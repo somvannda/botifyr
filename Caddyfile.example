@@ -1,0 +1,37 @@
+# Botifyr production reverse proxy (Caddy 2). Caddy obtains TLS automatically.
+#
+#   caddy run --config Caddyfile.example        # or mount as the Caddy config
+#
+# Assumes the compose services are on the same host:
+#   web   -> localhost:4322   (marketing + user portal at /portal)
+#   admin -> localhost:4324   (platform admin console)
+#   cloud -> localhost:8787   (API + websockets)
+# Override hosts/ports to match your DNS and docker-compose mapping.
+
+{
+	email admin@botifyr.xyz
+}
+
+# Marketing site + user portal
+botifyr.xyz, www.botifyr.xyz {
+	encode gzip
+	reverse_proxy localhost:4322
+}
+
+# Dedicated app host (same portal image; optional, e.g. app.botifyr.xyz/portal)
+app.botifyr.xyz {
+	encode gzip
+	reverse_proxy localhost:4322
+}
+
+# Platform admin console
+admin.botifyr.xyz {
+	encode gzip
+	reverse_proxy localhost:4324
+}
+
+# Cloud API + realtime websockets
+api.botifyr.xyz {
+	encode gzip
+	reverse_proxy localhost:8787
+}

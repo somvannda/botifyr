@@ -4,6 +4,12 @@ Three deployables: **web** (marketing + help, static), **cloud** (Fastify API + 
 runner), and the **desktop** app (Tauri, built and shipped to users). Postgres backs
 the cloud.
 
+For a full production reverse proxy with subdomains and automatic TLS, see
+[`Caddyfile.example`](../Caddyfile.example) (`botifyr.xyz` → web, `admin.` → admin
+console, `api.` → cloud). Set `VITE_CLOUD_URL=https://api.botifyr.xyz` when building
+the web/admin images, and `ADMIN_URL=https://admin.botifyr.xyz` for the `/admin`
+redirect.
+
 The provided `docker-compose.yml` runs the server-side pieces:
 
 | Service | Image | Port (host) | Notes |
