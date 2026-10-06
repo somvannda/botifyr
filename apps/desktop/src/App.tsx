@@ -4,6 +4,7 @@ import type {
   AuditEvent,
   Bot,
   BotFile,
+  ChatMessage,
   ConnectionInfo,
   LearnedSkill,
   RuntimeConfig,
@@ -44,6 +45,7 @@ import { Markdown } from "./Markdown";
 import "./styles.css";
 
 const CLOUD_URL = (import.meta.env.VITE_CLOUD_URL as string | undefined) ?? "http://localhost:8787";
+const ADMIN_URL = (import.meta.env.VITE_ADMIN_URL as string | undefined) ?? "http://localhost:4322/admin";
 const TOKEN_KEY = "botifyr.token";
 
 type ConnectionState = "connecting" | "online" | "offline";
@@ -109,6 +111,16 @@ export default function App() {
   const [tokenValue, setTokenValue] = useState("");
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [groupWorking, setGroupWorking] = useState<{ sessionId: string; names: string[] } | null>(null);
+  const [replyTo, setReplyTo] = useState<{ id: string; author: string; content: string } | null>(null);
+  const [reactFor, setReactFor] = useState<string | null>(null);
+  const [reactions, setReactions] = useState<Record<string, string>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("botifyr.reactions") ?? "{}") as Record<string, string>;
+    } catch {
+      return {};
+    }
+  });
+  const [forwardMessage, setForwardMessage] = useState<{ content: string } | null>(null);
   const [historyIndex, setHistoryIndex] = useState<number | null>(null);
   const [mentionIndex, setMentionIndex] = useState(0);
   const [listening, setListening] = useState(false);
@@ -622,7 +634,9 @@ export default function App() {
     const trimmed = raw.trim();
     if (!trimmed || !activeSessionId || sending) return;
     const sessionId = activeSessionId;
+    const payload = replyTo ? `↩ ${replyTo.author}: ${replyTo.content.slice(0, 120)}\n\n${trimmed}` : trimmed;
     const optimisticId = `local-${Date.now()}`;
+    setReplyTo(null);
     // Show the message immediately; the bot's reply arrives asynchronously.
     setSessions((prev) =>
       prev.map((session) =>
@@ -634,7 +648,7 @@ export default function App() {
                 {
                   id: optimisticId,
                   role: "user" as const,
-                  content: trimmed,
+                  content: payload,
                   createdAt: new Date().toISOString(),
                 },
               ],
@@ -648,7 +662,7 @@ export default function App() {
     setSending(true);
     setError(null);
     try {
-      const { session, warning } = await client.sendMessage(sessionId, trimmed, useComputer);
+      const { session, warning } = await client.sendMessage(sessionId, payload, useComputer);
       setSessions((prev) => prev.map((s) => (s.id === session.id ? session : s)));
       setLimitWarning(warning ?? null);
     } catch (err: unknown) {
@@ -691,6 +705,95 @@ export default function App() {
   function insertMention(name: string) {
     setText((prev) => prev.replace(/@[\w -]*$/, () => `@${name} `));
     setMentionQuery(null);
+  }
+
+  function toggleReaction(id: string, emoji: string) {
+    const next = { ...reactions };
+    if (next[id] === emoji) delete next[id];
+    else next[id] = emoji;
+    setReactions(next);
+    localStorage.setItem("botifyr.reactions", JSON.stringify(next));
+    setReactFor(null);
+  }
+
+  function startReply(id: string, author: string, content: string) {
+    setReplyTo({ id, author, content });
+  }
+
+  function actionsFor(message: ChatMessage, author: string, showRetry = false) {
+    return (
+      <div className="msg-actions">
+        <button
+          className="msg-action"
+          type="button"
+          title="Add emoji"
+          onClick={() => setReactFor((value) => (value === message.id ? null : message.id))}
+        >
+          🙂
+        </button>
+        <button
+          className="msg-action"
+          type="button"
+          title="Reply"
+          onClick={() => startReply(message.id, author, message.content)}
+        >
+          ↩
+        </button>
+        <button
+          className="msg-action"
+          type="button"
+          title="Forward"
+          onClick={() => setForwardMessage({ content: message.content })}
+        >
+          ➦
+        </button>
+        <button
+          className="msg-action"
+          type="button"
+          title="Copy"
+          onClick={() => void navigator.clipboard?.writeText(message.content)}
+        >
+          Copy
+        </button>
+        {showRetry && (
+          <button
+            className="msg-action"
+            type="button"
+            title="Regenerate reply"
+            disabled={busy}
+            onClick={() => void retry()}
+          >
+            Retry
+          </button>
+        )}
+        {reactFor === message.id && (
+          <span className="react-picker">
+            {["👍", "❤️", "😂", "🎉", "👀", "✅"].map((emoji) => (
+              <button
+                key={emoji}
+                className="react-emoji"
+                type="button"
+                onClick={() => toggleReaction(message.id, emoji)}
+              >
+                {emoji}
+              </button>
+            ))}
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  async function forwardTo(bot: Bot) {
+    if (!forwardMessage) return;
+    try {
+      await client.sendMessage(bot.sessionId, `Forwarded message:\n${forwardMessage.content}`, useComputer);
+      setForwardMessage(null);
+      setActiveBotId(bot.id);
+      setActiveSessionId(bot.sessionId);
+    } catch (err: unknown) {
+      setError(messageOf(err));
+    }
   }
 
   function toggleMic() {
@@ -1195,6 +1298,21 @@ export default function App() {
               <span className="account-label">Settings</span>
             </button>
             <div className="account-sep" />
+            {user.role === "admin" && (
+              <button
+                className="account-item"
+                type="button"
+                onClick={() => {
+                  void openExternal(ADMIN_URL);
+                  setShowAccountMenu(false);
+                }}
+              >
+                <span className="account-ico">
+                  <GearIcon size={16} />
+                </span>
+                <span className="account-label">Admin</span>
+              </button>
+            )}
             <button
               className="account-item"
               type="button"
@@ -1333,7 +1451,11 @@ export default function App() {
                 if (message.role === "user") {
                   return (
                     <div key={message.id} className="msg-user">
-                      <div className="msg-user-bubble">{message.content}</div>
+                      {actionsFor(message, "You")}
+                      <div className="msg-user-bubble">
+                        {message.content}
+                        {reactions[message.id] && <span className="reaction">{reactions[message.id]}</span>}
+                      </div>
                       <span className="msg-user-avatar">{initials(user.email)}</span>
                     </div>
                   );
@@ -1363,27 +1485,8 @@ export default function App() {
                           ))}
                         </div>
                       )}
-                      <div className="msg-actions">
-                        <button
-                          className="msg-action"
-                          type="button"
-                          title="Copy"
-                          onClick={() => void navigator.clipboard?.writeText(message.content)}
-                        >
-                          Copy
-                        </button>
-                        {message.id === lastAssistantId && (
-                          <button
-                            className="msg-action"
-                            type="button"
-                            title="Regenerate reply"
-                            disabled={busy}
-                            onClick={() => void retry()}
-                          >
-                            Retry
-                          </button>
-                        )}
-                      </div>
+                      {reactions[message.id] && <span className="reaction">{reactions[message.id]}</span>}
+                      {actionsFor(message, msgBot?.name ?? activeBotName, message.id === lastAssistantId)}
                     </div>
                   </div>
                 );
@@ -1547,6 +1650,16 @@ export default function App() {
                   {bot.name}
                 </button>
               ))}
+            </div>
+          )}
+          {replyTo && (
+            <div className="reply-bar">
+              <span className="reply-bar-text">
+                ↩ {replyTo.author}: {replyTo.content.slice(0, 90)}
+              </span>
+              <button className="reply-bar-close" type="button" onClick={() => setReplyTo(null)}>
+                ✕
+              </button>
             </div>
           )}
           <div className="composer-bar">
@@ -1973,6 +2086,33 @@ export default function App() {
                   </section>
                 );
               })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {forwardMessage && (
+        <div className="apps-overlay" onClick={() => setForwardMessage(null)}>
+          <div className="apps-panel" onClick={(event) => event.stopPropagation()}>
+            <div className="apps-head">
+              <span className="apps-title">Forward to…</span>
+              <button className="round small" type="button" onClick={() => setForwardMessage(null)}>
+                <CloseIcon size={13} />
+              </button>
+            </div>
+            <p className="apps-sub">Send this message to a bot or group.</p>
+            <div className="market-rows">
+              {bots.map((bot) => (
+                <button key={bot.id} className="market-row" type="button" onClick={() => void forwardTo(bot)}>
+                  <span className="market-ico">
+                    <BotLogo size={24} scheme={BOT_SCHEMES[bot.scheme % BOT_SCHEMES.length]} />
+                  </span>
+                  <span className="market-row-text">
+                    <span className="market-name">{bot.name}</span>
+                    <span className="market-desc">{bot.memberIds?.length ? "Group" : "Bot"}</span>
+                  </span>
+                </button>
+              ))}
             </div>
           </div>
         </div>
