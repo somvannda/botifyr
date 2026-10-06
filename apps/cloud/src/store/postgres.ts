@@ -6,6 +6,7 @@ import type {
   ConnectionRecord,
   FileRecord,
   LearnedSkillRecord,
+  Plan,
   SecretRecord,
   SessionRecord,
   Store,
@@ -33,14 +34,21 @@ export class PostgresStore implements Store {
 
   async createUser(record: UserRecord): Promise<void> {
     await this.pool.query(
-      "INSERT INTO users (id, email, password_hash, role, created_at) VALUES ($1, $2, $3, $4, $5)",
-      [record.id, record.email, record.passwordHash, record.role ?? "user", record.createdAt],
+      "INSERT INTO users (id, email, password_hash, role, plan, created_at) VALUES ($1, $2, $3, $4, $5, $6)",
+      [
+        record.id,
+        record.email,
+        record.passwordHash,
+        record.role ?? "user",
+        record.plan ?? "trial",
+        record.createdAt,
+      ],
     );
   }
 
   async getUserByEmail(email: string): Promise<UserRecord | null> {
     const { rows } = await this.pool.query(
-      "SELECT id, email, password_hash, role, created_at FROM users WHERE lower(email) = lower($1)",
+      "SELECT id, email, password_hash, role, plan, created_at FROM users WHERE lower(email) = lower($1)",
       [email],
     );
     return rows[0] ? toUser(rows[0]) : null;
@@ -48,7 +56,7 @@ export class PostgresStore implements Store {
 
   async getUserById(id: string): Promise<UserRecord | null> {
     const { rows } = await this.pool.query(
-      "SELECT id, email, password_hash, role, created_at FROM users WHERE id = $1",
+      "SELECT id, email, password_hash, role, plan, created_at FROM users WHERE id = $1",
       [id],
     );
     return rows[0] ? toUser(rows[0]) : null;
@@ -56,13 +64,17 @@ export class PostgresStore implements Store {
 
   async listUsers(): Promise<UserRecord[]> {
     const { rows } = await this.pool.query(
-      "SELECT id, email, password_hash, role, created_at FROM users ORDER BY created_at ASC",
+      "SELECT id, email, password_hash, role, plan, created_at FROM users ORDER BY created_at ASC",
     );
     return rows.map(toUser);
   }
 
   async setUserRole(id: string, role: "user" | "admin"): Promise<void> {
     await this.pool.query("UPDATE users SET role = $1 WHERE id = $2", [role, id]);
+  }
+
+  async setUserPlan(id: string, plan: Plan): Promise<void> {
+    await this.pool.query("UPDATE users SET plan = $1 WHERE id = $2", [plan, id]);
   }
 
   async createToken(tokenHash: string, userId: string, expiresAt: string): Promise<void> {
@@ -389,6 +401,7 @@ function toUser(row: any): UserRecord {
     email: row.email,
     passwordHash: row.password_hash,
     role: row.role ?? "user",
+    plan: row.plan === "pro" ? "pro" : "trial",
     createdAt: row.created_at.toISOString(),
   };
 }

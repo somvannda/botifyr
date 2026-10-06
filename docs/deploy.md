@@ -41,6 +41,20 @@ botifyr.xyz {
 3. Put TLS in front of `8787` and set the same hostname in `VITE_CLOUD_URL` when
    building the desktop app.
 
+### Optional: billing (Stripe)
+
+Plans are `trial` (default) and `pro`. Stripe is off unless configured:
+
+- `STRIPE_SECRET_KEY` — Stripe secret key
+- `STRIPE_PRICE_ID` — the recurring price to sell
+- `STRIPE_WEBHOOK_SECRET` — shared secret checked on `/v1/billing/webhook`
+  (point Stripe at it for `checkout.session.completed` and
+  `customer.subscription.deleted`)
+
+Without these, the app still shows the current plan and explains that billing
+isn't configured. Admins can set a plan directly:
+`POST /admin/users/:id/plan` with `{ "plan": "pro" }`.
+
 Google Cloud: add these **Authorized redirect URIs** to the OAuth client:
 - `https://<cloud-host>/auth/google/callback` (sign-in)
 - `https://<cloud-host>/auth/google/connect/callback` (Connect apps)

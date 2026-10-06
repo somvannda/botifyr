@@ -143,6 +143,7 @@ export interface User {
   email: string;
   createdAt: string;
   role: "user" | "admin";
+  plan?: "trial" | "pro";
 }
 
 export interface AuthResponse {

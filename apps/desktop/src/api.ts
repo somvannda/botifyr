@@ -117,6 +117,18 @@ export class BotifyrClient {
     return this.request("/v1/learned-skills");
   }
 
+  billing(): Promise<{ plan: "trial" | "pro"; stripeConfigured: boolean }> {
+    return this.request("/v1/billing");
+  }
+
+  billingCheckout(returnUrl: string): Promise<{ url: string }> {
+    return this.request("/v1/billing/checkout", {
+      method: "POST",
+      json: true,
+      body: JSON.stringify({ returnUrl }),
+    });
+  }
+
   createBot(input: {
     name: string;
     emoji: string;

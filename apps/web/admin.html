@@ -220,6 +220,10 @@
         await api(`/admin/users/${id}/role`, { method: "POST", body: JSON.stringify({ role }) });
         await load();
       }
+      async function setPlan(id, plan) {
+        await api(`/admin/users/${id}/plan`, { method: "POST", body: JSON.stringify({ plan }) });
+        await load();
+      }
 
       async function load() {
         errEl.textContent = "";
@@ -265,6 +269,12 @@
             const toggle = el("button", "act", user.role === "admin" ? "Make user" : "Make admin");
             toggle.onclick = () => setRole(user.id, user.role === "admin" ? "user" : "admin");
             row.appendChild(toggle);
+            row.appendChild(
+              el("span", "pill " + (user.plan === "pro" ? "approved" : ""), user.plan || "trial"),
+            );
+            const planToggle = el("button", "act", user.plan === "pro" ? "Downgrade" : "Make Pro");
+            planToggle.onclick = () => setPlan(user.id, user.plan === "pro" ? "trial" : "pro");
+            row.appendChild(planToggle);
             usersEl.appendChild(row);
           }
         } catch (error) {

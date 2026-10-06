@@ -211,6 +211,8 @@ export default function App() {
   );
   const [autoUpdate, setAutoUpdate] = useState(() => localStorage.getItem("botifyr.autoUpdate") !== "0");
   const [checkNote, setCheckNote] = useState<string | null>(null);
+  const [plan, setPlan] = useState<"trial" | "pro">("trial");
+  const [stripeConfigured, setStripeConfigured] = useState(false);
   const [trialStart] = useState(() => {
     const existing = Number(localStorage.getItem("botifyr.trialStart"));
     if (existing) return existing;
@@ -292,14 +294,17 @@ export default function App() {
       client.listConnections(),
       client.listSkills(),
       client.listLearnedSkills(),
+      client.billing(),
     ])
-      .then(([botList, sessionList, connectionList, skillList, learnedList]) => {
+      .then(([botList, sessionList, connectionList, skillList, learnedList, billing]) => {
         if (!mounted) return;
         setBots(botList);
         setSessions(sessionList);
         setConnections(connectionList);
         setSkills(skillList);
         setLearnedSkills(learnedList);
+        setPlan(billing.plan);
+        setStripeConfigured(billing.stripeConfigured);
         // Open the last-used chat, else the most recently active one.
         const lastAt = (bot: Bot): string => {
           const session = sessionList.find((entry) => entry.id === bot.sessionId);
@@ -671,6 +676,18 @@ export default function App() {
   function finishBotSave() {
     setBotSaved(true);
     window.setTimeout(() => closeBotModal(), 750);
+  }
+
+  async function upgradePlan() {
+    setCheckNote(null);
+    const returnUrl = SKILLS_URL.replace(/\/skills\/?$/, "");
+    try {
+      const { url } = await client.billingCheckout(returnUrl);
+      void openExternal(url);
+      setCheckNote("Opening secure checkout…");
+    } catch (err: unknown) {
+      setCheckNote(messageOf(err));
+    }
   }
 
   async function removeBot(bot: Bot) {
@@ -2765,48 +2782,70 @@ export default function App() {
 
               {settingsTab === "usage" && (
                 <div className="settings-sections">
-                  <div className="trial-card">
-                    <div className="trial-head">
-                      <span>Trial usage</span>
-                      <span>{trialPercent}%</span>
+                  {plan === "pro" ? (
+                    <div className="trial-card">
+                      <div className="trial-head">
+                        <span>Pro plan</span>
+                        <span>Active</span>
+                      </div>
+                      <div className="trial-foot">
+                        Unlimited bots, always-on schedules and priority sandboxes.
+                      </div>
                     </div>
-                    <div className="trial-bar">
-                      <span style={{ width: `${trialPercent}%` }} />
+                  ) : (
+                    <div className="trial-card">
+                      <div className="trial-head">
+                        <span>Trial usage</span>
+                        <span>{trialPercent}%</span>
+                      </div>
+                      <div className="trial-bar">
+                        <span style={{ width: `${trialPercent}%` }} />
+                      </div>
+                      <div className="trial-foot">Ends in {trialDaysLeft} days</div>
                     </div>
-                    <div className="trial-foot">Ends in {trialDaysLeft} days</div>
-                  </div>
+                  )}
 
                   <div className="settings-section-title">Manage Plan</div>
                   <div className="settings-row">
                     <span className="settings-row-main">
-                      <span className="settings-row-name">Current plan: Trial</span>
+                      <span className="settings-row-name">
+                        Current plan: {plan === "pro" ? "Pro" : "Trial"}
+                      </span>
                       <span className="settings-row-sub">
                         {config?.usage
                           ? `${config.usage.tokensToday.toLocaleString()} tokens · ${config.usage.requestsToday} requests today`
                           : "No usage yet"}
                       </span>
                     </span>
-                    <button
-                      className="btn primary"
-                      type="button"
-                      onClick={() => setCheckNote("Upgrade is not available yet.")}
-                    >
-                      Upgrade to Pro
-                    </button>
+                    {plan === "pro" ? (
+                      <span className="settings-badge">Active</span>
+                    ) : (
+                      <button className="btn primary" type="button" onClick={() => void upgradePlan()}>
+                        Upgrade to Pro
+                      </button>
+                    )}
                   </div>
-                  <div className="settings-row">
-                    <span className="settings-row-main">
-                      <span className="settings-row-name">Cancel Trial</span>
-                      <span className="settings-row-sub">Stop the trial at the end of the period</span>
-                    </span>
-                    <button
-                      className="ghost small"
-                      type="button"
-                      onClick={() => setCheckNote("Your trial will end at the end of the current period.")}
-                    >
-                      Cancel Trial
-                    </button>
-                  </div>
+                  {plan !== "pro" && (
+                    <div className="settings-row">
+                      <span className="settings-row-main">
+                        <span className="settings-row-name">Cancel Trial</span>
+                        <span className="settings-row-sub">Stop the trial at the end of the period</span>
+                      </span>
+                      <button
+                        className="ghost small"
+                        type="button"
+                        onClick={() => setCheckNote("Your trial will end at the end of the current period.")}
+                      >
+                        Cancel Trial
+                      </button>
+                    </div>
+                  )}
+                  {!stripeConfigured && plan !== "pro" && (
+                    <p className="settings-note">
+                      Billing isn't configured on this server — self-host for unlimited use, or set
+                      STRIPE_SECRET_KEY and STRIPE_PRICE_ID to enable upgrades.
+                    </p>
+                  )}
                   {checkNote && <p className="settings-note">{checkNote}</p>}
                 </div>
               )}

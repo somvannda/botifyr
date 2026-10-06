@@ -202,11 +202,18 @@ export async function buildServer(options: ServerOptions) {
     request.userId = userId;
   };
 
-  const toUser = (record: { id: string; email: string; createdAt: string; role?: string }): User => ({
+  const toUser = (record: {
+    id: string;
+    email: string;
+    createdAt: string;
+    role?: string;
+    plan?: string;
+  }): User => ({
     id: record.id,
     email: record.email,
     createdAt: record.createdAt,
     role: record.role === "admin" ? "admin" : "user",
+    plan: record.plan === "pro" ? "pro" : "trial",
   });
 
   const canReceive = (userId: string, event: ServerEvent): boolean => {
@@ -735,6 +742,7 @@ export async function buildServer(options: ServerOptions) {
       id: user.id,
       email: user.email,
       role: user.role,
+      plan: user.plan === "pro" ? "pro" : "trial",
       createdAt: user.createdAt,
     })),
   );
@@ -750,6 +758,93 @@ export async function buildServer(options: ServerOptions) {
       return { ok: true };
     },
   );
+
+  app.post<{ Params: { id: string }; Body: { plan?: string } }>(
+    "/admin/users/:id/plan",
+    { preHandler: requireAdmin },
+    async (request, reply) => {
+      const plan = request.body?.plan;
+      if (plan !== "trial" && plan !== "pro")
+        return reply.code(400).send({ error: "plan must be trial or pro" });
+      await store.setUserPlan(request.params.id, plan);
+      return { ok: true };
+    },
+  );
+
+  /* Billing / plans. Stripe is optional: without keys the endpoint explains
+     that billing isn't configured rather than pretending to charge. */
+  const stripeSecret = process.env.STRIPE_SECRET_KEY;
+  const stripePrice = process.env.STRIPE_PRICE_ID;
+  const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  const stripeConfigured = Boolean(stripeSecret && stripePrice);
+
+  app.get("/v1/billing", { preHandler: requireAuth }, async (request) => {
+    const record = await store.getUserById(request.userId as string);
+    return {
+      plan: record?.plan === "pro" ? "pro" : "trial",
+      stripeConfigured,
+    };
+  });
+
+  app.post<{ Body: { returnUrl?: string } }>(
+    "/v1/billing/checkout",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      if (!stripeConfigured) {
+        return reply.code(400).send({
+          error:
+            "Billing isn't configured on this server. Set STRIPE_SECRET_KEY and STRIPE_PRICE_ID, or self-host for unlimited use.",
+        });
+      }
+      const record = await store.getUserById(request.userId as string);
+      const origin = (request.body?.returnUrl ?? "https://botifyr.xyz").replace(/\/$/, "");
+      const params = new URLSearchParams({
+        mode: "subscription",
+        "line_items[0][price]": stripePrice as string,
+        "line_items[0][quantity]": "1",
+        success_url: `${origin}/?billing=success`,
+        cancel_url: `${origin}/#pricing`,
+        client_reference_id: request.userId as string,
+      });
+      if (record?.email) params.set("customer_email", record.email);
+      const response = await fetch("https://api.stripe.com/v1/checkout/sessions", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${stripeSecret}`,
+          "content-type": "application/x-www-form-urlencoded",
+        },
+        body: params.toString(),
+      });
+      const data = (await response.json()) as { url?: string; error?: { message?: string } };
+      if (!response.ok || !data.url) {
+        return reply.code(502).send({ error: data.error?.message ?? "Stripe checkout failed." });
+      }
+      return { url: data.url };
+    },
+  );
+
+  /**
+   * Minimal Stripe webhook. Guarded by a shared secret so it can never be used
+   * to grant a plan without Stripe. For production, verify the real signature
+   * with stripe.webhooks.constructEvent and the webhook signing secret.
+   */
+  app.post("/v1/billing/webhook", async (request, reply) => {
+    if (!stripeWebhookSecret) return reply.code(404).send();
+    if (String(request.headers["stripe-signature"] ?? "") !== stripeWebhookSecret) {
+      return reply.code(400).send({ error: "invalid signature" });
+    }
+    const event = request.body as {
+      type?: string;
+      data?: { object?: { client_reference_id?: string } };
+    };
+    const userId = event?.data?.object?.client_reference_id;
+    if (userId && event.type === "checkout.session.completed") {
+      await store.setUserPlan(userId, "pro");
+    } else if (userId && event.type === "customer.subscription.deleted") {
+      await store.setUserPlan(userId, "trial");
+    }
+    return reply.code(204).send();
+  });
 
   app.post<{ Body: { email?: string; password?: string } }>("/auth/signup", async (request, reply) => {
     const email = (request.body?.email ?? "").trim();

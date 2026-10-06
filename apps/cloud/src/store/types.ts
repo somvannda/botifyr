@@ -2,11 +2,15 @@ import type { BotSchedule, ChatMessage, Task } from "@botifyr/shared";
 
 /** Persistence contracts shared by the memory and Postgres stores. */
 
+/** Subscription plan. "trial" is the free tier. */
+export type Plan = "trial" | "pro";
+
 export interface UserRecord {
   id: string;
   email: string;
   passwordHash: string;
   role: "user" | "admin";
+  plan?: Plan;
   createdAt: string;
 }
 
@@ -112,6 +116,7 @@ export interface Store {
   getUserById(id: string): Promise<UserRecord | null>;
   listUsers(): Promise<UserRecord[]>;
   setUserRole(id: string, role: "user" | "admin"): Promise<void>;
+  setUserPlan(id: string, plan: Plan): Promise<void>;
 
   createToken(tokenHash: string, userId: string, expiresAt: string): Promise<void>;
   getUserIdByTokenHash(tokenHash: string): Promise<string | null>;

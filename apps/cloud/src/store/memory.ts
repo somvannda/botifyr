@@ -5,6 +5,7 @@ import type {
   ConnectionRecord,
   FileRecord,
   LearnedSkillRecord,
+  Plan,
   SecretRecord,
   SessionRecord,
   Store,
@@ -52,6 +53,11 @@ export class MemoryStore implements Store {
   async setUserRole(id: string, role: "user" | "admin"): Promise<void> {
     const record = this.users.get(id);
     if (record) record.role = role;
+  }
+
+  async setUserPlan(id: string, plan: Plan): Promise<void> {
+    const record = this.users.get(id);
+    if (record) record.plan = plan;
   }
 
   async createToken(tokenHash: string, userId: string, expiresAt: string): Promise<void> {

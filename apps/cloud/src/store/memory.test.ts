@@ -34,6 +34,8 @@ describe("MemoryStore", () => {
     expect((await store.getUserByEmail("someone@example.COM"))?.id).toBe("u1");
     await store.setUserRole("u1", "admin");
     expect((await store.getUserById("u1"))?.role).toBe("admin");
+    await store.setUserPlan("u1", "pro");
+    expect((await store.getUserById("u1"))?.plan).toBe("pro");
   });
 
   it("issues tokens and rejects expired ones", async () => {

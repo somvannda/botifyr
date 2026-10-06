@@ -2846,6 +2846,17 @@ body {
   margin: 4px 0;
 }
 
+.settings-badge {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #3fd18b;
+  background: rgba(63, 209, 139, 0.14);
+  border-radius: 999px;
+  padding: 4px 10px;
+}
+
 .trial-card {
   border: 1px solid var(--border);
   border-radius: 12px;
