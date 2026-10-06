@@ -36,4 +36,26 @@ describe("CORS", () => {
 
     await app.close();
   });
+
+  it("refuses an origin that is not allowlisted", async () => {
+    const app = await buildServer({
+      store: new MemoryStore(),
+      vaultKey: Buffer.alloc(32),
+      localChannel: createLocalChannel(),
+    });
+    await app.ready();
+
+    const response = await app.inject({
+      method: "OPTIONS",
+      url: "/v1/bots/example",
+      headers: {
+        origin: "https://evil.example",
+        "access-control-request-method": "DELETE",
+      },
+    });
+
+    expect(response.headers["access-control-allow-origin"]).toBeUndefined();
+
+    await app.close();
+  });
 });

@@ -127,8 +127,41 @@ export interface ServerOptions {
   localChannel: LocalChannel;
 }
 
+/**
+ * Origins allowed to call this API from a browser. Anything else is refused,
+ * so a random site the user visits can't silently drive their bots with their
+ * stored session. Override with BOTIFYR_ALLOWED_ORIGINS (comma-separated); set
+ * it to "*" only for throwaway/local debugging.
+ */
+function allowedOrigins(): Set<string> {
+  const defaults = [
+    // Desktop dev (Vite) and packaged Tauri webview.
+    "http://localhost:1420",
+    "http://127.0.0.1:1420",
+    "tauri://localhost",
+    "http://tauri.localhost",
+    "https://tauri.localhost",
+    // Web portal + marketing (Docker / dev).
+    "http://localhost:4322",
+    "http://127.0.0.1:4322",
+    "http://localhost:4323",
+    "http://127.0.0.1:4323",
+    "https://botifyr.xyz",
+    "https://www.botifyr.xyz",
+    "https://app.botifyr.xyz",
+    // Admin console.
+    "http://localhost:4324",
+    "http://127.0.0.1:4324",
+    "https://admin.botifyr.xyz",
+  ];
+  const raw = process.env.BOTIFYR_ALLOWED_ORIGINS;
+  const list = raw && raw.trim() ? raw.split(",") : defaults;
+  return new Set(list.map((entry) => entry.trim()).filter(Boolean));
+}
+
 export async function buildServer(options: ServerOptions) {
   const { store, vaultKey, localChannel } = options;
+  const corsOrigins = allowedOrigins();
 
   /* ------------------------------------------------------------------------ */
   /* Cost controls (modelled on Chmaba's limits)                              */
@@ -266,8 +299,12 @@ export async function buildServer(options: ServerOptions) {
   // The desktop app (and website) call this API cross-origin, so allow the
   // full set of verbs we actually use — the default omits PUT/PATCH/DELETE,
   // which silently broke Edit/Delete bot with a CORS "Failed to fetch".
+  // Origins are allowlisted so a random site can't drive a user's bots.
   await app.register(cors, {
-    origin: true,
+    origin: (origin, cb) => {
+      const ok = !origin || corsOrigins.has("*") || corsOrigins.has(origin);
+      cb(null, ok);
+    },
     methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["content-type", "authorization"],
   });
