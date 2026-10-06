@@ -141,6 +141,15 @@ export interface ConnectionInfo {
   connectedAt: string;
 }
 
+/** A file saved to a bot's Library (text artifacts the agent can write/read). */
+export interface BotFile {
+  id: string;
+  botId: string;
+  name: string;
+  size: number;
+  updatedAt: string;
+}
+
 export interface CreateSecretRequest {
   name: string;
   value: string;

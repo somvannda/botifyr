@@ -3,6 +3,7 @@ import type { FormEvent, ReactNode } from "react";
 import type {
   AuditEvent,
   Bot,
+  BotFile,
   ConnectionInfo,
   RuntimeConfig,
   SecretSummary,
@@ -132,6 +133,10 @@ export default function App() {
   });
   const [editingLabel, setEditingLabel] = useState(false);
   const [labelDraft, setLabelDraft] = useState("");
+  const [botFiles, setBotFiles] = useState<BotFile[]>([]);
+  const [libName, setLibName] = useState("");
+  const [libOpen, setLibOpen] = useState<{ id: string; name: string } | null>(null);
+  const [libContent, setLibContent] = useState("");
   const [secretName, setSecretName] = useState("");
   const [secretValue, setSecretValue] = useState("");
 
@@ -263,6 +268,14 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("botifyr.botPanel", showBotPanel ? "1" : "0");
   }, [showBotPanel]);
+
+  useEffect(() => {
+    if (!activeBotId || botPanelTab !== "library") return;
+    client
+      .listFiles(activeBotId)
+      .then((files) => setBotFiles(files))
+      .catch(() => {});
+  }, [activeBotId, botPanelTab, client]);
 
   function applyEvent(event: ServerEvent) {
     switch (event.type) {
@@ -551,6 +564,54 @@ export default function App() {
     setLabels(next);
     localStorage.setItem("botifyr.labels", JSON.stringify(next));
     setEditingLabel(false);
+  }
+
+  async function refreshFiles() {
+    if (!activeBotId) return;
+    setBotFiles(await client.listFiles(activeBotId));
+  }
+
+  async function createLibFile() {
+    if (!activeBotId || !libName.trim()) return;
+    try {
+      const file = await client.saveFile(activeBotId, libName.trim(), "");
+      setLibName("");
+      setLibOpen({ id: file.id, name: file.name });
+      setLibContent("");
+      await refreshFiles();
+    } catch (err: unknown) {
+      setError(messageOf(err));
+    }
+  }
+
+  async function openLibFile(file: BotFile) {
+    try {
+      const full = await client.getFile(file.id);
+      setLibOpen({ id: full.id, name: full.name });
+      setLibContent(full.content);
+    } catch (err: unknown) {
+      setError(messageOf(err));
+    }
+  }
+
+  async function saveLibFile() {
+    if (!activeBotId || !libOpen) return;
+    try {
+      await client.saveFile(activeBotId, libOpen.name, libContent);
+      await refreshFiles();
+    } catch (err: unknown) {
+      setError(messageOf(err));
+    }
+  }
+
+  async function deleteLibFile(id: string) {
+    try {
+      await client.deleteFile(id);
+      if (libOpen?.id === id) setLibOpen(null);
+      await refreshFiles();
+    } catch (err: unknown) {
+      setError(messageOf(err));
+    }
   }
 
   async function retry() {
@@ -935,7 +996,7 @@ export default function App() {
             <span className="thread-pill">
               <BotLogo size={18} scheme={activeScheme} />
               {liveTask && <span className={`status-dot status-${liveTask.status}`} />}
-              {activeBotName}
+              <span className="thread-pill-name">{activeBotName}</span>
             </span>
             <div className="topbar-right">
               <button
@@ -955,12 +1016,6 @@ export default function App() {
                 >
                   ⋯
                 </button>
-              )}
-              {config && (
-                <span className="chip">
-                  {config.provider} · {config.capabilities.join(", ") || "no tools"}
-                  {config.nodeOnline ? " · local: on" : ""}
-                </span>
               )}
               {latestTask && (
                 <button className="ghost small" type="button" onClick={toggleAudit}>
@@ -1243,6 +1298,20 @@ export default function App() {
                   <span>Type</span>
                   <span>{inGroup ? "Group" : "Bot"}</span>
                 </div>
+                {config && (
+                  <div className="bot-panel-kv">
+                    <span>Model</span>
+                    <span>{config.provider}</span>
+                  </div>
+                )}
+                {config && (
+                  <div className="bot-panel-kv">
+                    <span>Tools</span>
+                    <span>
+                      {(config.capabilities.join(", ") || "none") + (config.nodeOnline ? " · local" : "")}
+                    </span>
+                  </div>
+                )}
                 {inGroup && (
                   <div className="bot-panel-kv">
                     <span>Members</span>
@@ -1260,7 +1329,53 @@ export default function App() {
             )}
 
             {botPanelTab === "library" && (
-              <p className="bot-panel-empty">No items yet. Files a bot saves will show up here.</p>
+              <div className="library">
+                <div className="library-new">
+                  <input
+                    placeholder="new file name"
+                    value={libName}
+                    onChange={(event) => setLibName(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") void createLibFile();
+                    }}
+                  />
+                  <button className="ghost small" type="button" onClick={() => void createLibFile()}>
+                    New
+                  </button>
+                </div>
+                <ul className="library-list">
+                  {botFiles.length === 0 && (
+                    <li className="bot-panel-empty">No items yet. Files a bot saves show here.</li>
+                  )}
+                  {botFiles.map((file) => (
+                    <li key={file.id} className={libOpen?.id === file.id ? "active" : ""}>
+                      <button className="library-name" type="button" onClick={() => void openLibFile(file)}>
+                        {file.name}
+                      </button>
+                      <button
+                        className="library-del"
+                        type="button"
+                        onClick={() => void deleteLibFile(file.id)}
+                      >
+                        ✕
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                {libOpen && (
+                  <div className="library-editor">
+                    <div className="library-editor-head">{libOpen.name}</div>
+                    <textarea
+                      value={libContent}
+                      onChange={(event) => setLibContent(event.target.value)}
+                      rows={8}
+                    />
+                    <button className="ghost small" type="button" onClick={() => void saveLibFile()}>
+                      Save
+                    </button>
+                  </div>
+                )}
+              </div>
             )}
 
             {botPanelTab === "computer" && (

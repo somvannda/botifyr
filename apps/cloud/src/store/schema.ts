@@ -84,4 +84,16 @@ CREATE TABLE IF NOT EXISTS usage_events (
   created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS usage_user_idx ON usage_events (user_id, created_at);
+
+CREATE TABLE IF NOT EXISTS files (
+  id         TEXT PRIMARY KEY,
+  bot_id     TEXT NOT NULL,
+  user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name       TEXT NOT NULL,
+  content    TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (bot_id, name)
+);
+CREATE INDEX IF NOT EXISTS files_bot_idx ON files (bot_id);
 `;

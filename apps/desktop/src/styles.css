@@ -1188,6 +1188,13 @@ body {
   padding: 6px 14px;
   font-size: 13px;
   font-weight: 600;
+  max-width: 45%;
+}
+
+.thread-pill-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .pill-avatar {
@@ -2163,7 +2170,7 @@ body {
 }
 
 .account-item:hover:not(:disabled) {
-  background: #232327;
+  background: var(--panel-2);
 }
 
 .account-item:disabled {
@@ -2608,6 +2615,105 @@ body {
 
 .market-card .ghost {
   align-self: flex-start;
+}
+
+/* Bot Library ------------------------------------------------------------ */
+.library {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.library-new {
+  display: flex;
+  gap: 8px;
+}
+
+.library-new input {
+  flex: 1;
+  min-width: 0;
+  background: #0e0e10;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 10px;
+  color: var(--text);
+  font-size: 12.5px;
+  outline: none;
+}
+
+.library-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.library-list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 8px;
+  padding: 2px 4px;
+}
+
+.library-list li.active {
+  background: var(--panel-2);
+}
+
+.library-name {
+  flex: 1;
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  padding: 7px 6px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.library-name:hover {
+  background: var(--panel-2);
+}
+
+.library-del {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 4px 6px;
+}
+
+.library-del:hover {
+  color: var(--danger);
+}
+
+.library-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.library-editor-head {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.library-editor textarea {
+  width: 100%;
+  resize: vertical;
+  background: #0e0e10;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: var(--text);
+  font-size: 12.5px;
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  line-height: 1.5;
+  outline: none;
 }
 
 .apps-actions {

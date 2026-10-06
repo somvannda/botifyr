@@ -8,6 +8,7 @@ import type {
   AuditEvent,
   AuthResponse,
   Bot,
+  BotFile,
   ConnectionInfo,
   SecretSummary,
   ServerEvent,
@@ -31,6 +32,7 @@ import { createToken, hashPassword, hashToken, verifyPassword } from "./auth.js"
 import { encryptSecret } from "./vault.js";
 import { runTask, runtimeInfo, summarizeConversation } from "./runner.js";
 import type { Store } from "./store/index.js";
+import type { FileRecord } from "./store/types.js";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -872,6 +874,72 @@ export async function buildServer(options: ServerOptions) {
     await store.updateBot(bot);
     return bot;
   });
+
+  /* Bot Library: text files a bot can keep and the agent can read/write. */
+  const toBotFile = (record: FileRecord): BotFile => ({
+    id: record.id,
+    botId: record.botId,
+    name: record.name,
+    size: record.content.length,
+    updatedAt: record.updatedAt,
+  });
+
+  app.get<{ Params: { id: string } }>(
+    "/v1/bots/:id/files",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const bot = await store.getBot(request.params.id);
+      if (!bot || bot.userId !== userId) return reply.code(404).send({ error: "bot not found" });
+      return (await store.listFiles(bot.id)).map(toBotFile);
+    },
+  );
+
+  app.post<{ Params: { id: string }; Body: { name?: string; content?: string } }>(
+    "/v1/bots/:id/files",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const bot = await store.getBot(request.params.id);
+      if (!bot || bot.userId !== userId) return reply.code(404).send({ error: "bot not found" });
+      const name = (request.body?.name ?? "").trim().slice(0, 120);
+      if (!name) return reply.code(400).send({ error: "a file name is required" });
+      const content = String(request.body?.content ?? "").slice(0, 200_000);
+      const existing = (await store.listFiles(bot.id)).find((file) => file.name === name);
+      const now = new Date().toISOString();
+      const record: FileRecord = {
+        id: existing?.id ?? randomUUID(),
+        botId: bot.id,
+        userId,
+        name,
+        content,
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+      };
+      await store.upsertFile(record);
+      return reply.code(existing ? 200 : 201).send(toBotFile(record));
+    },
+  );
+
+  app.get<{ Params: { id: string } }>(
+    "/v1/files/:id",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const file = await store.getFile(request.userId as string, request.params.id);
+      if (!file) return reply.code(404).send({ error: "file not found" });
+      return file;
+    },
+  );
+
+  app.delete<{ Params: { id: string } }>(
+    "/v1/files/:id",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const removed = await store.deleteFile(request.userId as string, request.params.id);
+      if (!removed) return reply.code(404).send({ error: "file not found" });
+      return reply.code(204).send();
+    },
+  );
 
   app.post("/v1/sessions", { preHandler: requireAuth }, async (request) => {
     const session: Session = {

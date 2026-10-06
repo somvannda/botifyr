@@ -17,6 +17,7 @@ import {
 import { emit } from "./events.js";
 import { clearComputerSandbox, setComputerSandbox, setScreenshot, waitForApproval } from "./runtime.js";
 import { createConnectionTools } from "./connections-tools.js";
+import { createFileTools } from "./files-tools.js";
 import { createLocalTools, nodeInfo } from "./nodes.js";
 import type { Store } from "./store/index.js";
 
@@ -188,6 +189,8 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
     const connections = await store.listConnections(userId).catch(() => []);
     if (connections.length > 0) tools.push(...createConnectionTools(store, deps.vaultKey, userId));
   }
+  // Library tools: the authoring bot can read/write its own files.
+  if (deps.author) tools.push(...createFileTools(store, deps.author.id, userId));
   const localInstruction =
     deps.local && nodeInfo(userId).online
       ? "The user has explicitly enabled their own computer for this request. Perform it on their machine using the local.browser.* and local.shell/local.file tools."

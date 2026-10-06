@@ -3,6 +3,7 @@ import type {
   AuditRecord,
   BotRecord,
   ConnectionRecord,
+  FileRecord,
   SecretRecord,
   SessionRecord,
   Store,
@@ -23,6 +24,7 @@ export class MemoryStore implements Store {
   private secrets = new Map<string, SecretRecord>();
   private connections = new Map<string, ConnectionRecord>();
   private usage: UsageRecord[] = [];
+  private files = new Map<string, FileRecord>();
 
   async init(): Promise<void> {}
   async close(): Promise<void> {}
@@ -181,5 +183,32 @@ export class MemoryStore implements Store {
       tokens: rows.reduce((sum, record) => sum + record.promptTokens + record.completionTokens, 0),
       requests: rows.length,
     };
+  }
+
+  async upsertFile(record: FileRecord): Promise<void> {
+    this.files.set(`${record.botId}:${record.name}`, record);
+  }
+
+  async listFiles(botId: string): Promise<FileRecord[]> {
+    return [...this.files.values()]
+      .filter((file) => file.botId === botId)
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  async getFile(userId: string, id: string): Promise<FileRecord | null> {
+    for (const file of this.files.values()) {
+      if (file.id === id && file.userId === userId) return file;
+    }
+    return null;
+  }
+
+  async deleteFile(userId: string, id: string): Promise<boolean> {
+    for (const [key, file] of this.files) {
+      if (file.id === id && file.userId === userId) {
+        this.files.delete(key);
+        return true;
+      }
+    }
+    return false;
   }
 }

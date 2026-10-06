@@ -76,6 +76,17 @@ export interface UsageRecord {
   createdAt: string;
 }
 
+/** A text file in a bot's Library. */
+export interface FileRecord {
+  id: string;
+  botId: string;
+  userId: string;
+  name: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Store {
   init(): Promise<void>;
   close(): Promise<void>;
@@ -121,4 +132,9 @@ export interface Store {
   addUsage(record: UsageRecord): Promise<void>;
   /** Total tokens + request count for a user since an ISO timestamp. */
   usageSince(userId: string, sinceIso: string): Promise<{ tokens: number; requests: number }>;
+
+  upsertFile(record: FileRecord): Promise<void>;
+  listFiles(botId: string): Promise<FileRecord[]>;
+  getFile(userId: string, id: string): Promise<FileRecord | null>;
+  deleteFile(userId: string, id: string): Promise<boolean>;
 }

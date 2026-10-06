@@ -2,6 +2,7 @@ import type {
   AuditEvent,
   AuthResponse,
   Bot,
+  BotFile,
   ConnectionInfo,
   RuntimeConfig,
   SecretSummary,
@@ -188,6 +189,26 @@ export class BotifyrClient {
 
   listConnections(): Promise<ConnectionInfo[]> {
     return this.request("/v1/connections");
+  }
+
+  listFiles(botId: string): Promise<BotFile[]> {
+    return this.request(`/v1/bots/${botId}/files`);
+  }
+
+  saveFile(botId: string, name: string, content: string): Promise<BotFile> {
+    return this.request(`/v1/bots/${botId}/files`, {
+      method: "POST",
+      json: true,
+      body: JSON.stringify({ name, content }),
+    });
+  }
+
+  getFile(id: string): Promise<{ id: string; name: string; content: string }> {
+    return this.request(`/v1/files/${id}`);
+  }
+
+  deleteFile(id: string): Promise<void> {
+    return this.request(`/v1/files/${id}`, { method: "DELETE" });
   }
 
   startConnection(provider: string): Promise<{ url: string }> {
