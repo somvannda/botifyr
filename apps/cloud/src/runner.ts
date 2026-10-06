@@ -300,7 +300,7 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
       provider: getProvider(),
       tools,
       workspaceDir: process.cwd(),
-      maxSteps: Number(process.env.BOTIFYR_MAX_STEPS ?? 12),
+      maxSteps: Number(process.env.BOTIFYR_MAX_STEPS ?? 16),
       maxTokens: Number(process.env.BOTIFYR_MAX_OUTPUT_TOKENS ?? 1024),
       requestApproval: async (title, description, risk) => {
         const approval = {

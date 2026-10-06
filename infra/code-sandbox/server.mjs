@@ -35,7 +35,9 @@ const actions = {
     try {
       const { stdout, stderr } = await execFileAsync("sh", ["-c", cmd], {
         cwd: WORKSPACE,
-        timeout: 60_000,
+        // Generous by default so bulk downloads (yt-dlp over many URLs) finish;
+        // override with EXEC_TIMEOUT_MS.
+        timeout: Number(process.env.EXEC_TIMEOUT_MS ?? 900_000),
         maxBuffer: 16 * 1024 * 1024,
       });
       const output = `$ ${cmd}\n${stdout}${stderr ? `\n[stderr]\n${stderr}` : ""}`.trimEnd();

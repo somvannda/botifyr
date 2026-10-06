@@ -38,29 +38,38 @@ export function createMediaTools(
   const download: ToolDefinition = {
     name: "youtube.download",
     description:
-      "Download a YouTube video (or its audio) with yt-dlp. Files are saved to the downloads folder so the user can retrieve them.",
+      "Download one or many YouTube (or other yt-dlp supported) URLs with yt-dlp. For a list, pass `urls` (up to 50) instead of `url` — a single call downloads them all. Files are saved with their titles so the user can retrieve them.",
     parameters: {
       type: "object",
       properties: {
-        url: { type: "string", description: "YouTube (or other yt-dlp supported) URL." },
+        url: { type: "string", description: "A single URL." },
+        urls: {
+          type: "array",
+          items: { type: "string" },
+          description: "Multiple URLs to download in one call (preferred for lists of links).",
+        },
         audio_only: { type: "boolean", description: "Extract audio as mp3 instead of video." },
         quality: { type: "number", description: "Max video height, e.g. 720 or 1080 (default 1080)." },
       },
-      required: ["url"],
     },
     requiresApproval: true,
     run: async (args) => {
-      const url = safeUrl(args.url);
-      if (!url) return { ok: false, output: "A valid http(s) URL is required." };
+      const raw = Array.isArray(args.urls) ? args.urls : args.url !== undefined ? [args.url] : [];
+      const urls = raw.map(safeUrl).filter((value): value is string => Boolean(value));
+      if (urls.length === 0) return { ok: false, output: "At least one valid http(s) URL is required." };
+      const list = urls.slice(0, 50);
       const audio = args.audio_only === true;
       const height = Math.min(2160, Math.max(144, Number(args.quality) || 1080));
       const cookies = await cookieArg();
+      const quoted = list.map((url) => `'${url}'`).join(" ");
+      // Titles keep each file distinct, so a batch doesn't overwrite itself.
+      const template = `'${outDir}/%(title)s [%(id)s].%(ext)s'`;
+      const common = `${cookies}--no-playlist --ignore-errors --no-overwrites`;
       const command = audio
-        ? `mkdir -p '${outDir}' && rm -f '${outDir}'/audio.* && ` +
-          `yt-dlp ${cookies}--no-playlist -x --audio-format mp3 -o '${outDir}/audio.%(ext)s' '${url}' && ls -lh '${outDir}'`
-        : `mkdir -p '${outDir}' && rm -f '${outDir}'/video.* && ` +
-          `yt-dlp ${cookies}--no-playlist -f 'bv*[height<=${height}]+ba/b[height<=${height}]' --merge-output-format mp4 ` +
-          `-o '${outDir}/video.%(ext)s' '${url}' && ls -lh '${outDir}'`;
+        ? `mkdir -p '${outDir}' && yt-dlp ${common} -x --audio-format mp3 -o ${template} ${quoted}; ` +
+          `echo '--- files ---'; ls -lh '${outDir}'`
+        : `mkdir -p '${outDir}' && yt-dlp ${common} -f 'bv*[height<=${height}]+ba/b[height<=${height}]' ` +
+          `--merge-output-format mp4 -o ${template} ${quoted}; echo '--- files ---'; ls -lh '${outDir}'`;
       return backend.exec(command);
     },
   };
