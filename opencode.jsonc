@@ -1,0 +1,40 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+
+  // Keep the cheapest capable model as the coding-agent default. This controls
+  // DEVELOPMENT spend only — product runtime limits live in docs/cost-controls.md
+  // and the BOTIFYR_* env vars (see AGENTS.md §5).
+  "model": "deepseek/deepseek-flash",
+
+  // Automatically compact old conversation so huge contexts don't accumulate.
+  "compaction": {
+    "auto": true,
+    "keep": {
+      "tokens": 12000
+    },
+    "buffer": 16000
+  },
+
+  // Don't watch noisy/generated folders (also avoids spurious rebuilds).
+  "watcher": {
+    "ignore": [
+      "node_modules/**",
+      "**/node_modules/**",
+      "dist/**",
+      "**/dist/**",
+      ".git/**",
+      "**/target/**",
+      ".turbo/**",
+      "coverage/**",
+      ".vite/**",
+      "**/.vite/**"
+    ]
+  },
+
+  // Bound how many agentic steps a single Build request may take.
+  "agents": {
+    "build": {
+      "steps": 12
+    }
+  }
+}
