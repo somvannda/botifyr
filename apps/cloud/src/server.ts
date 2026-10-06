@@ -94,6 +94,30 @@ function downloadTargets(text: string): string[] | null {
   return list.length > 0 ? list : null;
 }
 
+/**
+ * Detect "grab 20 links of <query>" style requests so the runtime can search
+ * YouTube directly (via yt-dlp) instead of depending on the model.
+ */
+function searchIntent(text: string): { query: string; count: number } | null {
+  if (!/\b(grab|find|get|search|collect|list|pull)\b/i.test(text)) return null;
+  if (!/\b(links?|videos?|songs?|urls?|clips?)\b/i.test(text)) return null;
+  const countMatch = text.match(/\b(\d{1,3})\b/);
+  const count = countMatch ? Math.min(50, Math.max(1, Number(countMatch[1]))) : 10;
+  const head = text.split(/\b(?:so that|so i can|so i|then|so)\b/i)[0] ?? text;
+  const query = head
+    .replace(/https?:\/\/\S+/gi, " ")
+    .replace(
+      /\b(grab|find|get|search|collect|list|pull|me|please|the|top|youtube|links?|videos?|songs?|urls?|clips?|for|and|of|from|on)\b/gi,
+      " ",
+    )
+    .replace(/\b\d{1,3}\b/g, " ")
+    .replace(/[^\p{L}\p{N} ]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (query.length < 2) return null;
+  return { query, count };
+}
+
 export interface ServerOptions {
   store: Store;
   vaultKey: Buffer;
@@ -352,7 +376,12 @@ export async function buildServer(options: ServerOptions) {
     // If the user pasted links and asked to download them, run the download tool
     // directly (deterministic) instead of hoping the model chooses to.
     const targets = downloadTargets(capped);
-    const initialToolCall = targets ? { name: "youtube.download", arguments: { urls: targets } } : undefined;
+    const search = targets ? null : searchIntent(capped);
+    const initialToolCall = targets
+      ? { name: "youtube.download", arguments: { urls: targets } }
+      : search
+        ? { name: "youtube.search", arguments: { query: search.query, count: search.count } }
+        : undefined;
 
     const bot = session.botId ? await store.getBot(session.botId) : null;
     // Group chats: every member bot replies in turn.

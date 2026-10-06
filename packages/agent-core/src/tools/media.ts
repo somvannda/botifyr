@@ -97,6 +97,34 @@ export function createMediaTools(
     },
   };
 
+  const search: ToolDefinition = {
+    name: "youtube.search",
+    description:
+      "Search YouTube and return matching video links (title + URL). Use this to find links when the user names an artist, song or topic instead of pasting URLs.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Search terms, e.g. an artist or song." },
+        count: { type: "number", description: "How many results (default 10, max 50)." },
+      },
+      required: ["query"],
+    },
+    run: async (args) => {
+      const query = String(args.query ?? "")
+        .replace(/['\n\r]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 200);
+      if (!query) return { ok: false, output: "A search query is required." };
+      const count = Math.min(50, Math.max(1, Number(args.count) || 10));
+      const cookies = await cookieArg();
+      const command =
+        `yt-dlp ${cookies}'ytsearch${count}:${query}' --flat-playlist --no-warnings ` +
+        `--print "%(webpage_url)s :: %(title)s" 2>&1 | head -n ${count}`;
+      return backend.exec(command);
+    },
+  };
+
   const info: ToolDefinition = {
     name: "youtube.info",
     description: "Get metadata (title, duration, formats) for a YouTube URL via yt-dlp.",
@@ -112,5 +140,5 @@ export function createMediaTools(
     },
   };
 
-  return { tools: [download, info] };
+  return { tools: [download, search, info] };
 }

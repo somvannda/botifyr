@@ -36,7 +36,7 @@ export const SKILLS: SkillDefinition[] = [
     description: "Download YouTube media with yt-dlp and process it with ffmpeg.",
     content: [
       "YouTube workflow (runs in the code sandbox; needs the 'code' capability).",
-      "Finding links: if the user names an artist, song or topic instead of URLs, find the links yourself with the browser tools — browser.goto to https://www.youtube.com/results?search_query=<url-encoded query> and then browser.extract to read the watch links — and list the video URLs. In a group chat, @mention the member who should download and include the URLs in that same message so they can act on them.",
+      "Finding links: youtube.search({ query, count }) returns matching video URLs (title + link) straight from yt-dlp — prefer it over scraping the browser. In a group chat, @mention the member who should download and include the URLs in that same message so they can act on them.",
       "Inspect first: youtube.info(url) returns the title, duration and available formats.",
       "Download: youtube.download({ url, audio_only, quality }) saves the file(s) into the downloads folder, which the app serves back to the user as Download links. For a list of links, call youtube.download ONCE with urls: [ ... ] (up to 50) rather than one call per link — one approval, one step, all files.",
       "If the user says 'download those links' without repeating them, list the links you can see (including from your own earlier chat with them) and confirm which ones to download before starting — end your reply with a fenced `options` block (e.g. each candidate link, plus 'All of them').",

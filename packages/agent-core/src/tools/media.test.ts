@@ -65,6 +65,18 @@ describe("youtube.download", () => {
     expect(commands.some((command) => command.includes("height<=480"))).toBe(true);
   });
 
+  it("searches YouTube via yt-dlp", async () => {
+    const { backend, commands } = fakeBackend();
+    const tool = createMediaTools(backend, "/d").tools.find((entry) => entry.name === "youtube.search");
+    if (!tool) throw new Error("youtube.search not found");
+    const result = await tool.run({ query: "heng pitu", count: 20 }, ctx);
+
+    expect(result.ok).toBe(true);
+    const command = commands[0] ?? "";
+    expect(command).toContain("ytsearch20:heng pitu");
+    expect(command).toContain("--flat-playlist");
+  });
+
   it("rejects when no valid url is given", async () => {
     const { backend, commands } = fakeBackend();
     const result = await downloadTool(backend).run({ url: "not-a-url" }, ctx);
