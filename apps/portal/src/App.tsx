@@ -12,7 +12,7 @@ import type {
   Task,
   User,
 } from "@botifyr/shared";
-import { AuthError, BotifyrClient, type ApiKeySummary } from "@botifyr/client";
+import { AuthError, BotifyrClient, type ApiKeySummary, type Person } from "@botifyr/client";
 import {
   BOT_SCHEMES,
   BotLogo,
@@ -128,6 +128,13 @@ export function Portal() {
   const [connections, setConnections] = useState<ConnectionInfo[]>([]);
   const [learnedSkills, setLearnedSkills] = useState<LearnedSkill[]>([]);
   const [skills, setSkills] = useState<Skill[]>([]);
+  const [friends, setFriends] = useState<Person[]>([]);
+  const [friendRequests, setFriendRequests] = useState<
+    Array<{ id: string; direction: "incoming" | "outgoing"; person: Person }>
+  >([]);
+  const [showPeople, setShowPeople] = useState(false);
+  const [peopleQuery, setPeopleQuery] = useState("");
+  const [peopleResults, setPeopleResults] = useState<Person[]>([]);
   const [downloads, setDownloads] = useState<Array<{ name: string; size: number }>>([]);
   const [playerFile, setPlayerFile] = useState<{ name: string; url: string } | null>(null);
   const [downloadsExpanded, setDownloadsExpanded] = useState(false);
@@ -297,6 +304,21 @@ export function Portal() {
     };
   }, [liveTask?.id, liveTask?.status, client]);
 
+  const loadPeople = useCallback(async (): Promise<void> => {
+    try {
+      const [friendList, requests] = await Promise.all([client.listFriends(), client.listFriendRequests()]);
+      setFriends(friendList);
+      setFriendRequests(requests);
+    } catch {
+      // best-effort
+    }
+  }, [client]);
+
+  useEffect(() => {
+    if (!user) return;
+    void loadPeople();
+  }, [user, loadPeople]);
+
   async function signInWithGoogle() {
     setAuthBusy(true);
     setError(null);
@@ -375,13 +397,62 @@ export function Portal() {
     setBusy(true);
     setError(null);
     try {
-      const { session } = await client.sendMessage(sessionId, trimmed, useComputer);
-      setSessions((prev) => prev.map((entry) => (entry.id === sessionId ? session : entry)));
+      const activeKind = sessions.find((entry) => entry.id === sessionId)?.kind;
+      const result =
+        activeKind === "dm" || activeKind === "group"
+          ? await client.sendDm(sessionId, trimmed)
+          : await client.sendMessage(sessionId, trimmed, useComputer);
+      setSessions((prev) => prev.map((entry) => (entry.id === sessionId ? result.session : entry)));
     } catch (err: unknown) {
       setError(messageOf(err));
       await bootstrap().catch(() => {});
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function searchPeopleNow(query: string): Promise<void> {
+    setPeopleQuery(query);
+    if (query.trim().length < 1) {
+      setPeopleResults([]);
+      return;
+    }
+    try {
+      setPeopleResults(await client.searchPeople(query.trim()));
+    } catch {
+      setPeopleResults([]);
+    }
+  }
+
+  async function addFriend(person: Person): Promise<void> {
+    try {
+      await client.addFriend(person.id);
+      await loadPeople();
+      if (peopleQuery.trim()) setPeopleResults(await client.searchPeople(peopleQuery.trim()));
+    } catch (err: unknown) {
+      setError(messageOf(err));
+    }
+  }
+
+  async function respondRequest(id: string, action: "accept" | "decline"): Promise<void> {
+    try {
+      await client.respondFriendRequest(id, action);
+      await loadPeople();
+    } catch (err: unknown) {
+      setError(messageOf(err));
+    }
+  }
+
+  async function openDmWith(person: Person): Promise<void> {
+    try {
+      const session = await client.openDm(person.id);
+      setSessions((prev) => (prev.some((entry) => entry.id === session.id) ? prev : [session, ...prev]));
+      setActiveBotId(null);
+      setActiveSessionId(session.id);
+      setShowPeople(false);
+      setSidebarOpen(false);
+    } catch (err: unknown) {
+      setError(messageOf(err));
     }
   }
 
@@ -604,6 +675,16 @@ export function Portal() {
           <button className="new-task" type="button" onClick={() => openBot("group")}>
             <UsersIcon size={16} /> New group
           </button>
+          <button
+            className="new-task"
+            type="button"
+            onClick={() => {
+              setShowPeople(true);
+              void loadPeople();
+            }}
+          >
+            <UsersIcon size={16} /> People
+          </button>
         </div>
 
         <div className="newchat-panel" style={{ position: "static", display: "block" }}>
@@ -640,6 +721,21 @@ export function Portal() {
                 {bot.name}
               </span>
               <span className="newchat-meta">{bot.memberIds?.length ?? 0} bots</span>
+            </button>
+          ))}
+          {friends.length > 0 && <div className="newchat-section">People</div>}
+          {friends.map((person) => (
+            <button
+              key={person.id}
+              className="newchat-item"
+              type="button"
+              onClick={() => void openDmWith(person)}
+            >
+              <span className="conv-avatar">{person.online ? "●" : "○"}</span>
+              <span className="newchat-name">
+                {person.displayName || (person.handle ? `@${person.handle}` : "Friend")}
+              </span>
+              <span className="newchat-meta">{person.online ? "online" : "offline"}</span>
             </button>
           ))}
         </div>
@@ -719,6 +815,32 @@ export function Portal() {
               )}
 
               {activeSession.messages.map((message) => {
+                if (activeSession.kind === "dm" || activeSession.kind === "group") {
+                  const mine = message.senderId === user.id;
+                  const person = friends.find((entry) => entry.id === message.senderId);
+                  const label = person?.displayName || (person?.handle ? `@${person.handle}` : "Friend");
+                  return mine ? (
+                    <div key={message.id} className="msg-user">
+                      <div className="msg-user-bubble">{message.content}</div>
+                      <span className="msg-user-avatar">{initials(user.email)}</span>
+                    </div>
+                  ) : (
+                    <div key={message.id} className="msg-assistant">
+                      <BotLogo
+                        size={26}
+                        scheme={BOT_SCHEMES[(person?.avatarScheme ?? 0) % BOT_SCHEMES.length]}
+                        className="msg-bot-logo"
+                      />
+                      <div className="msg-body">
+                        <div className="msg-author">
+                          <span className="msg-author-emoji">{person?.avatarEmoji ?? "🙂"}</span>
+                          {label}
+                        </div>
+                        <Markdown text={message.content} />
+                      </div>
+                    </div>
+                  );
+                }
                 if (message.role === "user") {
                   return (
                     <div key={message.id} className="msg-user">
@@ -1141,6 +1263,100 @@ export function Portal() {
             ) : (
               <video className="player-media" src={playerFile.url} controls autoPlay />
             )}
+          </div>
+        </div>
+      )}
+
+      {showPeople && (
+        <div className="apps-overlay" onClick={() => setShowPeople(false)}>
+          <div className="apps-panel" onClick={(event) => event.stopPropagation()}>
+            <div className="apps-head">
+              <span className="apps-title">People</span>
+              <button className="icon-btn sm" type="button" onClick={() => setShowPeople(false)}>
+                <CloseIcon size={13} />
+              </button>
+            </div>
+            <input
+              className="settings-input"
+              style={{ width: "100%", margin: "10px 0", boxSizing: "border-box" }}
+              placeholder="Search people by @handle or email"
+              value={peopleQuery}
+              onChange={(event) => void searchPeopleNow(event.target.value)}
+            />
+            {peopleResults.length > 0 && (
+              <>
+                <div className="settings-section-title">Results</div>
+                <ul className="downloads-list">
+                  {peopleResults.map((person) => (
+                    <li key={person.id} className="download-row">
+                      <span className="download-ico">{person.avatarEmoji ?? "🙂"}</span>
+                      <div className="download-main">
+                        <div className="download-name">
+                          {person.displayName ||
+                            (person.handle ? `@${person.handle}` : person.id.slice(0, 8))}
+                        </div>
+                        <div className="download-size">{person.online ? "online" : "offline"}</div>
+                      </div>
+                      {person.friend ? (
+                        <button className="ghost small" type="button" onClick={() => void openDmWith(person)}>
+                          Message
+                        </button>
+                      ) : person.requested ? (
+                        <span className="settings-note">Requested</span>
+                      ) : (
+                        <button className="ghost small" type="button" onClick={() => void addFriend(person)}>
+                          {person.incoming ? "Accept" : "Add friend"}
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+            {friendRequests.filter((request) => request.direction === "incoming").length > 0 && (
+              <>
+                <div className="settings-section-title">Friend requests</div>
+                <ul className="downloads-list">
+                  {friendRequests
+                    .filter((request) => request.direction === "incoming")
+                    .map((request) => (
+                      <li key={request.id} className="download-row">
+                        <span className="download-ico">🙂</span>
+                        <div className="download-main">
+                          <div className="download-name">
+                            {request.person.displayName ||
+                              (request.person.handle ? `@${request.person.handle}` : "Friend")}
+                          </div>
+                        </div>
+                        <button
+                          className="ghost small"
+                          type="button"
+                          onClick={() => void respondRequest(request.id, "accept")}
+                        >
+                          Accept
+                        </button>
+                      </li>
+                    ))}
+                </ul>
+              </>
+            )}
+            <div className="settings-section-title">Friends ({friends.length})</div>
+            <ul className="downloads-list">
+              {friends.length === 0 && <li className="muted">No friends yet — search above.</li>}
+              {friends.map((person) => (
+                <li key={person.id} className="download-row">
+                  <span className="download-ico">{person.online ? "●" : "○"}</span>
+                  <div className="download-main">
+                    <div className="download-name">
+                      {person.displayName || (person.handle ? `@${person.handle}` : "Friend")}
+                    </div>
+                  </div>
+                  <button className="ghost small" type="button" onClick={() => void openDmWith(person)}>
+                    Message
+                  </button>
+                </li>
+              ))}
+            </ul>
           </div>
         </div>
       )}
