@@ -212,7 +212,10 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [skills, setSkills] = useState<Skill[]>([]);
   const [learnedSkills, setLearnedSkills] = useState<LearnedSkill[]>([]);
   const [downloads, setDownloads] = useState<Array<{ name: string; size: number }>>([]);
-  const [playerFile, setPlayerFile] = useState<{ name: string; url: string } | null>(null);
+  const [player, setPlayer] = useState<{ items: Array<{ name: string; url: string }>; index: number } | null>(
+    null,
+  );
+  const playerFile = player ? player.items[player.index] : null;
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [friends, setFriends] = useState<Person[]>([]);
   const [friendRequests, setFriendRequests] = useState<
@@ -574,6 +577,28 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   async function openExternal(url: string) {
     await bridge.openExternal(url);
   }
+
+  /** Open the media viewer at an item so you can browse prev/next. */
+  function openPlayer(items: Array<{ name: string; url: string }>, index: number): void {
+    if (items.length === 0) return;
+    setPlayer({ items, index: Math.max(0, Math.min(index, items.length - 1)) });
+  }
+
+  // Arrow keys / Esc while the viewer is open.
+  useEffect(() => {
+    if (!player) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setPlayer(null);
+      else if (event.key === "ArrowRight")
+        setPlayer((prev) =>
+          prev && prev.index < prev.items.length - 1 ? { ...prev, index: prev.index + 1 } : prev,
+        );
+      else if (event.key === "ArrowLeft")
+        setPlayer((prev) => (prev && prev.index > 0 ? { ...prev, index: prev.index - 1 } : prev));
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [player]);
 
   // Browser-based sign-in (Grok-Bot style): open the web page, then pick up the
   // session the cloud issues once Google returns.
@@ -2441,7 +2466,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                     </div>
                   )}
                   <ul className={`downloads-list ${downloadsExpanded ? "expanded" : ""}`}>
-                    {downloads.map((file) => (
+                    {downloads.map((file, index) => (
                       <li key={file.name} className="download-row">
                         <span className="download-ico">{isPlayable(file.name) ? "▶" : "▢"}</span>
                         <div className="download-main">
@@ -2459,7 +2484,15 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                           <button
                             className="ghost small"
                             type="button"
-                            onClick={() => setPlayerFile({ name: file.name, url: downloadUrl(file.name) })}
+                            onClick={() =>
+                              openPlayer(
+                                downloads.map((entry) => ({
+                                  name: entry.name,
+                                  url: downloadUrl(entry.name),
+                                })),
+                                index,
+                              )
+                            }
                           >
                             Play
                           </button>
@@ -2818,7 +2851,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                   </div>
                 )}
                 <ul className="downloads-list">
-                  {libraryMedia.map((item) => (
+                  {libraryMedia.map((item, index) => (
                     <li key={item.id} className="download-row">
                       <span className="download-ico">{isPlayable(item.name) ? "▶" : "▢"}</span>
                       <div className="download-main">
@@ -2834,7 +2867,12 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                         <button
                           className="ghost small"
                           type="button"
-                          onClick={() => setPlayerFile({ name: item.name, url: mediaUrl(item) })}
+                          onClick={() =>
+                            openPlayer(
+                              libraryMedia.map((entry) => ({ name: entry.name, url: mediaUrl(entry) })),
+                              index,
+                            )
+                          }
                         >
                           Play
                         </button>
@@ -2843,7 +2881,12 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                         <button
                           className="ghost small"
                           type="button"
-                          onClick={() => setPlayerFile({ name: item.name, url: mediaUrl(item) })}
+                          onClick={() =>
+                            openPlayer(
+                              libraryMedia.map((entry) => ({ name: entry.name, url: mediaUrl(entry) })),
+                              index,
+                            )
+                          }
                         >
                           View
                         </button>
@@ -3467,14 +3510,43 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
         </div>
       )}
 
-      {playerFile && (
-        <div className="apps-overlay" onClick={() => setPlayerFile(null)}>
+      {playerFile && player && (
+        <div className="apps-overlay" onClick={() => setPlayer(null)}>
           <div className="player-panel" onClick={(event) => event.stopPropagation()}>
             <div className="apps-head">
+              <button
+                className="round small"
+                type="button"
+                aria-label="Previous"
+                disabled={player.index <= 0}
+                onClick={() =>
+                  setPlayer((prev) => (prev && prev.index > 0 ? { ...prev, index: prev.index - 1 } : prev))
+                }
+              >
+                ‹
+              </button>
               <span className="apps-title" title={playerFile.name}>
                 {prettyFileName(playerFile.name)}
               </span>
-              <button className="round small" type="button" onClick={() => setPlayerFile(null)}>
+              {player.items.length > 1 && (
+                <span className="player-count">
+                  {player.index + 1} / {player.items.length}
+                </span>
+              )}
+              <button
+                className="round small"
+                type="button"
+                aria-label="Next"
+                disabled={player.index >= player.items.length - 1}
+                onClick={() =>
+                  setPlayer((prev) =>
+                    prev && prev.index < prev.items.length - 1 ? { ...prev, index: prev.index + 1 } : prev,
+                  )
+                }
+              >
+                ›
+              </button>
+              <button className="round small" type="button" onClick={() => setPlayer(null)}>
                 ✕
               </button>
             </div>
@@ -4060,7 +4132,12 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                               <button
                                 className="ghost small"
                                 type="button"
-                                onClick={() => setPlayerFile({ name: item.name, url: mediaUrl(item) })}
+                                onClick={() =>
+                                  openPlayer(
+                                    media.map((entry) => ({ name: entry.name, url: mediaUrl(entry) })),
+                                    media.findIndex((entry) => entry.id === item.id),
+                                  )
+                                }
                               >
                                 Play
                               </button>
