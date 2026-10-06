@@ -138,6 +138,125 @@ nav.links a:hover {
   font-size: 13.5px;
 }
 
+/* Pricing */
+.section-sub {
+  text-align: center;
+  color: var(--muted);
+  margin: 8px auto 0;
+  max-width: 520px;
+}
+
+.pricing {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  padding: 28px 0 40px;
+  align-items: start;
+}
+
+.price-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  position: relative;
+  padding: 24px 20px;
+}
+
+.price-card.popular {
+  border-color: var(--accent);
+  box-shadow: 0 12px 40px rgba(109, 139, 255, 0.16);
+}
+
+.price-card h3 {
+  font-size: 16px;
+}
+
+.price {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.price span {
+  font-size: 30px;
+  font-weight: 700;
+  color: var(--text);
+  margin-right: 4px;
+}
+
+.price-card ul {
+  list-style: none;
+  margin: 4px 0 8px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13.5px;
+  color: var(--muted);
+}
+
+.price-card li::before {
+  content: "✓";
+  color: #3fd18b;
+  margin-right: 8px;
+  font-weight: 700;
+}
+
+.price-card .cta {
+  justify-content: center;
+  margin-top: auto;
+}
+
+.cta.ghost {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.cta.ghost:hover {
+  background: var(--panel);
+}
+
+.badge {
+  position: absolute;
+  top: -11px;
+  right: 16px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+/* FAQ */
+.faq {
+  max-width: 720px;
+  margin: 20px auto 64px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.faq details {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  border-radius: 12px;
+  padding: 14px 18px;
+}
+
+.faq summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.faq p {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
 footer.site {
   border-top: 1px solid var(--border);
   padding: 28px 0 48px;
@@ -219,6 +338,10 @@ footer.site {
 
 @media (max-width: 760px) {
   .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pricing {
     grid-template-columns: 1fr;
   }
 

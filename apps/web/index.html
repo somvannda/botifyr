@@ -64,6 +64,7 @@
           Botifyr
         </a>
         <nav class="links">
+          <a href="/#pricing">Pricing</a>
           <a href="/skills">Skills</a>
           <a href="/help">Help</a>
           <a href="mailto:support@botifyr.xyz">Contact</a>
@@ -131,7 +132,7 @@
         </div>
       </section>
 
-      <h2 style="text-align: center; margin: 24px 0 0; font-size: 26px">Self-host in seconds</h2>
+      <h2 id="selfhost" style="text-align: center; margin: 24px 0 0; font-size: 26px">Self-host in seconds</h2>
       <section class="hero" style="padding: 14px 0 48px">
         <pre
           style="
@@ -148,6 +149,78 @@
 npm install
 docker compose up -d --build cloud
 npm run dev:desktop:tauri</code></pre>
+      </section>
+
+      <h2 id="pricing" style="text-align: center; margin: 24px 0 0; font-size: 26px">Simple pricing</h2>
+      <p class="section-sub">Start free. Upgrade when you put your bots to work.</p>
+      <section class="pricing">
+        <div class="card price-card">
+          <h3>Free</h3>
+          <div class="price"><span>$0</span>/month</div>
+          <ul>
+            <li>Chat with bots</li>
+            <li>Browser &amp; code capabilities</li>
+            <li>Group chats &amp; the skill library</li>
+            <li>Community support</li>
+          </ul>
+          <a class="cta ghost" href="/help">Get started</a>
+        </div>
+        <div class="card price-card popular">
+          <span class="badge">Most popular</span>
+          <h3>Pro</h3>
+          <div class="price"><span>$20</span>/month</div>
+          <ul>
+            <li>Everything in Free</li>
+            <li>Desktop computer use</li>
+            <li>Always-on scheduled bots</li>
+            <li>Priority sandboxes &amp; higher limits</li>
+            <li>Email support</li>
+          </ul>
+          <a class="cta" href="/help">Start free trial</a>
+        </div>
+        <div class="card price-card">
+          <h3>Self-host</h3>
+          <div class="price"><span>Your infra</span></div>
+          <ul>
+            <li>Bring your own model key</li>
+            <li>Unlimited bots &amp; seats</li>
+            <li>Full data control</li>
+            <li>Audit trail &amp; approvals</li>
+          </ul>
+          <a class="cta ghost" href="/#selfhost">Deploy it →</a>
+        </div>
+      </section>
+
+      <h2 style="text-align: center; margin: 32px 0 0; font-size: 26px">Frequently asked</h2>
+      <section class="faq">
+        <details>
+          <summary>Does it really operate software, or just talk about it?</summary>
+          <p>
+            It really operates: browser use, desktop computer use, and a code/shell sandbox — each task runs in
+            a throwaway, isolated environment, and consequential steps wait for your approval.
+          </p>
+        </details>
+        <details>
+          <summary>Where does my data live?</summary>
+          <p>
+            Botifyr is self-hostable. Cloud hides secrets with envelope encryption; self-hosting keeps
+            everything in your own database and volumes.
+          </p>
+        </details>
+        <details>
+          <summary>Which models can I use?</summary>
+          <p>
+            It's model-agnostic — any OpenAI-compatible provider. The default is a cost-efficient model with
+            strict token caps, history summarisation and a response cache.
+          </p>
+        </details>
+        <details>
+          <summary>How do bots learn new skills?</summary>
+          <p>
+            A bot can save a capability it worked out. Once approved, it joins a shared library so new users'
+            bots start already trained.
+          </p>
+        </details>
       </section>
 
       <footer class="site">
