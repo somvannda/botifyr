@@ -27,6 +27,7 @@ import {
   ownerOfSession,
   rememberSession,
   rememberTask,
+  withSessionLock,
 } from "./runtime.js";
 import { resolveTaskApproval } from "./approvals.js";
 import { handleNodeMessage, nodeInfo, registerNode } from "./nodes.js";
@@ -358,9 +359,14 @@ export async function buildServer(options: ServerOptions) {
             .join("\n");
           const summary = await summarizeConversation(snapshot ? `${snapshot}\n${older}` : older);
           if (summary) {
-            session.summary = summary;
-            session.summaryUpTo = boundary;
-            await store.updateSession(session);
+            // Re-read before writing: the run may have appended messages since
+            // this snapshot, and writing the stale object would wipe them.
+            const fresh = await store.getSession(session.id);
+            if (fresh) {
+              fresh.summary = summary;
+              fresh.summaryUpTo = boundary;
+              await store.updateSession(fresh);
+            }
           }
         } catch {
           // summarization is best-effort
@@ -413,15 +419,22 @@ export async function buildServer(options: ServerOptions) {
       createdAt: now,
       updatedAt: now,
     };
-    session.messages.push({
+    const userMessage = {
       id: randomUUID(),
-      role: "user",
+      role: "user" as const,
       content: capped,
       createdAt: now,
       taskId: task.id,
+    };
+    // Append against the freshest copy so a concurrent run can't clobber it.
+    await withSessionLock(session.id, async () => {
+      const fresh = (await store.getSession(session.id)) ?? session;
+      if (!fresh.messages.some((message) => message.id === userMessage.id)) {
+        fresh.messages.push(userMessage);
+      }
+      await store.updateSession(fresh);
+      session.messages = fresh.messages;
     });
-
-    await store.updateSession(session);
     await store.createTask(task);
     rememberSession(session.id, session.userId);
     rememberTask(task.id, session.id, userId);
