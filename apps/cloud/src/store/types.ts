@@ -89,6 +89,18 @@ export interface FileRecord {
   updatedAt: string;
 }
 
+/** A learned skill, shared across all users (self-trained capability library). */
+export interface LearnedSkillRecord {
+  id: string;
+  name: string;
+  description: string;
+  content: string;
+  source: string;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Store {
   init(): Promise<void>;
   close(): Promise<void>;
@@ -139,4 +151,10 @@ export interface Store {
   listFiles(botId: string): Promise<FileRecord[]>;
   getFile(userId: string, id: string): Promise<FileRecord | null>;
   deleteFile(userId: string, id: string): Promise<boolean>;
+
+  upsertLearnedSkill(record: LearnedSkillRecord): Promise<void>;
+  listLearnedSkills(): Promise<LearnedSkillRecord[]>;
+  getLearnedSkill(id: string): Promise<LearnedSkillRecord | null>;
+  getLearnedSkillByName(name: string): Promise<LearnedSkillRecord | null>;
+  deleteLearnedSkill(userId: string, id: string): Promise<boolean>;
 }

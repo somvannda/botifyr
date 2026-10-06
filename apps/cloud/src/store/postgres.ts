@@ -5,6 +5,7 @@ import type {
   BotRecord,
   ConnectionRecord,
   FileRecord,
+  LearnedSkillRecord,
   SecretRecord,
   SessionRecord,
   Store,
@@ -334,6 +335,39 @@ export class PostgresStore implements Store {
 
   async deleteFile(userId: string, id: string): Promise<boolean> {
     const result = await this.pool.query("DELETE FROM files WHERE user_id = $1 AND id = $2", [userId, id]);
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async upsertLearnedSkill(record: LearnedSkillRecord): Promise<void> {
+    await this.pool.query(
+      "INSERT INTO learned_skills (id, name, data, created_by, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6) " +
+        "ON CONFLICT (name) DO UPDATE SET data = EXCLUDED.data, updated_at = EXCLUDED.updated_at",
+      [record.id, record.name, record, record.createdBy, record.createdAt, record.updatedAt],
+    );
+  }
+
+  async listLearnedSkills(): Promise<LearnedSkillRecord[]> {
+    const { rows } = await this.pool.query("SELECT data FROM learned_skills ORDER BY updated_at DESC");
+    return rows.map((row) => row.data as LearnedSkillRecord);
+  }
+
+  async getLearnedSkill(id: string): Promise<LearnedSkillRecord | null> {
+    const { rows } = await this.pool.query("SELECT data FROM learned_skills WHERE id = $1", [id]);
+    return rows[0]?.data ?? null;
+  }
+
+  async getLearnedSkillByName(name: string): Promise<LearnedSkillRecord | null> {
+    const { rows } = await this.pool.query("SELECT data FROM learned_skills WHERE lower(name) = lower($1)", [
+      name,
+    ]);
+    return rows[0]?.data ?? null;
+  }
+
+  async deleteLearnedSkill(userId: string, id: string): Promise<boolean> {
+    const result = await this.pool.query("DELETE FROM learned_skills WHERE id = $1 AND created_by = $2", [
+      id,
+      userId,
+    ]);
     return (result.rowCount ?? 0) > 0;
   }
 }

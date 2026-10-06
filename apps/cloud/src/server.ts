@@ -538,6 +538,58 @@ export async function buildServer(options: ServerOptions) {
     SKILLS.map((skill) => ({ id: skill.id, name: skill.name, description: skill.description })),
   );
 
+  /** Skills the bot team has learned (global, shared by all users). */
+  app.get("/v1/learned-skills", { preHandler: requireAuth }, async () => {
+    const list = await store.listLearnedSkills();
+    return list.map((skill) => ({
+      id: skill.id,
+      name: skill.name,
+      description: skill.description,
+      createdAt: skill.createdAt,
+    }));
+  });
+
+  app.post<{ Body: { name?: string; description?: string; content?: string; source?: string } }>(
+    "/v1/learned-skills",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const name = (request.body?.name ?? "").trim().slice(0, 80);
+      if (!name) return reply.code(400).send({ error: "a skill name is required" });
+      const userId = request.userId as string;
+      const existing = await store.getLearnedSkillByName(name);
+      const now = new Date().toISOString();
+      const record = {
+        id: existing?.id ?? randomUUID(),
+        name,
+        description: (request.body?.description ?? "").slice(0, 240),
+        content: (request.body?.content ?? "").slice(0, 20_000),
+        source: (request.body?.source ?? "").slice(0, 1_000),
+        createdBy: existing?.createdBy ?? userId,
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+      };
+      await store.upsertLearnedSkill(record);
+      return reply
+        .code(existing ? 200 : 201)
+        .send({
+          id: record.id,
+          name: record.name,
+          description: record.description,
+          createdAt: record.createdAt,
+        });
+    },
+  );
+
+  app.delete<{ Params: { id: string } }>(
+    "/v1/learned-skills/:id",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const removed = await store.deleteLearnedSkill(request.userId as string, request.params.id);
+      if (!removed) return reply.code(404).send({ error: "skill not found" });
+      return reply.code(204).send();
+    },
+  );
+
   app.post<{ Body: { email?: string; password?: string } }>("/auth/signup", async (request, reply) => {
     const email = (request.body?.email ?? "").trim();
     const password = request.body?.password ?? "";

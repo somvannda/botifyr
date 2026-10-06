@@ -4,6 +4,7 @@ import type {
   BotRecord,
   ConnectionRecord,
   FileRecord,
+  LearnedSkillRecord,
   SecretRecord,
   SessionRecord,
   Store,
@@ -25,6 +26,7 @@ export class MemoryStore implements Store {
   private connections = new Map<string, ConnectionRecord>();
   private usage: UsageRecord[] = [];
   private files = new Map<string, FileRecord>();
+  private learnedSkills = new Map<string, LearnedSkillRecord>();
 
   async init(): Promise<void> {}
   async close(): Promise<void> {}
@@ -210,5 +212,39 @@ export class MemoryStore implements Store {
       }
     }
     return false;
+  }
+
+  async upsertLearnedSkill(record: LearnedSkillRecord): Promise<void> {
+    for (const [key, existing] of this.learnedSkills) {
+      if (existing.name.toLowerCase() === record.name.toLowerCase() && existing.id !== record.id) {
+        this.learnedSkills.delete(key);
+      }
+    }
+    this.learnedSkills.set(record.id, structuredClone(record));
+  }
+
+  async listLearnedSkills(): Promise<LearnedSkillRecord[]> {
+    return [...this.learnedSkills.values()]
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .map((record) => structuredClone(record));
+  }
+
+  async getLearnedSkill(id: string): Promise<LearnedSkillRecord | null> {
+    const record = this.learnedSkills.get(id);
+    return record ? structuredClone(record) : null;
+  }
+
+  async getLearnedSkillByName(name: string): Promise<LearnedSkillRecord | null> {
+    for (const record of this.learnedSkills.values()) {
+      if (record.name.toLowerCase() === name.toLowerCase()) return structuredClone(record);
+    }
+    return null;
+  }
+
+  async deleteLearnedSkill(userId: string, id: string): Promise<boolean> {
+    const record = this.learnedSkills.get(id);
+    if (!record || record.createdBy !== userId) return false;
+    this.learnedSkills.delete(id);
+    return true;
   }
 }

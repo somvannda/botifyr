@@ -96,4 +96,13 @@ CREATE TABLE IF NOT EXISTS files (
   UNIQUE (bot_id, name)
 );
 CREATE INDEX IF NOT EXISTS files_bot_idx ON files (bot_id);
+
+CREATE TABLE IF NOT EXISTS learned_skills (
+  id          TEXT PRIMARY KEY,
+  name        TEXT NOT NULL UNIQUE,
+  data        JSONB NOT NULL,
+  created_by  TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 `;

@@ -99,6 +99,14 @@ export interface Skill {
   description: string;
 }
 
+/** A skill a bot researched and saved for every bot to reuse (global). */
+export interface LearnedSkill {
+  id: string;
+  name: string;
+  description: string;
+  createdAt: string;
+}
+
 /**
  * A bot is an agent the user talks to. It owns a single conversation thread,
  * has its own name, avatar colour and standing instructions.

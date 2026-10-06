@@ -20,6 +20,7 @@ import { clearComputerSandbox, setComputerSandbox, setScreenshot, waitForApprova
 import { createConnectionTools } from "./connections-tools.js";
 import { createFileTools } from "./files-tools.js";
 import { createGithubTools } from "./github-tools.js";
+import { createLearnedSkillTools } from "./learned-skills-tools.js";
 import { createNotionTools, createSlackTools, createTelegramTools } from "./token-apps-tools.js";
 import { decryptSecret } from "./vault.js";
 import { createLocalTools, nodeInfo } from "./nodes.js";
@@ -220,13 +221,26 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
     if (providers.has("notion")) tools.push(...createNotionTools(store, deps.vaultKey, userId));
     if (providers.has("telegram")) tools.push(...createTelegramTools(store, deps.vaultKey, userId));
   }
+  // Self-learning tools: available everywhere (list/get/save learned skills).
+  tools.push(...createLearnedSkillTools(store, userId));
   // Library tools: the authoring bot can read/write its own files.
   if (deps.author) tools.push(...createFileTools(store, deps.author.id, userId));
   const localInstruction =
     deps.local && nodeInfo(userId).online
       ? "The user has explicitly enabled their own computer for this request. Perform it on their machine using the local.browser.* and local.shell/local.file tools."
       : undefined;
-  const instructions = [deps.instructions, localInstruction].filter(Boolean).join(" ") || undefined;
+  // Surface the team's learned skills so the agent reuses (and grows) them.
+  const learned = await store.listLearnedSkills().catch(() => []);
+  const skillIndex =
+    learned.length > 0
+      ? "Skills already learned by the team (call skills.get with the name to read the full guide before unfamiliar work; save new ones with skills.learn):\n" +
+        learned
+          .slice(0, 25)
+          .map((skill) => `- ${skill.name}: ${skill.description}`)
+          .join("\n")
+      : "";
+  const instructions =
+    [deps.instructions, skillIndex, localInstruction].filter(Boolean).join("\n\n") || undefined;
   if (hasComputer) {
     task.liveStream = true;
     task.updatedAt = new Date().toISOString();
