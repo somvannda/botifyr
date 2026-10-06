@@ -105,7 +105,6 @@ export function createMediaTools(
         return { ok: false, output: "No downloadable videos were found at that URL." };
       }
 
-      const outputs: string[] = [];
       let ok = true;
       for (let index = 0; index < finalList.length; index += 1) {
         const url = finalList[index];
@@ -115,13 +114,18 @@ export function createMediaTools(
           : `yt-dlp ${common} -f 'bv*[height<=${height}]+ba/b[height<=${height}]' ` +
             `--merge-output-format mp4 -o ${template} '${url}'`;
         const result = await backend.exec(command);
-        outputs.push(result.output);
         if (!result.ok) ok = false;
       }
 
       const listing = await backend.exec(`ls -lh '${outDir}'`);
-      const tail = outputs.join("\n").slice(-2500);
-      return { ok, output: `${tail}\n--- files ---\n${listing.output}`.slice(0, 6000) };
+      const files = listing.output
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean);
+      const header = ok
+        ? `Downloaded ${finalList.length} item(s) into the downloads folder.`
+        : `Downloaded with some errors (${finalList.length} requested).`;
+      return { ok, output: `${header}\n${files.join("\n")}`.slice(0, 4000) };
     },
   };
 

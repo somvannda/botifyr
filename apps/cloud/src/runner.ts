@@ -54,6 +54,8 @@ export interface RunnerDeps {
   autoApprove?: boolean;
   /** A deterministic first tool call (e.g. download pasted links) before the model runs. */
   initialToolCall?: { name: string; arguments: Record<string, unknown> };
+  /** When true, run initialToolCall and finish without consulting the model. */
+  initialToolOnly?: boolean;
 }
 
 type Capability = "browser" | "computer" | "code";
@@ -318,6 +320,7 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
       })(),
       autoApprove: deps.autoApprove === true,
       initialToolCall: deps.initialToolCall,
+      initialToolOnly: deps.initialToolOnly === true,
       requestApproval: async (title, description, risk) => {
         const approval = {
           id: randomUUID(),

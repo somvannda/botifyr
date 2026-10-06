@@ -510,6 +510,7 @@ export async function buildServer(options: ServerOptions) {
               author: { id: member.id },
               autoApprove: member.autoApprove === true,
               initialToolCall: member.id === directMemberId ? initialToolCall : undefined,
+              initialToolOnly: initialToolCall?.name === "youtube.download",
               suppressIf: autonomous ? (reply) => reply.trim().startsWith("[SKIP]") : undefined,
             },
             task,
@@ -566,6 +567,7 @@ export async function buildServer(options: ServerOptions) {
           author: bot ? { id: bot.id } : undefined,
           autoApprove: bot?.autoApprove === true,
           initialToolCall,
+          initialToolOnly: initialToolCall?.name === "youtube.download",
         },
         task,
       ).catch((error) => {

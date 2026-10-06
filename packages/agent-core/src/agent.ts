@@ -53,6 +53,12 @@ export interface RunAgentOptions {
    * can't be refused.
    */
   initialToolCall?: { name: string; arguments: Record<string, unknown> };
+  /**
+   * When true (with initialToolCall), run that tool and finish — do not consult
+   * the model afterwards. Used for mechanical jobs so the model can neither
+   * refuse nor duplicate them.
+   */
+  initialToolOnly?: boolean;
   requestApproval: (title: string, description: string, risk: RiskLevel) => Promise<boolean>;
   onStep: (step: StepUpdate) => void;
   /** Live assistant text as the model streams it (optional). */
@@ -155,6 +161,8 @@ export async function runAgent(options: RunAgentOptions): Promise<AgentResult> {
         },
       ]
     : null;
+  const initialToolOnly = Boolean(options.initialToolCall) && options.initialToolOnly === true;
+  let lastToolOutput = "";
   const usage: TokenUsage = { promptTokens: 0, completionTokens: 0 };
 
   for (let iteration = 0; iteration < maxSteps; iteration += 1) {
@@ -292,6 +300,7 @@ export async function runAgent(options: RunAgentOptions): Promise<AgentResult> {
           options.onScreenshot(result.screenshot);
         }
         messages.push(toolMessage(call.id, call.name, result.output));
+        lastToolOutput = result.output;
         options.onStep({
           id: stepId,
           title: call.name,
@@ -300,8 +309,21 @@ export async function runAgent(options: RunAgentOptions): Promise<AgentResult> {
         });
       } catch (error) {
         messages.push(toolMessage(call.id, call.name, `Error: ${messageOf(error)}`));
+        lastToolOutput = `Error: ${messageOf(error)}`;
         options.onStep({ id: stepId, title: call.name, detail: messageOf(error), status: "failed" });
       }
+    }
+
+    // A mechanical job (e.g. a batch download) is done — return the result
+    // directly instead of letting the model re-run or refuse it.
+    if (initialToolOnly) {
+      return {
+        ok: true,
+        summary: lastToolOutput.trim() || "Done.",
+        steps: stepCount,
+        provider: provider.name,
+        usage,
+      };
     }
   }
 

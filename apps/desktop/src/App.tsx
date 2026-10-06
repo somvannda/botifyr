@@ -1733,12 +1733,13 @@ export default function App() {
                           </li>
                         );
                       }
+                      const detail = stepDetail(step.title, step.detail);
                       return (
                         <li key={step.id} className={`step step-${step.status}`}>
                           <span className="step-icon">{iconFor(step.status)}</span>
                           <div>
-                            <div className="step-title">{step.title}</div>
-                            {step.detail && <div className="step-detail">{truncate(step.detail, 220)}</div>}
+                            <div className="step-title">{stepLabel(step.title)}</div>
+                            {detail && <div className="step-detail">{detail}</div>}
                           </div>
                         </li>
                       );
@@ -3249,6 +3250,21 @@ function iconFor(status: Task["steps"][number]["status"]): string {
 function truncate(text: string, max: number): string {
   const clean = text.replace(/\s+/g, " ").trim();
   return clean.length > max ? `${clean.slice(0, max)}…` : clean;
+}
+
+/** Friendly labels for tool steps; media steps hide their raw JSON/output. */
+const STEP_LABELS: Record<string, string> = {
+  "youtube.download": "Downloading videos",
+  "youtube.search": "Searching YouTube",
+  "youtube.info": "Inspecting a video",
+};
+function stepLabel(title: string): string {
+  return STEP_LABELS[title] ?? title;
+}
+function stepDetail(title: string, detail: string | undefined): string | null {
+  if (!detail) return null;
+  if (title.startsWith("youtube.")) return null;
+  return truncate(detail, 220);
 }
 
 /** Parse "6/20 …" download progress from a task step's detail. */
