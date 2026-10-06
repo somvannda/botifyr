@@ -154,7 +154,14 @@ export async function buildServer(options: ServerOptions) {
   }
   const app = Fastify({ logger: true });
 
-  await app.register(cors, { origin: true });
+  // The desktop app (and website) call this API cross-origin, so allow the
+  // full set of verbs we actually use — the default omits PUT/PATCH/DELETE,
+  // which silently broke Edit/Delete bot with a CORS "Failed to fetch".
+  await app.register(cors, {
+    origin: true,
+    methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["content-type", "authorization"],
+  });
   await app.register(websocket);
 
   // Serve the brand logo for the sign-in pages (botifyr.xyz has an untrusted cert).
