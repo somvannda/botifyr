@@ -1104,7 +1104,7 @@ body {
 .apps-panel {
   width: 520px;
   max-width: 100%;
-  background: var(--panel-2);
+  background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 16px;
   padding: 18px;
@@ -1353,7 +1353,7 @@ body {
   max-width: calc(100% - 40px);
   max-height: calc(100% - 120px);
   overflow-y: auto;
-  background: var(--panel-2);
+  background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 8px;
@@ -1962,14 +1962,14 @@ body {
 .md code {
   font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
   font-size: 12.5px;
-  background: #1c1c20;
+  background: var(--panel-2);
   border: 1px solid var(--border);
   border-radius: 5px;
   padding: 1px 5px;
 }
 
 .md-code {
-  background: #101012;
+  background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 12px 14px;
@@ -2168,7 +2168,7 @@ body {
   right: 10px;
   bottom: 64px;
   z-index: 150;
-  background: var(--panel-2);
+  background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 6px;
@@ -2401,7 +2401,7 @@ body {
 .trial-bar {
   height: 8px;
   border-radius: 999px;
-  background: #1c1c20;
+  background: var(--panel-2);
   overflow: hidden;
 }
 
