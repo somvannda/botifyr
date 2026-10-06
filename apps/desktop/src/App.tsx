@@ -2085,6 +2085,15 @@ const MARKETPLACE: MarketApp[] = [
     icon: <span className="market-emoji">📐</span>,
   },
   {
+    id: "telegram",
+    provider: "telegram",
+    tokenApp: true,
+    name: "Telegram",
+    category: "Communication",
+    desc: "Send messages from your Telegram bot",
+    icon: <span className="market-emoji">✈️</span>,
+  },
+  {
     id: "figma",
     provider: null,
     name: "Figma",

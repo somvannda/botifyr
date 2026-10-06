@@ -52,6 +52,53 @@ export function createSlackTools(store: Store, vaultKey: Buffer, userId: string)
   ];
 }
 
+/* Telegram ----------------------------------------------------------------- */
+export function createTelegramTools(store: Store, vaultKey: Buffer, userId: string): ToolDefinition[] {
+  return [
+    {
+      name: "telegram.get_me",
+      description: "Check the connected Telegram bot (username / name).",
+      parameters: { type: "object", properties: {} },
+      run: async () => {
+        const token = await connectionToken(store, vaultKey, userId, "telegram");
+        if (!token) return { ok: false, output: "Telegram isn't connected. Connect it in the Marketplace." };
+        const response = await fetch(`https://api.telegram.org/bot${token}/getMe`);
+        const data = (await response.json()) as {
+          ok: boolean;
+          description?: string;
+          result?: { username?: string; first_name?: string };
+        };
+        return data.ok
+          ? { ok: true, output: `Bot: @${data.result?.username ?? "?"} (${data.result?.first_name ?? ""})` }
+          : { ok: false, output: `Telegram error: ${data.description ?? response.status}` };
+      },
+    },
+    {
+      name: "telegram.send_message",
+      description: "Send a Telegram message to a chat id or @channel.",
+      parameters: {
+        type: "object",
+        properties: { chat_id: { type: "string" }, text: { type: "string" } },
+        required: ["chat_id", "text"],
+      },
+      requiresApproval: true,
+      run: async (args) => {
+        const token = await connectionToken(store, vaultKey, userId, "telegram");
+        if (!token) return { ok: false, output: "Telegram isn't connected. Connect it in the Marketplace." };
+        const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ chat_id: String(args.chat_id ?? ""), text: String(args.text ?? "") }),
+        });
+        const data = (await response.json()) as { ok: boolean; description?: string };
+        return data.ok
+          ? { ok: true, output: "Message sent." }
+          : { ok: false, output: `Telegram error: ${data.description ?? response.status}` };
+      },
+    },
+  ];
+}
+
 /* Notion ------------------------------------------------------------------- */
 export function createNotionTools(store: Store, vaultKey: Buffer, userId: string): ToolDefinition[] {
   const headers = (token: string) => ({

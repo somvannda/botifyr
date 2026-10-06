@@ -19,7 +19,7 @@ import { clearComputerSandbox, setComputerSandbox, setScreenshot, waitForApprova
 import { createConnectionTools } from "./connections-tools.js";
 import { createFileTools } from "./files-tools.js";
 import { createGithubTools } from "./github-tools.js";
-import { createNotionTools, createSlackTools } from "./token-apps-tools.js";
+import { createNotionTools, createSlackTools, createTelegramTools } from "./token-apps-tools.js";
 import { createLocalTools, nodeInfo } from "./nodes.js";
 import type { Store } from "./store/index.js";
 
@@ -194,6 +194,7 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
     if (providers.has("github")) tools.push(...createGithubTools(store, deps.vaultKey, userId));
     if (providers.has("slack")) tools.push(...createSlackTools(store, deps.vaultKey, userId));
     if (providers.has("notion")) tools.push(...createNotionTools(store, deps.vaultKey, userId));
+    if (providers.has("telegram")) tools.push(...createTelegramTools(store, deps.vaultKey, userId));
   }
   // Library tools: the authoring bot can read/write its own files.
   if (deps.author) tools.push(...createFileTools(store, deps.author.id, userId));
