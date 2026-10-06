@@ -1,4 +1,5 @@
 import { BotLogo } from "./BotLogo";
+import { CloseIcon, MaximizeIcon, MinimizeIcon } from "./Icons";
 
 async function withWindow(run: (window: any) => Promise<unknown>): Promise<void> {
   try {
@@ -24,7 +25,7 @@ export function TitleBar() {
           title="Minimize"
           onClick={() => void withWindow((w) => w.minimize())}
         >
-          —
+          <MinimizeIcon size={14} />
         </button>
         <button
           className="win-btn"
@@ -34,7 +35,7 @@ export function TitleBar() {
             void withWindow(async (w) => ((await w.isMaximized()) ? w.unmaximize() : w.maximize()))
           }
         >
-          ▢
+          <MaximizeIcon size={12} />
         </button>
         <button
           className="win-btn close"
@@ -42,7 +43,7 @@ export function TitleBar() {
           title="Close"
           onClick={() => void withWindow((w) => w.close())}
         >
-          ✕
+          <CloseIcon size={13} />
         </button>
       </div>
     </header>

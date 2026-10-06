@@ -16,6 +16,20 @@ import { invoke } from "@tauri-apps/api/core";
 import { AuthError, BotifyrClient } from "./api";
 import { CalendarIcon, DriveIcon, GmailIcon } from "./AppIcons";
 import { BOT_SCHEMES, BotLogo } from "./BotLogo";
+import {
+  ChartIcon,
+  GearIcon,
+  HelpIcon,
+  LogoutIcon,
+  MobileIcon,
+  MoreIcon,
+  PanelIcon,
+  PlusIcon,
+  SearchIcon,
+  SendIcon,
+  UserPlusIcon,
+  UsersIcon,
+} from "./Icons";
 import { Markdown } from "./Markdown";
 import "./styles.css";
 
@@ -818,10 +832,10 @@ export default function App() {
       <aside className="sidebar">
         <div className="sidebar-top">
           <button className="round" type="button" title="Search" onClick={() => setSearchOpen((v) => !v)}>
-            ⌕
+            <SearchIcon size={16} />
           </button>
           <button className="round" type="button" title="New chat" onClick={() => setShowNewChat(true)}>
-            ＋
+            <PlusIcon size={18} />
           </button>
         </div>
 
@@ -897,13 +911,17 @@ export default function App() {
                 setShowAccountMenu(false);
               }}
             >
-              <span className="account-ico">◔</span>
+              <span className="account-ico">
+                <ChartIcon size={16} />
+              </span>
               <span className="account-label">Trial usage</span>
               <span className="account-value">{trialPercent}%</span>
               <span className="account-chev">›</span>
             </button>
             <button className="account-item" type="button" disabled>
-              <span className="account-ico">▢</span>
+              <span className="account-ico">
+                <MobileIcon size={16} />
+              </span>
               <span className="account-label">Get Botifyr for mobile</span>
             </button>
             <button
@@ -914,7 +932,9 @@ export default function App() {
                 setShowAccountMenu(false);
               }}
             >
-              <span className="account-ico">?</span>
+              <span className="account-ico">
+                <HelpIcon size={16} />
+              </span>
               <span className="account-label">Support</span>
               <span className="account-chev">›</span>
             </button>
@@ -927,7 +947,9 @@ export default function App() {
                 setShowAccountMenu(false);
               }}
             >
-              <span className="account-ico">⚙</span>
+              <span className="account-ico">
+                <GearIcon size={16} />
+              </span>
               <span className="account-label">Settings</span>
             </button>
             <div className="account-sep" />
@@ -939,7 +961,9 @@ export default function App() {
                 void addAccount();
               }}
             >
-              <span className="account-ico">＋</span>
+              <span className="account-ico">
+                <UserPlusIcon size={16} />
+              </span>
               <span className="account-label">Add account</span>
             </button>
             <button
@@ -950,7 +974,9 @@ export default function App() {
                 void logout();
               }}
             >
-              <span className="account-ico">⏻</span>
+              <span className="account-ico">
+                <LogoutIcon size={16} />
+              </span>
               <span className="account-label">Log out</span>
             </button>
           </div>
@@ -963,12 +989,16 @@ export default function App() {
             <span className="newchat-title">To: Start a chat with…</span>
             <div className="newchat-panel" onClick={(event) => event.stopPropagation()}>
               <button className="newchat-item" type="button" onClick={() => openCreateBot("bot")}>
-                <span className="newchat-ico">＋</span>
+                <span className="newchat-ico">
+                  <PlusIcon size={16} />
+                </span>
                 Create new Bot
               </button>
 
               <button className="newchat-item" type="button" onClick={() => openCreateBot("group")}>
-                <span className="newchat-ico">👥</span>
+                <span className="newchat-ico">
+                  <UsersIcon size={16} />
+                </span>
                 Create group chat
               </button>
 
@@ -1005,7 +1035,7 @@ export default function App() {
                 title={showBotPanel ? "Hide bot panel" : "Show bot panel"}
                 onClick={() => setShowBotPanel((value) => !value)}
               >
-                ▢
+                <PanelIcon size={16} />
               </button>
               {activeBot && (
                 <button
@@ -1014,7 +1044,7 @@ export default function App() {
                   title="Bot settings"
                   onClick={() => openEditBot(activeBot)}
                 >
-                  ⋯
+                  <MoreIcon size={16} />
                 </button>
               )}
               {latestTask && (
@@ -1206,7 +1236,7 @@ export default function App() {
         >
           <div className="composer-bar">
             <button className="round" type="button" title="New chat" onClick={() => setShowNewChat(true)}>
-              ＋
+              <PlusIcon size={18} />
             </button>
             <textarea
               value={text}
@@ -1226,7 +1256,7 @@ export default function App() {
               type="submit"
               disabled={!text.trim() || !activeSessionId || sending || busy}
             >
-              {busy ? "…" : "➤"}
+              {busy ? "…" : <SendIcon size={16} />}
             </button>
           </div>
         </form>
