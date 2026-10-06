@@ -532,7 +532,7 @@ export default function App() {
     setBotEmoji(bot.emoji);
     setBotScheme(bot.scheme % BOT_SCHEMES.length);
     setBotIntro(bot.instructions);
-    setGroupMembers(bot.memberIds ?? []);
+    setGroupMembers((bot.memberIds ?? []).filter((id) => id !== bot.id));
     setAutonomous(bot.autonomous === true);
     setSchedulePrompt(bot.schedule?.prompt ?? "");
     setScheduleEvery(bot.schedule?.everyMinutes ?? 60);
@@ -2191,38 +2191,54 @@ export default function App() {
 
               {(createBotMode === "group" || createBotMode === "edit") && (
                 <>
-                  <div className="member-actions">
-                    <span className="member-actions-title">Members</span>
-                    <button
-                      className="link"
-                      type="button"
-                      onClick={() => setGroupMembers(bots.map((bot) => bot.id))}
-                    >
-                      Add all
-                    </button>
-                    <button className="link" type="button" onClick={() => setGroupMembers([])}>
-                      None
-                    </button>
-                  </div>
-                  <ul className="member-list">
-                    {bots.map((bot) => (
-                      <li key={bot.id}>
-                        <label className="member-item">
-                          <input
-                            type="checkbox"
-                            checked={groupMembers.includes(bot.id)}
-                            onChange={(event) =>
-                              setGroupMembers((prev) =>
-                                event.target.checked ? [...prev, bot.id] : prev.filter((id) => id !== bot.id),
-                              )
-                            }
-                          />
-                          <BotLogo size={22} scheme={BOT_SCHEMES[bot.scheme % BOT_SCHEMES.length]} />
-                          <span>{bot.name}</span>
-                        </label>
-                      </li>
-                    ))}
-                  </ul>
+                  {(() => {
+                    // A group holds individual bots only: never itself, and never
+                    // another group (no nested groups).
+                    const candidates = bots.filter(
+                      (bot) => bot.id !== editingBotId && !(bot.memberIds && bot.memberIds.length > 0),
+                    );
+                    return (
+                      <>
+                        <div className="member-actions">
+                          <span className="member-actions-title">Members</span>
+                          <button
+                            className="link"
+                            type="button"
+                            onClick={() => setGroupMembers(candidates.map((bot) => bot.id))}
+                          >
+                            Add all
+                          </button>
+                          <button className="link" type="button" onClick={() => setGroupMembers([])}>
+                            None
+                          </button>
+                        </div>
+                        <ul className="member-list">
+                          {candidates.length === 0 && (
+                            <li className="muted">No bots to add yet — create a bot first.</li>
+                          )}
+                          {candidates.map((bot) => (
+                            <li key={bot.id}>
+                              <label className="member-item">
+                                <input
+                                  type="checkbox"
+                                  checked={groupMembers.includes(bot.id)}
+                                  onChange={(event) =>
+                                    setGroupMembers((prev) =>
+                                      event.target.checked
+                                        ? [...prev, bot.id]
+                                        : prev.filter((id) => id !== bot.id),
+                                    )
+                                  }
+                                />
+                                <BotLogo size={22} scheme={BOT_SCHEMES[bot.scheme % BOT_SCHEMES.length]} />
+                                <span>{bot.name}</span>
+                              </label>
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    );
+                  })()}
                 </>
               )}
 

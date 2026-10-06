@@ -1131,11 +1131,14 @@ export async function buildServer(options: ServerOptions) {
     const emoji = (request.body?.emoji ?? "🤖").trim().slice(0, 8) || "🤖";
     const scheme = Number.isInteger(request.body?.scheme) ? Number(request.body?.scheme) : 0;
     const instructions = (request.body?.instructions ?? "").slice(0, 4000);
-    // Group: keep only member ids that belong to this user.
+    // Group: keep only member ids that belong to this user (individual bots,
+    // never another group).
     let memberIds: string[] | undefined;
     if (Array.isArray(request.body?.memberIds) && request.body.memberIds.length > 0) {
       const owned = await store.listBots(userId);
-      const ownedIds = new Set(owned.map((entry) => entry.id));
+      const ownedIds = new Set(
+        owned.filter((entry) => !(entry.memberIds && entry.memberIds.length > 0)).map((entry) => entry.id),
+      );
       memberIds = request.body.memberIds.filter((id) => ownedIds.has(id));
       if (memberIds.length === 0) memberIds = undefined;
     }
@@ -1200,10 +1203,15 @@ export async function buildServer(options: ServerOptions) {
     if (typeof request.body?.instructions === "string")
       bot.instructions = request.body.instructions.slice(0, 4000);
 
-    // Group membership: keep only ids the user owns (excluding the bot itself).
+    // Group membership: keep only ids the user owns (excluding the bot itself
+    // and other groups — groups hold individual bots, never nested groups).
     if (Array.isArray(request.body?.memberIds)) {
       const owned = await store.listBots(userId);
-      const ownedIds = new Set(owned.filter((entry) => entry.id !== bot.id).map((entry) => entry.id));
+      const ownedIds = new Set(
+        owned
+          .filter((entry) => entry.id !== bot.id && !(entry.memberIds && entry.memberIds.length > 0))
+          .map((entry) => entry.id),
+      );
       const members = request.body.memberIds.filter((id) => ownedIds.has(id));
       bot.memberIds = members.length > 0 ? members : undefined;
     }
