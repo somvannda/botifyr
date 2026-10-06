@@ -112,7 +112,7 @@ const SETTINGS_TABS = [
   { id: "computer", label: "Computer", icon: <MonitorIcon size={16} /> },
   { id: "usage", label: "Usage & Billing", icon: <ChartIcon size={16} /> },
   { id: "skills", label: "Learned skills", icon: <SparkIcon size={16} /> },
-  { id: "media", label: "Media", icon: <PanelIcon size={16} /> },
+  { id: "media", label: "Downloads", icon: <PanelIcon size={16} /> },
   { id: "updates", label: "Updates", icon: <DownloadIcon size={16} /> },
   { id: "vault", label: "Vault", icon: <LockIcon size={16} /> },
 ] as const;
@@ -168,6 +168,9 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     }
   });
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [approvalNotice, setApprovalNotice] = useState<{ title: string; decision: "allow" | "deny" } | null>(
+    null,
+  );
   const seenMessagesRef = useRef<Set<string>>(new Set());
   const seededSessionsRef = useRef<Set<string>>(new Set());
   const taskStatusRef = useRef<Record<string, string>>({});
@@ -1149,7 +1152,11 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     taskId: string,
     approvalId: string,
     decision: "allow" | "deny",
+    title = "Action",
   ): Promise<void> {
+    // Show the decision on the card for a moment before it clears.
+    setApprovalNotice({ title, decision });
+    window.setTimeout(() => setApprovalNotice(null), 1800);
     try {
       await client.resolveApproval(taskId, approvalId, decision);
     } catch (err: unknown) {
@@ -2414,49 +2421,73 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
           )}
         </section>
 
-        {pendingApprovals.length > 0 && (
+        {(pendingApprovals.length > 0 || approvalNotice) && (
           <div className="approval-panel">
             <div className="approval-panel-head">
-              <span className="approval-tag">
-                Approval needed
-                {pendingApprovals.length > 1 ? ` · ${pendingApprovals.length} pending` : ""}
+              <span
+                className={`approval-tag${
+                  approvalNotice ? (approvalNotice.decision === "allow" ? " ok" : " denied") : ""
+                }`}
+              >
+                {approvalNotice
+                  ? approvalNotice.decision === "allow"
+                    ? "Approved ✓"
+                    : "Denied"
+                  : "Approval needed"}
+                {!approvalNotice && pendingApprovals.length > 1
+                  ? ` · ${pendingApprovals.length} pending`
+                  : ""}
               </span>
-              {pendingApprovals.length > 1 && (
+              {!approvalNotice && pendingApprovals.length > 1 && (
                 <button className="ghost small" type="button" onClick={() => void approveAll()}>
                   Approve all ({pendingApprovals.length})
                 </button>
               )}
             </div>
-            {(() => {
-              const task = pendingApprovals[0];
-              const approval = task.approval;
-              if (!approval) return null;
-              return (
-                <div className="approval-card">
-                  <div className="approval-card-title">{approval.title}</div>
-                  <div className="approval-card-desc">{approval.description}</div>
-                  <div className="approval-card-actions">
-                    <button
-                      className="btn deny"
-                      type="button"
-                      onClick={() => void resolveApprovalFor(task.id, approval.id, "deny")}
-                    >
-                      Deny
-                    </button>
-                    <button
-                      className="btn allow"
-                      type="button"
-                      onClick={() => void resolveApprovalFor(task.id, approval.id, "allow")}
-                    >
-                      Allow once
-                    </button>
-                    <button className="ghost small" type="button" onClick={() => void allowAlways(task)}>
-                      Always allow
-                    </button>
+            {pendingApprovals.length > 0
+              ? (() => {
+                  const task = pendingApprovals[0];
+                  const approval = task.approval;
+                  if (!approval) return null;
+                  return (
+                    <div className="approval-card">
+                      <div className="approval-card-title">{approval.title}</div>
+                      <div className="approval-card-desc">{approval.description}</div>
+                      <div className="approval-card-actions">
+                        <button
+                          className="btn deny"
+                          type="button"
+                          onClick={() =>
+                            void resolveApprovalFor(task.id, approval.id, "deny", approval.title)
+                          }
+                        >
+                          Deny
+                        </button>
+                        <button
+                          className="btn allow"
+                          type="button"
+                          onClick={() =>
+                            void resolveApprovalFor(task.id, approval.id, "allow", approval.title)
+                          }
+                        >
+                          Allow once
+                        </button>
+                        <button className="ghost small" type="button" onClick={() => void allowAlways(task)}>
+                          Always allow
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()
+              : approvalNotice && (
+                  <div
+                    className={`approval-card approval-resolved ${
+                      approvalNotice.decision === "allow" ? "is-allowed" : "is-denied"
+                    }`}
+                  >
+                    <div className="approval-card-title">{approvalNotice.title}</div>
                   </div>
-                </div>
-              );
-            })()}
+                )}
           </div>
         )}
 
@@ -3828,11 +3859,37 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
 
               {settingsTab === "media" && (
                 <div className="settings-sections">
-                  <div className="settings-section-title">Media ({media.length})</div>
+                  <div className="settings-section-title">
+                    Downloads ({media.length}
+                    {media.length > 0
+                      ? ` · ${(media.reduce((sum, item) => sum + item.size, 0) / (1024 * 1024)).toFixed(1)} MB`
+                      : ""}
+                    )
+                  </div>
                   <p className="settings-note">
                     Files your bots downloaded. They live on the server until you move them to a computer; the
                     list stays in sync across your devices.
                   </p>
+                  <div className="settings-row">
+                    <span className="settings-row-main">
+                      <span className="settings-row-name">Cloud storage</span>
+                      <span className="settings-row-sub">
+                        {media.length} file{media.length === 1 ? "" : "s"} available
+                      </span>
+                    </span>
+                    <button
+                      className="ghost small"
+                      type="button"
+                      onClick={() =>
+                        void client
+                          .listMedia()
+                          .then(setMedia)
+                          .catch(() => {})
+                      }
+                    >
+                      Refresh
+                    </button>
+                  </div>
                   <p className="settings-note">
                     Other devices online:{" "}
                     {devices
@@ -3852,6 +3909,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                           <div className="download-size">
                             {Math.max(1, Math.round(item.size / 1024)).toLocaleString()} KB ·{" "}
                             {item.location === "device" ? `On ${item.device ?? "a device"}` : "On server"}
+                            {item.createdAt ? ` · ${new Date(item.createdAt).toLocaleDateString()}` : ""}
                           </div>
                         </div>
                         {isPlayable(item.name) && (
@@ -3863,6 +3921,13 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                             Play
                           </button>
                         )}
+                        <button
+                          className="ghost small"
+                          type="button"
+                          onClick={() => void openExternal(mediaUrl(item, true))}
+                        >
+                          Save
+                        </button>
                         <button className="ghost small" type="button" onClick={() => void sendToDevice(item)}>
                           Send
                         </button>

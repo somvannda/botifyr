@@ -729,6 +729,24 @@ body {
   color: var(--warn);
 }
 
+.approval-tag.ok {
+  color: var(--ok);
+}
+
+.approval-tag.denied {
+  color: var(--danger);
+}
+
+.approval-card.is-allowed {
+  border-color: rgba(63, 209, 139, 0.5);
+  background: rgba(63, 209, 139, 0.08);
+}
+
+.approval-card.is-denied {
+  border-color: rgba(239, 68, 68, 0.5);
+  background: rgba(239, 68, 68, 0.08);
+}
+
 .approval h3 {
   margin: 8px 0 6px;
   font-size: 15px;
