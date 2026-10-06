@@ -19,6 +19,7 @@ import { GithubBrand, NotionBrand, SlackBrand, TelegramBrand } from "./BrandIcon
 import { BOT_SCHEMES, BotLogo } from "./BotLogo";
 import {
   ChartIcon,
+  CheckIcon,
   CloseIcon,
   DownloadIcon,
   GearIcon,
@@ -1570,13 +1571,19 @@ export default function App() {
                           </span>
                           {app.provider ? (
                             installed ? (
-                              <button
-                                className="market-btn"
-                                type="button"
-                                onClick={() => void disconnectApp(app.provider!)}
-                              >
-                                Disconnect
-                              </button>
+                              <>
+                                <span className="market-added">
+                                  <CheckIcon size={13} /> Added
+                                </span>
+                                <button
+                                  className="market-remove"
+                                  type="button"
+                                  title="Remove"
+                                  onClick={() => void disconnectApp(app.provider!)}
+                                >
+                                  <CloseIcon size={12} />
+                                </button>
+                              </>
                             ) : app.tokenApp ? (
                               tokenInputFor === app.provider ? (
                                 <div className="market-token">
@@ -1616,7 +1623,7 @@ export default function App() {
                                 disabled={connectingApp === app.provider}
                                 onClick={() => void connectApp(app.provider!)}
                               >
-                                {connectingApp === app.provider ? "Connecting…" : "Add"}
+                                {connectingApp === app.provider ? "Adding…" : "Add"}
                               </button>
                             )
                           ) : (

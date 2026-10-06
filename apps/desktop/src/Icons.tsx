@@ -181,3 +181,11 @@ export function LockIcon({ size = 18, className }: IconProps) {
     </svg>
   );
 }
+
+export function CheckIcon({ size = 14, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden className={className} {...stroke}>
+      <path d="M5 12.5 9.5 17 19 7" />
+    </svg>
+  );
+}
