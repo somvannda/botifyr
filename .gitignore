@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dist-ssr/
+build/
+
+# Rust / Tauri
+apps/desktop/src-tauri/target/
+apps/desktop/src-tauri/gen/
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Local test scratch
+apps/cloud/.persistence.json
+
+# TypeScript
+*.tsbuildinfo
+
+# Turborepo / task caches
+.turbo/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db

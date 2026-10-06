@@ -1,0 +1,289 @@
+import { randomUUID } from "node:crypto";
+import type { ServerEvent, Task } from "@botifyr/shared";
+import {
+  createBrowserBackend,
+  createBrowserTools,
+  createComputerTools,
+  createDockerComputerBackend,
+  createDockerShellBackend,
+  createProvider,
+  createShellTools,
+  runAgent,
+  type ModelProvider,
+  type StepUpdate,
+  type ToolDefinition,
+} from "@botifyr/agent-core";
+import { emit } from "./events.js";
+import { clearComputerSandbox, setComputerSandbox, setScreenshot, waitForApproval } from "./runtime.js";
+import { createLocalTools, nodeInfo } from "./nodes.js";
+import type { Store } from "./store/index.js";
+
+export interface RunnerDeps {
+  store: Store;
+  userId: string;
+  /** Prior conversation turns for context. */
+  history?: { role: "user" | "assistant"; content: string }[];
+  /** When true, run on the user's own computer (local node) with local tools only. */
+  local?: boolean;
+  /** Standing instructions for the bot that owns this conversation. */
+  instructions?: string;
+  /** Identity of the bot authoring this reply (used to attribute group messages). */
+  author?: { id: string };
+}
+
+type Capability = "browser" | "computer" | "code";
+
+function sandboxMode(): "local" | "docker" {
+  return process.env.BOTIFYR_SANDBOX === "docker" ? "docker" : "local";
+}
+
+function capabilities(): Capability[] {
+  const raw = process.env.BOTIFYR_CAPABILITIES ?? "browser";
+  const list = raw
+    .split(",")
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean);
+  const valid = list.filter(
+    (entry): entry is Capability => entry === "browser" || entry === "computer" || entry === "code",
+  );
+  return valid.length > 0 ? valid : ["browser"];
+}
+
+let provider: ModelProvider | null = null;
+
+function getProvider(): ModelProvider {
+  if (!provider) {
+    const port = process.env.PORT ?? 8787;
+    const hostForBrowser = sandboxMode() === "docker" ? "host.docker.internal" : "localhost";
+    provider = createProvider({
+      provider: process.env.BOTIFYR_PROVIDER,
+      model: process.env.BOTIFYR_MODEL,
+      apiKey: process.env.BOTIFYR_API_KEY,
+      baseUrl: process.env.BOTIFYR_BASE_URL,
+      demoUrl: process.env.BOTIFYR_DEMO_URL ?? `http://${hostForBrowser}:${port}/demo`,
+    });
+  }
+  return provider;
+}
+
+export function runtimeInfo(): {
+  provider: string;
+  demo: boolean;
+  capabilities: Capability[];
+  sandbox: "local" | "docker";
+} {
+  const active = getProvider();
+  return {
+    provider: active.name,
+    demo: active.name === "mock",
+    capabilities: capabilities(),
+    sandbox: sandboxMode(),
+  };
+}
+
+function upsertStep(task: Task, update: StepUpdate): void {
+  const now = new Date().toISOString();
+  const existing = task.steps.find((step) => step.id === update.id);
+  if (!existing) {
+    task.steps.push({
+      id: update.id,
+      index: task.steps.length,
+      title: update.title,
+      detail: update.detail,
+      status: update.status,
+      startedAt: update.status === "running" ? now : undefined,
+      finishedAt: update.status === "running" ? undefined : now,
+    });
+    return;
+  }
+  existing.title = update.title;
+  if (update.detail !== undefined) existing.detail = update.detail;
+  existing.status = update.status;
+  if (update.status === "running" && !existing.startedAt) existing.startedAt = now;
+  if (update.status !== "running") existing.finishedAt = now;
+}
+
+function buildTools(
+  task: Task,
+  userId: string,
+  local: boolean,
+): { tools: ToolDefinition[]; closers: Array<() => Promise<void>>; hasComputer: boolean } {
+  // "Run on my computer": use only the user's own machine tools.
+  if (local && nodeInfo(userId).online) {
+    return { tools: createLocalTools(userId), closers: [], hasComputer: false };
+  }
+
+  const caps = capabilities();
+  const tools: ToolDefinition[] = [];
+  const closers: Array<() => Promise<void>> = [];
+  let hasComputer = false;
+
+  if (caps.includes("browser")) {
+    const browser = createBrowserTools(createBrowserBackend({ mode: sandboxMode() }));
+    tools.push(...browser.tools);
+    closers.push(() => browser.close());
+  }
+  if (caps.includes("computer")) {
+    const backend = createDockerComputerBackend();
+    const computer = createComputerTools(backend);
+    tools.push(...computer.tools);
+    closers.push(() => computer.close());
+    setComputerSandbox(task.id, backend);
+    hasComputer = true;
+  }
+  if (caps.includes("code")) {
+    const shell = createShellTools(createDockerShellBackend());
+    tools.push(...shell.tools);
+    closers.push(() => shell.close());
+  }
+  // Local tools operate the user's own machine; only when their node is online.
+  if (nodeInfo(userId).online) {
+    tools.push(...createLocalTools(userId));
+  }
+  return { tools, closers, hasComputer };
+}
+
+export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
+  const { store, userId, history } = deps;
+
+  task.status = "running";
+  task.steps = [];
+  task.updatedAt = new Date().toISOString();
+  await store.updateTask(task);
+  emit({ type: "task.updated", task });
+
+  const { tools, closers, hasComputer } = buildTools(task, userId, Boolean(deps.local));
+  const localInstruction =
+    deps.local && nodeInfo(userId).online
+      ? "The user has explicitly enabled their own computer for this request. Perform it on their machine using the local.browser.* and local.shell/local.file tools."
+      : undefined;
+  const instructions = [deps.instructions, localInstruction].filter(Boolean).join(" ") || undefined;
+  if (hasComputer) {
+    task.liveStream = true;
+    task.updatedAt = new Date().toISOString();
+    await store.updateTask(task);
+    emit({ type: "task.updated", task });
+  }
+
+  let chain = Promise.resolve();
+  const queue = (event: ServerEvent): void => {
+    chain = chain
+      .then(async () => {
+        task.updatedAt = new Date().toISOString();
+        await store.updateTask(task);
+        emit(event);
+      })
+      .catch(() => {});
+  };
+  const audit = (type: "tool" | "approval" | "task", toolName: string | null, detail: string): void => {
+    chain = chain
+      .then(() =>
+        store.appendAudit({
+          id: randomUUID(),
+          taskId: task.id,
+          userId,
+          type,
+          toolName,
+          detail,
+          createdAt: new Date().toISOString(),
+        }),
+      )
+      .catch(() => {});
+  };
+
+  let reply = "";
+  let ok = false;
+
+  try {
+    const result = await runAgent({
+      goal: task.goal,
+      history,
+      instructions,
+      provider: getProvider(),
+      tools,
+      workspaceDir: process.cwd(),
+      maxSteps: Number(process.env.BOTIFYR_MAX_STEPS ?? 12),
+      requestApproval: async (title, description, risk) => {
+        const approval = {
+          id: randomUUID(),
+          taskId: task.id,
+          title,
+          description,
+          risk,
+          status: "pending" as const,
+          createdAt: new Date().toISOString(),
+        };
+        task.approval = approval;
+        task.status = "awaiting_approval";
+        await store.updateTask(task);
+        emit({ type: "task.updated", task });
+        emit({ type: "approval.requested", taskId: task.id, approval });
+        audit("approval", null, `${title}: ${description}`);
+
+        const resolved = await waitForApproval(approval.id);
+        task.approval = resolved;
+        task.status = "running";
+        return resolved.status === "allowed";
+      },
+      onStep: (step) => {
+        upsertStep(task, step);
+        queue({ type: "task.updated", task });
+        if (step.status !== "running" && step.title.includes("."))
+          audit("tool", step.title, step.detail ?? "");
+      },
+      onToken: (delta) => {
+        emit({
+          type: "assistant.delta",
+          sessionId: task.sessionId,
+          taskId: task.id,
+          botId: deps.author?.id,
+          text: delta,
+        });
+      },
+      onScreenshot: (png) => {
+        setScreenshot(task.id, png);
+        task.screenshotAt = new Date().toISOString();
+        queue({ type: "task.updated", task });
+      },
+    });
+
+    await chain;
+    ok = result.ok;
+    reply = result.summary;
+    task.status = ok ? "completed" : "failed";
+    if (ok) task.result = reply;
+    else task.error = reply;
+    task.updatedAt = new Date().toISOString();
+    await store.updateTask(task);
+    emit(ok ? { type: "task.completed", task } : { type: "task.failed", task });
+    audit("task", null, ok ? "completed" : `failed: ${reply}`);
+  } finally {
+    await Promise.all(closers.map((close) => close()));
+    if (hasComputer) {
+      clearComputerSandbox(task.id);
+      task.liveStream = false;
+      task.updatedAt = new Date().toISOString();
+      await store.updateTask(task);
+      emit({ type: "task.updated", task });
+    }
+  }
+
+  // Append the assistant's reply to the conversation transcript.
+  try {
+    const session = await store.getSession(task.sessionId);
+    if (session) {
+      session.messages.push({
+        id: randomUUID(),
+        role: "assistant",
+        content: ok ? reply : `Something went wrong: ${reply}`,
+        createdAt: new Date().toISOString(),
+        taskId: task.id,
+        botId: deps.author?.id,
+      });
+      await store.updateSession(session);
+      emit({ type: "session.updated", session });
+    }
+  } catch {
+    // transcript update is best-effort
+  }
+}

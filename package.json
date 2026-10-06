@@ -1,0 +1,40 @@
+{
+  "name": "botifyr",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Botifyr — an AI agent that gets real work done.",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:cloud": "npm run dev -w @botifyr/cloud",
+    "dev:desktop": "npm run dev -w @botifyr/desktop",
+    "dev:desktop:tauri": "npm run tauri -w @botifyr/desktop -- dev",
+    "sandbox:build": "docker build -t botifyr/browser-sandbox:1.63.0 infra/browser-sandbox",
+    "desktop:build": "docker build -t botifyr/desktop-sandbox:1 infra/desktop-sandbox",
+    "code:build": "docker build -t botifyr/code-sandbox:1 infra/code-sandbox",
+    "db:up": "docker compose up -d postgres",
+    "db:down": "docker compose down",
+    "node:start": "npm run start -w @botifyr/node",
+    "chrome:debug": "node scripts/chrome-debug.mjs",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9",
+    "eslint": "^9",
+    "eslint-config-prettier": "^9",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "prettier": "^3",
+    "typescript-eslint": "^8",
+    "vitest": "^2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

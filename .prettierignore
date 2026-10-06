@@ -1,0 +1,10 @@
+node_modules
+dist
+dist-ssr
+build
+target
+gen
+coverage
+package-lock.json
+*.md
+apps/desktop/public/fonts

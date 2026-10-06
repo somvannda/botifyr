@@ -1,0 +1,303 @@
+import { Pool } from "pg";
+import type { Task } from "@botifyr/shared";
+import type {
+  AuditRecord,
+  BotRecord,
+  ConnectionRecord,
+  SecretRecord,
+  SessionRecord,
+  Store,
+  UserRecord,
+} from "./types.js";
+import { SCHEMA_SQL } from "./schema.js";
+
+/** Durable store backed by Postgres. Tasks are stored as JSONB documents. */
+
+export class PostgresStore implements Store {
+  private pool: Pool;
+
+  constructor(connectionString: string) {
+    this.pool = new Pool({ connectionString });
+  }
+
+  async init(): Promise<void> {
+    await this.pool.query(SCHEMA_SQL);
+  }
+
+  async close(): Promise<void> {
+    await this.pool.end();
+  }
+
+  async createUser(record: UserRecord): Promise<void> {
+    await this.pool.query(
+      "INSERT INTO users (id, email, password_hash, created_at) VALUES ($1, $2, $3, $4)",
+      [record.id, record.email, record.passwordHash, record.createdAt],
+    );
+  }
+
+  async getUserByEmail(email: string): Promise<UserRecord | null> {
+    const { rows } = await this.pool.query(
+      "SELECT id, email, password_hash, created_at FROM users WHERE lower(email) = lower($1)",
+      [email],
+    );
+    return rows[0] ? toUser(rows[0]) : null;
+  }
+
+  async getUserById(id: string): Promise<UserRecord | null> {
+    const { rows } = await this.pool.query(
+      "SELECT id, email, password_hash, created_at FROM users WHERE id = $1",
+      [id],
+    );
+    return rows[0] ? toUser(rows[0]) : null;
+  }
+
+  async createToken(tokenHash: string, userId: string, expiresAt: string): Promise<void> {
+    await this.pool.query("INSERT INTO auth_tokens (token_hash, user_id, expires_at) VALUES ($1, $2, $3)", [
+      tokenHash,
+      userId,
+      expiresAt,
+    ]);
+  }
+
+  async getUserIdByTokenHash(tokenHash: string): Promise<string | null> {
+    const { rows } = await this.pool.query(
+      "SELECT user_id FROM auth_tokens WHERE token_hash = $1 AND expires_at > now()",
+      [tokenHash],
+    );
+    return rows[0]?.user_id ?? null;
+  }
+
+  async deleteToken(tokenHash: string): Promise<void> {
+    await this.pool.query("DELETE FROM auth_tokens WHERE token_hash = $1", [tokenHash]);
+  }
+
+  async createSession(record: SessionRecord): Promise<void> {
+    await this.pool.query("INSERT INTO sessions (id, user_id, data, created_at) VALUES ($1, $2, $3, $4)", [
+      record.id,
+      record.userId,
+      { title: record.title, messages: record.messages, botId: record.botId },
+      record.createdAt,
+    ]);
+  }
+
+  async updateSession(record: SessionRecord): Promise<void> {
+    await this.pool.query(
+      "INSERT INTO sessions (id, user_id, data, created_at) VALUES ($1, $2, $3, $4) " +
+        "ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data",
+      [
+        record.id,
+        record.userId,
+        { title: record.title, messages: record.messages, botId: record.botId },
+        record.createdAt,
+      ],
+    );
+  }
+
+  async getSession(id: string): Promise<SessionRecord | null> {
+    const { rows } = await this.pool.query(
+      "SELECT id, user_id, data, created_at FROM sessions WHERE id = $1",
+      [id],
+    );
+    return rows[0] ? toSession(rows[0]) : null;
+  }
+
+  async listSessions(userId: string): Promise<SessionRecord[]> {
+    const { rows } = await this.pool.query(
+      "SELECT id, user_id, data, created_at FROM sessions WHERE user_id = $1 ORDER BY created_at DESC",
+      [userId],
+    );
+    return rows.map(toSession);
+  }
+
+  async createBot(record: BotRecord): Promise<void> {
+    await this.pool.query(
+      "INSERT INTO bots (id, user_id, session_id, data, created_at) VALUES ($1, $2, $3, $4, $5)",
+      [record.id, record.userId, record.sessionId, record, record.createdAt],
+    );
+  }
+
+  async getBot(id: string): Promise<BotRecord | null> {
+    const { rows } = await this.pool.query("SELECT data FROM bots WHERE id = $1", [id]);
+    return rows[0]?.data ?? null;
+  }
+
+  async listBots(userId: string): Promise<BotRecord[]> {
+    const { rows } = await this.pool.query(
+      "SELECT data FROM bots WHERE user_id = $1 ORDER BY created_at ASC",
+      [userId],
+    );
+    return rows.map((row) => row.data as BotRecord);
+  }
+
+  async deleteBot(userId: string, id: string): Promise<boolean> {
+    const result = await this.pool.query("DELETE FROM bots WHERE user_id = $1 AND id = $2", [userId, id]);
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async updateBot(record: BotRecord): Promise<void> {
+    await this.pool.query("UPDATE bots SET data = $1, session_id = $2 WHERE id = $3", [
+      record,
+      record.sessionId,
+      record.id,
+    ]);
+  }
+
+  async createTask(task: Task): Promise<void> {
+    await this.pool.query(
+      "INSERT INTO tasks (id, session_id, data, created_at, updated_at) VALUES ($1, $2, $3, $4, $5)",
+      [task.id, task.sessionId, task, task.createdAt, task.updatedAt],
+    );
+  }
+
+  async updateTask(task: Task): Promise<void> {
+    await this.pool.query(
+      "INSERT INTO tasks (id, session_id, data, created_at, updated_at) VALUES ($1, $2, $3, $4, $5) " +
+        "ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = EXCLUDED.updated_at",
+      [task.id, task.sessionId, task, task.createdAt, task.updatedAt],
+    );
+  }
+
+  async getTask(id: string): Promise<Task | null> {
+    const { rows } = await this.pool.query("SELECT data FROM tasks WHERE id = $1", [id]);
+    return rows[0]?.data ?? null;
+  }
+
+  async appendAudit(record: AuditRecord): Promise<void> {
+    await this.pool.query(
+      "INSERT INTO audit_events (id, task_id, user_id, type, tool_name, detail, created_at) " +
+        "VALUES ($1, $2, $3, $4, $5, $6, $7)",
+      [
+        record.id,
+        record.taskId,
+        record.userId,
+        record.type,
+        record.toolName,
+        record.detail,
+        record.createdAt,
+      ],
+    );
+  }
+
+  async listAudit(taskId: string): Promise<AuditRecord[]> {
+    const { rows } = await this.pool.query(
+      "SELECT id, task_id, user_id, type, tool_name, detail, created_at FROM audit_events " +
+        "WHERE task_id = $1 ORDER BY created_at ASC",
+      [taskId],
+    );
+    return rows.map((row) => ({
+      id: row.id,
+      taskId: row.task_id,
+      userId: row.user_id,
+      type: row.type,
+      toolName: row.tool_name,
+      detail: row.detail,
+      createdAt: row.created_at.toISOString(),
+    }));
+  }
+
+  async createSecret(record: SecretRecord): Promise<void> {
+    await this.pool.query(
+      "INSERT INTO secrets (id, user_id, name, ciphertext, iv, tag, created_at) " +
+        "VALUES ($1, $2, $3, $4, $5, $6, $7)",
+      [record.id, record.userId, record.name, record.ciphertext, record.iv, record.tag, record.createdAt],
+    );
+  }
+
+  async listSecrets(userId: string): Promise<SecretRecord[]> {
+    const { rows } = await this.pool.query(
+      "SELECT id, user_id, name, ciphertext, iv, tag, created_at FROM secrets WHERE user_id = $1 ORDER BY name",
+      [userId],
+    );
+    return rows.map(toSecret);
+  }
+
+  async getSecret(userId: string, name: string): Promise<SecretRecord | null> {
+    const { rows } = await this.pool.query(
+      "SELECT id, user_id, name, ciphertext, iv, tag, created_at FROM secrets WHERE user_id = $1 AND name = $2",
+      [userId, name],
+    );
+    return rows[0] ? toSecret(rows[0]) : null;
+  }
+
+  async deleteSecret(userId: string, id: string): Promise<boolean> {
+    const result = await this.pool.query("DELETE FROM secrets WHERE user_id = $1 AND id = $2", [userId, id]);
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async upsertConnection(record: ConnectionRecord): Promise<void> {
+    await this.pool.query(
+      "INSERT INTO connections (id, user_id, provider, ciphertext, iv, tag, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7) " +
+        "ON CONFLICT (user_id, provider) DO UPDATE SET ciphertext = EXCLUDED.ciphertext, iv = EXCLUDED.iv, " +
+        "tag = EXCLUDED.tag, created_at = EXCLUDED.created_at",
+      [record.id, record.userId, record.provider, record.ciphertext, record.iv, record.tag, record.createdAt],
+    );
+  }
+
+  async listConnections(userId: string): Promise<ConnectionRecord[]> {
+    const { rows } = await this.pool.query(
+      "SELECT id, user_id, provider, ciphertext, iv, tag, created_at FROM connections WHERE user_id = $1 ORDER BY provider",
+      [userId],
+    );
+    return rows.map(toConnection);
+  }
+
+  async getConnection(userId: string, provider: string): Promise<ConnectionRecord | null> {
+    const { rows } = await this.pool.query(
+      "SELECT id, user_id, provider, ciphertext, iv, tag, created_at FROM connections WHERE user_id = $1 AND provider = $2",
+      [userId, provider],
+    );
+    return rows[0] ? toConnection(rows[0]) : null;
+  }
+
+  async deleteConnection(userId: string, provider: string): Promise<boolean> {
+    const result = await this.pool.query("DELETE FROM connections WHERE user_id = $1 AND provider = $2", [
+      userId,
+      provider,
+    ]);
+    return (result.rowCount ?? 0) > 0;
+  }
+}
+
+function toUser(row: any): UserRecord {
+  return {
+    id: row.id,
+    email: row.email,
+    passwordHash: row.password_hash,
+    createdAt: row.created_at.toISOString(),
+  };
+}
+
+function toSecret(row: any): SecretRecord {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    name: row.name,
+    ciphertext: row.ciphertext,
+    iv: row.iv,
+    tag: row.tag,
+    createdAt: row.created_at.toISOString(),
+  };
+}
+
+function toConnection(row: any): ConnectionRecord {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    provider: row.provider,
+    ciphertext: row.ciphertext,
+    iv: row.iv,
+    tag: row.tag,
+    createdAt: row.created_at.toISOString(),
+  };
+}
+
+function toSession(row: any): SessionRecord {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    title: row.data?.title ?? "New chat",
+    messages: row.data?.messages ?? [],
+    botId: row.data?.botId,
+    createdAt: row.created_at.toISOString(),
+  };
+}

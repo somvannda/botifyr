@@ -1,0 +1,62 @@
+# Botifyr stack.
+#
+#   docker compose up -d --build      # postgres + cloud (always on)
+#   docker compose logs -f cloud
+#   docker compose down               # stop (keeps data)
+#
+# The cloud is built from apps/cloud/Dockerfile, reads apps/cloud/.env for
+# secrets, and spawns per-task sandbox containers on the shared botifyr-net
+# network via the mounted Docker socket.
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: botifyr-postgres
+    environment:
+      POSTGRES_USER: botifyr
+      POSTGRES_PASSWORD: botifyr
+      POSTGRES_DB: botifyr
+    ports:
+      - "54329:5432"
+    volumes:
+      - botifyr-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U botifyr"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - botifyr
+
+  cloud:
+    build:
+      context: .
+      dockerfile: apps/cloud/Dockerfile
+    container_name: botifyr-cloud
+    restart: unless-stopped
+    env_file:
+      - apps/cloud/.env
+    environment:
+      HOST: 0.0.0.0
+      PORT: "8787"
+      BOTIFYR_STORE: postgres
+      DATABASE_URL: postgres://botifyr:botifyr@postgres:5432/botifyr
+      BOTIFYR_SANDBOX: docker
+      BOTIFYR_SANDBOX_NETWORK: botifyr-net
+      BOTIFYR_DEMO_URL: http://cloud:8787/demo
+    ports:
+      - "8787:8787"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - botifyr
+
+networks:
+  botifyr:
+    name: botifyr-net
+
+volumes:
+  botifyr-pg:
