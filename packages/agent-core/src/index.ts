@@ -40,5 +40,6 @@ export type {
 export { createMockProvider } from "./providers/mock.js";
 export { createOpenAIProvider } from "./providers/openai.js";
 export type { OpenAIProviderOptions } from "./providers/openai.js";
+export { withResponseCache } from "./providers/cache.js";
 export { createProvider, detectProvider } from "./providers/index.js";
 export type { ProviderName, ProviderSelection } from "./providers/index.js";

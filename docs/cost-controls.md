@@ -21,6 +21,7 @@ tasks. They are part of the **shipped product**, not the development process
 | `BOTIFYR_MAX_MESSAGE_CHARS` | `4000` | Max characters per user message and per history turn. |
 | `BOTIFYR_RATE_LIMIT_PER_HOUR` | `60` | Per-user sliding window. `0` disables. Exceeded → **HTTP 429**. |
 | `BOTIFYR_DAILY_TOKEN_BUDGET` | `200000` | Per-user daily budget. Exceeded → **warning only** (requests still work). `0` disables. |
+| `BOTIFYR_CACHE_TTL_SECONDS` | `300` | Exact-match **response cache**. A hit costs **zero tokens**. `0` disables. |
 
 ## Behaviour
 - **Rate limit** → `429 Too Many Requests`.
@@ -33,6 +34,9 @@ tasks. They are part of the **shipped product**, not the development process
 - The rate limiter is **in-process** (`Map`) — correct for a single cloud instance.
   Running multiple instances would need a **shared** store (Redis/Postgres) so the
   limit is global. This is a scaling concern, not needed now.
-- There is **no response cache** yet. Adding one (hash prompt+messages → cached
-  reply with a TTL) would remove whole duplicate model calls and is the single
-  biggest additional saving.
+- The **response cache** is exact-match (hash of provider + messages + tools +
+  maxTokens) and in-process; cache hits are returned with zero usage so they are
+  never counted as spend. A shared cache (Redis/Postgres) would improve the hit
+  rate across instances.
+- **History summarization** (compress old turns instead of dropping them) is a
+  possible future improvement for long conversations.

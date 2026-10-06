@@ -9,6 +9,7 @@ import {
   createProvider,
   createShellTools,
   runAgent,
+  withResponseCache,
   type ModelProvider,
   type StepUpdate,
   type ToolDefinition,
@@ -55,13 +56,15 @@ function getProvider(): ModelProvider {
   if (!provider) {
     const port = process.env.PORT ?? 8787;
     const hostForBrowser = sandboxMode() === "docker" ? "host.docker.internal" : "localhost";
-    provider = createProvider({
+    const base = createProvider({
       provider: process.env.BOTIFYR_PROVIDER,
       model: process.env.BOTIFYR_MODEL,
       apiKey: process.env.BOTIFYR_API_KEY,
       baseUrl: process.env.BOTIFYR_BASE_URL,
       demoUrl: process.env.BOTIFYR_DEMO_URL ?? `http://${hostForBrowser}:${port}/demo`,
     });
+    // Exact-match response cache: a cache hit costs zero tokens. 0 disables.
+    provider = withResponseCache(base, Number(process.env.BOTIFYR_CACHE_TTL_SECONDS ?? 300));
   }
   return provider;
 }

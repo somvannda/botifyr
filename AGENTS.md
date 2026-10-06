@@ -43,3 +43,11 @@ keep development fast and cheap: **fewer tokens, fewer commands, fewer rebuilds*
 
 Changing `BOTIFYR_*` limits changes the **product**, not the coding agent. Don't
 add runtime-limit code to solve a development-cost problem, and vice-versa.
+
+## 6. Development keys & model
+- Use a **separate API key for development** than for the product, so each side's
+  spend is visible independently (the product uses `BOTIFYR_API_KEY`; the coding
+  agent has its own provider key).
+- Prefer the **cheapest model** that can do the job — for both the product default
+  and the coding agent.
+- Keep prompts short; avoid sending large diffs or files when a summary will do.
