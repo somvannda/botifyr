@@ -177,7 +177,6 @@ body {
 }
 
 .unread-badge {
-  margin-left: auto;
   flex: none;
   min-width: 18px;
   height: 18px;
@@ -1303,10 +1302,9 @@ body {
 }
 
 .conv-item {
-  display: grid;
-  grid-template-columns: 34px 1fr;
-  gap: 10px;
+  display: flex;
   align-items: center;
+  gap: 8px;
   padding: 9px 10px;
   border-radius: 12px;
   border: 1px solid transparent;
@@ -1314,6 +1312,70 @@ body {
   color: var(--text);
   cursor: pointer;
   text-align: left;
+}
+
+.conv-select {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.conv-aside {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.conv-delete {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.conv-item:hover .conv-delete,
+.conv-item .conv-delete:focus-visible {
+  opacity: 1;
+}
+
+.conv-delete:hover {
+  background: var(--panel-2);
+  color: var(--danger);
+}
+
+.conv-delete.confirm {
+  width: auto;
+  height: 22px;
+  padding: 0 8px;
+  color: var(--danger);
+  border: 1px solid var(--danger);
+  border-radius: 6px;
+  font-size: 11px;
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .conv-delete {
+    opacity: 1;
+  }
 }
 
 .conv-item:hover {

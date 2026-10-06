@@ -168,6 +168,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     }
   });
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [shareItem, setShareItem] = useState<MediaItem | null>(null);
   const [approvalNotice, setApprovalNotice] = useState<{ title: string; decision: "allow" | "deny" } | null>(
     null,
@@ -807,6 +808,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   }
 
   async function removeBot(bot: Bot) {
+    setConfirmDeleteId(null);
     try {
       await client.deleteBot(bot.id);
       const remaining = bots.filter((entry) => entry.id !== bot.id);
@@ -1845,23 +1847,48 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
             const session = sessions.find((entry) => entry.id === bot.sessionId);
             const last = session?.messages[session.messages.length - 1];
             return (
-              <button
-                key={bot.id}
-                type="button"
-                className={`conv-item ${bot.id === activeBotId ? "active" : ""}`}
-                onClick={() => selectBot(bot)}
-              >
-                <span className="conv-avatar">
-                  <BotLogo size={30} scheme={BOT_SCHEMES[bot.scheme % BOT_SCHEMES.length]} />
+              <div key={bot.id} className={`conv-item ${bot.id === activeBotId ? "active" : ""}`}>
+                <button className="conv-select" type="button" onClick={() => selectBot(bot)}>
+                  <span className="conv-avatar">
+                    <BotLogo size={30} scheme={BOT_SCHEMES[bot.scheme % BOT_SCHEMES.length]} />
+                  </span>
+                  <span className="conv-text">
+                    <span className="conv-name">{bot.name}</span>
+                    <span className="conv-preview">{last?.content?.slice(0, 42) || "No messages yet"}</span>
+                  </span>
+                </button>
+                <span className="conv-aside">
+                  {unreadCount(bot.sessionId) > 0 && (
+                    <span className="unread-badge">{unreadCount(bot.sessionId)}</span>
+                  )}
+                  {confirmDeleteId === bot.id ? (
+                    <button
+                      className="conv-delete confirm"
+                      type="button"
+                      title="Tap to confirm delete"
+                      onClick={() => void removeBot(bot)}
+                    >
+                      Delete
+                    </button>
+                  ) : (
+                    <button
+                      className="conv-delete"
+                      type="button"
+                      title="Delete bot and chat"
+                      aria-label="Delete bot and chat"
+                      onClick={() => {
+                        setConfirmDeleteId(bot.id);
+                        window.setTimeout(
+                          () => setConfirmDeleteId((cur) => (cur === bot.id ? null : cur)),
+                          3000,
+                        );
+                      }}
+                    >
+                      <CloseIcon size={13} />
+                    </button>
+                  )}
                 </span>
-                <span className="conv-text">
-                  <span className="conv-name">{bot.name}</span>
-                  <span className="conv-preview">{last?.content?.slice(0, 42) || "No messages yet"}</span>
-                </span>
-                {unreadCount(bot.sessionId) > 0 && (
-                  <span className="unread-badge">{unreadCount(bot.sessionId)}</span>
-                )}
-              </button>
+              </div>
             );
           })}
         </div>

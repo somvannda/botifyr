@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url";
 /** Tiny dependency-free static server for the Botifyr marketing/help site. */
 const root = fileURLToPath(new URL(".", import.meta.url));
 const port = Number(process.env.PORT ?? 4321);
+// The old static /admin.html is retired; send people to the real console.
+const adminUrl = process.env.ADMIN_URL ?? "http://localhost:4324";
 
 const types = {
   ".html": "text/html; charset=utf-8",
@@ -21,7 +23,11 @@ createServer(async (request, response) => {
     let path = decodeURIComponent((request.url ?? "/").split("?")[0]);
     if (path === "/") path = "/index.html";
     if (path === "/help" || path === "/docs") path = "/help.html";
-    if (path === "/admin") path = "/admin.html";
+    if (path === "/admin" || path === "/admin.html") {
+      response.writeHead(302, { location: adminUrl, "cache-control": "no-store" });
+      response.end();
+      return;
+    }
     if (path === "/skills") path = "/skills.html";
     if (path === "/developers") path = "/developers.html";
     const file = join(root, normalize(path).replace(/^(\.\.[/\\])+/, ""));

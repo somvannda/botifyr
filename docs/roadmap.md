@@ -22,7 +22,7 @@ they land. Keep entries short; link code paths instead of explaining them.
 - [ ] **Mobile PWA offline** (manifest exists; no service worker).
 - [ ] **Real Stripe** — keys, invoices, billing portal.
 - [ ] **Deploy** — TLS, reverse proxy, subdomains (`app.` / `admin.` / `api.`).
-- [ ] **Retire static `/admin.html`** (superseded by `apps/admin`).
+- [x] **Retire static `/admin.html`** — `/admin` now 302-redirects to the console.
 
 ## Gaps (quality / risk)
 - [ ] **Refusals** — mitigated (policy + prefill + retry + forced tool), not
