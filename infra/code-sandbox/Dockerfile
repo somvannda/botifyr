@@ -25,9 +25,9 @@ RUN apt-get update \
 WORKDIR /app
 COPY server.mjs ./
 
-RUN mkdir -p /workspace \
+RUN mkdir -p /workspace /downloads \
   && useradd -m -s /bin/bash runner \
-  && chown -R runner:runner /workspace
+  && chown -R runner:runner /workspace /downloads
 
 USER runner
 
