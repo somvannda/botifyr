@@ -6,9 +6,10 @@ they land. Keep entries short; link code paths instead of explaining them.
 ## Pending (requested, not finished)
 - [ ] **Per-platform extractors** — DramaBox, Hongguo, GoodShort, ShortMax,
       NetShort, QQTV, DramaWave, FreeReels, RaptDrama, ReelLife, ShortFlix,
-      DramaTV, DotDrama, iDrama (WeTV/iQIYI already work via yt-dlp).
-      Needs one **sample URL** per site. Generic HLS fallback exists in
-      `packages/agent-core/src/tools/media.ts`.
+      DramaTV, DotDrama, iDrama (WeTV/iQIYI already work via yt-dlp). Generic
+      HLS/MP4 sniffer hardened (JSON-escaped URLs); a **self-learning recipe**
+      design is in [`docs/extractors.md`](extractors.md). One sample URL per site
+      still speeds this up.
 - [x] **Friend group chats** — create a thread with several friends
       (`kind: "group"` model already exists).
 - [x] **Send a file to a friend** — signed, recipient-scoped, 7-day links from
