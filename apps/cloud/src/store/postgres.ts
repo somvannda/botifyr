@@ -214,6 +214,8 @@ export class PostgresStore implements Store {
         title: record.title,
         messages: record.messages,
         botId: record.botId,
+        kind: record.kind,
+        participants: record.participants,
         summary: record.summary,
         summaryUpTo: record.summaryUpTo,
       },
