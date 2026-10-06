@@ -402,6 +402,8 @@ body {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  /* Message actions sit beside the bubble; never let them add a sideways scroll. */
+  overflow-x: hidden;
   padding: 28px 32px;
 }
 
