@@ -63,7 +63,7 @@ export function createMediaTools(
   ): Promise<ToolResult> => {
     const cookies = await cookieArg();
     const template = `'${outDir}/%(title)s [%(id)s].%(ext)s'`;
-    const common = `${cookies}--no-playlist --ignore-errors --no-overwrites --no-warnings --no-progress`;
+    const common = `${cookies}--no-playlist --ignore-errors --continue --no-overwrites --no-warnings --no-progress`;
     await backend.exec(`mkdir -p '${outDir}'`);
 
     let ok = true;

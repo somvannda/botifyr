@@ -44,7 +44,8 @@ they land. Keep entries short; link code paths instead of explaining them.
       controls may still be inconsistent.
 
 ## Improvements (highest value first)
-- [ ] **Background download jobs** — resumable, persisted per-file status.
+- [x] **Background downloads** — `--continue` resume + interrupted-task
+      reconciliation on restart; a persisted per-file job queue is still open.
 - [x] **Media retention & quota** — age-based + quota sweep (`BOTIFYR_MEDIA_*`).
 - [ ] **Profile & notifications** — profile UI + DM unread.
 - [ ] **Local model option** — Ollama / OpenAI-compatible config switch.

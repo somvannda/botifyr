@@ -2745,6 +2745,27 @@ export async function buildServer(options: ServerOptions) {
     Math.max(5, Number(process.env.BOTIFYR_MEDIA_CLEANUP_MINUTES ?? 360)) * 60_000,
   );
 
+  /* Tasks that were mid-flight when the process last stopped can't be resumed
+     from memory, so mark them failed instead of leaving them "running" forever.
+     Re-sending the request re-runs them (yt-dlp resumes partial files). */
+  try {
+    const orphaned = await store.listActiveTasks();
+    for (const task of orphaned) {
+      task.status = "failed";
+      task.error = "Interrupted when the cloud restarted — send the message again to resume.";
+      task.updatedAt = new Date().toISOString();
+      for (const step of task.steps) {
+        if (step.status === "running" || step.status === "pending") step.status = "failed";
+      }
+      await store.updateTask(task);
+    }
+    if (orphaned.length > 0) {
+      app.log.warn({ count: orphaned.length }, "reconciled interrupted tasks as failed");
+    }
+  } catch (error) {
+    app.log.error({ err: error }, "task reconciliation failed");
+  }
+
   const scheduler = setInterval(() => {
     void (async () => {
       try {

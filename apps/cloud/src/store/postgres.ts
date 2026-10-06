@@ -341,6 +341,13 @@ export class PostgresStore implements Store {
     return rows[0]?.data ?? null;
   }
 
+  async listActiveTasks(): Promise<Task[]> {
+    const { rows } = await this.pool.query(
+      "SELECT data FROM tasks WHERE data->>'status' IN ('running', 'queued', 'awaiting_approval')",
+    );
+    return rows.map((row) => row.data as Task);
+  }
+
   async appendAudit(record: AuditRecord): Promise<void> {
     await this.pool.query(
       "INSERT INTO audit_events (id, task_id, user_id, type, tool_name, detail, created_at) " +

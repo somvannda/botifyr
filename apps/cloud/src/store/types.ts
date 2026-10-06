@@ -207,6 +207,8 @@ export interface Store {
   createTask(task: Task): Promise<void>;
   updateTask(task: Task): Promise<void>;
   getTask(id: string): Promise<Task | null>;
+  /** Tasks left in a non-terminal state (used to reconcile after a restart). */
+  listActiveTasks(): Promise<Task[]>;
 
   appendAudit(record: AuditRecord): Promise<void>;
   listAudit(taskId: string): Promise<AuditRecord[]>;

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { Task, TaskStatus } from "@botifyr/shared";
 import { MemoryStore } from "./memory.js";
 import type { BotRecord, FileRecord, LearnedSkillRecord, SessionRecord, UserRecord } from "./types.js";
 
@@ -206,5 +207,27 @@ describe("MemoryStore", () => {
     expect(await store.deleteMediaByTask("t1")).toBe(2);
     expect(await store.listMedia("u1")).toHaveLength(1);
     expect(await store.deleteMediaByTask("missing")).toBe(0);
+  });
+
+  it("lists only non-terminal tasks, for restart reconciliation", async () => {
+    const store = new MemoryStore();
+    const task = (id: string, status: TaskStatus): Task => ({
+      id,
+      sessionId: "s1",
+      goal: "g",
+      status,
+      steps: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await store.createTask(task("t-run", "running"));
+    await store.createTask(task("t-queue", "queued"));
+    await store.createTask(task("t-approve", "awaiting_approval"));
+    await store.createTask(task("t-done", "completed"));
+    await store.createTask(task("t-fail", "failed"));
+    await store.createTask(task("t-cancel", "cancelled"));
+
+    const active = await store.listActiveTasks();
+    expect(active.map((entry) => entry.id).sort()).toEqual(["t-approve", "t-queue", "t-run"]);
   });
 });

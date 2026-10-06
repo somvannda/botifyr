@@ -237,6 +237,12 @@ export class MemoryStore implements Store {
     return this.tasks.get(id) ?? null;
   }
 
+  async listActiveTasks(): Promise<Task[]> {
+    return [...this.tasks.values()].filter(
+      (task) => task.status === "running" || task.status === "queued" || task.status === "awaiting_approval",
+    );
+  }
+
   async appendAudit(record: AuditRecord): Promise<void> {
     this.audit.push(record);
   }
