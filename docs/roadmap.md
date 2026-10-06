@@ -9,10 +9,11 @@ they land. Keep entries short; link code paths instead of explaining them.
       DramaTV, DotDrama, iDrama (WeTV/iQIYI already work via yt-dlp).
       Needs one **sample URL** per site. Generic HLS fallback exists in
       `packages/agent-core/src/tools/media.ts`.
-- [ ] **Friend group chats** — create a thread with several friends
+- [x] **Friend group chats** — create a thread with several friends
       (`kind: "group"` model already exists).
 - [ ] **Send a file to a friend** — from Media/Library, share a downloaded file
-      into a DM (link first; optional P2P).
+      into a DM. Needs a **secure shared-file** design (a plain download URL
+      would leak the sender's token), so: signed, recipient-scoped links.
 - [ ] **Profile editing UI** — set @handle / display name / avatar
       (`PATCH /v1/profile` exists; no UI).
 - [ ] **Unread badges / notifications** for DMs.

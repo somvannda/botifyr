@@ -197,6 +197,8 @@ export default function App() {
   const [peopleQuery, setPeopleQuery] = useState("");
   const [peopleResults, setPeopleResults] = useState<Person[]>([]);
   const [showPeople, setShowPeople] = useState(false);
+  const [groupName, setGroupName] = useState("");
+  const [groupSelection, setGroupSelection] = useState<string[]>([]);
   const [activityCollapsed, setActivityCollapsed] = useState(false);
   const [downloadsExpanded, setDownloadsExpanded] = useState(false);
   const [devices, setDevices] = useState<Array<{ id: string; name: string; online: boolean }>>([]);
@@ -1259,6 +1261,24 @@ export default function App() {
     try {
       const session = await client.openDm(person.id);
       setSessions((prev) => (prev.some((entry) => entry.id === session.id) ? prev : [session, ...prev]));
+      setActiveBotId(null);
+      setActiveSessionId(session.id);
+      setShowPeople(false);
+    } catch (err: unknown) {
+      setError(messageOf(err));
+    }
+  }
+
+  async function createFriendGroup(): Promise<void> {
+    if (groupSelection.length < 2) {
+      setError("Pick at least two friends for a group.");
+      return;
+    }
+    try {
+      const session = await client.createFriendGroup(groupSelection, groupName.trim() || "New group");
+      setSessions((prev) => [session, ...prev.filter((entry) => entry.id !== session.id)]);
+      setGroupSelection([]);
+      setGroupName("");
       setActiveBotId(null);
       setActiveSessionId(session.id);
       setShowPeople(false);
@@ -3115,6 +3135,42 @@ export default function App() {
                 </li>
               ))}
             </ul>
+
+            {friends.length >= 2 && (
+              <>
+                <div className="settings-section-title">New group</div>
+                <input
+                  className="settings-input"
+                  style={{ width: "100%", marginBottom: 6, boxSizing: "border-box" }}
+                  placeholder="Group name"
+                  value={groupName}
+                  onChange={(event) => setGroupName(event.target.value)}
+                />
+                <ul className="downloads-list">
+                  {friends.map((person) => (
+                    <li key={person.id} className="download-row">
+                      <label className="member-item" style={{ flex: 1 }}>
+                        <input
+                          type="checkbox"
+                          checked={groupSelection.includes(person.id)}
+                          onChange={(event) =>
+                            setGroupSelection((prev) =>
+                              event.target.checked
+                                ? [...prev, person.id]
+                                : prev.filter((id) => id !== person.id),
+                            )
+                          }
+                        />
+                        <span>{person.displayName || (person.handle ? `@${person.handle}` : "Friend")}</span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+                <button className="btn primary" type="button" onClick={() => void createFriendGroup()}>
+                  Create group
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}

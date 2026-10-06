@@ -2491,6 +2491,7 @@ body {
   transition: opacity 0.12s ease;
   /* Invisible actions must not be selectable, or copying a chat drags them in. */
   user-select: none;
+  position: relative;
 }
 
 .msg-actions:focus-within {
@@ -2513,12 +2514,18 @@ body {
 }
 
 .react-picker {
+  /* Float above the message so it never squeezes the layout. */
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 30;
   display: inline-flex;
   gap: 2px;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 999px;
-  padding: 2px 6px;
+  padding: 4px 8px;
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5);
 }
 
 .react-emoji {
