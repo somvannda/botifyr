@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BotLogo } from "./BotLogo";
+import { BotLogo } from "@botifyr/ui";
 
 /** Branded startup screen shown briefly while the app boots. */
 export function Splash() {

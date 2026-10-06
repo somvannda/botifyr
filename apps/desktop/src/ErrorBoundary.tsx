@@ -1,5 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
-import { BotLogo } from "./BotLogo";
+import { BotLogo } from "@botifyr/ui";
 
 interface Props {
   children: ReactNode;

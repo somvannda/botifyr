@@ -1,5 +1,5 @@
-import { BotLogo } from "./BotLogo";
-import { CloseIcon, MaximizeIcon, MinimizeIcon } from "./Icons";
+import { BotLogo } from "@botifyr/ui";
+import { CloseIcon, MaximizeIcon, MinimizeIcon } from "@botifyr/ui";
 
 async function withWindow(run: (window: any) => Promise<unknown>): Promise<void> {
   try {

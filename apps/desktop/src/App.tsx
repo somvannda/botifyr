@@ -17,9 +17,9 @@ import type {
 } from "@botifyr/shared";
 import { invoke } from "@tauri-apps/api/core";
 import { AuthError, BotifyrClient } from "@botifyr/client";
-import { CalendarIcon, DriveIcon, GmailIcon } from "./AppIcons";
-import { GithubBrand, NotionBrand, SlackBrand, TelegramBrand } from "./BrandIcons";
-import { BOT_SCHEMES, BotLogo } from "./BotLogo";
+import { CalendarIcon, DriveIcon, GmailIcon } from "@botifyr/ui";
+import { GithubBrand, NotionBrand, SlackBrand, TelegramBrand } from "@botifyr/ui";
+import { BOT_SCHEMES, BotLogo } from "@botifyr/ui";
 import {
   ChartIcon,
   CheckIcon,
@@ -40,9 +40,9 @@ import {
   SendIcon,
   UserPlusIcon,
   UsersIcon,
-} from "./Icons";
-import { Markdown } from "./Markdown";
-import "./styles.css";
+} from "@botifyr/ui";
+import { Markdown } from "@botifyr/ui";
+import "@botifyr/ui/styles.css";
 
 const CLOUD_URL = (import.meta.env.VITE_CLOUD_URL as string | undefined) ?? "http://localhost:8787";
 const ADMIN_URL = (import.meta.env.VITE_ADMIN_URL as string | undefined) ?? "http://localhost:4322/admin";
