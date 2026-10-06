@@ -484,6 +484,12 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
         break;
       }
       case "approval.requested":
+        setTasks((prev) => {
+          const task = prev[event.taskId];
+          return task
+            ? { ...prev, [event.taskId]: { ...task, approval: event.approval, status: "awaiting_approval" } }
+            : prev;
+        });
         if (executionModeRef.current === "always_allow") {
           void client.resolveApproval(event.taskId, event.approval.id, "allow").catch(() => {});
         }
@@ -2187,6 +2193,21 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
           )}
         </section>
 
+        {liveTask?.approval && liveTask.approval.status === "pending" && (
+          <div className="approval-bar">
+            <span className="approval-bar-text">
+              <strong>{liveTask.approval.title}</strong>
+              <span className="approval-bar-sub">{liveTask.approval.description}</span>
+            </span>
+            <button className="btn primary" type="button" onClick={() => void decide("allow")}>
+              Allow
+            </button>
+            <button className="ghost small" type="button" onClick={() => void decide("deny")}>
+              Deny
+            </button>
+          </div>
+        )}
+
         <form
           className="composer"
           onSubmit={(event: FormEvent) => {
@@ -2194,6 +2215,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
             void send();
           }}
         >
+          {" "}
           {mentionQuery !== null && mentionMatches.length > 0 && (
             <div className="mention-popup">
               {mentionMatches.map((bot, index) => (
