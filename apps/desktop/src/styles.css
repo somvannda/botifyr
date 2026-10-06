@@ -15,7 +15,7 @@
   --border: #26262b;
   --text: #ececef;
   --muted: #8b8b92;
-  --hover: #1e1e22;
+  --hover: #232327;
   --bubble: #2a2a2e;
   --accent: #6d8bff;
   --accent-2: #8f6dff;
@@ -100,7 +100,7 @@ body {
 }
 
 .win-btn:hover {
-  background: var(--panel-2);
+  background: var(--hover);
   color: var(--text);
 }
 
@@ -195,7 +195,7 @@ body {
 }
 
 .task-item:hover {
-  background: var(--panel-2);
+  background: var(--hover);
 }
 
 .task-item.active {
@@ -963,7 +963,7 @@ body {
 }
 
 .conv-item:hover {
-  background: var(--panel-2);
+  background: var(--hover);
 }
 
 .conv-item.active {
@@ -1894,7 +1894,7 @@ body {
 }
 
 .bot-menu-btn:hover {
-  background: var(--panel-2);
+  background: var(--hover);
   color: var(--text);
 }
 
@@ -2009,7 +2009,7 @@ body {
 }
 
 .msg-action:hover {
-  background: var(--panel-2);
+  background: var(--hover);
   color: var(--text);
 }
 
@@ -2193,7 +2193,7 @@ body {
 }
 
 .account-item:hover:not(:disabled) {
-  background: var(--panel-2);
+  background: var(--hover);
 }
 
 .account-item:disabled {
@@ -2272,7 +2272,7 @@ body {
 }
 
 .settings-tab:hover {
-  background: var(--panel-2);
+  background: var(--hover);
   color: var(--text);
 }
 
@@ -2704,7 +2704,7 @@ body {
 }
 
 .library-name:hover {
-  background: var(--panel-2);
+  background: var(--hover);
 }
 
 .library-del {
