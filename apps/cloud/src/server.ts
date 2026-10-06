@@ -353,6 +353,21 @@ export async function buildServer(options: ServerOptions) {
   }
   const app = Fastify({ logger: true });
 
+  // Keep the raw body as well as the parsed JSON, so webhook handlers (Stripe)
+  // can verify their HMAC signature over the exact bytes.
+  app.addContentTypeParser(
+    "application/json",
+    { parseAs: "buffer" },
+    (request: FastifyRequest & { rawBody?: Buffer }, body, done) => {
+      request.rawBody = body as Buffer;
+      try {
+        done(null, JSON.parse((body as Buffer).toString("utf8")));
+      } catch (error) {
+        done(error as Error, undefined);
+      }
+    },
+  );
+
   // The desktop app (and website) call this API cross-origin, so allow the
   // full set of verbs we actually use — the default omits PUT/PATCH/DELETE,
   // which silently broke Edit/Delete bot with a CORS "Failed to fetch".
@@ -1107,6 +1122,27 @@ export async function buildServer(options: ServerOptions) {
   const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
   const stripeConfigured = Boolean(stripeSecret && stripePrice);
 
+  /** Verify Stripe's `Stripe-Signature: t=…,v1=…` HMAC over the raw body. */
+  const verifyStripeSignature = (raw: Buffer | undefined, header: string): boolean => {
+    if (!raw || !stripeWebhookSecret) return false;
+    const parts: Record<string, string> = {};
+    for (const piece of header.split(",")) {
+      const [key, value] = piece.split("=");
+      if (key && value) parts[key.trim()] = value.trim();
+    }
+    const timestamp = parts.t;
+    const signature = parts.v1;
+    if (!timestamp || !signature) return false;
+    // Reject stale/replayed events (older than 5 minutes).
+    if (Math.abs(Date.now() / 1000 - Number(timestamp)) > 300) return false;
+    const expected = createHmac("sha256", stripeWebhookSecret)
+      .update(`${timestamp}.${raw.toString("utf8")}`)
+      .digest("hex");
+    const given = Buffer.from(signature);
+    const want = Buffer.from(expected);
+    return given.length === want.length && timingSafeEqual(given, want);
+  };
+
   app.get("/v1/billing", { preHandler: requireAuth }, async (request) => {
     const record = await store.getUserById(request.userId as string);
     return {
@@ -1159,7 +1195,9 @@ export async function buildServer(options: ServerOptions) {
    */
   app.post("/v1/billing/webhook", async (request, reply) => {
     if (!stripeWebhookSecret) return reply.code(404).send();
-    if (String(request.headers["stripe-signature"] ?? "") !== stripeWebhookSecret) {
+    const raw = (request as FastifyRequest & { rawBody?: Buffer }).rawBody;
+    const signatureHeader = String(request.headers["stripe-signature"] ?? "");
+    if (!verifyStripeSignature(raw, signatureHeader)) {
       return reply.code(400).send({ error: "invalid signature" });
     }
     const event = request.body as {
