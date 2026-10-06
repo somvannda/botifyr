@@ -52,6 +52,8 @@ export interface RunnerDeps {
   suppressIf?: (reply: string) => boolean;
   /** When true, skip approval prompts for this bot (run consequential tools directly). */
   autoApprove?: boolean;
+  /** A deterministic first tool call (e.g. download pasted links) before the model runs. */
+  initialToolCall?: { name: string; arguments: Record<string, unknown> };
 }
 
 type Capability = "browser" | "computer" | "code";
@@ -315,6 +317,7 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
         return setting === "1" ? "On it — I'll do this now with my tools." : setting;
       })(),
       autoApprove: deps.autoApprove === true,
+      initialToolCall: deps.initialToolCall,
       requestApproval: async (title, description, risk) => {
         const approval = {
           id: randomUUID(),

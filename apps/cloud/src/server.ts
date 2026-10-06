@@ -78,6 +78,22 @@ const DEMO_HTML = `<!doctype html>
   </body>
 </html>`;
 
+/**
+ * If the user pasted links and asked to download them, return the URLs. This
+ * lets the runtime invoke the download tool directly, so the mechanical step
+ * can't be refused by the model.
+ */
+function downloadTargets(text: string): string[] | null {
+  const urls = text.match(/https?:\/\/[^\s<>"')]+/gi) ?? [];
+  if (urls.length === 0) return null;
+  if (!/\b(download|grab|save|fetch|rip|bulk)\b/i.test(text)) return null;
+  const media = urls.filter((url) =>
+    /youtube\.com|youtu\.be|vimeo\.com|soundcloud\.com|tiktok\.com/i.test(url),
+  );
+  const list = (media.length > 0 ? media : urls).slice(0, 50);
+  return list.length > 0 ? list : null;
+}
+
 export interface ServerOptions {
   store: Store;
   vaultKey: Buffer;
@@ -333,6 +349,11 @@ export async function buildServer(options: ServerOptions) {
     // A bot owns its thread, so keep the bot's name as the title.
     if (session.messages.length === 0 && !session.botId) session.title = capped.slice(0, 60);
 
+    // If the user pasted links and asked to download them, run the download tool
+    // directly (deterministic) instead of hoping the model chooses to.
+    const targets = downloadTargets(capped);
+    const initialToolCall = targets ? { name: "youtube.download", arguments: { urls: targets } } : undefined;
+
     const bot = session.botId ? await store.getBot(session.botId) : null;
     // Group chats: every member bot replies in turn.
     const members =
@@ -432,6 +453,7 @@ export async function buildServer(options: ServerOptions) {
               vaultKey,
               author: { id: member.id },
               autoApprove: member.autoApprove === true,
+              initialToolCall: mentioned.some((m) => m.id === member.id) ? initialToolCall : undefined,
               suppressIf: autonomous ? (reply) => reply.trim().startsWith("[SKIP]") : undefined,
             },
             task,
@@ -485,6 +507,7 @@ export async function buildServer(options: ServerOptions) {
           vaultKey,
           author: bot ? { id: bot.id } : undefined,
           autoApprove: bot?.autoApprove === true,
+          initialToolCall,
         },
         task,
       ).catch((error) => {

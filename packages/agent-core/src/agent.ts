@@ -2,9 +2,11 @@ import { randomUUID } from "node:crypto";
 import type {
   AgentMessage,
   ModelProvider,
+  ModelResponse,
   RiskLevel,
   StepUpdate,
   TokenUsage,
+  ToolCall,
   ToolDefinition,
   ToolSpec,
 } from "./types.js";
@@ -45,6 +47,12 @@ export interface RunAgentOptions {
   prefill?: string;
   /** When true, skip the approval gate and run consequential tools directly. */
   autoApprove?: boolean;
+  /**
+   * A tool the runtime invokes before asking the model anything. Used to make
+   * mechanical steps (e.g. downloading pasted links) deterministic, so they
+   * can't be refused.
+   */
+  initialToolCall?: { name: string; arguments: Record<string, unknown> };
   requestApproval: (title: string, description: string, risk: RiskLevel) => Promise<boolean>;
   onStep: (step: StepUpdate) => void;
   /** Live assistant text as the model streams it (optional). */
@@ -134,59 +142,81 @@ export async function runAgent(options: RunAgentOptions): Promise<AgentResult> {
   let stepCount = 0;
   let refusalRetries = 0;
   let forceToolCall = false;
+  // A runtime-invoked first action (deterministic step); processed like a tool
+  // call the model asked for.
+  let pendingToolCall: ToolCall[] | null = options.initialToolCall
+    ? [
+        {
+          id: randomUUID(),
+          name: options.initialToolCall.name,
+          arguments: options.initialToolCall.arguments,
+        },
+      ]
+    : null;
   const usage: TokenUsage = { promptTokens: 0, completionTokens: 0 };
 
   for (let iteration = 0; iteration < maxSteps; iteration += 1) {
-    const thinkId = randomUUID();
-    options.onStep({ id: thinkId, title: "Thinking", detail: "Deciding the next action", status: "running" });
+    let response: ModelResponse;
+    if (pendingToolCall) {
+      response = { toolCalls: pendingToolCall };
+      pendingToolCall = null;
+    } else {
+      const thinkId = randomUUID();
+      options.onStep({
+        id: thinkId,
+        title: "Thinking",
+        detail: "Deciding the next action",
+        status: "running",
+      });
 
-    let response;
-    try {
-      response =
-        options.onToken && provider.completeStream
-          ? await provider.completeStream(
-              {
+      try {
+        response =
+          options.onToken && provider.completeStream
+            ? await provider.completeStream(
+                {
+                  messages,
+                  tools: tools.map(toSpec),
+                  maxTokens: options.maxTokens,
+                  toolChoice: forceToolCall ? "required" : undefined,
+                },
+                options.onToken,
+              )
+            : await provider.complete({
                 messages,
                 tools: tools.map(toSpec),
                 maxTokens: options.maxTokens,
                 toolChoice: forceToolCall ? "required" : undefined,
-              },
-              options.onToken,
-            )
-          : await provider.complete({
-              messages,
-              tools: tools.map(toSpec),
-              maxTokens: options.maxTokens,
-              toolChoice: forceToolCall ? "required" : undefined,
-            });
-    } catch (error) {
-      options.onStep({ id: thinkId, title: "Thinking", detail: messageOf(error), status: "failed" });
-      return {
-        ok: false,
-        summary: `Model error: ${messageOf(error)}`,
-        steps: stepCount,
-        provider: provider.name,
-        usage,
-      };
-    }
+              });
+      } catch (error) {
+        options.onStep({ id: thinkId, title: "Thinking", detail: messageOf(error), status: "failed" });
+        return {
+          ok: false,
+          summary: `Model error: ${messageOf(error)}`,
+          steps: stepCount,
+          provider: provider.name,
+          usage,
+        };
+      }
 
-    if (response.usage) {
-      usage.promptTokens += response.usage.promptTokens;
-      usage.completionTokens += response.usage.completionTokens;
-    }
+      if (response.usage) {
+        usage.promptTokens += response.usage.promptTokens;
+        usage.completionTokens += response.usage.completionTokens;
+      }
 
-    // The prefill was only for the first call; drop it so it isn't repeated.
-    if (prefillIndex >= 0) {
-      messages.splice(prefillIndex, 1);
-      prefillIndex = -1;
-    }
+      // The prefill was only for the first call; drop it so it isn't repeated.
+      if (prefillIndex >= 0) {
+        messages.splice(prefillIndex, 1);
+        prefillIndex = -1;
+      }
 
-    options.onStep({
-      id: thinkId,
-      title: "Thinking",
-      detail: response.reasoning ?? (response.toolCalls.length ? "Chose an action" : "Ready with the answer"),
-      status: "done",
-    });
+      options.onStep({
+        id: thinkId,
+        title: "Thinking",
+        detail:
+          response.reasoning ?? (response.toolCalls.length ? "Chose an action" : "Ready with the answer"),
+        status: "done",
+      });
+    }
 
     if (response.toolCalls.length === 0) {
       const text = response.text?.trim() ?? "";

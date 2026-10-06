@@ -233,4 +233,21 @@ describe("runAgent", () => {
     expect(seen[0]?.at(-1)).toBe("assistant");
     expect(seen[1]?.at(-1)).not.toBe("assistant");
   });
+
+  it("runs the initial tool call before consulting the model", async () => {
+    let ran = 0;
+    const provider = scriptedProvider([{ text: "done", toolCalls: [] }]);
+    const result = await runAgent({
+      goal: "download these links",
+      provider,
+      tools: [echoTool(() => (ran += 1))],
+      workspaceDir: ".",
+      initialToolCall: { name: "demo_echo", arguments: { value: "preset" } },
+      requestApproval: async () => true,
+      onStep: () => {},
+    });
+
+    expect(ran).toBe(1);
+    expect(result.summary).toBe("done");
+  });
 });
