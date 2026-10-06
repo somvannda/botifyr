@@ -29,7 +29,12 @@ export default tseslint.config(
     },
   },
   {
-    files: ["apps/desktop/**/*.{ts,tsx}"],
+    files: [
+      "apps/desktop/**/*.{ts,tsx}",
+      "apps/portal/**/*.{ts,tsx}",
+      "apps/admin/**/*.{ts,tsx}",
+      "packages/ui/**/*.{ts,tsx}",
+    ],
     plugins: { "react-hooks": reactHooks },
     rules: {
       "react-hooks/rules-of-hooks": "error",

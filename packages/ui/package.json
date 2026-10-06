@@ -12,6 +12,10 @@
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
+  "dependencies": {
+    "@botifyr/client": "*",
+    "@botifyr/shared": "*"
+  },
   "peerDependencies": {
     "react": ">=18"
   },

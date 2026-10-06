@@ -11,3 +11,5 @@ export * from "./BotLogo";
 export * from "./BrandIcons";
 export * from "./AppIcons";
 export * from "./Markdown";
+export { BotifyrApp } from "./BotifyrApp";
+export { webBridge, defaultBridge, type BotBridge } from "./bridge";
