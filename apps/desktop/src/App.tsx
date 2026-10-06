@@ -187,6 +187,7 @@ export default function App() {
   const [skills, setSkills] = useState<Skill[]>([]);
   const [learnedSkills, setLearnedSkills] = useState<LearnedSkill[]>([]);
   const [downloads, setDownloads] = useState<Array<{ name: string; size: number }>>([]);
+  const [playerFile, setPlayerFile] = useState<{ name: string; url: string } | null>(null);
   const [ytCookies, setYtCookies] = useState("");
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
   const [skillQuery, setSkillQuery] = useState("");
@@ -1125,6 +1126,12 @@ export default function App() {
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null;
   const latestTask = sessionTasks.sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null;
   const busy = Boolean(liveTask);
+  const downloadUrl = (name: string, download = false): string =>
+    `${CLOUD_URL}/v1/tasks/${latestTask?.id}/downloads/${encodeURIComponent(name)}?token=${encodeURIComponent(
+      token(),
+    )}${download ? "&download=1" : ""}`;
+  const downloadStep = liveTask?.steps.find((step) => step.title === "Downloads");
+  const downloadTotal = downloadStep ? downloadProgress(downloadStep.detail) : null;
   const activeBot = bots.find((bot) => bot.id === activeBotId) ?? null;
   const activeScheme = BOT_SCHEMES[(activeBot?.scheme ?? 0) % BOT_SCHEMES.length];
   // A group is a container of bots, not a bot itself — keep them separate.
@@ -1187,21 +1194,27 @@ export default function App() {
   // Fetch any files a finished task produced (e.g. a YouTube download).
   useEffect(() => {
     const task = latestTask;
-    if (!task || (task.status !== "completed" && task.status !== "failed")) {
+    if (!task) {
       setDownloads([]);
       return;
     }
     let active = true;
-    client
-      .listDownloads(task.id)
-      .then((files) => {
-        if (active) setDownloads(files);
-      })
-      .catch(() => {
-        if (active) setDownloads([]);
-      });
+    const load = () =>
+      client
+        .listDownloads(task.id)
+        .then((files) => {
+          if (active) setDownloads(files);
+        })
+        .catch(() => {
+          if (active) setDownloads([]);
+        });
+    void load();
+    // Keep polling while the task runs so finished files appear live.
+    const running = task.status === "running" || task.status === "awaiting_approval";
+    const timer = running ? window.setInterval(load, 5000) : undefined;
     return () => {
       active = false;
+      if (timer) window.clearInterval(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [latestTask?.id, latestTask?.status, client]);
@@ -1747,23 +1760,56 @@ export default function App() {
                 </div>
               )}
 
-              {downloads.length > 0 && (
+              {(downloads.length > 0 || downloadStep) && (
                 <div className="downloads">
-                  <div className="downloads-title">Downloads</div>
-                  {downloads.map((file) => (
-                    <button
-                      key={file.name}
-                      className="download-link"
-                      type="button"
-                      onClick={() =>
-                        void openExternal(
-                          `${CLOUD_URL}/v1/tasks/${latestTask?.id}/downloads/${encodeURIComponent(file.name)}?token=${encodeURIComponent(token())}`,
-                        )
-                      }
-                    >
-                      {file.name} · {Math.max(1, Math.round(file.size / 1024))} KB — download
-                    </button>
-                  ))}
+                  <div className="downloads-head">
+                    <span className="downloads-title">Downloads</span>
+                    {downloadTotal && (
+                      <span className="downloads-count">
+                        {downloadTotal.done} / {downloadTotal.total}
+                      </span>
+                    )}
+                  </div>
+                  {downloadStep && (
+                    <div className="step-progress-bar downloads-bar">
+                      <span
+                        style={{
+                          width: `${
+                            downloadTotal ? Math.round((downloadTotal.done / downloadTotal.total) * 100) : 8
+                          }%`,
+                        }}
+                      />
+                    </div>
+                  )}
+                  <ul className="downloads-list">
+                    {downloads.map((file) => (
+                      <li key={file.name} className="download-row">
+                        <span className="download-ico">{isPlayable(file.name) ? "▶" : "▢"}</span>
+                        <span className="download-name" title={file.name}>
+                          {prettyFileName(file.name)}
+                        </span>
+                        <span className="download-size">
+                          {Math.max(1, Math.round(file.size / 1024)).toLocaleString()} KB
+                        </span>
+                        {isPlayable(file.name) && (
+                          <button
+                            className="ghost small"
+                            type="button"
+                            onClick={() => setPlayerFile({ name: file.name, url: downloadUrl(file.name) })}
+                          >
+                            Play
+                          </button>
+                        )}
+                        <button
+                          className="ghost small"
+                          type="button"
+                          onClick={() => void openExternal(downloadUrl(file.name, true))}
+                        >
+                          Save
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               )}
 
@@ -2594,6 +2640,26 @@ export default function App() {
         </div>
       )}
 
+      {playerFile && (
+        <div className="apps-overlay" onClick={() => setPlayerFile(null)}>
+          <div className="player-panel" onClick={(event) => event.stopPropagation()}>
+            <div className="apps-head">
+              <span className="apps-title" title={playerFile.name}>
+                {prettyFileName(playerFile.name)}
+              </span>
+              <button className="round small" type="button" onClick={() => setPlayerFile(null)}>
+                ✕
+              </button>
+            </div>
+            {/\.(mp3|m4a|aac|ogg|wav)$/i.test(playerFile.name) ? (
+              <audio className="player-media" src={playerFile.url} controls autoPlay />
+            ) : (
+              <video className="player-media" src={playerFile.url} controls autoPlay />
+            )}
+          </div>
+        </div>
+      )}
+
       {showSettings && (
         <div className="settings-overlay" onClick={() => setShowSettings(false)}>
           <div className="settings-modal" onClick={(event) => event.stopPropagation()}>
@@ -3164,4 +3230,17 @@ function downloadProgress(detail: string | undefined): { done: number; total: nu
   const done = Number(match[1]);
   const total = Number(match[2]);
   return total > 0 ? { done, total } : null;
+}
+
+/** Files the built-in player can handle. */
+function isPlayable(name: string): boolean {
+  return /\.(mp4|webm|m4v|mov|mp3|m4a|aac|ogg|wav)$/i.test(name);
+}
+
+/** "Song – Artist [id].mp4" → "Song – Artist" for a cleaner list. */
+function prettyFileName(name: string): string {
+  return name
+    .replace(/\.[a-z0-9]+$/i, "")
+    .replace(/\s*\[[A-Za-z0-9_-]{6,}\]\s*$/, "")
+    .trim();
 }

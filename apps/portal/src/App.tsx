@@ -82,6 +82,19 @@ function downloadProgress(detail: string | undefined): { done: number; total: nu
   return total > 0 ? { done: Number(match[1]), total } : null;
 }
 
+/** Files the built-in player can handle. */
+function isPlayable(name: string): boolean {
+  return /\.(mp4|webm|m4v|mov|mp3|m4a|aac|ogg|wav)$/i.test(name);
+}
+
+/** "Song – Artist [id].mp4" → "Song – Artist" for a cleaner list. */
+function prettyFileName(name: string): string {
+  return name
+    .replace(/\.[a-z0-9]+$/i, "")
+    .replace(/\s*\[[A-Za-z0-9_-]{6,}\]\s*$/, "")
+    .trim();
+}
+
 export function Portal() {
   const client = useMemo(() => new BotifyrClient(CLOUD_URL), []);
 
@@ -113,6 +126,8 @@ export function Portal() {
   const [connections, setConnections] = useState<ConnectionInfo[]>([]);
   const [learnedSkills, setLearnedSkills] = useState<LearnedSkill[]>([]);
   const [skills, setSkills] = useState<Skill[]>([]);
+  const [downloads, setDownloads] = useState<Array<{ name: string; size: number }>>([]);
+  const [playerFile, setPlayerFile] = useState<{ name: string; url: string } | null>(null);
 
   const [editor, setEditor] = useState<null | "bot" | "group" | "edit">(null);
   const [editId, setEditId] = useState<string | null>(null);
@@ -141,6 +156,11 @@ export function Portal() {
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
     : undefined;
   const downloadStep = liveTask?.steps.find((step) => step.title === "Downloads");
+  const downloadTotal = downloadStep ? downloadProgress(downloadStep.detail) : null;
+  const downloadUrl = (name: string, download = false): string =>
+    `${CLOUD_URL}/v1/tasks/${liveTask?.id}/downloads/${encodeURIComponent(name)}?token=${encodeURIComponent(
+      client.getToken() ?? "",
+    )}${download ? "&download=1" : ""}`;
 
   const standalone = bots.filter((bot) => !isGroup(bot));
   const groups = bots.filter(isGroup);
@@ -244,6 +264,29 @@ export function Portal() {
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [activeSession?.messages.length, activeStream]);
+
+  // Keep the download list fresh while a task runs.
+  useEffect(() => {
+    if (!liveTask) {
+      setDownloads([]);
+      return;
+    }
+    let active = true;
+    const load = () =>
+      client
+        .listDownloads(liveTask.id)
+        .then((files) => {
+          if (active) setDownloads(files);
+        })
+        .catch(() => {});
+    void load();
+    const running = liveTask.status === "running" || liveTask.status === "awaiting_approval";
+    const timer = running ? window.setInterval(load, 5000) : undefined;
+    return () => {
+      active = false;
+      if (timer) window.clearInterval(timer);
+    };
+  }, [liveTask?.id, liveTask?.status, client]);
 
   async function signInWithGoogle() {
     setAuthBusy(true);
@@ -743,6 +786,44 @@ export function Portal() {
                   );
                 })()}
 
+              {downloads.length > 0 && (
+                <div className="downloads">
+                  <div className="downloads-head">
+                    <span className="downloads-title">Downloads</span>
+                    {downloadTotal && (
+                      <span className="downloads-count">
+                        {downloadTotal.done} / {downloadTotal.total}
+                      </span>
+                    )}
+                  </div>
+                  <ul className="downloads-list">
+                    {downloads.map((file) => (
+                      <li key={file.name} className="download-row">
+                        <span className="download-ico">{isPlayable(file.name) ? "▶" : "▢"}</span>
+                        <span className="download-name" title={file.name}>
+                          {prettyFileName(file.name)}
+                        </span>
+                        <span className="download-size">
+                          {Math.max(1, Math.round(file.size / 1024)).toLocaleString()} KB
+                        </span>
+                        {isPlayable(file.name) && (
+                          <button
+                            className="ghost small"
+                            type="button"
+                            onClick={() => setPlayerFile({ name: file.name, url: downloadUrl(file.name) })}
+                          >
+                            Play
+                          </button>
+                        )}
+                        <a className="ghost small" href={downloadUrl(file.name, true)} download>
+                          Save
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               {liveTask?.approval && liveTask.approval.status === "pending" && (
                 <div className="approval">
                   <span className="approval-tag">Approval needed · {liveTask.approval.risk} risk</span>
@@ -998,6 +1079,26 @@ export function Portal() {
                         : "Create bot"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {playerFile && (
+        <div className="apps-overlay" onClick={() => setPlayerFile(null)}>
+          <div className="player-panel" onClick={(event) => event.stopPropagation()}>
+            <div className="apps-head">
+              <span className="apps-title" title={playerFile.name}>
+                {prettyFileName(playerFile.name)}
+              </span>
+              <button className="round small" type="button" onClick={() => setPlayerFile(null)}>
+                <CloseIcon size={13} />
+              </button>
+            </div>
+            {/\.(mp3|m4a|aac|ogg|wav)$/i.test(playerFile.name) ? (
+              <audio className="player-media" src={playerFile.url} controls autoPlay />
+            ) : (
+              <video className="player-media" src={playerFile.url} controls autoPlay />
+            )}
           </div>
         </div>
       )}

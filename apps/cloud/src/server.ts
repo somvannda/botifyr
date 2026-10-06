@@ -3,8 +3,8 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import cors from "@fastify/cors";
 import websocket from "@fastify/websocket";
 import { randomBytes, randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
-import { readFile, readdir, stat } from "node:fs/promises";
+import { createReadStream, readFileSync } from "node:fs";
+import { readdir, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 import type {
   AuditEvent,
@@ -1768,24 +1768,50 @@ export async function buildServer(options: ServerOptions) {
     },
   );
 
-  app.get<{ Params: { id: string; name: string } }>(
+  app.get<{ Params: { id: string; name: string }; Querystring: { download?: string } }>(
     "/v1/tasks/:id/downloads/:name",
     { preHandler: requireAuth },
     async (request, reply) => {
       const task = await ownedTask(request, request.params.id);
       if (!task) return reply.code(404).send({ error: "task not found" });
       const safeName = basename(request.params.name);
+      const filePath = join(downloadsRoot, task.id, safeName);
+      const type = safeName.endsWith(".mp3")
+        ? "audio/mpeg"
+        : safeName.endsWith(".mp4")
+          ? "video/mp4"
+          : "application/octet-stream";
+      // Inline by default so videos/audio play in the browser; ?download=1 saves.
+      const disposition = request.query.download === "1" ? "attachment" : "inline";
+      // HTTP headers must be ASCII: use an ASCII fallback plus RFC 5987 UTF-8.
+      const asciiName = safeName.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "_");
+      const dispositionHeader = `${disposition}; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(safeName)}`;
       try {
-        const data = await readFile(join(downloadsRoot, task.id, safeName));
-        const type = safeName.endsWith(".mp3")
-          ? "audio/mpeg"
-          : safeName.endsWith(".mp4")
-            ? "video/mp4"
-            : "application/octet-stream";
+        const info = await stat(filePath);
+        if (!info.isFile()) throw new Error("not a file");
+        const range = request.headers.range;
+        const match = typeof range === "string" ? /bytes=(\d*)-(\d*)/.exec(range) : null;
+        if (match) {
+          const start = match[1] ? Number(match[1]) : 0;
+          const end = match[2] ? Math.min(Number(match[2]), info.size - 1) : info.size - 1;
+          if (start > end) {
+            return reply.code(416).header("content-range", `bytes */${info.size}`).send();
+          }
+          return reply
+            .code(206)
+            .header("content-range", `bytes ${start}-${end}/${info.size}`)
+            .header("accept-ranges", "bytes")
+            .header("content-length", end - start + 1)
+            .header("content-disposition", dispositionHeader)
+            .type(type)
+            .send(createReadStream(filePath, { start, end }));
+        }
         return reply
-          .header("content-disposition", `attachment; filename="${safeName}"`)
+          .header("accept-ranges", "bytes")
+          .header("content-length", info.size)
+          .header("content-disposition", dispositionHeader)
           .type(type)
-          .send(data);
+          .send(createReadStream(filePath));
       } catch {
         return reply.code(404).send({ error: "file not found" });
       }
