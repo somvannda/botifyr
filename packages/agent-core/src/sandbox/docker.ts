@@ -17,6 +17,8 @@ export interface ContainerSpec {
   containerPort: number;
   /** Prefix for the generated container name. */
   namePrefix: string;
+  /** Extra `-v` mounts, e.g. "botifyr-downloads:/downloads". */
+  volumes?: string[];
   startupTimeoutMs?: number;
 }
 
@@ -55,6 +57,9 @@ export function createContainerHandle(spec: ContainerSpec): ContainerHandle {
         args.push("--network", network);
       } else {
         args.push("-p", `127.0.0.1::${spec.containerPort}`);
+      }
+      for (const volume of spec.volumes ?? []) {
+        args.push("-v", volume);
       }
       args.push(spec.image);
       await exec("docker", args);

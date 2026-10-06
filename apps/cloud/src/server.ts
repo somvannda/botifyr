@@ -4,6 +4,8 @@ import cors from "@fastify/cors";
 import websocket from "@fastify/websocket";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { readFile, readdir, stat } from "node:fs/promises";
+import { basename, join } from "node:path";
 import type {
   AuditEvent,
   AuthResponse,
@@ -1190,6 +1192,54 @@ export async function buildServer(options: ServerOptions) {
         createdAt: record.createdAt,
       }));
       return events;
+    },
+  );
+
+  /* Downloads produced by a task (e.g. youtube.download), served to the user. */
+  const downloadsRoot = process.env.BOTIFYR_DOWNLOADS_DIR ?? "/downloads";
+
+  app.get<{ Params: { id: string } }>(
+    "/v1/tasks/:id/downloads",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const task = await ownedTask(request, request.params.id);
+      if (!task) return reply.code(404).send({ error: "task not found" });
+      try {
+        const dir = join(downloadsRoot, task.id);
+        const entries = await readdir(dir);
+        const files: Array<{ name: string; size: number }> = [];
+        for (const name of entries) {
+          const info = await stat(join(dir, name));
+          if (info.isFile()) files.push({ name, size: info.size });
+        }
+        return files;
+      } catch {
+        return [];
+      }
+    },
+  );
+
+  app.get<{ Params: { id: string; name: string } }>(
+    "/v1/tasks/:id/downloads/:name",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const task = await ownedTask(request, request.params.id);
+      if (!task) return reply.code(404).send({ error: "task not found" });
+      const safeName = basename(request.params.name);
+      try {
+        const data = await readFile(join(downloadsRoot, task.id, safeName));
+        const type = safeName.endsWith(".mp3")
+          ? "audio/mpeg"
+          : safeName.endsWith(".mp4")
+            ? "video/mp4"
+            : "application/octet-stream";
+        return reply
+          .header("content-disposition", `attachment; filename="${safeName}"`)
+          .type(type)
+          .send(data);
+      } catch {
+        return reply.code(404).send({ error: "file not found" });
+      }
     },
   );
 

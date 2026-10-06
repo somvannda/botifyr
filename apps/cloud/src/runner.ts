@@ -166,12 +166,15 @@ function buildTools(
     hasComputer = true;
   }
   if (caps.includes("code")) {
-    const shellBackend = createDockerShellBackend();
+    const downloadsVolume = process.env.BOTIFYR_DOWNLOADS_VOLUME ?? "botifyr-downloads";
+    const downloadsDir = process.env.BOTIFYR_DOWNLOADS_DIR ?? "/downloads";
+    const shellBackend = createDockerShellBackend({ volumes: [`${downloadsVolume}:${downloadsDir}`] });
     const shell = createShellTools(shellBackend);
     tools.push(...shell.tools);
     closers.push(() => shell.close());
-    // Media (yt-dlp) tools run in the same sandbox.
-    tools.push(...createMediaTools(shellBackend).tools);
+    // Media (yt-dlp) tools save into the shared downloads volume, which the
+    // cloud serves back to the user via /v1/tasks/:id/downloads.
+    tools.push(...createMediaTools(shellBackend, `${downloadsDir}/${task.id}`).tools);
   }
   // Local tools operate the user's own machine; only when their node is online.
   if (nodeInfo(userId).online) {

@@ -128,6 +128,7 @@ export default function App() {
   const [scheduleEvery, setScheduleEvery] = useState(60);
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
   const [skills, setSkills] = useState<Skill[]>([]);
+  const [downloads, setDownloads] = useState<Array<{ name: string; size: number }>>([]);
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
   const [secrets, setSecrets] = useState<SecretSummary[]>([]);
   const [showSettings, setShowSettings] = useState(false);
@@ -916,6 +917,28 @@ export default function App() {
       )
     : [];
 
+  // Fetch any files a finished task produced (e.g. a YouTube download).
+  useEffect(() => {
+    const task = latestTask;
+    if (!task || (task.status !== "completed" && task.status !== "failed")) {
+      setDownloads([]);
+      return;
+    }
+    let active = true;
+    client
+      .listDownloads(task.id)
+      .then((files) => {
+        if (active) setDownloads(files);
+      })
+      .catch(() => {
+        if (active) setDownloads([]);
+      });
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [latestTask?.id, latestTask?.status, client]);
+
   if (!authChecked) return <div className="center">Loading…</div>;
 
   if (!user) {
@@ -1364,6 +1387,26 @@ export default function App() {
                       </div>
                     </div>
                   )}
+                </div>
+              )}
+
+              {downloads.length > 0 && (
+                <div className="downloads">
+                  <div className="downloads-title">Downloads</div>
+                  {downloads.map((file) => (
+                    <button
+                      key={file.name}
+                      className="download-link"
+                      type="button"
+                      onClick={() =>
+                        void openExternal(
+                          `${CLOUD_URL}/v1/tasks/${latestTask?.id}/downloads/${encodeURIComponent(file.name)}?token=${encodeURIComponent(token())}`,
+                        )
+                      }
+                    >
+                      {file.name} · {Math.max(1, Math.round(file.size / 1024))} KB — download
+                    </button>
+                  ))}
                 </div>
               )}
 

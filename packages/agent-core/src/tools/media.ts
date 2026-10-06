@@ -18,11 +18,11 @@ export interface MediaTools {
   tools: ToolDefinition[];
 }
 
-export function createMediaTools(backend: ShellBackend): MediaTools {
+export function createMediaTools(backend: ShellBackend, outDir = "/workspace"): MediaTools {
   const download: ToolDefinition = {
     name: "youtube.download",
     description:
-      "Download a YouTube video (or its audio) into the sandbox workspace with yt-dlp. Returns the saved file list.",
+      "Download a YouTube video (or its audio) with yt-dlp. Files are saved to the downloads folder so the user can retrieve them.",
     parameters: {
       type: "object",
       properties: {
@@ -39,10 +39,11 @@ export function createMediaTools(backend: ShellBackend): MediaTools {
       const audio = args.audio_only === true;
       const height = Math.min(2160, Math.max(144, Number(args.quality) || 1080));
       const command = audio
-        ? `cd /workspace && rm -f audio.* && yt-dlp --no-playlist -x --audio-format mp3 -o 'audio.%(ext)s' '${url}' && ls -lh`
-        : `cd /workspace && rm -f video.* && ` +
+        ? `mkdir -p '${outDir}' && rm -f '${outDir}'/audio.* && ` +
+          `yt-dlp --no-playlist -x --audio-format mp3 -o '${outDir}/audio.%(ext)s' '${url}' && ls -lh '${outDir}'`
+        : `mkdir -p '${outDir}' && rm -f '${outDir}'/video.* && ` +
           `yt-dlp --no-playlist -f 'bv*[height<=${height}]+ba/b[height<=${height}]' --merge-output-format mp4 ` +
-          `-o 'video.%(ext)s' '${url}' && ls -lh`;
+          `-o '${outDir}/video.%(ext)s' '${url}' && ls -lh '${outDir}'`;
       return backend.exec(command);
     },
   };

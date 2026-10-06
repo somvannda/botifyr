@@ -1998,6 +1998,38 @@ body {
   cursor: default;
 }
 
+.downloads {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: var(--panel);
+}
+
+.downloads-title {
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.download-link {
+  font-size: 13px;
+  color: var(--accent);
+  text-decoration: none;
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  padding: 0;
+}
+
+.download-link:hover {
+  text-decoration: underline;
+}
+
 .reveal {
   white-space: pre-wrap;
   word-break: break-word;

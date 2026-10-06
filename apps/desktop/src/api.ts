@@ -238,6 +238,10 @@ export class BotifyrClient {
     return this.request(`/v1/tasks/${taskId}/audit`);
   }
 
+  listDownloads(taskId: string): Promise<Array<{ name: string; size: number }>> {
+    return this.request(`/v1/tasks/${taskId}/downloads`);
+  }
+
   nodeToken(): Promise<{ token: string; expiresAt: string }> {
     return this.request("/v1/node-token", { method: "POST" });
   }

@@ -10,6 +10,7 @@ import { createContainerHandle } from "../sandbox/docker.js";
 export interface DockerShellOptions {
   image?: string;
   containerPort?: number;
+  volumes?: string[];
   startupTimeoutMs?: number;
 }
 
@@ -23,6 +24,7 @@ export function createDockerShellBackend(options: DockerShellOptions = {}): Shel
     image: options.image ?? process.env.BOTIFYR_CODE_IMAGE ?? "botifyr/code-sandbox:1",
     containerPort: options.containerPort ?? 8792,
     namePrefix: "botifyr-code",
+    volumes: options.volumes,
     startupTimeoutMs: options.startupTimeoutMs ?? 60_000,
   });
 
