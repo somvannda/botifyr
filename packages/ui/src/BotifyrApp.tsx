@@ -1363,6 +1363,16 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       token(),
     )}${download ? "&download=1" : ""}`;
 
+  /** Permanently delete a downloaded file from the server. */
+  async function deleteDownload(item: MediaItem): Promise<void> {
+    try {
+      await client.deleteMedia(item.id, true);
+      setMedia((prev) => prev.filter((entry) => entry.id !== item.id));
+    } catch (err: unknown) {
+      setError(messageOf(err));
+    }
+  }
+
   async function moveToThisComputer(item: MediaItem): Promise<void> {
     // Download a copy to this machine, then record where it lives.
     void openExternal(mediaUrl(item, true));
@@ -4037,6 +4047,13 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                         </button>
                         <button className="ghost small" type="button" onClick={() => setShareItem(item)}>
                           Send to friend
+                        </button>
+                        <button
+                          className="ghost small danger"
+                          type="button"
+                          onClick={() => void deleteDownload(item)}
+                        >
+                          Delete
                         </button>
                         <button
                           className="ghost small"
