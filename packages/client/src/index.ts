@@ -42,6 +42,27 @@ export interface ApiKeyCreated extends ApiKeySummary {
   key: string;
 }
 
+/** A platform user as seen by the admin console. */
+export interface AdminUser {
+  id: string;
+  email: string;
+  role: "user" | "admin";
+  plan: "trial" | "pro";
+  createdAt: string;
+}
+
+/** A learned skill with its full guide, for moderation. */
+export interface AdminSkill {
+  id: string;
+  name: string;
+  description: string;
+  content: string;
+  status: "pending" | "approved" | "rejected";
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 /** Thrown when the token is missing, invalid, or expired. */
 export class AuthError extends Error {}
 
@@ -161,6 +182,43 @@ export class BotifyrClient {
 
   revokeApiKey(id: string): Promise<void> {
     return this.request(`/v1/api-keys/${id}`, { method: "DELETE" });
+  }
+
+  /* Platform admin (requires an admin account). */
+  adminUsers(): Promise<AdminUser[]> {
+    return this.request("/admin/users");
+  }
+
+  adminSetRole(id: string, role: "user" | "admin"): Promise<{ ok: boolean }> {
+    return this.request(`/admin/users/${id}/role`, {
+      method: "POST",
+      json: true,
+      body: JSON.stringify({ role }),
+    });
+  }
+
+  adminSetPlan(id: string, plan: "trial" | "pro"): Promise<{ ok: boolean }> {
+    return this.request(`/admin/users/${id}/plan`, {
+      method: "POST",
+      json: true,
+      body: JSON.stringify({ plan }),
+    });
+  }
+
+  adminSkills(): Promise<AdminSkill[]> {
+    return this.request("/admin/learned-skills");
+  }
+
+  adminSetSkillStatus(id: string, status: "pending" | "approved" | "rejected"): Promise<AdminSkill> {
+    return this.request(`/admin/learned-skills/${id}/status`, {
+      method: "POST",
+      json: true,
+      body: JSON.stringify({ status }),
+    });
+  }
+
+  adminDeleteSkill(id: string): Promise<void> {
+    return this.request(`/admin/learned-skills/${id}`, { method: "DELETE" });
   }
 
   createBot(input: {

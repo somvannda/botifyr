@@ -69,6 +69,20 @@ services:
     networks:
       - botifyr
 
+  # Platform admin console (separate app; run it on its own host/subdomain).
+  admin:
+    build:
+      context: .
+      dockerfile: apps/admin/Dockerfile
+      args:
+        VITE_CLOUD_URL: ${VITE_CLOUD_URL:-http://localhost:8787}
+    container_name: botifyr-admin
+    restart: unless-stopped
+    ports:
+      - "${ADMIN_PORT:-4324}:80"
+    networks:
+      - botifyr
+
 networks:
   botifyr:
     name: botifyr-net
