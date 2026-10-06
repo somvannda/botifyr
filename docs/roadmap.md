@@ -51,7 +51,8 @@ they land. Keep entries short; link code paths instead of explaining them.
 - [ ] **Local model option** — Ollama / OpenAI-compatible config switch.
 - [x] **Security pass** — CORS allowlist + rotating refresh tokens done;
       optional E2E for DMs still open.
-- [ ] **Cost enforcement** — hard daily cap + per-task budget.
+- [x] **Cost enforcement** — opt-in hard daily cap (`BOTIFYR_ENFORCE_BUDGET`);
+      a per-task budget is still open.
 - [ ] **Deploy pipeline** — proxy + subdomains + Stripe.
 - [ ] **Test coverage** — API integration + UI smoke test.
 

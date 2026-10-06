@@ -294,6 +294,17 @@ export async function buildServer(options: ServerOptions) {
     }
     return null;
   }
+
+  // When BOTIFYR_ENFORCE_BUDGET=1, an over-budget user is refused new work
+  // (HTTP 429) instead of merely warned. Off by default so it can't surprise you.
+  const enforceBudget = (process.env.BOTIFYR_ENFORCE_BUDGET ?? "0") === "1";
+
+  /** Whether new work should be refused because the daily budget is spent. */
+  async function budgetBlocked(userId: string): Promise<boolean> {
+    if (!enforceBudget || dailyTokenBudget <= 0) return false;
+    const { tokens } = await store.usageSince(userId, startOfToday());
+    return tokens >= dailyTokenBudget;
+  }
   const app = Fastify({ logger: true });
 
   // The desktop app (and website) call this API cross-origin, so allow the
@@ -1842,6 +1853,11 @@ export async function buildServer(options: ServerOptions) {
           .code(429)
           .send({ error: "You've reached the message limit for now — please try again later." });
       }
+      if (await budgetBlocked(userId)) {
+        return reply
+          .code(429)
+          .send({ error: "Daily token budget reached — try again tomorrow or raise the budget." });
+      }
       const warning = await budgetWarning(userId);
 
       // Natural-language stop: "stop", "cancel", "stop this download".
@@ -2027,6 +2043,11 @@ export async function buildServer(options: ServerOptions) {
           .code(429)
           .send({ error: "You've reached the message limit for now — please try again later." });
       }
+      if (await budgetBlocked(userId)) {
+        return reply
+          .code(429)
+          .send({ error: "Daily token budget reached — try again tomorrow or raise the budget." });
+      }
       const warning = await budgetWarning(userId);
       try {
         const task = await retryTask(session, userId, request.body?.local === true);
@@ -2053,6 +2074,12 @@ export async function buildServer(options: ServerOptions) {
         return reply
           .code(429)
           .send({ error: "You've reached the message limit for now — please try again later." });
+      }
+
+      if (await budgetBlocked(userId)) {
+        return reply
+          .code(429)
+          .send({ error: "Daily token budget reached — try again tomorrow or raise the budget." });
       }
 
       return startTask(session, goal, userId);
