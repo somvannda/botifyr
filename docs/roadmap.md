@@ -21,8 +21,9 @@ they land. Keep entries short; link code paths instead of explaining them.
 - [x] **P2P hardening** — TURN/ICE servers configurable via `/v1/config`
       (`BOTIFYR_TURN_*` / `BOTIFYR_ICE_SERVERS`); still to verify across 2 devices.
 - [ ] **Mobile PWA offline** (manifest exists; no service worker).
-- [ ] **Real Stripe** — checkout + webhook signature verification done; invoices
-      and the billing portal are still open.
+- [ ] **Prepaid billing via ChmabaPay** (KHQR / ABA PayWay) — monthly prepaid
+      plans, invoices, reminders 7/3/1 days, 7-day grace, downgrade to free.
+      Full design: [`docs/billing.md`](billing.md). Not implemented yet.
 - [ ] **Deploy** — TLS, reverse proxy, subdomains (`app.` / `admin.` / `api.`).
 - [x] **Retire static `/admin.html`** — `/admin` now 302-redirects to the console.
 
@@ -56,7 +57,7 @@ they land. Keep entries short; link code paths instead of explaining them.
       optional E2E for DMs still open.
 - [x] **Cost enforcement** — opt-in hard daily cap (`BOTIFYR_ENFORCE_BUDGET`) and
       a per-task token cap (`BOTIFYR_MAX_TASK_TOKENS`).
-- [ ] **Deploy pipeline** — proxy + subdomains + Stripe.
+- [ ] **Deploy pipeline** — proxy + subdomains.
 - [ ] **Test coverage** — API integration + UI smoke test.
 
 ## Done (for reference)
