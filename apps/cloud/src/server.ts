@@ -426,6 +426,9 @@ export async function buildServer(options: ServerOptions) {
       );
       const autonomous = bot?.autonomous === true;
       const responders = autonomous ? members : mentioned.length > 0 ? mentioned : members;
+      // A deterministic tool step (download/search) runs on ONE member only, so
+      // two bots don't download the same links.
+      const directMemberId = initialToolCall ? (mentioned[0]?.id ?? responders[0]?.id ?? null) : null;
       void (async () => {
         const nameById = new Map(members.map((m) => [m.id, m.name]));
         const spoken = new Set<string>();
@@ -483,7 +486,7 @@ export async function buildServer(options: ServerOptions) {
               vaultKey,
               author: { id: member.id },
               autoApprove: member.autoApprove === true,
-              initialToolCall: mentioned.some((m) => m.id === member.id) ? initialToolCall : undefined,
+              initialToolCall: member.id === directMemberId ? initialToolCall : undefined,
               suppressIf: autonomous ? (reply) => reply.trim().startsWith("[SKIP]") : undefined,
             },
             task,

@@ -800,9 +800,14 @@ export function Portal() {
                     {downloads.map((file) => (
                       <li key={file.name} className="download-row">
                         <span className="download-ico">{isPlayable(file.name) ? "▶" : "▢"}</span>
-                        <span className="download-name" title={file.name}>
-                          {prettyFileName(file.name)}
-                        </span>
+                        <div className="download-main">
+                          <div className="download-name" title={file.name}>
+                            {prettyFileName(file.name)}
+                          </div>
+                          <div className="download-bar">
+                            <span />
+                          </div>
+                        </div>
                         <span className="download-size">
                           {Math.max(1, Math.round(file.size / 1024)).toLocaleString()} KB
                         </span>

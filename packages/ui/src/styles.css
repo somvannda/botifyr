@@ -417,6 +417,17 @@ body {
 
 .step-running .step-icon {
   color: var(--accent);
+  animation: step-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes step-pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 .step-done .step-icon {
@@ -2155,13 +2166,51 @@ body {
   flex: none;
 }
 
-.download-name {
+.download-main {
   flex: 1;
   min-width: 0;
+}
+
+.download-name {
   font-size: 13px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.download-bar {
+  height: 3px;
+  margin-top: 5px;
+  border-radius: 999px;
+  background: var(--hover);
+  overflow: hidden;
+}
+
+.download-bar > span {
+  display: block;
+  height: 100%;
+  width: 100%;
+  border-radius: 999px;
+  background: var(--ok);
+}
+
+.download-bar.indeterminate > span {
+  width: 35%;
+  background: var(--accent);
+  animation: dl-slide 1.1s ease-in-out infinite;
+}
+
+@keyframes dl-slide {
+  0% {
+    margin-left: -40%;
+  }
+  100% {
+    margin-left: 100%;
+  }
+}
+
+.download-active {
+  background: var(--panel-2);
 }
 
 .download-size {

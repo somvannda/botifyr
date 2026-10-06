@@ -1735,7 +1735,7 @@ export default function App() {
                           <span className="step-icon">{iconFor(step.status)}</span>
                           <div>
                             <div className="step-title">{step.title}</div>
-                            {step.detail && <div className="step-detail">{step.detail}</div>}
+                            {step.detail && <div className="step-detail">{truncate(step.detail, 220)}</div>}
                           </div>
                         </li>
                       );
@@ -1781,13 +1781,32 @@ export default function App() {
                       />
                     </div>
                   )}
+                  {liveTask && (liveTask.status === "running" || liveTask.status === "awaiting_approval") && (
+                    <div className="download-row download-active">
+                      <span className="download-ico">↓</span>
+                      <div className="download-main">
+                        <div className="download-name">
+                          Downloading
+                          {downloadTotal ? ` ${downloadTotal.done} / ${downloadTotal.total}` : "…"}
+                        </div>
+                        <div className="download-bar indeterminate">
+                          <span />
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   <ul className="downloads-list">
                     {downloads.map((file) => (
                       <li key={file.name} className="download-row">
                         <span className="download-ico">{isPlayable(file.name) ? "▶" : "▢"}</span>
-                        <span className="download-name" title={file.name}>
-                          {prettyFileName(file.name)}
-                        </span>
+                        <div className="download-main">
+                          <div className="download-name" title={file.name}>
+                            {prettyFileName(file.name)}
+                          </div>
+                          <div className="download-bar">
+                            <span />
+                          </div>
+                        </div>
                         <span className="download-size">
                           {Math.max(1, Math.round(file.size / 1024)).toLocaleString()} KB
                         </span>
@@ -3213,7 +3232,7 @@ function iconFor(status: Task["steps"][number]["status"]): string {
     case "pending":
       return "○";
     case "running":
-      return "◐";
+      return "●";
     case "done":
       return "●";
     case "failed":
@@ -3221,6 +3240,12 @@ function iconFor(status: Task["steps"][number]["status"]): string {
     case "skipped":
       return "–";
   }
+}
+
+/** Trim noisy tool output for display. */
+function truncate(text: string, max: number): string {
+  const clean = text.replace(/\s+/g, " ").trim();
+  return clean.length > max ? `${clean.slice(0, max)}…` : clean;
 }
 
 /** Parse "6/20 …" download progress from a task step's detail. */

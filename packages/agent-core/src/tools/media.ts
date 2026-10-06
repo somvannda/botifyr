@@ -73,7 +73,7 @@ export function createMediaTools(
       const cookies = await cookieArg();
       // Titles keep each file distinct, so a batch doesn't overwrite itself.
       const template = `'${outDir}/%(title)s [%(id)s].%(ext)s'`;
-      const common = `${cookies}--no-playlist --ignore-errors --no-overwrites`;
+      const common = `${cookies}--no-playlist --ignore-errors --no-overwrites --no-warnings --no-progress`;
       await backend.exec(`mkdir -p '${outDir}'`);
 
       // Download one at a time so the transcript can show per-file progress.
@@ -92,8 +92,8 @@ export function createMediaTools(
       }
 
       const listing = await backend.exec(`ls -lh '${outDir}'`);
-      const tail = outputs.join("\n").slice(-6000);
-      return { ok, output: `${tail}\n--- files ---\n${listing.output}`.slice(0, 12_000) };
+      const tail = outputs.join("\n").slice(-2500);
+      return { ok, output: `${tail}\n--- files ---\n${listing.output}`.slice(0, 6000) };
     },
   };
 
@@ -136,7 +136,7 @@ export function createMediaTools(
     run: async (args) => {
       const url = safeUrl(args.url);
       if (!url) return { ok: false, output: "A valid http(s) URL is required." };
-      return backend.exec(`yt-dlp --no-playlist --dump-single-json '${url}' | head -c 2000`);
+      return backend.exec(`yt-dlp --no-playlist --no-warnings --dump-single-json '${url}' | head -c 1200`);
     },
   };
 
