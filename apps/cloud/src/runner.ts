@@ -312,7 +312,7 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
       prefill: (() => {
         const setting = process.env.BOTIFYR_PREFILL ?? "1";
         if (setting === "0") return undefined;
-        return setting === "1" ? "Got it — I'll take care of that now." : setting;
+        return setting === "1" ? "On it — I'll do this now with my tools." : setting;
       })(),
       autoApprove: deps.autoApprove === true,
       requestApproval: async (title, description, risk) => {

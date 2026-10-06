@@ -58,10 +58,12 @@ export function createOpenAIProvider(options: OpenAIProviderOptions): ModelProvi
       messages,
       tools,
       maxTokens,
+      toolChoice,
     }: {
       messages: AgentMessage[];
       tools: ToolSpec[];
       maxTokens?: number;
+      toolChoice?: "auto" | "none" | "required";
     }): Promise<ModelResponse> {
       const body: Record<string, unknown> = {
         model: options.model,
@@ -89,7 +91,7 @@ export function createOpenAIProvider(options: OpenAIProviderOptions): ModelProvi
             parameters: tool.parameters,
           },
         }));
-        body.tool_choice = "auto";
+        body.tool_choice = toolChoice ?? "auto";
       }
 
       const response = await fetch(endpoint, {
@@ -134,7 +136,7 @@ export function createOpenAIProvider(options: OpenAIProviderOptions): ModelProvi
           : undefined,
       };
     },
-    async completeStream({ messages, tools, maxTokens }, onDelta) {
+    async completeStream({ messages, tools, maxTokens, toolChoice }, onDelta) {
       const body: Record<string, unknown> = {
         model: options.model,
         messages: messages.map(toOpenAIMessage),
@@ -159,7 +161,7 @@ export function createOpenAIProvider(options: OpenAIProviderOptions): ModelProvi
             parameters: tool.parameters,
           },
         }));
-        body.tool_choice = "auto";
+        body.tool_choice = toolChoice ?? "auto";
       }
 
       const response = await fetch(endpoint, {

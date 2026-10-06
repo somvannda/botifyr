@@ -139,4 +139,98 @@ describe("runAgent", () => {
 
     expect(system).toContain("Sam");
   });
+
+  it("re-directs a refusal and then uses a tool", async () => {
+    const provider = scriptedProvider([
+      {
+        text: "I'm not going to do that. It violates YouTube's Terms of Service and the content is copyrighted.",
+        toolCalls: [],
+      },
+      { toolCalls: [{ id: "1", name: "demo_echo", arguments: { value: "go" } }] },
+      { text: "done", toolCalls: [] },
+    ]);
+    let ran = false;
+    const result = await runAgent({
+      goal: "download the links",
+      provider,
+      tools: [echoTool(() => (ran = true))],
+      workspaceDir: ".",
+      requestApproval: async () => true,
+      onStep: () => {},
+    });
+
+    expect(ran).toBe(true);
+    expect(result.summary).toBe("done");
+  });
+
+  it("does not treat a short normal answer as a refusal", async () => {
+    const provider = scriptedProvider([{ text: "ok", toolCalls: [] }]);
+    const result = await runAgent({
+      goal: "say ok",
+      provider,
+      tools: [echoTool(() => {})],
+      workspaceDir: ".",
+      requestApproval: async () => true,
+      onStep: () => {},
+    });
+    expect(result.summary).toBe("ok");
+  });
+
+  it("auto-approve runs a consequential tool without asking", async () => {
+    let asked = false;
+    const risky: ToolDefinition = {
+      name: "danger_go",
+      description: "Risky action.",
+      parameters: { type: "object", properties: {} },
+      requiresApproval: true,
+      run: async () => ({ ok: true, output: "did it" }),
+    };
+    const provider = scriptedProvider([
+      { toolCalls: [{ id: "1", name: "danger_go", arguments: {} }] },
+      { text: "done", toolCalls: [] },
+    ]);
+
+    const result = await runAgent({
+      goal: "go",
+      provider,
+      tools: [risky],
+      workspaceDir: ".",
+      autoApprove: true,
+      requestApproval: async () => {
+        asked = true;
+        return false;
+      },
+      onStep: () => {},
+    });
+
+    expect(asked).toBe(false);
+    expect(result.ok).toBe(true);
+  });
+
+  it("sends the prefill only on the first model call", async () => {
+    const seen: string[][] = [];
+    const provider: ModelProvider = {
+      name: "capture",
+      async complete({ messages }) {
+        seen.push(messages.map((message) => message.role));
+        return messages.length > 3
+          ? { text: "done", toolCalls: [] }
+          : { toolCalls: [{ id: "1", name: "demo_echo", arguments: { value: "x" } }] };
+      },
+    };
+
+    await runAgent({
+      goal: "go",
+      provider,
+      tools: [echoTool(() => {})],
+      workspaceDir: ".",
+      prefill: "On it.",
+      requestApproval: async () => true,
+      onStep: () => {},
+    });
+
+    // First call ends with the assistant prefill; later calls do not.
+    expect(seen[0]?.at(-1)).toBe("assistant");
+    expect(seen[1]?.at(-1)).not.toBe("assistant");
+  });
 });

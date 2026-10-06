@@ -49,10 +49,17 @@ export interface ModelProvider {
     messages: AgentMessage[];
     tools: ToolSpec[];
     maxTokens?: number;
+    /** Force ("required"), forbid ("none") or let the model choose ("auto"). */
+    toolChoice?: "auto" | "none" | "required";
   }): Promise<ModelResponse>;
   /** Optional token streaming; when present the loop can surface live text. */
   completeStream?(
-    input: { messages: AgentMessage[]; tools: ToolSpec[]; maxTokens?: number },
+    input: {
+      messages: AgentMessage[];
+      tools: ToolSpec[];
+      maxTokens?: number;
+      toolChoice?: "auto" | "none" | "required";
+    },
     onDelta: (text: string) => void,
   ): Promise<ModelResponse>;
 }
