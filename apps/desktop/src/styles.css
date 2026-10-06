@@ -15,6 +15,8 @@
   --border: #26262b;
   --text: #ececef;
   --muted: #8b8b92;
+  --hover: #1e1e22;
+  --bubble: #2a2a2e;
   --accent: #6d8bff;
   --accent-2: #8f6dff;
   --ok: #3fd18b;
@@ -1018,7 +1020,7 @@ body {
 }
 
 .user-avatar:hover {
-  border-color: #3a3a42;
+  border-color: var(--border);
 }
 
 .user-info {
@@ -1074,8 +1076,8 @@ body {
 }
 
 .connect-apps:hover {
-  background: #1e1e22;
-  border-color: #34343a;
+  background: var(--hover);
+  border-color: var(--border);
 }
 
 .connect-apps-icons {
@@ -1239,8 +1241,14 @@ body {
 
 .msg-user {
   align-self: flex-end;
-  max-width: 80%;
-  background: #2a2a2e;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  max-width: 82%;
+}
+
+.msg-user-bubble {
+  background: var(--bubble);
   color: var(--text);
   padding: 10px 14px;
   border-radius: 16px;
@@ -1249,6 +1257,21 @@ body {
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.msg-user-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  display: grid;
+  place-items: center;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--muted);
+  flex: none;
+  margin-top: 2px;
 }
 
 /* Composer bar */
@@ -1354,7 +1377,7 @@ body {
 
 .newchat-item:hover,
 .newchat-item.active {
-  background: #232327;
+  background: var(--hover);
 }
 
 .newchat-ico {
@@ -2015,7 +2038,7 @@ body {
 }
 
 .bot-name-input:focus {
-  border-color: #3a3a42;
+  border-color: var(--border);
 }
 
 .bot-emoji-input {
@@ -2072,7 +2095,7 @@ body {
 }
 
 .member-item:hover {
-  background: #1e1e22;
+  background: var(--hover);
 }
 
 .bot-instructions {
@@ -2091,7 +2114,7 @@ body {
 }
 
 .bot-instructions:focus {
-  border-color: #3a3a42;
+  border-color: var(--border);
 }
 
 .schedule-box {
@@ -2405,6 +2428,8 @@ body {
   --border: #e0e3e9;
   --text: #1a1c21;
   --muted: #6b7280;
+  --hover: #e6e9ef;
+  --bubble: #e4e7ee;
 }
 
 [data-theme="light"] .settings-line select,
@@ -2412,7 +2437,11 @@ body {
 [data-theme="light"] .bot-name-input,
 [data-theme="light"] .bot-emoji-input,
 [data-theme="light"] .bot-instructions,
-[data-theme="light"] .schedule-every input {
+[data-theme="light"] .schedule-every input,
+[data-theme="light"] .library-new input,
+[data-theme="light"] .library-editor textarea,
+[data-theme="light"] .market-search,
+[data-theme="light"] .search {
   background: #ffffff;
 }
 

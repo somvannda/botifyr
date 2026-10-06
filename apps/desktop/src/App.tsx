@@ -1061,7 +1061,8 @@ export default function App() {
                 if (message.role === "user") {
                   return (
                     <div key={message.id} className="msg-user">
-                      {message.content}
+                      <div className="msg-user-bubble">{message.content}</div>
+                      <span className="msg-user-avatar">{initials(user.email)}</span>
                     </div>
                   );
                 }
@@ -1072,7 +1073,7 @@ export default function App() {
                   <div key={message.id} className="msg-assistant">
                     <BotLogo size={26} scheme={msgScheme} className="msg-bot-logo" />
                     <div className="msg-body">
-                      {inGroup && msgBot && <div className="msg-author">{msgBot.name}</div>}
+                      {msgBot && <div className="msg-author">{msgBot.name}</div>}
                       <Markdown text={message.content} />
                       <div className="msg-actions">
                         <button
@@ -1104,7 +1105,7 @@ export default function App() {
                 <div className="msg-assistant">
                   <BotLogo size={26} scheme={streamScheme} className="msg-bot-logo" />
                   <div className="msg-body">
-                    {inGroup && streamBot && <div className="msg-author">{streamBot.name}</div>}
+                    {streamBot && <div className="msg-author">{streamBot.name}</div>}
                     {stream && stream.text ? (
                       <span className="reveal">{stream.text}</span>
                     ) : (
