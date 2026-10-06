@@ -105,6 +105,7 @@ export default function App() {
   const [tokenInputFor, setTokenInputFor] = useState<string | null>(null);
   const [tokenValue, setTokenValue] = useState("");
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [historyIndex, setHistoryIndex] = useState<number | null>(null);
   const [listening, setListening] = useState(false);
   const recognitionRef = useRef<{ start: () => void; stop: () => void } | null>(null);
   const [bots, setBots] = useState<Bot[]>([]);
@@ -296,6 +297,10 @@ export default function App() {
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
+
+  useEffect(() => {
+    setHistoryIndex(null);
+  }, [activeSessionId]);
 
   useEffect(() => {
     localStorage.setItem("botifyr.botPanel", showBotPanel ? "1" : "0");
@@ -587,6 +592,7 @@ export default function App() {
       setSessions((prev) => prev.map((s) => (s.id === session.id ? session : s)));
       setText("");
       setMentionQuery(null);
+      setHistoryIndex(null);
       setLimitWarning(warning ?? null);
     } catch (err: unknown) {
       setError(messageOf(err));
@@ -862,6 +868,10 @@ export default function App() {
   const filteredBots = query.trim()
     ? orderedBots.filter((bot) => bot.name.toLowerCase().includes(query.trim().toLowerCase()))
     : orderedBots;
+  // Messages you've sent in this chat, for ↑/↓ recall in the composer.
+  const sentHistory = (sessions.find((entry) => entry.id === activeSessionId)?.messages ?? [])
+    .filter((message) => message.role === "user")
+    .map((message) => message.content);
   const thinking =
     (sending || busy) &&
     (activeSession ? activeSession.messages[activeSession.messages.length - 1]?.role === "user" : false);
@@ -1394,6 +1404,26 @@ export default function App() {
                 if (event.key === "Enter" && !event.shiftKey) {
                   event.preventDefault();
                   void send();
+                  return;
+                }
+                if (event.key === "ArrowUp" && (text === "" || historyIndex !== null)) {
+                  if (sentHistory.length === 0) return;
+                  event.preventDefault();
+                  const next = historyIndex === null ? sentHistory.length - 1 : Math.max(0, historyIndex - 1);
+                  setHistoryIndex(next);
+                  setText(sentHistory[next]);
+                  return;
+                }
+                if (event.key === "ArrowDown" && historyIndex !== null) {
+                  event.preventDefault();
+                  const next = historyIndex + 1;
+                  if (next >= sentHistory.length) {
+                    setHistoryIndex(null);
+                    setText("");
+                  } else {
+                    setHistoryIndex(next);
+                    setText(sentHistory[next]);
+                  }
                 }
               }}
             />
