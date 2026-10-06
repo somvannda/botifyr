@@ -191,6 +191,7 @@ export default function App() {
   const [playerFile, setPlayerFile] = useState<{ name: string; url: string } | null>(null);
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [activityCollapsed, setActivityCollapsed] = useState(false);
+  const [downloadsExpanded, setDownloadsExpanded] = useState(false);
   const [devices, setDevices] = useState<Array<{ id: string; name: string; online: boolean }>>([]);
   const myDeviceId = useMemo(() => deviceId(), []);
   const p2p = useMemo(
@@ -1878,6 +1879,16 @@ export default function App() {
                         {downloadTotal.done} / {downloadTotal.total}
                       </span>
                     )}
+                    <span className="downloads-spacer" />
+                    <button
+                      className="activity-toggle"
+                      type="button"
+                      onClick={() => setDownloadsExpanded((value) => !value)}
+                      title={downloadsExpanded ? "Collapse list" : "Expand list"}
+                      aria-label={downloadsExpanded ? "Collapse downloads" : "Expand downloads"}
+                    >
+                      <ChevronIcon size={15} className={downloadsExpanded ? "chev-up" : ""} />
+                    </button>
                   </div>
                   {downloadStep && (
                     <div className="step-progress-bar downloads-bar">
@@ -1904,7 +1915,7 @@ export default function App() {
                       </div>
                     </div>
                   )}
-                  <ul className="downloads-list">
+                  <ul className={`downloads-list ${downloadsExpanded ? "expanded" : ""}`}>
                     {downloads.map((file) => (
                       <li key={file.name} className="download-row">
                         <span className="download-ico">{isPlayable(file.name) ? "▶" : "▢"}</span>

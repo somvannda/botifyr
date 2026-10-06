@@ -17,6 +17,7 @@ import {
   BOT_SCHEMES,
   BotLogo,
   ChartIcon,
+  ChevronIcon,
   CloseIcon,
   GearIcon,
   LogoutIcon,
@@ -129,6 +130,7 @@ export function Portal() {
   const [skills, setSkills] = useState<Skill[]>([]);
   const [downloads, setDownloads] = useState<Array<{ name: string; size: number }>>([]);
   const [playerFile, setPlayerFile] = useState<{ name: string; url: string } | null>(null);
+  const [downloadsExpanded, setDownloadsExpanded] = useState(false);
 
   const [editor, setEditor] = useState<null | "bot" | "group" | "edit">(null);
   const [editId, setEditId] = useState<string | null>(null);
@@ -805,8 +807,18 @@ export function Portal() {
                         {downloadTotal.done} / {downloadTotal.total}
                       </span>
                     )}
+                    <span className="downloads-spacer" />
+                    <button
+                      className="activity-toggle"
+                      type="button"
+                      onClick={() => setDownloadsExpanded((value) => !value)}
+                      title={downloadsExpanded ? "Collapse list" : "Expand list"}
+                      aria-label={downloadsExpanded ? "Collapse downloads" : "Expand downloads"}
+                    >
+                      <ChevronIcon size={15} className={downloadsExpanded ? "chev-up" : ""} />
+                    </button>
                   </div>
-                  <ul className="downloads-list">
+                  <ul className={`downloads-list ${downloadsExpanded ? "expanded" : ""}`}>
                     {downloads.map((file) => (
                       <li key={file.name} className="download-row">
                         <span className="download-ico">{isPlayable(file.name) ? "▶" : "▢"}</span>

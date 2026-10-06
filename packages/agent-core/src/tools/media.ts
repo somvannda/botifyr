@@ -67,6 +67,27 @@ export function createMediaTools(
     await backend.exec(`mkdir -p '${outDir}'`);
 
     let ok = true;
+    // Best-effort generic fallback for sites yt-dlp doesn't support directly:
+    // fetch the page and pull an HLS/MP4 stream URL out of it.
+    const tryFallback = async (url: string): Promise<boolean> => {
+      await backend.exec(`curl -sL -A 'Mozilla/5.0' '${url}' -o /workspace/_page.html`);
+      const probe = await backend.exec(
+        `grep -oE 'https?://[^" ]+\\.(m3u8|mp4)' /workspace/_page.html | head -n 1`,
+      );
+      const candidate = probe.output
+        .split("\n")
+        .map((line) => line.trim())
+        .find((line) => /^https?:\/\/.+\.(m3u8|mp4)$/.test(line));
+      if (!candidate) return false;
+      const retry = await backend.exec(
+        audio
+          ? `yt-dlp ${common} -x --audio-format mp3 -o ${template} '${candidate}'`
+          : `yt-dlp ${common} -f 'bv*[height<=${height}]+ba/b[height<=${height}]' ` +
+              `--merge-output-format mp4 -o ${template} '${candidate}'`,
+      );
+      return retry.ok;
+    };
+
     for (let index = 0; index < urls.length; index += 1) {
       const url = urls[index];
       context.log(`download ${index + 1}/${urls.length} ${url}`);
@@ -75,7 +96,7 @@ export function createMediaTools(
         : `yt-dlp ${common} -f 'bv*[height<=${height}]+ba/b[height<=${height}]' ` +
           `--merge-output-format mp4 -o ${template} '${url}'`;
       const result = await backend.exec(command);
-      if (!result.ok) ok = false;
+      if (!result.ok && !(await tryFallback(url))) ok = false;
     }
 
     const listing = await backend.exec(`ls -lh '${outDir}'`);

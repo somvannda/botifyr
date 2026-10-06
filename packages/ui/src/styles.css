@@ -2201,8 +2201,20 @@ body {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  max-height: 320px;
+  max-height: 220px;
   overflow-y: auto;
+}
+
+.downloads-list.expanded {
+  max-height: none;
+}
+
+.downloads-spacer {
+  flex: 1;
+}
+
+.chev-up {
+  transform: rotate(180deg);
 }
 
 .download-row {
