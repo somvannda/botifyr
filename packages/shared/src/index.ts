@@ -146,6 +146,11 @@ export interface User {
   createdAt: string;
   role: "user" | "admin";
   plan?: "trial" | "pro";
+  /** Public @handle for finding people. */
+  handle?: string;
+  displayName?: string;
+  avatarEmoji?: string;
+  avatarScheme?: number;
 }
 
 export interface AuthResponse {
@@ -229,6 +234,8 @@ export type ServerEvent =
   | { type: "task.updated"; task: Task }
   | { type: "approval.requested"; taskId: string; approval: Approval }
   | { type: "approval.resolved"; taskId: string; approval: Approval }
+  | { type: "presence"; userId: string; online: boolean; toUserId: string }
+  | { type: "friend.request"; requestId: string; fromUserId: string; toUserId: string }
   | { type: "task.completed"; task: Task }
   | { type: "task.failed"; task: Task };
 

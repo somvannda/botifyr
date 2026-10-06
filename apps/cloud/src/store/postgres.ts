@@ -6,6 +6,7 @@ import type {
   BotRecord,
   ConnectionRecord,
   FileRecord,
+  FriendRequestRecord,
   LearnedSkillRecord,
   MediaRecord,
   Plan,
@@ -51,38 +52,69 @@ export class PostgresStore implements Store {
 
   async createUser(record: UserRecord): Promise<void> {
     await this.pool.query(
-      "INSERT INTO users (id, email, password_hash, role, plan, created_at) VALUES ($1, $2, $3, $4, $5, $6)",
+      "INSERT INTO users (id, email, password_hash, role, plan, handle, display_name, avatar_emoji, avatar_scheme, created_at) " +
+        "VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
       [
         record.id,
         record.email,
         record.passwordHash,
         record.role ?? "user",
         record.plan ?? "trial",
+        record.handle ?? null,
+        record.displayName ?? null,
+        record.avatarEmoji ?? null,
+        record.avatarScheme ?? null,
         record.createdAt,
       ],
     );
   }
 
   async getUserByEmail(email: string): Promise<UserRecord | null> {
-    const { rows } = await this.pool.query(
-      "SELECT id, email, password_hash, role, plan, created_at FROM users WHERE lower(email) = lower($1)",
-      [email],
-    );
+    const { rows } = await this.pool.query("SELECT * FROM users WHERE lower(email) = lower($1)", [email]);
     return rows[0] ? toUser(rows[0]) : null;
   }
 
   async getUserById(id: string): Promise<UserRecord | null> {
-    const { rows } = await this.pool.query(
-      "SELECT id, email, password_hash, role, plan, created_at FROM users WHERE id = $1",
-      [id],
-    );
+    const { rows } = await this.pool.query("SELECT * FROM users WHERE id = $1", [id]);
     return rows[0] ? toUser(rows[0]) : null;
   }
 
-  async listUsers(): Promise<UserRecord[]> {
+  async getUserByHandle(handle: string): Promise<UserRecord | null> {
+    const { rows } = await this.pool.query("SELECT * FROM users WHERE lower(handle) = lower($1)", [
+      handle.replace(/^@/, ""),
+    ]);
+    return rows[0] ? toUser(rows[0]) : null;
+  }
+
+  async searchUsers(query: string, excludeId: string, limit: number): Promise<UserRecord[]> {
+    const like = `%${query.replace(/^@/, "").trim()}%`;
     const { rows } = await this.pool.query(
-      "SELECT id, email, password_hash, role, plan, created_at FROM users ORDER BY created_at ASC",
+      "SELECT * FROM users WHERE id <> $1 AND (handle ILIKE $2 OR email ILIKE $2 OR display_name ILIKE $2) " +
+        "ORDER BY handle NULLS LAST LIMIT $3",
+      [excludeId, like, Math.max(1, Math.min(50, limit))],
     );
+    return rows.map(toUser);
+  }
+
+  async updateUserProfile(
+    id: string,
+    profile: { handle?: string; displayName?: string; avatarEmoji?: string; avatarScheme?: number },
+  ): Promise<void> {
+    await this.pool.query(
+      "UPDATE users SET handle = COALESCE($1, handle), display_name = COALESCE($2, display_name), " +
+        "avatar_emoji = COALESCE($3, avatar_emoji), avatar_scheme = COALESCE($4, avatar_scheme) WHERE id = $5",
+      [
+        profile.handle ?? null,
+        profile.displayName ?? null,
+        profile.avatarEmoji ?? null,
+        profile.avatarScheme ?? null,
+        id,
+      ],
+    );
+  }
+
+  async listUsers(): Promise<UserRecord[]> {
+    const { rows } = await this.pool.query("SELECT * FROM users ORDER BY created_at ASC");
     return rows.map(toUser);
   }
 
@@ -92,6 +124,66 @@ export class PostgresStore implements Store {
 
   async setUserPlan(id: string, plan: Plan): Promise<void> {
     await this.pool.query("UPDATE users SET plan = $1 WHERE id = $2", [plan, id]);
+  }
+
+  async createFriendRequest(record: FriendRequestRecord): Promise<void> {
+    await this.pool.query(
+      "INSERT INTO friend_requests (id, from_user, to_user, status, created_at, updated_at) " +
+        "VALUES ($1,$2,$3,$4,$5,$6)",
+      [record.id, record.fromUserId, record.toUserId, record.status, record.createdAt, record.updatedAt],
+    );
+  }
+
+  async getFriendRequest(id: string): Promise<FriendRequestRecord | null> {
+    const { rows } = await this.pool.query("SELECT * FROM friend_requests WHERE id = $1", [id]);
+    return rows[0] ? toFriendRequest(rows[0]) : null;
+  }
+
+  async listFriendRequests(userId: string): Promise<FriendRequestRecord[]> {
+    const { rows } = await this.pool.query(
+      "SELECT * FROM friend_requests WHERE from_user = $1 OR to_user = $1 ORDER BY created_at DESC",
+      [userId],
+    );
+    return rows.map(toFriendRequest);
+  }
+
+  async updateFriendRequest(record: FriendRequestRecord): Promise<void> {
+    await this.pool.query("UPDATE friend_requests SET status = $1, updated_at = $2 WHERE id = $3", [
+      record.status,
+      record.updatedAt,
+      record.id,
+    ]);
+  }
+
+  async createFriendship(a: string, b: string): Promise<void> {
+    const [x, y] = a < b ? [a, b] : [b, a];
+    await this.pool.query("INSERT INTO friendships (user_a, user_b) VALUES ($1,$2) ON CONFLICT DO NOTHING", [
+      x,
+      y,
+    ]);
+  }
+
+  async listFriends(userId: string): Promise<string[]> {
+    const { rows } = await this.pool.query(
+      "SELECT CASE WHEN user_a = $1 THEN user_b ELSE user_a END AS friend FROM friendships WHERE user_a = $1 OR user_b = $1",
+      [userId],
+    );
+    return rows.map((row) => row.friend as string);
+  }
+
+  async areFriends(a: string, b: string): Promise<boolean> {
+    const [x, y] = a < b ? [a, b] : [b, a];
+    const { rows } = await this.pool.query("SELECT 1 FROM friendships WHERE user_a = $1 AND user_b = $2", [
+      x,
+      y,
+    ]);
+    return rows.length > 0;
+  }
+
+  async deleteFriendship(a: string, b: string): Promise<boolean> {
+    const [x, y] = a < b ? [a, b] : [b, a];
+    const result = await this.pool.query("DELETE FROM friendships WHERE user_a = $1 AND user_b = $2", [x, y]);
+    return (result.rowCount ?? 0) > 0;
   }
 
   async createToken(tokenHash: string, userId: string, expiresAt: string): Promise<void> {
@@ -557,7 +649,22 @@ function toUser(row: any): UserRecord {
     passwordHash: row.password_hash,
     role: row.role ?? "user",
     plan: row.plan === "pro" ? "pro" : "trial",
+    handle: row.handle ?? undefined,
+    displayName: row.display_name ?? undefined,
+    avatarEmoji: row.avatar_emoji ?? undefined,
+    avatarScheme: row.avatar_scheme ?? undefined,
     createdAt: row.created_at.toISOString(),
+  };
+}
+
+function toFriendRequest(row: any): FriendRequestRecord {
+  return {
+    id: row.id,
+    fromUserId: row.from_user,
+    toUserId: row.to_user,
+    status: row.status === "accepted" ? "accepted" : row.status === "declined" ? "declined" : "pending",
+    createdAt: row.created_at.toISOString(),
+    updatedAt: row.updated_at.toISOString(),
   };
 }
 

@@ -10,6 +10,30 @@ CREATE TABLE IF NOT EXISTS users (
 );
 ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS plan TEXT NOT NULL DEFAULT 'trial';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS handle TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_emoji TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_scheme INTEGER;
+CREATE UNIQUE INDEX IF NOT EXISTS users_handle_idx ON users (lower(handle)) WHERE handle IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS friendships (
+  user_a     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_b     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_a, user_b)
+);
+CREATE INDEX IF NOT EXISTS friendships_b_idx ON friendships (user_b);
+
+CREATE TABLE IF NOT EXISTS friend_requests (
+  id         TEXT PRIMARY KEY,
+  from_user  TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  to_user    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  status     TEXT NOT NULL DEFAULT 'pending',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS friend_requests_to_idx ON friend_requests (to_user, status);
+CREATE INDEX IF NOT EXISTS friend_requests_from_idx ON friend_requests (from_user, status);
 
 CREATE TABLE IF NOT EXISTS auth_tokens (
   token_hash TEXT PRIMARY KEY,

@@ -5,6 +5,7 @@ import type {
   BotRecord,
   ConnectionRecord,
   FileRecord,
+  FriendRequestRecord,
   LearnedSkillRecord,
   MediaRecord,
   Plan,
@@ -32,6 +33,8 @@ export class MemoryStore implements Store {
   private learnedSkills = new Map<string, LearnedSkillRecord>();
   private apiKeys = new Map<string, ApiKeyRecord>();
   private media = new Map<string, MediaRecord>();
+  private friendRequests = new Map<string, FriendRequestRecord>();
+  private friendships = new Set<string>();
 
   async init(): Promise<void> {}
   async close(): Promise<void> {}
@@ -62,6 +65,86 @@ export class MemoryStore implements Store {
   async setUserPlan(id: string, plan: Plan): Promise<void> {
     const record = this.users.get(id);
     if (record) record.plan = plan;
+  }
+
+  async getUserByHandle(handle: string): Promise<UserRecord | null> {
+    const wanted = handle.replace(/^@/, "").toLowerCase();
+    for (const record of this.users.values()) {
+      if (record.handle?.toLowerCase() === wanted) return { ...record };
+    }
+    return null;
+  }
+
+  async searchUsers(query: string, excludeId: string, limit: number): Promise<UserRecord[]> {
+    const q = query.replace(/^@/, "").toLowerCase().trim();
+    if (!q) return [];
+    return [...this.users.values()]
+      .filter(
+        (record) =>
+          record.id !== excludeId &&
+          (record.handle?.toLowerCase().includes(q) ||
+            record.email.toLowerCase().includes(q) ||
+            (record.displayName ?? "").toLowerCase().includes(q)),
+      )
+      .slice(0, Math.max(1, Math.min(50, limit)))
+      .map((record) => ({ ...record }));
+  }
+
+  async updateUserProfile(
+    id: string,
+    profile: { handle?: string; displayName?: string; avatarEmoji?: string; avatarScheme?: number },
+  ): Promise<void> {
+    const record = this.users.get(id);
+    if (!record) return;
+    if (profile.handle !== undefined) record.handle = profile.handle;
+    if (profile.displayName !== undefined) record.displayName = profile.displayName;
+    if (profile.avatarEmoji !== undefined) record.avatarEmoji = profile.avatarEmoji;
+    if (profile.avatarScheme !== undefined) record.avatarScheme = profile.avatarScheme;
+  }
+
+  private friendKey(a: string, b: string): string {
+    return a < b ? `${a}|${b}` : `${b}|${a}`;
+  }
+
+  async createFriendRequest(record: FriendRequestRecord): Promise<void> {
+    this.friendRequests.set(record.id, { ...record });
+  }
+
+  async getFriendRequest(id: string): Promise<FriendRequestRecord | null> {
+    const record = this.friendRequests.get(id);
+    return record ? { ...record } : null;
+  }
+
+  async listFriendRequests(userId: string): Promise<FriendRequestRecord[]> {
+    return [...this.friendRequests.values()]
+      .filter((record) => record.fromUserId === userId || record.toUserId === userId)
+      .map((record) => ({ ...record }));
+  }
+
+  async updateFriendRequest(record: FriendRequestRecord): Promise<void> {
+    if (this.friendRequests.has(record.id)) this.friendRequests.set(record.id, { ...record });
+  }
+
+  async createFriendship(a: string, b: string): Promise<void> {
+    this.friendships.add(this.friendKey(a, b));
+  }
+
+  async listFriends(userId: string): Promise<string[]> {
+    const ids: string[] = [];
+    for (const key of this.friendships) {
+      const [x, y] = key.split("|");
+      if (x === userId) ids.push(y);
+      else if (y === userId) ids.push(x);
+    }
+    return ids;
+  }
+
+  async areFriends(a: string, b: string): Promise<boolean> {
+    return this.friendships.has(this.friendKey(a, b));
+  }
+
+  async deleteFriendship(a: string, b: string): Promise<boolean> {
+    return this.friendships.delete(this.friendKey(a, b));
   }
 
   async createToken(tokenHash: string, userId: string, expiresAt: string): Promise<void> {

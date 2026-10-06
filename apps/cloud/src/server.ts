@@ -212,6 +212,28 @@ export async function buildServer(options: ServerOptions) {
       .catch(() => {});
   };
 
+  /* Presence: how many live websocket streams a user has (0 = offline). */
+  const streamCounts = new Map<string, number>();
+  const isOnline = (userId: string): boolean => (streamCounts.get(userId) ?? 0) > 0;
+  const broadcastPresence = async (userId: string, online: boolean): Promise<void> => {
+    const friends = await store.listFriends(userId).catch(() => []);
+    for (const friend of friends) emit({ type: "presence", userId, online, toUserId: friend });
+  };
+  const noteOnline = (userId: string): void => {
+    const next = (streamCounts.get(userId) ?? 0) + 1;
+    streamCounts.set(userId, next);
+    if (next === 1) void broadcastPresence(userId, true);
+  };
+  const noteOffline = (userId: string): void => {
+    const next = Math.max(0, (streamCounts.get(userId) ?? 1) - 1);
+    if (next === 0) {
+      streamCounts.delete(userId);
+      void broadcastPresence(userId, false);
+    } else {
+      streamCounts.set(userId, next);
+    }
+  };
+
   /** Returns a non-blocking warning when the user is over the daily budget. */
   async function budgetWarning(userId: string): Promise<string | null> {
     if (dailyTokenBudget <= 0) return null;
@@ -297,13 +319,38 @@ export async function buildServer(options: ServerOptions) {
     createdAt: string;
     role?: string;
     plan?: string;
+    handle?: string;
+    displayName?: string;
+    avatarEmoji?: string;
+    avatarScheme?: number;
   }): User => ({
     id: record.id,
     email: record.email,
     createdAt: record.createdAt,
     role: record.role === "admin" ? "admin" : "user",
     plan: record.plan === "pro" ? "pro" : "trial",
+    handle: record.handle,
+    displayName: record.displayName,
+    avatarEmoji: record.avatarEmoji,
+    avatarScheme: record.avatarScheme,
   });
+
+  const slugify = (value: string): string =>
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9._-]+/g, "")
+      .slice(0, 24) || "user";
+
+  /** Pick a free @handle derived from the email's local part. */
+  const freeHandle = async (email: string): Promise<string> => {
+    const base = slugify(email.split("@")[0] ?? "user");
+    let candidate = base;
+    for (let n = 2; n < 500; n += 1) {
+      if (!(await store.getUserByHandle(candidate))) return candidate;
+      candidate = `${base}${n}`;
+    }
+    return `${base}${Date.now().toString(36).slice(-4)}`;
+  };
 
   const canReceive = (userId: string, event: ServerEvent): boolean => {
     switch (event.type) {
@@ -324,6 +371,9 @@ export async function buildServer(options: ServerOptions) {
       case "approval.requested":
       case "approval.resolved":
         return ownerOfEventTask(event.taskId) === userId;
+      case "presence":
+      case "friend.request":
+        return event.toUserId === userId;
       default:
         return false;
     }
@@ -1058,6 +1108,7 @@ export async function buildServer(options: ServerOptions) {
       email,
       passwordHash: hashPassword(password),
       role: roleFor(email),
+      handle: await freeHandle(email),
       createdAt: new Date().toISOString(),
     };
     await store.createUser(record);
@@ -1190,6 +1241,7 @@ export async function buildServer(options: ServerOptions) {
             email: info.email,
             passwordHash: "google",
             role: roleFor(info.email),
+            handle: await freeHandle(info.email),
             createdAt: new Date().toISOString(),
           };
           await store.createUser(record);
@@ -1402,6 +1454,11 @@ export async function buildServer(options: ServerOptions) {
   app.get("/auth/me", { preHandler: requireAuth }, async (request, reply) => {
     const record = await store.getUserById(request.userId as string);
     if (!record) return reply.code(404).send({ error: "user not found" });
+    // Backfill a handle for accounts created before profiles existed.
+    if (!record.handle) {
+      record.handle = await freeHandle(record.email);
+      await store.updateUserProfile(record.id, { handle: record.handle });
+    }
     return toUser(record);
   });
 
@@ -1774,6 +1831,174 @@ export async function buildServer(options: ServerOptions) {
     },
   );
 
+  /* ------------------------------------------------------------------------ */
+  /* People: profiles, friend requests, friends (with presence)               */
+  /* ------------------------------------------------------------------------ */
+  const personOf = (record: {
+    id: string;
+    handle?: string;
+    displayName?: string;
+    avatarEmoji?: string;
+    avatarScheme?: number;
+  }) => ({
+    id: record.id,
+    handle: record.handle,
+    displayName: record.displayName,
+    avatarEmoji: record.avatarEmoji,
+    avatarScheme: record.avatarScheme,
+    online: isOnline(record.id),
+  });
+
+  app.patch<{
+    Body: { handle?: string; displayName?: string; avatarEmoji?: string; avatarScheme?: number };
+  }>("/v1/profile", { preHandler: requireAuth }, async (request, reply) => {
+    const userId = request.userId as string;
+    const profile: { handle?: string; displayName?: string; avatarEmoji?: string; avatarScheme?: number } =
+      {};
+    if (typeof request.body?.handle === "string") {
+      const handle = slugify(request.body.handle);
+      if (handle.length < 3) return reply.code(400).send({ error: "handle must be at least 3 characters" });
+      const existing = await store.getUserByHandle(handle);
+      if (existing && existing.id !== userId) return reply.code(409).send({ error: "that handle is taken" });
+      profile.handle = handle;
+    }
+    if (typeof request.body?.displayName === "string")
+      profile.displayName = request.body.displayName.slice(0, 40);
+    if (typeof request.body?.avatarEmoji === "string")
+      profile.avatarEmoji = request.body.avatarEmoji.trim().slice(0, 8);
+    if (Number.isInteger(request.body?.avatarScheme))
+      profile.avatarScheme = Number(request.body?.avatarScheme);
+    await store.updateUserProfile(userId, profile);
+    const record = await store.getUserById(userId);
+    return record ? toUser(record) : reply.code(404).send({ error: "not found" });
+  });
+
+  app.get<{ Querystring: { q?: string } }>("/v1/people", { preHandler: requireAuth }, async (request) => {
+    const userId = request.userId as string;
+    const query = String((request.query as { q?: string } | undefined)?.q ?? "").trim();
+    if (query.length < 1) return [];
+    const results = await store.searchUsers(query, userId, 20);
+    const friendIds = new Set(await store.listFriends(userId));
+    const requests = await store.listFriendRequests(userId);
+    const outgoing = new Set(
+      requests.filter((r) => r.status === "pending" && r.fromUserId === userId).map((r) => r.toUserId),
+    );
+    const incoming = new Set(
+      requests.filter((r) => r.status === "pending" && r.toUserId === userId).map((r) => r.fromUserId),
+    );
+    return results.map((record) => ({
+      ...personOf(record),
+      friend: friendIds.has(record.id),
+      requested: outgoing.has(record.id),
+      incoming: incoming.has(record.id),
+    }));
+  });
+
+  app.get("/v1/friends", { preHandler: requireAuth }, async (request) => {
+    const userId = request.userId as string;
+    const ids = await store.listFriends(userId);
+    const people = await Promise.all(ids.map((id) => store.getUserById(id)));
+    return people.filter((record): record is NonNullable<typeof record> => Boolean(record)).map(personOf);
+  });
+
+  app.get("/v1/friend-requests", { preHandler: requireAuth }, async (request) => {
+    const userId = request.userId as string;
+    const requests = (await store.listFriendRequests(userId)).filter((r) => r.status === "pending");
+    const cache = new Map<string, ReturnType<typeof personOf> | null>();
+    const out: Array<{ id: string; direction: "incoming" | "outgoing"; person: unknown }> = [];
+    for (const request of requests) {
+      const otherId = request.fromUserId === userId ? request.toUserId : request.fromUserId;
+      if (!cache.has(otherId)) {
+        const record = await store.getUserById(otherId);
+        cache.set(otherId, record ? personOf(record) : null);
+      }
+      const person = cache.get(otherId);
+      if (person)
+        out.push({
+          id: request.id,
+          direction: request.fromUserId === userId ? "outgoing" : "incoming",
+          person,
+        });
+    }
+    return out;
+  });
+
+  app.post<{ Body: { userId?: string; handle?: string } }>(
+    "/v1/friend-requests",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      let target = request.body?.userId ? await store.getUserById(request.body.userId) : null;
+      if (!target && request.body?.handle) target = await store.getUserByHandle(request.body.handle);
+      if (!target) return reply.code(404).send({ error: "user not found" });
+      if (target.id === userId) return reply.code(400).send({ error: "you can't add yourself" });
+      if (await store.areFriends(userId, target.id)) return { ok: true, friend: true };
+      const existing = (await store.listFriendRequests(userId)).find(
+        (record) =>
+          record.status === "pending" &&
+          ((record.fromUserId === userId && record.toUserId === target?.id) ||
+            (record.fromUserId === target?.id && record.toUserId === userId)),
+      );
+      if (existing) {
+        if (existing.toUserId === userId) {
+          existing.status = "accepted";
+          existing.updatedAt = new Date().toISOString();
+          await store.updateFriendRequest(existing);
+          await store.createFriendship(userId, target.id);
+          emit({ type: "friend.request", requestId: existing.id, fromUserId: userId, toUserId: target.id });
+          return { ok: true, friend: true };
+        }
+        return { ok: true, pending: true };
+      }
+      const now = new Date().toISOString();
+      const record = {
+        id: randomUUID(),
+        fromUserId: userId,
+        toUserId: target.id,
+        status: "pending" as const,
+        createdAt: now,
+        updatedAt: now,
+      };
+      await store.createFriendRequest(record);
+      emit({ type: "friend.request", requestId: record.id, fromUserId: userId, toUserId: target.id });
+      return { ok: true, pending: true };
+    },
+  );
+
+  app.post<{ Params: { id: string }; Body: { action?: string } }>(
+    "/v1/friend-requests/:id",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const record = await store.getFriendRequest(request.params.id);
+      if (!record || record.toUserId !== userId || record.status !== "pending") {
+        return reply.code(404).send({ error: "request not found" });
+      }
+      record.status = request.body?.action === "accept" ? "accepted" : "declined";
+      record.updatedAt = new Date().toISOString();
+      await store.updateFriendRequest(record);
+      if (record.status === "accepted") {
+        await store.createFriendship(record.fromUserId, record.toUserId);
+        emit({
+          type: "friend.request",
+          requestId: record.id,
+          fromUserId: userId,
+          toUserId: record.fromUserId,
+        });
+      }
+      return { ok: true, friend: record.status === "accepted" };
+    },
+  );
+
+  app.delete<{ Params: { id: string } }>(
+    "/v1/friends/:id",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      await store.deleteFriendship(request.userId as string, request.params.id);
+      return reply.code(204).send();
+    },
+  );
+
   /* Downloads produced by a task (e.g. youtube.download), served to the user. */
   const downloadsRoot = process.env.BOTIFYR_DOWNLOADS_DIR ?? "/downloads";
 
@@ -2087,7 +2312,11 @@ export async function buildServer(options: ServerOptions) {
         // socket closed
       }
     });
-    ws.addEventListener?.("close", () => unsubscribe());
+    noteOnline(userId);
+    ws.addEventListener?.("close", () => {
+      unsubscribe();
+      noteOffline(userId);
+    });
   });
 
   // Local node: a process on the user's own machine that exposes a local browser.

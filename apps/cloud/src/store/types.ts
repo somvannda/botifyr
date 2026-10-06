@@ -11,7 +11,22 @@ export interface UserRecord {
   passwordHash: string;
   role: "user" | "admin";
   plan?: Plan;
+  /** Public @handle (unique, lower-case) for finding people. */
+  handle?: string;
+  displayName?: string;
+  avatarEmoji?: string;
+  avatarScheme?: number;
   createdAt: string;
+}
+
+/** A pending/accepted friend request between two users. */
+export interface FriendRequestRecord {
+  id: string;
+  fromUserId: string;
+  toUserId: string;
+  status: "pending" | "accepted" | "declined";
+  createdAt: string;
+  updatedAt: string;
 }
 
 /** A conversation: id + owner + title + transcript. */
@@ -146,9 +161,25 @@ export interface Store {
   createUser(record: UserRecord): Promise<void>;
   getUserByEmail(email: string): Promise<UserRecord | null>;
   getUserById(id: string): Promise<UserRecord | null>;
+  getUserByHandle(handle: string): Promise<UserRecord | null>;
+  searchUsers(query: string, excludeId: string, limit: number): Promise<UserRecord[]>;
+  updateUserProfile(
+    id: string,
+    profile: { handle?: string; displayName?: string; avatarEmoji?: string; avatarScheme?: number },
+  ): Promise<void>;
   listUsers(): Promise<UserRecord[]>;
   setUserRole(id: string, role: "user" | "admin"): Promise<void>;
   setUserPlan(id: string, plan: Plan): Promise<void>;
+
+  createFriendRequest(record: FriendRequestRecord): Promise<void>;
+  getFriendRequest(id: string): Promise<FriendRequestRecord | null>;
+  listFriendRequests(userId: string): Promise<FriendRequestRecord[]>;
+  updateFriendRequest(record: FriendRequestRecord): Promise<void>;
+  createFriendship(a: string, b: string): Promise<void>;
+  /** User ids of this user's friends. */
+  listFriends(userId: string): Promise<string[]>;
+  areFriends(a: string, b: string): Promise<boolean>;
+  deleteFriendship(a: string, b: string): Promise<boolean>;
 
   createToken(tokenHash: string, userId: string, expiresAt: string): Promise<void>;
   getUserIdByTokenHash(tokenHash: string): Promise<string | null>;
