@@ -151,6 +151,14 @@ export class BotifyrClient {
     });
   }
 
+  retry(sessionId: string, local = false): Promise<{ session: Session; task: Task; warning?: string }> {
+    return this.request(`/v1/sessions/${sessionId}/retry`, {
+      method: "POST",
+      json: true,
+      body: JSON.stringify({ local }),
+    });
+  }
+
   resolveApproval(taskId: string, approvalId: string, decision: "allow" | "deny"): Promise<void> {
     return this.request(`/v1/tasks/${taskId}/approvals/${approvalId}`, {
       method: "POST",

@@ -462,6 +462,18 @@ export default function App() {
     }
   }
 
+  async function retry() {
+    if (!activeSessionId || busy) return;
+    setError(null);
+    try {
+      const { session, warning } = await client.retry(activeSessionId, useComputer);
+      setSessions((prev) => prev.map((s) => (s.id === session.id ? session : s)));
+      setLimitWarning(warning ?? null);
+    } catch (err: unknown) {
+      setError(messageOf(err));
+    }
+  }
+
   async function decide(decision: "allow" | "deny") {
     const task = liveTask;
     if (!task?.approval) return;
@@ -585,6 +597,9 @@ export default function App() {
     (config.usage?.tokensToday ?? 0) >= config.limits.dailyTokenBudget
       ? `Daily token budget reached (${(config.usage?.tokensToday ?? 0).toLocaleString()} / ${config.limits.dailyTokenBudget.toLocaleString()}). Messages still work — raise BOTIFYR_DAILY_TOKEN_BUDGET to increase it.`
       : null;
+  const lastAssistantId = activeSession
+    ? [...activeSession.messages].reverse().find((message) => message.role === "assistant")?.id
+    : undefined;
 
   if (!authChecked) return <div className="center">Loading…</div>;
 
@@ -921,6 +936,17 @@ export default function App() {
                         >
                           Copy
                         </button>
+                        {message.id === lastAssistantId && (
+                          <button
+                            className="msg-action"
+                            type="button"
+                            title="Regenerate reply"
+                            disabled={busy}
+                            onClick={() => void retry()}
+                          >
+                            Retry
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>

@@ -306,6 +306,52 @@ export async function buildServer(options: ServerOptions) {
     return task;
   }
 
+  /** Re-run the last user turn (drops the previous reply first). */
+  async function retryTask(session: Session, userId: string, local = false): Promise<Task> {
+    const lastUserIndex = session.messages.map((message) => message.role).lastIndexOf("user");
+    if (lastUserIndex < 0) throw new Error("there is nothing to retry");
+    session.messages = session.messages.slice(0, lastUserIndex + 1);
+    const goal = session.messages[lastUserIndex].content.slice(0, maxMessageChars);
+    const windowSize = maxHistoryTurns * 2;
+    const history = session.messages
+      .slice(0, lastUserIndex)
+      .slice(-windowSize)
+      .map((message) => ({ role: message.role, content: message.content.slice(0, maxMessageChars) }));
+
+    const bot = session.botId ? await store.getBot(session.botId) : null;
+    const now = new Date().toISOString();
+    const task: Task = {
+      id: randomUUID(),
+      sessionId: session.id,
+      goal,
+      status: "queued",
+      steps: [],
+      createdAt: now,
+      updatedAt: now,
+    };
+    await store.updateSession(session);
+    await store.createTask(task);
+    rememberSession(session.id, session.userId);
+    rememberTask(task.id, session.id, userId);
+    emit({ type: "session.updated", session });
+    emit({ type: "task.created", task });
+
+    void runTask(
+      {
+        store,
+        userId,
+        history,
+        local,
+        instructions: bot?.instructions,
+        summary: session.summary,
+        author: bot ? { id: bot.id } : undefined,
+      },
+      task,
+    ).catch((error) => app.log.error({ err: error, taskId: task.id }, "retry run failed"));
+
+    return task;
+  }
+
   /** Create a bot together with the conversation thread it owns. */
   async function createBotFor(
     userId: string,
@@ -805,6 +851,31 @@ export async function buildServer(options: ServerOptions) {
 
       const task = await startTask(session, text, userId, request.body?.local === true);
       return { session, task, warning: warning ?? undefined };
+    },
+  );
+
+  // Re-run the last user turn (Regenerate).
+  app.post<{ Params: { id: string }; Body: { local?: boolean } }>(
+    "/v1/sessions/:id/retry",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const session = await store.getSession(request.params.id);
+      if (!session || session.userId !== request.userId) {
+        return reply.code(404).send({ error: "session not found" });
+      }
+      const userId = request.userId as string;
+      if (!rateLimitOk(userId)) {
+        return reply
+          .code(429)
+          .send({ error: "You've reached the message limit for now — please try again later." });
+      }
+      const warning = await budgetWarning(userId);
+      try {
+        const task = await retryTask(session, userId, request.body?.local === true);
+        return { session, task, warning: warning ?? undefined };
+      } catch (error) {
+        return reply.code(400).send({ error: error instanceof Error ? error.message : "retry failed" });
+      }
     },
   );
 
