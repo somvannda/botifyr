@@ -50,6 +50,7 @@ import {
 import { Markdown } from "./Markdown";
 import { P2P, deviceId, saveBlob } from "./p2p";
 import { defaultBridge, type BotBridge } from "./bridge";
+import { mergeTask } from "./taskMerge";
 import "./styles.css";
 
 const CLOUD_URL = (import.meta.env.VITE_CLOUD_URL as string | undefined) ?? "http://localhost:8787";
@@ -515,15 +516,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       case "task.failed": {
         setTasks((prev) => {
           const existing = prev[event.task.id];
-          // Only keep a pending approval when the update carries none at all (a
-          // transient snapshot). A *resolved* approval from the server must
-          // clear the prompt — otherwise the buttons keep acting on a task that
-          // already moved on and appear dead.
-          const next =
-            existing?.approval?.status === "pending" && !event.task.approval
-              ? { ...event.task, approval: existing.approval, status: "awaiting_approval" as const }
-              : event.task;
-          return { ...prev, [event.task.id]: next };
+          return { ...prev, [event.task.id]: mergeTask(existing, event.task) };
         });
         break;
       }
