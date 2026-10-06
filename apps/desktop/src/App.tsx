@@ -101,6 +101,7 @@ export default function App() {
   const [marketViewAll, setMarketViewAll] = useState(false);
   const [tokenInputFor, setTokenInputFor] = useState<string | null>(null);
   const [tokenValue, setTokenValue] = useState("");
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [bots, setBots] = useState<Bot[]>([]);
   const [activeBotId, setActiveBotId] = useState<string | null>(null);
   const [stream, setStream] = useState<{
@@ -573,6 +574,7 @@ export default function App() {
       const { session, warning } = await client.sendMessage(activeSessionId, trimmed, useComputer);
       setSessions((prev) => prev.map((s) => (s.id === session.id ? session : s)));
       setText("");
+      setMentionQuery(null);
       setLimitWarning(warning ?? null);
     } catch (err: unknown) {
       setError(messageOf(err));
@@ -587,6 +589,21 @@ export default function App() {
     setLabels(next);
     localStorage.setItem("botifyr.labels", JSON.stringify(next));
     setEditingLabel(false);
+  }
+
+  function onComposerChange(value: string) {
+    setText(value);
+    if (!activeBot?.memberIds?.length) {
+      setMentionQuery(null);
+      return;
+    }
+    const match = /(?:^|\s)@([\w -]*)$/.exec(value);
+    setMentionQuery(match ? match[1] : null);
+  }
+
+  function insertMention(name: string) {
+    setText((prev) => prev.replace(/@[\w -]*$/, () => `@${name} `));
+    setMentionQuery(null);
   }
 
   async function refreshFiles() {
@@ -768,6 +785,11 @@ export default function App() {
   const activeScheme = BOT_SCHEMES[(activeBot?.scheme ?? 0) % BOT_SCHEMES.length];
   const activeBotName = activeBot?.name ?? "Botifyr";
   const botLabel = activeBotId ? (labels[activeBotId] ?? "") : "";
+  const groupMemberBots: Bot[] = activeBot?.memberIds
+    ? activeBot.memberIds
+        .map((id) => bots.find((bot) => bot.id === id))
+        .filter((bot): bot is Bot => Boolean(bot))
+    : [];
   const inGroup = Boolean(activeBot?.memberIds && activeBot.memberIds.length > 0);
   const streamBot = stream?.botId ? (bots.find((bot) => bot.id === stream.botId) ?? null) : null;
   const streamScheme = BOT_SCHEMES[(streamBot?.scheme ?? activeBot?.scheme ?? 0) % BOT_SCHEMES.length];
@@ -1255,13 +1277,31 @@ export default function App() {
             void send();
           }}
         >
+          {mentionQuery !== null && groupMemberBots.length > 0 && (
+            <div className="mention-popup">
+              {groupMemberBots
+                .filter((bot) => bot.name.toLowerCase().includes(mentionQuery.toLowerCase()))
+                .slice(0, 6)
+                .map((bot) => (
+                  <button
+                    key={bot.id}
+                    type="button"
+                    className="mention-item"
+                    onClick={() => insertMention(bot.name)}
+                  >
+                    <BotLogo size={18} scheme={BOT_SCHEMES[bot.scheme % BOT_SCHEMES.length]} />
+                    {bot.name}
+                  </button>
+                ))}
+            </div>
+          )}
           <div className="composer-bar">
             <button className="round" type="button" title="New chat" onClick={() => setShowNewChat(true)}>
               <PlusIcon size={18} />
             </button>
             <textarea
               value={text}
-              onChange={(event) => setText(event.target.value)}
+              onChange={(event) => onComposerChange(event.target.value)}
               placeholder={`Message ${activeBotName}`}
               rows={1}
               disabled={busy}
@@ -1643,25 +1683,40 @@ export default function App() {
             </div>
 
             {(createBotMode === "group" || createBotMode === "edit") && (
-              <ul className="member-list">
-                {bots.map((bot) => (
-                  <li key={bot.id}>
-                    <label className="member-item">
-                      <input
-                        type="checkbox"
-                        checked={groupMembers.includes(bot.id)}
-                        onChange={(event) =>
-                          setGroupMembers((prev) =>
-                            event.target.checked ? [...prev, bot.id] : prev.filter((id) => id !== bot.id),
-                          )
-                        }
-                      />
-                      <BotLogo size={22} scheme={BOT_SCHEMES[bot.scheme % BOT_SCHEMES.length]} />
-                      <span>{bot.name}</span>
-                    </label>
-                  </li>
-                ))}
-              </ul>
+              <>
+                <div className="member-actions">
+                  <span className="member-actions-title">Members</span>
+                  <button
+                    className="link"
+                    type="button"
+                    onClick={() => setGroupMembers(bots.map((bot) => bot.id))}
+                  >
+                    Add all
+                  </button>
+                  <button className="link" type="button" onClick={() => setGroupMembers([])}>
+                    None
+                  </button>
+                </div>
+                <ul className="member-list">
+                  {bots.map((bot) => (
+                    <li key={bot.id}>
+                      <label className="member-item">
+                        <input
+                          type="checkbox"
+                          checked={groupMembers.includes(bot.id)}
+                          onChange={(event) =>
+                            setGroupMembers((prev) =>
+                              event.target.checked ? [...prev, bot.id] : prev.filter((id) => id !== bot.id),
+                            )
+                          }
+                        />
+                        <BotLogo size={22} scheme={BOT_SCHEMES[bot.scheme % BOT_SCHEMES.length]} />
+                        <span>{bot.name}</span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              </>
             )}
 
             <textarea

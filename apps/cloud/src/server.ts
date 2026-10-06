@@ -267,8 +267,14 @@ export async function buildServer(options: ServerOptions) {
     emit({ type: "task.created", task });
 
     if (members.length > 0) {
+      // @mentions choose who replies; otherwise every member replies in turn.
+      const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const mentioned = members.filter((member) =>
+        new RegExp(`@${escapeRegex(member.name)}(?![\\w-])`, "i").test(capped),
+      );
+      const responders = mentioned.length > 0 ? mentioned : members;
       void (async () => {
-        for (const member of members) {
+        for (const member of responders) {
           const latest = (await store.getSession(session.id)) ?? session;
           const memberHistory = latest.messages.slice(-windowSize).map((message) => ({
             role: message.role,
