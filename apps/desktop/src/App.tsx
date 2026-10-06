@@ -2051,7 +2051,8 @@ const MARKETPLACE: MarketApp[] = [
   },
   {
     id: "slack",
-    provider: null,
+    provider: "slack",
+    tokenApp: true,
     name: "Slack",
     category: "Communication",
     desc: "Send and read team messages",
@@ -2059,7 +2060,8 @@ const MARKETPLACE: MarketApp[] = [
   },
   {
     id: "notion",
-    provider: null,
+    provider: "notion",
+    tokenApp: true,
     name: "Notion",
     category: "Productivity",
     desc: "Search and update your pages",
