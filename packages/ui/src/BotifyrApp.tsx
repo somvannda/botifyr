@@ -836,7 +836,9 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       if (url) void openExternal(url);
       setCheckNote("Opening secure checkout…");
     } catch (err: unknown) {
-      setCheckNote(messageOf(err));
+      const message = messageOf(err);
+      setCheckNote(message);
+      pushToast({ kind: "task", title: "Checkout unavailable", body: message });
     }
   }
 
@@ -848,7 +850,9 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       if (url) void openExternal(url);
       setCheckNote("Opening secure checkout…");
     } catch (err: unknown) {
-      setCheckNote(messageOf(err));
+      const message = messageOf(err);
+      setCheckNote(message);
+      pushToast({ kind: "task", title: "Top-up unavailable", body: message });
     }
   }
 
