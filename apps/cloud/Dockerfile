@@ -22,7 +22,6 @@ COPY packages/shared/package.json packages/shared/
 COPY packages/agent-core/package.json packages/agent-core/
 COPY packages/channels/package.json packages/channels/
 COPY apps/cloud/package.json apps/cloud/
-COPY apps/desktop/package.json apps/desktop/
 RUN npm install --no-audit --no-fund
 
 # Application sources.
