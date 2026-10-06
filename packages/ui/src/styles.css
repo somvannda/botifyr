@@ -96,8 +96,8 @@ body {
 .app {
   display: grid;
   grid-template-columns: 270px 1fr;
-  height: calc(100vh - 34px);
-  margin-top: 34px;
+  height: calc(100vh - var(--titlebar, 0px));
+  margin-top: var(--titlebar, 0px);
 }
 
 /* Custom title bar ------------------------------------------------------- */
@@ -1684,8 +1684,8 @@ body {
 .center {
   display: grid;
   place-items: center;
-  height: calc(100vh - 34px);
-  margin-top: 34px;
+  height: calc(100vh - var(--titlebar, 0px));
+  margin-top: var(--titlebar, 0px);
   padding: 24px;
 }
 
