@@ -21,6 +21,7 @@ import { createConnectionTools } from "./connections-tools.js";
 import { createFileTools } from "./files-tools.js";
 import { createGithubTools } from "./github-tools.js";
 import { createNotionTools, createSlackTools, createTelegramTools } from "./token-apps-tools.js";
+import { decryptSecret } from "./vault.js";
 import { createLocalTools, nodeInfo } from "./nodes.js";
 import type { Store } from "./store/index.js";
 
@@ -141,6 +142,7 @@ function buildTools(
   task: Task,
   userId: string,
   local: boolean,
+  vaultKey?: Buffer,
 ): { tools: ToolDefinition[]; closers: Array<() => Promise<void>>; hasComputer: boolean } {
   // "Run on my computer": use only the user's own machine tools.
   if (local && nodeInfo(userId).online) {
@@ -173,8 +175,20 @@ function buildTools(
     tools.push(...shell.tools);
     closers.push(() => shell.close());
     // Media (yt-dlp) tools save into the shared downloads volume, which the
-    // cloud serves back to the user via /v1/tasks/:id/downloads.
-    tools.push(...createMediaTools(shellBackend, `${downloadsDir}/${task.id}`).tools);
+    // cloud serves back to the user via /v1/tasks/:id/downloads. If the user
+    // stored YouTube cookies (Vault: YOUTUBE_COOKIES), pass them to yt-dlp.
+    const getCookies = vaultKey
+      ? async (): Promise<string | null> => {
+          const record = await store.getSecret(userId, "YOUTUBE_COOKIES");
+          if (!record) return null;
+          try {
+            return decryptSecret(vaultKey, record);
+          } catch {
+            return null;
+          }
+        }
+      : undefined;
+    tools.push(...createMediaTools(shellBackend, `${downloadsDir}/${task.id}`, getCookies).tools);
   }
   // Local tools operate the user's own machine; only when their node is online.
   if (nodeInfo(userId).online) {
@@ -192,7 +206,7 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
   await store.updateTask(task);
   emit({ type: "task.updated", task });
 
-  const { tools, closers, hasComputer } = buildTools(task, userId, Boolean(deps.local));
+  const { tools, closers, hasComputer } = buildTools(task, userId, Boolean(deps.local), deps.vaultKey);
   // Connected-app tools (Gmail / Calendar / Drive) when the user has linked any.
   if (deps.vaultKey) {
     const connections = await store.listConnections(userId).catch(() => []);

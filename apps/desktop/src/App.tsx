@@ -129,6 +129,7 @@ export default function App() {
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
   const [skills, setSkills] = useState<Skill[]>([]);
   const [downloads, setDownloads] = useState<Array<{ name: string; size: number }>>([]);
+  const [ytCookies, setYtCookies] = useState("");
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
   const [secrets, setSecrets] = useState<SecretSummary[]>([]);
   const [showSettings, setShowSettings] = useState(false);
@@ -772,6 +773,33 @@ export default function App() {
   async function removeSecret(id: string) {
     try {
       await client.deleteSecret(id);
+      setSecrets(await client.listSecrets());
+    } catch (err: unknown) {
+      setError(messageOf(err));
+    }
+  }
+
+  async function saveYoutubeCookies() {
+    if (!ytCookies.trim()) {
+      setError("Paste your cookies.txt contents first.");
+      return;
+    }
+    try {
+      const existing = secrets.find((secret) => secret.name === "YOUTUBE_COOKIES");
+      if (existing) await client.deleteSecret(existing.id);
+      await client.createSecret("YOUTUBE_COOKIES", ytCookies);
+      setSecrets(await client.listSecrets());
+      setYtCookies("");
+      setCheckNote("YouTube cookies saved.");
+    } catch (err: unknown) {
+      setError(messageOf(err));
+    }
+  }
+
+  async function removeYoutubeCookies() {
+    try {
+      const existing = secrets.find((secret) => secret.name === "YOUTUBE_COOKIES");
+      if (existing) await client.deleteSecret(existing.id);
       setSecrets(await client.listSecrets());
     } catch (err: unknown) {
       setError(messageOf(err));

@@ -18,7 +18,23 @@ export interface MediaTools {
   tools: ToolDefinition[];
 }
 
-export function createMediaTools(backend: ShellBackend, outDir = "/workspace"): MediaTools {
+export function createMediaTools(
+  backend: ShellBackend,
+  outDir = "/workspace",
+  getCookies?: () => Promise<string | null>,
+): MediaTools {
+  const cookieArg = async (): Promise<string> => {
+    if (!getCookies) return "";
+    try {
+      const cookies = await getCookies();
+      if (!cookies || !cookies.trim()) return "";
+      await backend.writeFile("cookies.txt", cookies);
+      return "--cookies /workspace/cookies.txt ";
+    } catch {
+      return "";
+    }
+  };
+
   const download: ToolDefinition = {
     name: "youtube.download",
     description:
@@ -38,11 +54,12 @@ export function createMediaTools(backend: ShellBackend, outDir = "/workspace"): 
       if (!url) return { ok: false, output: "A valid http(s) URL is required." };
       const audio = args.audio_only === true;
       const height = Math.min(2160, Math.max(144, Number(args.quality) || 1080));
+      const cookies = await cookieArg();
       const command = audio
         ? `mkdir -p '${outDir}' && rm -f '${outDir}'/audio.* && ` +
-          `yt-dlp --no-playlist -x --audio-format mp3 -o '${outDir}/audio.%(ext)s' '${url}' && ls -lh '${outDir}'`
+          `yt-dlp ${cookies}--no-playlist -x --audio-format mp3 -o '${outDir}/audio.%(ext)s' '${url}' && ls -lh '${outDir}'`
         : `mkdir -p '${outDir}' && rm -f '${outDir}'/video.* && ` +
-          `yt-dlp --no-playlist -f 'bv*[height<=${height}]+ba/b[height<=${height}]' --merge-output-format mp4 ` +
+          `yt-dlp ${cookies}--no-playlist -f 'bv*[height<=${height}]+ba/b[height<=${height}]' --merge-output-format mp4 ` +
           `-o '${outDir}/video.%(ext)s' '${url}' && ls -lh '${outDir}'`;
       return backend.exec(command);
     },
