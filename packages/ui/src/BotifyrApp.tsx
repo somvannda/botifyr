@@ -290,6 +290,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [labelDraft, setLabelDraft] = useState("");
   const [botFiles, setBotFiles] = useState<BotFile[]>([]);
   const [libraryCategory, setLibraryCategory] = useState<MediaKind | "all">("all");
+  const [downloadsCategory, setDownloadsCategory] = useState<MediaKind | "all">("all");
   const [libName, setLibName] = useState("");
   const [libOpen, setLibOpen] = useState<{ id: string; name: string } | null>(null);
   const [libContent, setLibContent] = useState("");
@@ -1405,6 +1406,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     libraryCategory === "all"
       ? botMedia
       : botMedia.filter((item) => mediaKind(item.name) === libraryCategory);
+  const downloadsMedia =
+    downloadsCategory === "all" ? media : media.filter((item) => mediaKind(item.name) === downloadsCategory);
 
   const mediaUrl = (item: MediaItem, download = false): string =>
     `${CLOUD_URL}/v1/tasks/${item.taskId}/downloads/${encodeURIComponent(item.name)}?token=${encodeURIComponent(
@@ -2186,17 +2189,19 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
               </span>
             )}
             <div className="topbar-right">
-              <button
-                className="bot-menu-btn"
-                type="button"
-                title={findOpen ? "Close search" : "Search this chat"}
-                onClick={() => {
-                  setFindOpen((value) => !value);
-                  setFindQuery("");
-                }}
-              >
-                <SearchIcon size={16} />
-              </button>
+              {activeSession && (
+                <button
+                  className="bot-menu-btn"
+                  type="button"
+                  title={findOpen ? "Close search" : "Search this chat"}
+                  onClick={() => {
+                    setFindOpen((value) => !value);
+                    setFindQuery("");
+                  }}
+                >
+                  <SearchIcon size={16} />
+                </button>
+              )}
               <button
                 className="bot-menu-btn"
                 type="button"
@@ -4169,9 +4174,32 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                       .map((device) => device.name)
                       .join(", ") || "none"}
                   </p>
+                  <div className="library-cats">
+                    {LIBRARY_CATS.map(([id, label]) => {
+                      const count =
+                        id === "all"
+                          ? media.length
+                          : media.filter((item) => mediaKind(item.name) === id).length;
+                      return (
+                        <button
+                          key={id}
+                          className={`library-cat ${downloadsCategory === id ? "active" : ""}`}
+                          type="button"
+                          onClick={() => setDownloadsCategory(id)}
+                        >
+                          {label}
+                          <span className="library-cat-count">{count}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                   <ul className="downloads-list">
-                    {media.length === 0 && <li className="muted">Nothing downloaded yet.</li>}
-                    {groupByDate(media, (entry) => entry.createdAt).map(([date, dayItems]) => (
+                    {downloadsMedia.length === 0 && (
+                      <li className="muted">
+                        {media.length === 0 ? "Nothing downloaded yet." : "Nothing in this category."}
+                      </li>
+                    )}
+                    {groupByDate(downloadsMedia, (entry) => entry.createdAt).map(([date, dayItems]) => (
                       <Fragment key={date}>
                         <li className="date-sep">{date}</li>
                         {dayItems.map((item) => (
