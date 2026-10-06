@@ -20,6 +20,7 @@ import { clearComputerSandbox, setComputerSandbox, setScreenshot, waitForApprova
 import { createConnectionTools } from "./connections-tools.js";
 import { createFileTools } from "./files-tools.js";
 import { createGithubTools } from "./github-tools.js";
+import { createHistoryTools } from "./history-tools.js";
 import { createLearnedSkillTools } from "./learned-skills-tools.js";
 import { createNotionTools, createSlackTools, createTelegramTools } from "./token-apps-tools.js";
 import { decryptSecret } from "./vault.js";
@@ -223,6 +224,8 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
   }
   // Self-learning tools: available everywhere (list/get/save learned skills).
   tools.push(...createLearnedSkillTools(store, userId));
+  // History search: the bot can look up its own past chats for context/links.
+  tools.push(...createHistoryTools(store, deps.author?.id ?? null, task.sessionId));
   // Library tools: the authoring bot can read/write its own files.
   if (deps.author) tools.push(...createFileTools(store, deps.author.id, userId));
   const localInstruction =

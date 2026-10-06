@@ -105,6 +105,7 @@ export default function App() {
   const [tokenInputFor, setTokenInputFor] = useState<string | null>(null);
   const [tokenValue, setTokenValue] = useState("");
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [groupWorking, setGroupWorking] = useState<{ sessionId: string; names: string[] } | null>(null);
   const [historyIndex, setHistoryIndex] = useState<number | null>(null);
   const [mentionIndex, setMentionIndex] = useState(0);
   const [listening, setListening] = useState(false);
@@ -361,6 +362,9 @@ export default function App() {
             : { sessionId: event.sessionId, taskId: event.taskId, botId: event.botId, text: event.text },
         );
         break;
+      case "group.working":
+        setGroupWorking({ sessionId: event.sessionId, names: event.names });
+        break;
       case "task.created":
       case "task.updated":
       case "task.completed":
@@ -606,16 +610,44 @@ export default function App() {
   async function sendMessage(raw: string) {
     const trimmed = raw.trim();
     if (!trimmed || !activeSessionId || sending) return;
+    const sessionId = activeSessionId;
+    const optimisticId = `local-${Date.now()}`;
+    // Show the message immediately; the bot's reply arrives asynchronously.
+    setSessions((prev) =>
+      prev.map((session) =>
+        session.id === sessionId
+          ? {
+              ...session,
+              messages: [
+                ...session.messages,
+                {
+                  id: optimisticId,
+                  role: "user" as const,
+                  content: trimmed,
+                  createdAt: new Date().toISOString(),
+                },
+              ],
+            }
+          : session,
+      ),
+    );
+    setText("");
+    setMentionQuery(null);
+    setHistoryIndex(null);
     setSending(true);
     setError(null);
     try {
-      const { session, warning } = await client.sendMessage(activeSessionId, trimmed, useComputer);
+      const { session, warning } = await client.sendMessage(sessionId, trimmed, useComputer);
       setSessions((prev) => prev.map((s) => (s.id === session.id ? session : s)));
-      setText("");
-      setMentionQuery(null);
-      setHistoryIndex(null);
       setLimitWarning(warning ?? null);
     } catch (err: unknown) {
+      setSessions((prev) =>
+        prev.map((session) =>
+          session.id === sessionId
+            ? { ...session, messages: session.messages.filter((message) => message.id !== optimisticId) }
+            : session,
+        ),
+      );
       setError(messageOf(err));
     } finally {
       setSending(false);
@@ -1364,17 +1396,38 @@ export default function App() {
                 </div>
               )}
 
-              {thinking && !streamActive && (
-                <div className="thinking-row">
-                  <BotLogo size={24} scheme={activeScheme} />
-                  <span>{activeBotName} is thinking</span>
-                  <span className="think-dots">
-                    <i />
-                    <i />
-                    <i />
-                  </span>
-                </div>
-              )}
+              {groupWorking &&
+                groupWorking.sessionId === activeSessionId &&
+                groupWorking.names.length > 0 && (
+                  <div className="thinking-row">
+                    <span>
+                      {groupWorking.names.join(", ")} {groupWorking.names.length > 1 ? "are" : "is"} replying
+                    </span>
+                    <span className="think-dots">
+                      <i />
+                      <i />
+                      <i />
+                    </span>
+                  </div>
+                )}
+
+              {thinking &&
+                !streamActive &&
+                !(
+                  groupWorking &&
+                  groupWorking.sessionId === activeSessionId &&
+                  groupWorking.names.length > 0
+                ) && (
+                  <div className="thinking-row">
+                    <BotLogo size={24} scheme={activeScheme} />
+                    <span>{activeBotName} is thinking</span>
+                    <span className="think-dots">
+                      <i />
+                      <i />
+                      <i />
+                    </span>
+                  </div>
+                )}
 
               {liveTask && (
                 <div className="activity">

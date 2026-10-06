@@ -184,6 +184,8 @@ export async function buildServer(options: ServerOptions) {
       case "assistant.delta":
         // Route by task owner (set for every run) and fall back to session owner.
         return ownerOfEventTask(event.taskId) === userId || ownerOfSession(event.sessionId) === userId;
+      case "group.working":
+        return ownerOfSession(event.sessionId) === userId;
       case "task.created":
       case "task.updated":
       case "task.completed":
@@ -212,21 +214,29 @@ export async function buildServer(options: ServerOptions) {
     const windowSize = maxHistoryTurns * 2;
 
     // Compress older turns into a rolling summary (keeps memory, bounds tokens).
+    // Rolling summary runs in the background so it never delays the response.
     if (summarizeEnabled && session.messages.length > windowSize) {
-      const boundary = session.messages.length - windowSize;
-      const already = session.summaryUpTo ?? 0;
-      if (boundary > already) {
-        const older = session.messages
-          .slice(already, boundary)
-          .map((message) => `${message.role}: ${message.content.slice(0, maxMessageChars)}`)
-          .join("\n");
-        const summary = await summarizeConversation(session.summary ? `${session.summary}\n${older}` : older);
-        if (summary) {
-          session.summary = summary;
-          session.summaryUpTo = boundary;
-          await store.updateSession(session);
+      const snapshot = session.summary;
+      const messages = session.messages.slice();
+      void (async () => {
+        try {
+          const boundary = messages.length - windowSize;
+          const already = session.summaryUpTo ?? 0;
+          if (boundary <= already) return;
+          const older = messages
+            .slice(already, boundary)
+            .map((message) => `${message.role}: ${message.content.slice(0, maxMessageChars)}`)
+            .join("\n");
+          const summary = await summarizeConversation(snapshot ? `${snapshot}\n${older}` : older);
+          if (summary) {
+            session.summary = summary;
+            session.summaryUpTo = boundary;
+            await store.updateSession(session);
+          }
+        } catch {
+          // summarization is best-effort
         }
-      }
+      })();
     }
 
     const history = session.messages
@@ -278,6 +288,11 @@ export async function buildServer(options: ServerOptions) {
       const autonomous = bot?.autonomous === true;
       const responders = autonomous ? members : mentioned.length > 0 ? mentioned : members;
       void (async () => {
+        emit({
+          type: "group.working",
+          sessionId: session.id,
+          names: responders.map((member) => member.name),
+        });
         const queue = [...responders];
         const spoken = new Set<string>();
         let guard = 0;
@@ -358,6 +373,7 @@ export async function buildServer(options: ServerOptions) {
             }
           }
         }
+        emit({ type: "group.working", sessionId: session.id, names: [] });
       })();
     } else {
       void runTask(
@@ -569,14 +585,12 @@ export async function buildServer(options: ServerOptions) {
         updatedAt: now,
       };
       await store.upsertLearnedSkill(record);
-      return reply
-        .code(existing ? 200 : 201)
-        .send({
-          id: record.id,
-          name: record.name,
-          description: record.description,
-          createdAt: record.createdAt,
-        });
+      return reply.code(existing ? 200 : 201).send({
+        id: record.id,
+        name: record.name,
+        description: record.description,
+        createdAt: record.createdAt,
+      });
     },
   );
 
