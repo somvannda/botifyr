@@ -1743,13 +1743,17 @@ body {
 
 /* Sidebar extras --------------------------------------------------------- */
 .sidebar-actions {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 8px;
-  flex-wrap: wrap;
 }
 
 .sidebar-actions .new-task {
-  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
 }
 
 .ghost {
