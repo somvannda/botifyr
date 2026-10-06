@@ -26,11 +26,25 @@ export interface MediaTools {
   tools: ToolDefinition[];
 }
 
+export interface MediaRecipeHint {
+  pattern: string;
+  headers?: Record<string, string>;
+}
+
 export interface MediaToolOptions {
   /** Default max video height when the model doesn't specify one. */
   quality?: number;
   /** Default to audio-only (much faster for big batches). */
   audioOnly?: boolean;
+  /** Approved extraction recipe for a URL's domain (null when none). */
+  getRecipe?: (url: string) => Promise<MediaRecipeHint | null>;
+  /** Persist a self-learned recipe (as pending) for admin approval. */
+  proposeRecipe?: (recipe: {
+    domain: string;
+    pattern: string;
+    headers?: Record<string, string>;
+    note?: string;
+  }) => Promise<void>;
 }
 
 export function createMediaTools(
@@ -67,9 +81,37 @@ export function createMediaTools(
     await backend.exec(`mkdir -p '${outDir}'`);
 
     let ok = true;
-    // Best-effort generic fallback for sites yt-dlp doesn't support directly:
-    // fetch the page and pull an HLS/MP4 stream URL out of it. Handles plain and
-    // JSON-escaped (https:\/\/…) URLs, which most players embed.
+    // 1) A learned recipe for this domain (if approved), then 2) the generic
+    // sniffer: fetch the page and pull an HLS/MP4 URL out of it. Handles plain
+    // and JSON-escaped (https:\/\/…) URLs, which most players embed.
+    const tryRecipe = async (url: string): Promise<boolean> => {
+      if (!options.getRecipe) return false;
+      const recipe = await options.getRecipe(url).catch(() => null);
+      if (!recipe?.pattern) return false;
+      const headerFlags = recipe.headers
+        ? Object.entries(recipe.headers)
+            .map(([key, value]) => `-H '${key}: ${String(value).replace(/['\n\r]/g, "")}'`)
+            .join(" ")
+        : "";
+      const pattern = recipe.pattern.replace(/['\n\r]/g, "");
+      await backend.exec(
+        `curl -sL ${headerFlags} -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' '${url}' -o /workspace/_page.html`,
+      );
+      const probe = await backend.exec(`grep -oE '${pattern}' /workspace/_page.html | head -n 3`);
+      const candidate = probe.output
+        .split("\n")
+        .map((line) => line.trim().replace(/\\\//g, "/"))
+        .filter((line) => /^https?:\/\/.+\.(m3u8|mp4)/.test(line))[0];
+      if (!candidate) return false;
+      const retry = await backend.exec(
+        audio
+          ? `yt-dlp ${common} -x --audio-format mp3 -o ${template} '${candidate}'`
+          : `yt-dlp ${common} -f 'bv*[height<=${height}]+ba/b[height<=${height}]' ` +
+              `--merge-output-format mp4 -o ${template} '${candidate}'`,
+      );
+      return retry.ok;
+    };
+
     const tryFallback = async (url: string): Promise<boolean> => {
       await backend.exec(
         `curl -sL -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' '${url}' -o /workspace/_page.html`,
@@ -100,7 +142,10 @@ export function createMediaTools(
         : `yt-dlp ${common} -f 'bv*[height<=${height}]+ba/b[height<=${height}]' ` +
           `--merge-output-format mp4 -o ${template} '${url}'`;
       const result = await backend.exec(command);
-      if (!result.ok && !(await tryFallback(url))) ok = false;
+      if (!result.ok) {
+        const recovered = (await tryRecipe(url)) || (await tryFallback(url));
+        if (!recovered) ok = false;
+      }
     }
 
     const listing = await backend.exec(`ls -lh '${outDir}'`);
@@ -249,5 +294,63 @@ export function createMediaTools(
     },
   };
 
-  return { tools: [download, downloadSearch, search, info] };
+  const learnRecipe: ToolDefinition = {
+    name: "media.learn_recipe",
+    description:
+      "Record a per-domain extraction recipe after you've found the real media URL (e.g. by watching the page's network in the browser). It's saved for admin approval, then reused automatically for that site.",
+    parameters: {
+      type: "object",
+      properties: {
+        url: { type: "string", description: "A sample page URL on the site." },
+        pattern: { type: "string", description: "Regex that matches the stream URL in the page/API body." },
+        headers: { type: "object", description: "Optional headers needed (Referer, User-Agent, …)." },
+        note: { type: "string", description: "Optional note, e.g. the sample page used." },
+      },
+      required: ["url", "pattern"],
+    },
+    run: async (args) => {
+      if (!options.proposeRecipe) {
+        return { ok: false, output: "Recipe learning isn't enabled on this server." };
+      }
+      const url = safeUrl(args.url);
+      if (!url) return { ok: false, output: "A valid http(s) sample URL is required." };
+      const pattern = String(args.pattern ?? "")
+        .trim()
+        .slice(0, 400);
+      if (!pattern) return { ok: false, output: "A regex pattern is required." };
+      let domain = "";
+      try {
+        domain = new URL(url).hostname.toLowerCase();
+      } catch {
+        return { ok: false, output: "Could not determine the domain from the URL." };
+      }
+      const headers =
+        args.headers && typeof args.headers === "object"
+          ? Object.fromEntries(
+              Object.entries(args.headers as Record<string, unknown>)
+                .filter(([, value]) => typeof value === "string")
+                .map(([key, value]) => [key, String(value)]),
+            )
+          : undefined;
+      try {
+        await options.proposeRecipe({
+          domain,
+          pattern,
+          headers,
+          note: typeof args.note === "string" ? args.note.slice(0, 300) : undefined,
+        });
+      } catch (error) {
+        return {
+          ok: false,
+          output: `Could not save the recipe: ${error instanceof Error ? error.message : "unknown error"}`,
+        };
+      }
+      return {
+        ok: true,
+        output: `Proposed a recipe for ${domain}. An admin must approve it before it's used automatically.`,
+      };
+    },
+  };
+
+  return { tools: [download, downloadSearch, search, info, learnRecipe] };
 }

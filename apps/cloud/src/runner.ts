@@ -218,6 +218,33 @@ function buildTools(
       ...createMediaTools(shellBackend, `${downloadsDir}/${task.id}`, getCookies, {
         quality: Number(process.env.BOTIFYR_DOWNLOAD_QUALITY ?? 720),
         audioOnly: (process.env.BOTIFYR_DOWNLOAD_AUDIO ?? "0") === "1",
+        // Approved per-domain recipes are applied on a yt-dlp miss; the bot can
+        // propose new ones (saved pending for admin approval).
+        getRecipe: async (url) => {
+          try {
+            const domain = new URL(url).hostname.toLowerCase();
+            const recipe = await store.getMediaRecipe(domain);
+            if (recipe?.status === "approved") {
+              return { pattern: recipe.pattern, headers: recipe.headers };
+            }
+          } catch {
+            // ignore a bad/relative URL
+          }
+          return null;
+        },
+        proposeRecipe: async (recipe) => {
+          const now = new Date().toISOString();
+          await store.saveMediaRecipe({
+            domain: recipe.domain,
+            pattern: recipe.pattern,
+            headers: recipe.headers,
+            status: "pending",
+            createdBy: userId,
+            note: recipe.note,
+            createdAt: now,
+            updatedAt: now,
+          });
+        },
       }).tools,
     );
   }
