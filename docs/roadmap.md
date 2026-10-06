@@ -31,13 +31,14 @@ they land. Keep entries short; link code paths instead of explaining them.
 - [ ] **Heuristics** — deterministic routing is regex-based; add a confirm step
       when confidence is low.
 - [ ] **Long jobs** — 15-min sandbox exec cap; whole-channel downloads can
-      exceed it. No resumable background job queue.
-- [ ] **Media storage** — server volume only; no quota / auto-cleanup; “Move”
-      is copy + mark, purge is manual.
+      exceed it. Resume + restart reconciliation done; a persisted per-file job
+      queue is still open.
+- [x] **Media storage** — age + quota sweep (`BOTIFYR_MEDIA_*`); “Move” is
+      copy + mark. A complete **Downloads** history view backfills from the volume.
 - [ ] **Security** — CORS allowlist and access/refresh tokens are done;
       DMs are still server-readable (no E2E); P2P without TURN.
-- [ ] **Cost** — daily token budget is warning-only; add enforcement + per-task
-      cap and a usage view.
+- [x] **Cost** — opt-in hard daily cap + per-task token cap; usage visible in
+      Settings → Usage.
 - [ ] **Testing** — unit tests for media only; no API/UI integration or E2E.
 - [ ] **Multi-device** — presence via socket only; offline DMs are not queued.
 - [ ] **Design system** — `.icon-btn`/`.round`/`.btn`/`.ghost` rule added; older
@@ -47,7 +48,7 @@ they land. Keep entries short; link code paths instead of explaining them.
 - [x] **Background downloads** — `--continue` resume + interrupted-task
       reconciliation on restart; a persisted per-file job queue is still open.
 - [x] **Media retention & quota** — age-based + quota sweep (`BOTIFYR_MEDIA_*`).
-- [ ] **Profile & notifications** — profile UI + DM unread.
+- [x] **Profile & notifications** — profile UI + unread badges + in-app toasts.
 - [ ] **Local model option** — Ollama / OpenAI-compatible config switch.
 - [x] **Security pass** — CORS allowlist + rotating refresh tokens done;
       optional E2E for DMs still open.
