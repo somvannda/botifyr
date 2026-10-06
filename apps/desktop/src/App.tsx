@@ -124,6 +124,7 @@ export default function App() {
   const [botScheme, setBotScheme] = useState(0);
   const [botIntro, setBotIntro] = useState("");
   const [groupMembers, setGroupMembers] = useState<string[]>([]);
+  const [autonomous, setAutonomous] = useState(false);
   const [schedulePrompt, setSchedulePrompt] = useState("");
   const [scheduleEvery, setScheduleEvery] = useState(60);
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
@@ -484,6 +485,7 @@ export default function App() {
     setBotScheme(bots.length % BOT_SCHEMES.length);
     setBotIntro("");
     setGroupMembers([]);
+    setAutonomous(false);
     setSchedulePrompt("");
     setScheduleEvery(60);
     setScheduleEnabled(false);
@@ -499,6 +501,7 @@ export default function App() {
     setBotScheme(bot.scheme % BOT_SCHEMES.length);
     setBotIntro(bot.instructions);
     setGroupMembers(bot.memberIds ?? []);
+    setAutonomous(bot.autonomous === true);
     setSchedulePrompt(bot.schedule?.prompt ?? "");
     setScheduleEvery(bot.schedule?.everyMinutes ?? 60);
     setScheduleEnabled(bot.schedule?.enabled ?? false);
@@ -521,6 +524,7 @@ export default function App() {
           scheme: botScheme,
           instructions: botIntro.trim(),
           memberIds: groupMembers,
+          autonomous,
           skills: selectedSkills,
           schedule: schedulePrompt.trim()
             ? { prompt: schedulePrompt.trim(), everyMinutes: scheduleEvery, enabled: scheduleEnabled }
@@ -560,6 +564,7 @@ export default function App() {
         scheme: botScheme,
         instructions,
         memberIds,
+        autonomous,
         skills: selectedSkills,
       });
       setBots((prev) => [...prev, bot]);
@@ -1991,6 +1996,17 @@ export default function App() {
                   ))}
                 </ul>
               </>
+            )}
+
+            {(createBotMode === "group" || createBotMode === "edit") && (
+              <label className="settings-line">
+                <span>Autonomous — every member decides whether to reply</span>
+                <input
+                  type="checkbox"
+                  checked={autonomous}
+                  onChange={(event) => setAutonomous(event.target.checked)}
+                />
+              </label>
             )}
 
             <div className="settings-section-title">Skills</div>

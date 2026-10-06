@@ -275,7 +275,8 @@ export async function buildServer(options: ServerOptions) {
       const mentioned = members.filter((member) =>
         new RegExp(`@${escapeRegex(member.name)}(?![\\w-])`, "i").test(capped),
       );
-      const responders = mentioned.length > 0 ? mentioned : members;
+      const autonomous = bot?.autonomous === true;
+      const responders = autonomous ? members : mentioned.length > 0 ? mentioned : members;
       void (async () => {
         const queue = [...responders];
         const spoken = new Set<string>();
@@ -308,6 +309,7 @@ export async function buildServer(options: ServerOptions) {
                 )
                 .join("\n")
             : "";
+          const beforeCount = latest.messages.length;
           await runTask(
             {
               store,
@@ -321,6 +323,9 @@ export async function buildServer(options: ServerOptions) {
                 ownRecent
                   ? `Context from your OWN separate one-to-one chat with the user (use it — e.g. links they shared with you earlier):\n${ownRecent}`
                   : "",
+                autonomous
+                  ? "Autonomous mode: every member sees this message and decides for themselves. If it isn't for you and you have nothing useful to add, reply with exactly [SKIP] and nothing else."
+                  : "",
                 "If the user refers to links/items from earlier, list what you found and confirm which ones they want before acting (end with an options block).",
                 member.instructions,
                 skillInstructions(member.skills),
@@ -330,6 +335,7 @@ export async function buildServer(options: ServerOptions) {
               summary: latest.summary,
               vaultKey,
               author: { id: member.id },
+              suppressIf: autonomous ? (reply) => reply.trim().startsWith("[SKIP]") : undefined,
             },
             task,
           ).catch((error) => app.log.error({ err: error, taskId: task.id }, "group member run failed"));
@@ -337,7 +343,7 @@ export async function buildServer(options: ServerOptions) {
           // Handoff: if this reply @mentions a member who hasn't spoken, they respond too.
           const after = (await store.getSession(session.id)) ?? latest;
           const reply = after.messages[after.messages.length - 1];
-          if (reply?.role === "assistant") {
+          if (after.messages.length > beforeCount && reply?.role === "assistant") {
             for (const other of members) {
               if (
                 !spoken.has(other.id) &&
@@ -464,6 +470,7 @@ export async function buildServer(options: ServerOptions) {
       scheme: number;
       instructions: string;
       memberIds?: string[];
+      autonomous?: boolean;
       skills?: string[];
     },
   ): Promise<Bot> {
@@ -483,6 +490,7 @@ export async function buildServer(options: ServerOptions) {
       scheme: input.scheme,
       instructions: input.instructions,
       memberIds: input.memberIds && input.memberIds.length > 0 ? input.memberIds : undefined,
+      autonomous: input.autonomous === true ? true : undefined,
       skills: input.skills && input.skills.length > 0 ? input.skills : undefined,
       sessionId: session.id,
       createdAt: now,
@@ -886,6 +894,7 @@ export async function buildServer(options: ServerOptions) {
       scheme?: number;
       instructions?: string;
       memberIds?: string[];
+      autonomous?: boolean;
       skills?: string[];
     };
   }>("/v1/bots", { preHandler: requireAuth }, async (request, reply) => {
@@ -911,6 +920,7 @@ export async function buildServer(options: ServerOptions) {
       scheme,
       instructions,
       memberIds,
+      autonomous: request.body?.autonomous === true,
       skills: Array.isArray(request.body?.skills)
         ? request.body.skills.filter((id) => SKILLS.some((skill) => skill.id === id))
         : undefined,
@@ -938,6 +948,7 @@ export async function buildServer(options: ServerOptions) {
       scheme?: number;
       instructions?: string;
       memberIds?: string[];
+      autonomous?: boolean;
       skills?: string[];
       schedule?: { prompt?: string; everyMinutes?: number; enabled?: boolean };
     };
@@ -975,6 +986,10 @@ export async function buildServer(options: ServerOptions) {
     if (Array.isArray(request.body?.skills)) {
       const skills = request.body.skills.filter((id) => SKILLS.some((skill) => skill.id === id));
       bot.skills = skills.length > 0 ? skills : undefined;
+    }
+
+    if (typeof request.body?.autonomous === "boolean") {
+      bot.autonomous = request.body.autonomous || undefined;
     }
 
     // Schedule: run a prompt automatically every N minutes.

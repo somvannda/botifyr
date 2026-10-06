@@ -40,6 +40,8 @@ export interface RunnerDeps {
   author?: { id: string };
   /** Vault key, so connected-app tools can read stored OAuth tokens. */
   vaultKey?: Buffer;
+  /** If this returns true for the reply, do not append it (autonomous group skip). */
+  suppressIf?: (reply: string) => boolean;
 }
 
 type Capability = "browser" | "computer" | "code";
@@ -356,7 +358,7 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
   // Append the assistant's reply to the conversation transcript.
   try {
     const session = await store.getSession(task.sessionId);
-    if (session) {
+    if (session && !deps.suppressIf?.(reply)) {
       session.messages.push({
         id: randomUUID(),
         role: "assistant",

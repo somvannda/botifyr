@@ -114,6 +114,8 @@ export interface Bot {
   instructions: string;
   /** For group chats: the bot ids that take turns replying. */
   memberIds?: string[];
+  /** For group chats: every member reads each message and decides whether to reply. */
+  autonomous?: boolean;
   /** Skill ids this bot has been taught (injected into its instructions). */
   skills?: string[];
   /** Optional schedule: run `prompt` every N minutes. */
