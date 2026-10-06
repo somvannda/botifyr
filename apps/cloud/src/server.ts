@@ -2480,12 +2480,12 @@ export async function buildServer(options: ServerOptions) {
     },
   );
 
-  app.get<{ Params: { token: string } }>(
-    "/v1/shared/:token",
+  app.get<{ Querystring: { share?: string } }>(
+    "/v1/shared",
     { preHandler: requireAuth },
     async (request, reply) => {
       const userId = request.userId as string;
-      const payload = verifyShare(request.params.token);
+      const payload = verifyShare(request.query.share ?? "");
       if (!payload || payload.r !== userId) {
         return reply.code(403).send({ error: "invalid or expired share link" });
       }

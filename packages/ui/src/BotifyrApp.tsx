@@ -2169,9 +2169,9 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                             type="button"
                             onClick={() =>
                               void openExternal(
-                                `${CLOUD_URL}/v1/shared/${encodeURIComponent(
+                                `${CLOUD_URL}/v1/shared?share=${encodeURIComponent(
                                   sharedTokenOf(message.content) as string,
-                                )}?token=${encodeURIComponent(token() ?? "")}`,
+                                )}&token=${encodeURIComponent(token() ?? "")}`,
                               )
                             }
                           >
