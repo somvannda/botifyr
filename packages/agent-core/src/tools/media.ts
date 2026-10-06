@@ -68,16 +68,20 @@ export function createMediaTools(
 
     let ok = true;
     // Best-effort generic fallback for sites yt-dlp doesn't support directly:
-    // fetch the page and pull an HLS/MP4 stream URL out of it.
+    // fetch the page and pull an HLS/MP4 stream URL out of it. Handles plain and
+    // JSON-escaped (https:\/\/…) URLs, which most players embed.
     const tryFallback = async (url: string): Promise<boolean> => {
-      await backend.exec(`curl -sL -A 'Mozilla/5.0' '${url}' -o /workspace/_page.html`);
-      const probe = await backend.exec(
-        `grep -oE 'https?://[^" ]+\\.(m3u8|mp4)' /workspace/_page.html | head -n 1`,
+      await backend.exec(
+        `curl -sL -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' '${url}' -o /workspace/_page.html`,
       );
-      const candidate = probe.output
+      const probe = await backend.exec(
+        `grep -oE 'https?:[^" <>]+\\.(m3u8|mp4)' /workspace/_page.html | head -n 10`,
+      );
+      const candidates = probe.output
         .split("\n")
-        .map((line) => line.trim())
-        .find((line) => /^https?:\/\/.+\.(m3u8|mp4)$/.test(line));
+        .map((line) => line.trim().replace(/\\\//g, "/"))
+        .filter((line) => /^https?:\/\/.+\.(m3u8|mp4)/.test(line));
+      const candidate = candidates[0];
       if (!candidate) return false;
       const retry = await backend.exec(
         audio
