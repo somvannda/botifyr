@@ -20,14 +20,14 @@ they land. Keep entries short; link code paths instead of explaining them.
       and desktop (via `tauri-plugin-notification`).
 - [x] **P2P hardening** — TURN/ICE servers configurable via `/v1/config`
       (`BOTIFYR_TURN_*` / `BOTIFYR_ICE_SERVERS`); still to verify across 2 devices.
-- [ ] **Mobile PWA offline** (manifest exists; no service worker).
+- [x] **Mobile PWA offline** — service worker app-shell caching (`apps/portal/public/sw.js`); API/auth never cached.
 - [ ] **Prepaid billing via ChmabaPay** (KHQR / ABA PayWay) — monthly prepaid
       plans **+ on-demand credits**, admin-set pricing/grace/reminders, 7/3/1-day
       reminders, 7-day grace, hard-stop then downgrade to free. Design:
       [`docs/billing.md`](billing.md). **Implemented**: data model, ChmabaPay
       client + pricing, routes + webhook + scheduler, hard-stop, admin billing UI,
       user Usage & Billing. Remaining: live **0.01** validation + email/Telegram go-live.
-- [ ] **Deploy** — TLS, reverse proxy, subdomains (`app.` / `admin.` / `api.`).
+- [x] **Deploy** — `Caddyfile.example` (automatic TLS + `app.`/`admin.`/`api.` subdomains) + docs.
 - [x] **Retire static `/admin.html`** — `/admin` now 302-redirects to the console.
 
 ## Gaps (quality / risk)
@@ -60,7 +60,7 @@ they land. Keep entries short; link code paths instead of explaining them.
       optional E2E for DMs still open.
 - [x] **Cost enforcement** — opt-in hard daily cap (`BOTIFYR_ENFORCE_BUDGET`) and
       a per-task token cap (`BOTIFYR_MAX_TASK_TOKENS`).
-- [ ] **Deploy pipeline** — proxy + subdomains.
+- [x] **Deploy pipeline** — `Caddyfile.example` + subdomains (see `docs/deploy.md`).
 - [ ] **Test coverage** — API integration + UI smoke test.
 
 ## Done (for reference)
