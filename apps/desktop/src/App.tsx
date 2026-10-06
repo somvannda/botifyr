@@ -96,6 +96,8 @@ export default function App() {
   const [connections, setConnections] = useState<ConnectionInfo[]>([]);
   const [connectingApp, setConnectingApp] = useState<string | null>(null);
   const [marketQuery, setMarketQuery] = useState("");
+  const [tokenInputFor, setTokenInputFor] = useState<string | null>(null);
+  const [tokenValue, setTokenValue] = useState("");
   const [bots, setBots] = useState<Bot[]>([]);
   const [activeBotId, setActiveBotId] = useState<string | null>(null);
   const [stream, setStream] = useState<{
@@ -702,6 +704,18 @@ export default function App() {
     try {
       await client.disconnect(provider);
       setConnections(await client.listConnections());
+    } catch (err: unknown) {
+      setError(messageOf(err));
+    }
+  }
+
+  async function saveToken(provider: string) {
+    if (!tokenValue.trim()) return;
+    try {
+      await client.connectToken(provider, tokenValue.trim());
+      setConnections(await client.listConnections());
+      setTokenInputFor(null);
+      setTokenValue("");
     } catch (err: unknown) {
       setError(messageOf(err));
     }
@@ -1479,6 +1493,38 @@ export default function App() {
                         >
                           Disconnect
                         </button>
+                      ) : app.tokenApp ? (
+                        tokenInputFor === app.provider ? (
+                          <div className="market-token">
+                            <input
+                              type="password"
+                              placeholder="Personal access token"
+                              value={tokenValue}
+                              onChange={(event) => setTokenValue(event.target.value)}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter") void saveToken(app.provider!);
+                              }}
+                            />
+                            <button
+                              className="ghost small"
+                              type="button"
+                              onClick={() => void saveToken(app.provider!)}
+                            >
+                              Save
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            className="ghost small"
+                            type="button"
+                            onClick={() => {
+                              setTokenInputFor(app.provider);
+                              setTokenValue("");
+                            }}
+                          >
+                            Connect
+                          </button>
+                        )
                       ) : (
                         <button
                           className="ghost small"
@@ -1970,6 +2016,8 @@ interface MarketApp {
   id: string;
   /** Connection provider id, or null when the app is not available yet. */
   provider: string | null;
+  /** True when the app connects with a personal access token (no OAuth). */
+  tokenApp?: boolean;
   name: string;
   category: string;
   desc: string;
@@ -2019,10 +2067,11 @@ const MARKETPLACE: MarketApp[] = [
   },
   {
     id: "github",
-    provider: null,
+    provider: "github",
+    tokenApp: true,
     name: "GitHub",
     category: "Developer",
-    desc: "Read repos, issues, and pull requests",
+    desc: "Read repositories and issues",
     icon: <span className="market-emoji">🐙</span>,
   },
   {

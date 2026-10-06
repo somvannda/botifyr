@@ -215,6 +215,14 @@ export class BotifyrClient {
     return this.request(`/v1/connections/${provider}/start`, { method: "POST", json: true, body: "{}" });
   }
 
+  connectToken(provider: string, token: string): Promise<{ provider: string; connectedAt: string }> {
+    return this.request(`/v1/connections/${provider}/token`, {
+      method: "POST",
+      json: true,
+      body: JSON.stringify({ token }),
+    });
+  }
+
   disconnect(provider: string): Promise<void> {
     return this.request(`/v1/connections/${provider}`, { method: "DELETE" });
   }

@@ -86,6 +86,15 @@ function notConnected(app: string): { ok: boolean; output: string } {
   return { ok: false, output: `${app} isn't connected. Ask the user to connect it under "Connect apps".` };
 }
 
+export async function connectionToken(
+  store: Store,
+  vaultKey: Buffer,
+  userId: string,
+  provider: string,
+): Promise<string | null> {
+  return accessTokenFor(store, vaultKey, userId, provider);
+}
+
 export function createConnectionTools(store: Store, vaultKey: Buffer, userId: string): ToolDefinition[] {
   return [
     {

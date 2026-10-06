@@ -18,6 +18,7 @@ import { emit } from "./events.js";
 import { clearComputerSandbox, setComputerSandbox, setScreenshot, waitForApproval } from "./runtime.js";
 import { createConnectionTools } from "./connections-tools.js";
 import { createFileTools } from "./files-tools.js";
+import { createGithubTools } from "./github-tools.js";
 import { createLocalTools, nodeInfo } from "./nodes.js";
 import type { Store } from "./store/index.js";
 
@@ -187,7 +188,9 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
   // Connected-app tools (Gmail / Calendar / Drive) when the user has linked any.
   if (deps.vaultKey) {
     const connections = await store.listConnections(userId).catch(() => []);
+    const providers = new Set(connections.map((connection) => connection.provider));
     if (connections.length > 0) tools.push(...createConnectionTools(store, deps.vaultKey, userId));
+    if (providers.has("github")) tools.push(...createGithubTools(store, deps.vaultKey, userId));
   }
   // Library tools: the authoring bot can read/write its own files.
   if (deps.author) tools.push(...createFileTools(store, deps.author.id, userId));

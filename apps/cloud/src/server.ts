@@ -657,6 +657,34 @@ export async function buildServer(options: ServerOptions) {
     },
   );
 
+  // Token-based connection (apps with a personal access token, e.g. GitHub).
+  const TOKEN_APPS = new Set(["github", "notion", "slack", "linear"]);
+  app.post<{ Params: { provider: string }; Body: { token?: string } }>(
+    "/v1/connections/:provider/token",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const provider = request.params.provider;
+      if (!TOKEN_APPS.has(provider)) return reply.code(400).send({ error: "unknown app" });
+      const token = (request.body?.token ?? "").trim();
+      if (!token) return reply.code(400).send({ error: "a token is required" });
+      const encrypted = encryptSecret(
+        vaultKey,
+        JSON.stringify({ accessToken: token, refreshToken: null, expiresAt: null }),
+      );
+      const now = new Date().toISOString();
+      await store.upsertConnection({
+        id: randomUUID(),
+        userId: request.userId as string,
+        provider,
+        ciphertext: encrypted.ciphertext,
+        iv: encrypted.iv,
+        tag: encrypted.tag,
+        createdAt: now,
+      });
+      return { provider, connectedAt: now };
+    },
+  );
+
   app.get<{ Querystring: { provider?: string; state?: string } }>(
     "/auth/google/connect",
     async (request, reply) => {

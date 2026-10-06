@@ -2445,6 +2445,7 @@ body {
 [data-theme="light"] .library-new input,
 [data-theme="light"] .library-editor textarea,
 [data-theme="light"] .market-search,
+[data-theme="light"] .market-token input,
 [data-theme="light"] .search {
   background: #ffffff;
 }
@@ -2648,6 +2649,24 @@ body {
 
 .market-card .ghost {
   align-self: flex-start;
+}
+
+.market-token {
+  display: flex;
+  gap: 6px;
+  width: 100%;
+}
+
+.market-token input {
+  flex: 1;
+  min-width: 0;
+  background: #0e0e10;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 9px;
+  color: var(--text);
+  font-size: 11.5px;
+  outline: none;
 }
 
 /* Bot Library ------------------------------------------------------------ */
