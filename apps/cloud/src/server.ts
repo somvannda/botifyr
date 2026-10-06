@@ -177,7 +177,8 @@ export async function buildServer(options: ServerOptions) {
       case "session.updated":
         return event.session.userId === userId;
       case "assistant.delta":
-        return ownerOfSession(event.sessionId) === userId;
+        // Route by task owner (set for every run) and fall back to session owner.
+        return ownerOfEventTask(event.taskId) === userId || ownerOfSession(event.sessionId) === userId;
       case "task.created":
       case "task.updated":
       case "task.completed":
@@ -258,6 +259,7 @@ export async function buildServer(options: ServerOptions) {
 
     await store.updateSession(session);
     await store.createTask(task);
+    rememberSession(session.id, session.userId);
     rememberTask(task.id, session.id, userId);
     emit({ type: "session.updated", session });
     emit({ type: "task.created", task });
