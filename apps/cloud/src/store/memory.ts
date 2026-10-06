@@ -427,4 +427,15 @@ export class MemoryStore implements Store {
     this.media.delete(id);
     return true;
   }
+
+  async deleteMediaByTask(taskId: string): Promise<number> {
+    let removed = 0;
+    for (const [key, record] of this.media) {
+      if (record.taskId === taskId) {
+        this.media.delete(key);
+        removed += 1;
+      }
+    }
+    return removed;
+  }
 }

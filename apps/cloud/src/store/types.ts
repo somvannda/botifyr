@@ -249,4 +249,6 @@ export interface Store {
   getMedia(userId: string, id: string): Promise<MediaRecord | null>;
   updateMedia(record: MediaRecord): Promise<void>;
   deleteMedia(userId: string, id: string): Promise<boolean>;
+  /** Remove every media record a task produced (used by retention cleanup). */
+  deleteMediaByTask(taskId: string): Promise<number>;
 }

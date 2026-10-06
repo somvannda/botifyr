@@ -184,4 +184,27 @@ describe("MemoryStore", () => {
     expect(await store.revokeApiKey("u1", "k1")).toBe(true);
     expect(await store.getApiKeyByHash("hash1")).toBeNull();
   });
+
+  it("tracks media per task and clears a whole task's records", async () => {
+    const store = new MemoryStore();
+    const media = (id: string, taskId: string, name: string) => ({
+      id,
+      userId: "u1",
+      taskId,
+      name,
+      size: 10,
+      mime: "video/mp4",
+      location: "server" as const,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await store.upsertMedia(media("t1:a.mp4", "t1", "a.mp4"));
+    await store.upsertMedia(media("t1:b.mp4", "t1", "b.mp4"));
+    await store.upsertMedia(media("t2:c.mp4", "t2", "c.mp4"));
+
+    expect(await store.listMedia("u1")).toHaveLength(3);
+    expect(await store.deleteMediaByTask("t1")).toBe(2);
+    expect(await store.listMedia("u1")).toHaveLength(1);
+    expect(await store.deleteMediaByTask("missing")).toBe(0);
+  });
 });

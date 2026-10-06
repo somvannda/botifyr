@@ -41,6 +41,19 @@ botifyr.xyz {
 3. Put TLS in front of `8787` and set the same hostname in `VITE_CLOUD_URL` when
    building the desktop app.
 
+### Media retention & quota
+
+Downloads live on the `botifyr-downloads` volume. The cloud sweeps it on boot
+and every `BOTIFYR_MEDIA_CLEANUP_MINUTES` (default 360):
+
+- `BOTIFYR_MEDIA_RETENTION_DAYS` (default 30) — delete a task's files this many
+  days after their last activity. `0` keeps them forever.
+- `BOTIFYR_MEDIA_QUOTA_MB` (default 0 = unlimited) — when the volume grows past
+  this, the oldest task folders are removed first.
+
+Set both to `0` to disable automatic cleanup entirely. Removing a task's files
+also clears its entries from the media manifest.
+
 ### Optional: billing (Stripe)
 
 Plans are `trial` (default) and `pro`. Stripe is off unless configured:

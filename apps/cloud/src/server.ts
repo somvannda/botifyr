@@ -2681,6 +2681,70 @@ export async function buildServer(options: ServerOptions) {
   });
 
   // Always-on bots: fire scheduled prompts while the cloud is running.
+  /* Media retention: drop old task folders and keep the volume under quota. */
+  const retentionDays = Number(process.env.BOTIFYR_MEDIA_RETENTION_DAYS ?? 30);
+  const quotaBytes = Number(process.env.BOTIFYR_MEDIA_QUOTA_MB ?? 0) * 1024 * 1024;
+
+  const folderInfo = async (dir: string): Promise<{ size: number; newest: number }> => {
+    let size = 0;
+    let newest = 0;
+    const entries = await readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        const inner = await folderInfo(full);
+        size += inner.size;
+        newest = Math.max(newest, inner.newest);
+      } else {
+        const info = await stat(full);
+        size += info.size;
+        newest = Math.max(newest, info.mtimeMs);
+      }
+    }
+    return { size, newest };
+  };
+
+  const cleanupMedia = async (): Promise<void> => {
+    let entries;
+    try {
+      entries = await readdir(downloadsRoot, { withFileTypes: true });
+    } catch {
+      return; // volume not mounted yet
+    }
+    const folders: Array<{ taskId: string; size: number; newest: number }> = [];
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const info = await folderInfo(join(downloadsRoot, entry.name)).catch(() => null);
+      if (info) folders.push({ taskId: entry.name, ...info });
+    }
+    // Oldest first, so quota trimming drops the least recently used.
+    folders.sort((a, b) => a.newest - b.newest);
+    const cutoff = retentionDays > 0 ? Date.now() - retentionDays * 24 * 60 * 60 * 1000 : 0;
+
+    let total = folders.reduce((sum, folder) => sum + folder.size, 0);
+    let removed = 0;
+    for (const folder of folders) {
+      const expired = cutoff > 0 && folder.newest < cutoff;
+      const overQuota = quotaBytes > 0 && total > quotaBytes;
+      if (!expired && !overQuota) continue;
+      await rm(join(downloadsRoot, folder.taskId), { recursive: true, force: true }).catch(() => {});
+      await store.deleteMediaByTask(folder.taskId).catch(() => {});
+      total -= folder.size;
+      removed += 1;
+    }
+    if (removed > 0) {
+      app.log.info({ removed, totalBytes: total }, "media cleanup removed old task folders");
+    }
+  };
+
+  if (retentionDays > 0 || quotaBytes > 0) {
+    void cleanupMedia();
+  }
+  const cleanupTimer = setInterval(
+    () => void cleanupMedia(),
+    Math.max(5, Number(process.env.BOTIFYR_MEDIA_CLEANUP_MINUTES ?? 360)) * 60_000,
+  );
+
   const scheduler = setInterval(() => {
     void (async () => {
       try {
@@ -2707,7 +2771,10 @@ export async function buildServer(options: ServerOptions) {
       }
     })();
   }, 30_000);
-  app.addHook("onClose", async () => clearInterval(scheduler));
+  app.addHook("onClose", async () => {
+    clearInterval(scheduler);
+    clearInterval(cleanupTimer);
+  });
 
   return app;
 }

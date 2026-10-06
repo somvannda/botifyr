@@ -613,6 +613,11 @@ export class PostgresStore implements Store {
     const result = await this.pool.query("DELETE FROM media WHERE id = $1 AND user_id = $2", [id, userId]);
     return (result.rowCount ?? 0) > 0;
   }
+
+  async deleteMediaByTask(taskId: string): Promise<number> {
+    const result = await this.pool.query("DELETE FROM media WHERE task_id = $1", [taskId]);
+    return result.rowCount ?? 0;
+  }
 }
 
 function toMedia(row: any): MediaRecord {
