@@ -1,0 +1,11 @@
+{
+  "name": "@botifyr/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Botifyr marketing + help site (static).",
+  "scripts": {
+    "dev": "node server.mjs",
+    "start": "node server.mjs"
+  }
+}

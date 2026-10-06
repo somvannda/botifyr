@@ -18,6 +18,7 @@
     "db:up": "docker compose up -d postgres",
     "db:down": "docker compose down",
     "node:start": "npm run start -w @botifyr/node",
+    "dev:web": "npm run dev -w @botifyr/web",
     "chrome:debug": "node scripts/chrome-debug.mjs",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "eslint .",

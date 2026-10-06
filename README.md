@@ -60,7 +60,8 @@ botifyr/
 ├─ apps/
 │  ├─ cloud/       Fastify API + agent runner + Postgres (the "brain")
 │  ├─ desktop/     Tauri 2 + React window (Vite front end, Rust shell)
-│  └─ node/        Local helper on your machine (its own browser + shell)
+│  ├─ node/        Local helper on your machine (its own browser + shell)
+│  └─ web/         Marketing + help site (static, our own domain content)
 ├─ packages/
 │  ├─ agent-core/  Provider-agnostic agent loop, tools, model providers
 │  ├─ channels/    Messaging channels (local API, Telegram)

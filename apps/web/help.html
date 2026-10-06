@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Botifyr — Help</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="site">
+        <a class="brand" href="/">
+          <svg width="26" height="26" viewBox="0 0 100 100" aria-hidden="true">
+            <g stroke="#141416" stroke-width="3.4" stroke-linecap="round">
+              <line x1="42" y1="17" x2="34.5" y2="7" />
+              <line x1="58" y1="17" x2="65.5" y2="7" />
+            </g>
+            <circle cx="33" cy="6" r="5" fill="#141416" />
+            <circle cx="67" cy="6" r="5" fill="#141416" />
+            <rect x="27" y="14" width="46" height="30" rx="9" fill="#e9eaee" stroke="#141416" stroke-width="3.4" />
+            <rect x="40.5" y="23" width="5.5" height="9.5" rx="2.6" fill="#141416" />
+            <rect x="54" y="23" width="5.5" height="9.5" rx="2.6" fill="#141416" />
+            <path
+              d="M13 46h74L61 87.5Q50 95 39 87.5Z"
+              fill="#19b7c9"
+              stroke="#141416"
+              stroke-width="3.4"
+              stroke-linejoin="round"
+            />
+            <path
+              d="M29 50h42L56 71.5Q50 77 44 71.5Z"
+              fill="#f5a623"
+              stroke="#141416"
+              stroke-width="3.4"
+              stroke-linejoin="round"
+            />
+            <circle cx="50" cy="69" r="10" fill="#141416" />
+            <text x="50" y="74" text-anchor="middle" font-family="Georgia, serif" font-size="14" font-weight="700" fill="#fff">
+              f
+            </text>
+          </svg>
+          Botifyr
+        </a>
+        <nav class="links">
+          <a href="/">Home</a>
+          <a href="mailto:support@botifyr.xyz">Contact</a>
+        </nav>
+      </header>
+
+      <div class="doc">
+        <nav>
+          <a href="#start">Getting started</a>
+          <a href="#bots">Bots &amp; group chats</a>
+          <a href="#apps">Connect apps</a>
+          <a href="#computer">Your computer</a>
+          <a href="#schedule">Schedules</a>
+          <a href="#settings">Settings</a>
+          <a href="#cost">Usage &amp; cost</a>
+          <a href="#selfhost">Self-hosting</a>
+        </nav>
+
+        <main>
+          <h1>Help</h1>
+          <p>Everything you need to run Botifyr. Still stuck? Email <a href="mailto:support@botifyr.xyz">support@botifyr.xyz</a>.</p>
+
+          <h2 id="start">Getting started</h2>
+          <p>
+            Install the desktop app, then sign in with Google in your browser. When you return, the app picks up
+            the session automatically. On first launch you get a default bot called <strong>Botifyr</strong>.
+          </p>
+
+          <h2 id="bots">Bots &amp; group chats</h2>
+          <p>
+            A bot is an agent plus its own conversation. Click <strong>＋</strong> to create a bot (name, colour,
+            instructions) or a <strong>group chat</strong> that combines several bots, each replying in turn.
+            Open a bot's panel (the ▢ button) for Details, Library, and its Computer screen.
+          </p>
+
+          <h2 id="apps">Connect apps</h2>
+          <p>
+            From the footer, <strong>Connect apps</strong> opens the Marketplace. Connecting Gmail, Calendar or
+            Drive lets your agents read and act on them. You authorize with the provider and can disconnect at any
+            time.
+          </p>
+
+          <h2 id="computer">Your computer</h2>
+          <p>
+            Turn on <strong>My computer</strong> to let a task use your own browser and shell instead of the cloud
+            sandbox. Consequential actions still ask first unless you set <em>Always allow</em>.
+          </p>
+
+          <h2 id="schedule">Schedules</h2>
+          <p>
+            Edit a bot and set an <strong>Always-on schedule</strong>: a prompt and an interval. Botifyr runs it
+            automatically and the result appears in the bot's conversation.
+          </p>
+
+          <h2 id="settings">Settings</h2>
+          <p>
+            Click your avatar → <strong>Settings</strong>. General (account, theme, language, timezone), Computer
+            (approvals, connection), Usage &amp; Billing, Updates, and Vault (encrypted secrets).
+          </p>
+
+          <h2 id="cost">Usage &amp; cost</h2>
+          <p>
+            Every model call is capped and counted. The app shows <strong>Usage today</strong>; the cloud enforces a
+            per-user rate limit and warns when you pass your daily token budget (it never blocks). Old turns are
+            summarised so long chats stay cheap.
+          </p>
+
+          <h2 id="selfhost">Self-hosting</h2>
+          <p>The stack runs anywhere Docker does.</p>
+          <pre><code>git clone &lt;your-repo&gt;
+npm install
+docker compose up -d --build cloud   # cloud + Postgres
+npm run dev:desktop:tauri            # desktop app</code></pre>
+          <p>Configuration lives in <code>apps/cloud/.env</code> (provider, keys, limits).</p>
+        </main>
+      </div>
+
+      <footer class="site">
+        <span>© 2026 Botifyr</span>
+        <span><a href="/">Home</a> · <a href="mailto:support@botifyr.xyz">support@botifyr.xyz</a></span>
+      </footer>
+    </div>
+  </body>
+</html>
