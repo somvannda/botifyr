@@ -11,9 +11,8 @@ they land. Keep entries short; link code paths instead of explaining them.
       `packages/agent-core/src/tools/media.ts`.
 - [x] **Friend group chats** — create a thread with several friends
       (`kind: "group"` model already exists).
-- [ ] **Send a file to a friend** — from Media/Library, share a downloaded file
-      into a DM. Needs a **secure shared-file** design (a plain download URL
-      would leak the sender's token), so: signed, recipient-scoped links.
+- [x] **Send a file to a friend** — signed, recipient-scoped, 7-day links from
+      Downloads → “Send to friend”; the recipient taps “Save file” in the DM.
 - [x] **Profile editing UI** — set @handle / display name / avatar
       (`PATCH /v1/profile`; UI in the People panel).
 - [x] **Unread badges** — per conversation; opening a chat clears it.

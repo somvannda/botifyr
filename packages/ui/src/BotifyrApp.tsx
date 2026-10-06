@@ -168,6 +168,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     }
   });
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [shareItem, setShareItem] = useState<MediaItem | null>(null);
   const [approvalNotice, setApprovalNotice] = useState<{ title: string; decision: "allow" | "deny" } | null>(
     null,
   );
@@ -1441,6 +1442,23 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     }
   }
 
+  /** Share a downloaded file with a friend via a signed, recipient-scoped link. */
+  async function shareWith(person: Person): Promise<void> {
+    const item = shareItem;
+    setShareItem(null);
+    if (!item) return;
+    try {
+      const { token: shareToken } = await client.shareMedia(item.id, person.id);
+      const session = await client.openDm(person.id);
+      await client.sendDm(session.id, `📎 ${prettyFileName(item.name)}\n/shared/${shareToken}`);
+      setSessions((prev) => (prev.some((entry) => entry.id === session.id) ? prev : [session, ...prev]));
+      setActiveBotId(null);
+      setActiveSessionId(session.id);
+    } catch (err: unknown) {
+      setError(messageOf(err));
+    }
+  }
+
   async function saveProfile(): Promise<void> {
     try {
       const updated = await client.updateProfile({
@@ -2140,6 +2158,21 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                           {label}
                         </div>
                         <Markdown text={message.content} />
+                        {sharedTokenOf(message.content) && (
+                          <button
+                            className="ghost small"
+                            type="button"
+                            onClick={() =>
+                              void openExternal(
+                                `${CLOUD_URL}/v1/shared/${encodeURIComponent(
+                                  sharedTokenOf(message.content) as string,
+                                )}?token=${encodeURIComponent(token() ?? "")}`,
+                              )
+                            }
+                          >
+                            Save file
+                          </button>
+                        )}
                       </div>
                     </div>
                   );
@@ -3372,6 +3405,30 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
         </div>
       )}
 
+      {shareItem && (
+        <div className="apps-overlay" onClick={() => setShareItem(null)}>
+          <div className="apps-panel" onClick={(event) => event.stopPropagation()}>
+            <div className="apps-head">
+              <span className="apps-title">Send to a friend</span>
+              <button className="icon-btn sm" type="button" onClick={() => setShareItem(null)}>
+                ✕
+              </button>
+            </div>
+            <p className="apps-sub">{prettyFileName(shareItem.name)}</p>
+            <ul className="member-list">
+              {friends.length === 0 && <li className="muted">Add a friend first.</li>}
+              {friends.map((person) => (
+                <li key={person.id}>
+                  <button className="ghost small" type="button" onClick={() => void shareWith(person)}>
+                    {person.displayName || (person.handle ? `@${person.handle}` : "Friend")}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+
       {showPeople && (
         <div className="apps-overlay" onClick={() => setShowPeople(false)}>
           <div className="apps-panel" onClick={(event) => event.stopPropagation()}>
@@ -3931,6 +3988,9 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                         <button className="ghost small" type="button" onClick={() => void sendToDevice(item)}>
                           Send
                         </button>
+                        <button className="ghost small" type="button" onClick={() => setShareItem(item)}>
+                          Send to friend
+                        </button>
                         <button
                           className="ghost small"
                           type="button"
@@ -4247,4 +4307,10 @@ function prettyFileName(name: string): string {
     .replace(/\.[a-z0-9]+$/i, "")
     .replace(/\s*\[[A-Za-z0-9_-]{6,}\]\s*$/, "")
     .trim();
+}
+
+/** A signed share token embedded in a message as `/shared/<token>`. */
+function sharedTokenOf(text: string): string | null {
+  const match = /\/shared\/([A-Za-z0-9._-]+)/.exec(text);
+  return match ? match[1] : null;
 }

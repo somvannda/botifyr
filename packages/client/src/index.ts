@@ -345,6 +345,15 @@ export class BotifyrClient {
     return this.request(`/v1/media/${id}${purge ? "?purge=1" : ""}`, { method: "DELETE" });
   }
 
+  /** Create a signed, recipient-scoped link to a downloaded file. */
+  shareMedia(id: string, toUserId: string): Promise<{ token: string; expiresAt: string }> {
+    return this.request(`/v1/media/${encodeURIComponent(id)}/share`, {
+      method: "POST",
+      json: true,
+      body: JSON.stringify({ toUserId }),
+    });
+  }
+
   /* P2P: online devices of this user + a signaling relay for WebRTC. */
   listDevices(): Promise<Array<{ id: string; name: string; online: boolean }>> {
     return this.request("/v1/devices");

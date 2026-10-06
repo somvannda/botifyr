@@ -2,7 +2,7 @@ import Fastify from "fastify";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import cors from "@fastify/cors";
 import websocket from "@fastify/websocket";
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { createReadStream, readFileSync } from "node:fs";
 import { readdir, rm, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
@@ -2428,6 +2428,87 @@ export async function buildServer(options: ServerOptions) {
       }
       await store.deleteMedia(userId, record.id);
       return reply.code(204).send();
+    },
+  );
+
+  /* Signed, recipient-scoped links so a file can be shared with a friend
+     without exposing the sender's token or creating a public URL. */
+  const signShare = (payload: Record<string, unknown>): string => {
+    const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
+    const mac = createHmac("sha256", vaultKey).update(body).digest("base64url");
+    return `${body}.${mac}`;
+  };
+
+  const verifyShare = (token: string): { t: string; n: string; r: string; e: number } | null => {
+    const [body, mac] = token.split(".");
+    if (!body || !mac) return null;
+    const expected = createHmac("sha256", vaultKey).update(body).digest("base64url");
+    const given = Buffer.from(mac);
+    const want = Buffer.from(expected);
+    if (given.length !== want.length || !timingSafeEqual(given, want)) return null;
+    try {
+      const payload = JSON.parse(Buffer.from(body, "base64url").toString("utf8")) as {
+        t: string;
+        n: string;
+        r: string;
+        e: number;
+      };
+      if (!payload.t || !payload.n || !payload.r || typeof payload.e !== "number" || payload.e < Date.now()) {
+        return null;
+      }
+      return payload;
+    } catch {
+      return null;
+    }
+  };
+
+  app.post<{ Params: { id: string }; Body: { toUserId?: string } }>(
+    "/v1/media/:id/share",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const record = await store.getMedia(userId, request.params.id);
+      if (!record) return reply.code(404).send({ error: "media not found" });
+      const toUserId = (request.body?.toUserId ?? "").trim();
+      if (!toUserId) return reply.code(400).send({ error: "toUserId is required" });
+      if (!(await store.areFriends(userId, toUserId))) {
+        return reply.code(403).send({ error: "you can only share with friends" });
+      }
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+      const token = signShare({ t: record.taskId, n: record.name, r: toUserId, e: Date.parse(expiresAt) });
+      return { token, expiresAt };
+    },
+  );
+
+  app.get<{ Params: { token: string } }>(
+    "/v1/shared/:token",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const payload = verifyShare(request.params.token);
+      if (!payload || payload.r !== userId) {
+        return reply.code(403).send({ error: "invalid or expired share link" });
+      }
+      const safeName = basename(payload.n);
+      const filePath = join(downloadsRoot, payload.t, safeName);
+      const type = safeName.endsWith(".mp3")
+        ? "audio/mpeg"
+        : safeName.endsWith(".mp4")
+          ? "video/mp4"
+          : "application/octet-stream";
+      const asciiName = safeName.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "_");
+      const disposition = `attachment; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(safeName)}`;
+      try {
+        const info = await stat(filePath);
+        if (!info.isFile()) throw new Error("not a file");
+        return reply
+          .header("content-length", info.size)
+          .header("content-disposition", disposition)
+          .type(type)
+          .send(createReadStream(filePath));
+      } catch {
+        return reply.code(404).send({ error: "file not found" });
+      }
     },
   );
 
