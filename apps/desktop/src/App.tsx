@@ -1794,7 +1794,7 @@ export default function App() {
                           : liveTask.status}
                     </span>
                     <button
-                      className="activity-toggle"
+                      className="icon-btn sm"
                       type="button"
                       onClick={() => setActivityCollapsed((value) => !value)}
                       title={activityCollapsed ? "Expand" : "Collapse"}
@@ -1881,7 +1881,7 @@ export default function App() {
                     )}
                     <span className="downloads-spacer" />
                     <button
-                      className="activity-toggle"
+                      className="icon-btn sm"
                       type="button"
                       onClick={() => setDownloadsExpanded((value) => !value)}
                       title={downloadsExpanded ? "Collapse list" : "Expand list"}
@@ -2076,7 +2076,9 @@ export default function App() {
                 type="button"
                 title="Stop"
                 onClick={() =>
-                  void client.cancelTask(liveTask.id).catch((err: unknown) => setError(messageOf(err)))
+                  void client
+                    .cancelSession(activeSessionId ?? "")
+                    .catch((err: unknown) => setError(messageOf(err)))
                 }
               >
                 <StopIcon size={16} />

@@ -809,7 +809,7 @@ export function Portal() {
                     )}
                     <span className="downloads-spacer" />
                     <button
-                      className="activity-toggle"
+                      className="icon-btn sm"
                       type="button"
                       onClick={() => setDownloadsExpanded((value) => !value)}
                       title={downloadsExpanded ? "Collapse list" : "Expand list"}
@@ -908,7 +908,9 @@ export function Portal() {
                 type="button"
                 title="Stop"
                 onClick={() =>
-                  void client.cancelTask(liveTask.id).catch((err: unknown) => setError(messageOf(err)))
+                  void client
+                    .cancelSession(activeSessionId ?? "")
+                    .catch((err: unknown) => setError(messageOf(err)))
                 }
               >
                 <StopIcon size={18} />

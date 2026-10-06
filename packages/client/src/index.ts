@@ -352,6 +352,10 @@ export class BotifyrClient {
     });
   }
 
+  cancelSession(sessionId: string): Promise<{ stopped: number }> {
+    return this.request(`/v1/sessions/${sessionId}/cancel`, { method: "POST", json: true, body: "{}" });
+  }
+
   cancelTask(taskId: string): Promise<void> {
     return this.request(`/v1/tasks/${taskId}/cancel`, { method: "POST", json: true, body: "{}" });
   }

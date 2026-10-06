@@ -1804,6 +1804,31 @@ export async function buildServer(options: ServerOptions) {
     },
   );
 
+  // Stop every running task in a chat (covers all members of a group at once).
+  app.post<{ Params: { id: string } }>(
+    "/v1/sessions/:id/cancel",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const session = await store.getSession(request.params.id);
+      if (!session || session.userId !== request.userId) {
+        return reply.code(404).send({ error: "session not found" });
+      }
+      const running = runningTasksForSession(session.id);
+      for (const taskId of running) {
+        cancelTask(taskId);
+        const active = await store.getTask(taskId);
+        if (active && active.status !== "completed" && active.status !== "failed") {
+          active.status = "cancelled";
+          active.error = "Stopped by you.";
+          active.updatedAt = new Date().toISOString();
+          await store.updateTask(active);
+          emit({ type: "task.updated", task: active });
+        }
+      }
+      return { stopped: running.length };
+    },
+  );
+
   // Re-run the last user turn (Regenerate).
   app.post<{ Params: { id: string }; Body: { local?: boolean } }>(
     "/v1/sessions/:id/retry",

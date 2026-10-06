@@ -7,6 +7,23 @@
   src: url("/fonts/inter-latin.woff2") format("woff2");
 }
 
+/* Khmer support — many downloaded titles are Khmer. */
+@font-face {
+  font-family: "Noto Sans Khmer";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/noto-sans-khmer-400.ttf") format("truetype");
+}
+
+@font-face {
+  font-family: "Noto Sans Khmer";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/fonts/noto-sans-khmer-600.ttf") format("truetype");
+}
+
 :root {
   color-scheme: dark;
   --bg: #0a0a0b;
@@ -24,6 +41,7 @@
   --danger: #ff6b6b;
   font-family:
     "Inter",
+    "Noto Sans Khmer",
     "Segoe UI",
     system-ui,
     -apple-system,
@@ -644,6 +662,12 @@ body {
 }
 
 /* Icon buttons + settings ------------------------------------------------ */
+/* Button system ------------------------------------------------------------
+   Add new buttons from these primitives so they always look consistent:
+     .icon-btn            square, icon-only (toggles, menus) — add .sm for 28px
+     .round               circular composer buttons (mic, send, stop)
+     .btn / .ghost        text buttons (add .small for compact)
+   Do not hand-roll a new button; add a modifier only when truly needed. */
 .icon-btn {
   border: 1px solid var(--border);
   background: var(--panel-2);
@@ -657,9 +681,36 @@ body {
   display: grid;
   place-items: center;
   flex: none;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    transform 0.1s ease;
 }
 
 .icon-btn:hover {
+  background: var(--hover);
+  border-color: var(--muted);
+}
+
+.icon-btn:active {
+  transform: scale(0.96);
+}
+
+.icon-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.icon-btn.sm {
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  font-size: 15px;
+}
+
+.icon-btn.active {
+  color: var(--accent);
   border-color: var(--accent);
 }
 
@@ -1904,32 +1955,17 @@ body {
   color: var(--text);
 }
 
-.activity-toggle {
-  width: 26px;
-  height: 26px;
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--panel-2);
-  color: var(--muted);
-  cursor: pointer;
-  transition:
-    color 0.15s ease,
-    border-color 0.15s ease;
-}
-
-.activity-toggle:hover {
-  color: var(--text);
-  border-color: var(--accent);
-}
-
-.activity-toggle svg {
+/* Chevron toggle icons rotate; the button itself uses .icon-btn (.sm). */
+.icon-btn svg {
   transition: transform 0.18s ease;
 }
 
-.activity-toggle .chev-collapsed {
+.chev-collapsed {
   transform: rotate(-90deg);
+}
+
+.chev-up {
+  transform: rotate(180deg);
 }
 
 /* Collapsed: keep the header, hide the rest. */
