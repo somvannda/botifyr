@@ -476,7 +476,16 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       case "task.updated":
       case "task.completed":
       case "task.failed": {
-        setTasks((prev) => ({ ...prev, [event.task.id]: event.task }));
+        setTasks((prev) => {
+          const existing = prev[event.task.id];
+          // A later update can arrive without the approval; keep the pending one
+          // so the prompt can't flicker away before the user answers.
+          const next =
+            existing?.approval?.status === "pending" && event.task.approval?.status !== "pending"
+              ? { ...event.task, approval: existing.approval, status: "awaiting_approval" as const }
+              : event.task;
+          return { ...prev, [event.task.id]: next };
+        });
         const pending = event.task.approval;
         if (executionModeRef.current === "always_allow" && pending && pending.status === "pending") {
           void client.resolveApproval(event.task.id, pending.id, "allow").catch(() => {});
