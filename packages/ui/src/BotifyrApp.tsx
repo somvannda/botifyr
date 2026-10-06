@@ -97,6 +97,15 @@ const REFRESH_KEY = "botifyr.refresh";
 
 type ConnectionState = "connecting" | "online" | "offline";
 
+/** A transient in-app notification (incoming message or finished task). */
+interface Toast {
+  id: string;
+  kind: "message" | "task";
+  title: string;
+  body: string;
+  sessionId?: string;
+}
+
 const SETTINGS_TABS = [
   { id: "general", label: "General", icon: <GearIcon size={16} /> },
   { id: "computer", label: "Computer", icon: <MonitorIcon size={16} /> },
@@ -157,6 +166,10 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       return {};
     }
   });
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const seenMessagesRef = useRef<Set<string>>(new Set());
+  const seededSessionsRef = useRef<Set<string>>(new Set());
+  const taskStatusRef = useRef<Record<string, string>>({});
   const [reactions, setReactions] = useState<Record<string, string>>(() => {
     try {
       return JSON.parse(localStorage.getItem("botifyr.reactions") ?? "{}") as Record<string, string>;
@@ -524,6 +537,27 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       case "approval.resolved":
         break;
     }
+  }
+
+  /** Open the conversation a notification points at. */
+  function openSessionById(sessionId: string): void {
+    const bot = bots.find((entry) => entry.sessionId === sessionId);
+    if (bot) {
+      selectBot(bot);
+      return;
+    }
+    setActiveBotId(null);
+    setActiveSessionId(sessionId);
+  }
+
+  function pushToast(toast: Omit<Toast, "id">): void {
+    const id = Math.random().toString(36).slice(2);
+    setToasts((prev) => [...prev.slice(-2), { ...toast, id }]);
+    window.setTimeout(() => setToasts((prev) => prev.filter((entry) => entry.id !== id)), 6000);
+  }
+
+  function dismissToast(id: string): void {
+    setToasts((prev) => prev.filter((entry) => entry.id !== id));
   }
 
   async function openExternal(url: string) {
@@ -1553,6 +1587,57 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     });
   }, [activeSessionId]);
 
+  // Raise a toast for incoming messages in a conversation you're not viewing.
+  // A session's existing history is seeded silently on first sight, so only
+  // genuinely new messages notify.
+  useEffect(() => {
+    const seen = seenMessagesRef.current;
+    const seeded = seededSessionsRef.current;
+    for (const session of sessions) {
+      const firstSight = !seeded.has(session.id);
+      seeded.add(session.id);
+      const isActive = session.id === activeSessionId;
+      const bot = bots.find((entry) => entry.sessionId === session.id);
+      for (const message of session.messages) {
+        if (seen.has(message.id)) continue;
+        seen.add(message.id);
+        if (firstSight || isActive || !user) continue;
+        const incoming =
+          session.kind === "dm" || session.kind === "group"
+            ? Boolean(message.senderId && message.senderId !== user.id)
+            : message.role === "assistant";
+        const body = message.content.replace(/\s+/g, " ").trim();
+        if (!incoming || !body) continue;
+        pushToast({
+          kind: "message",
+          title: bot?.name ?? (session.kind === "dm" ? "New message" : session.title || "New message"),
+          body: body.slice(0, 120),
+          sessionId: session.id,
+        });
+      }
+    }
+  }, [sessions, activeSessionId, user, bots]);
+
+  // Raise a toast when a task finishes or fails while you're elsewhere.
+  useEffect(() => {
+    for (const task of Object.values(tasks)) {
+      const previous = taskStatusRef.current[task.id];
+      taskStatusRef.current[task.id] = task.status;
+      if (previous === undefined || previous === task.status) continue;
+      if (task.status !== "completed" && task.status !== "failed") continue;
+      if (task.sessionId === activeSessionId) continue;
+      const session = sessions.find((entry) => entry.id === task.sessionId);
+      const bot = bots.find((entry) => entry.id === session?.botId);
+      const name = bot?.name ?? session?.title ?? "Task";
+      pushToast({
+        kind: "task",
+        title: task.status === "completed" ? `${name} finished` : `${name} got stuck`,
+        body: task.goal.replace(/\s+/g, " ").slice(0, 120),
+        sessionId: task.sessionId,
+      });
+    }
+  }, [tasks, sessions, bots, activeSessionId]);
+
   // Seed the profile editor from the signed-in user.
   useEffect(() => {
     if (!user) return;
@@ -1617,6 +1702,33 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
 
   return (
     <div className={`app${showBotPanel && activeBot ? " with-panel" : ""}`}>
+      {toasts.length > 0 && (
+        <div className="toast-stack">
+          {toasts.map((toast) => (
+            <div key={toast.id} className={`toast toast-${toast.kind}`}>
+              <button
+                className="toast-main"
+                type="button"
+                onClick={() => {
+                  if (toast.sessionId) openSessionById(toast.sessionId);
+                  dismissToast(toast.id);
+                }}
+              >
+                <span className="toast-title">{toast.title}</span>
+                {toast.body && <span className="toast-body">{toast.body}</span>}
+              </button>
+              <button
+                className="toast-close"
+                type="button"
+                aria-label="Dismiss"
+                onClick={() => dismissToast(toast.id)}
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
       <aside className="sidebar">
         <div className="sidebar-top">
           <button className="round" type="button" title="Search" onClick={() => setSearchOpen((v) => !v)}>
