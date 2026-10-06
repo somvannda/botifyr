@@ -41,6 +41,8 @@ CREATE TABLE IF NOT EXISTS auth_tokens (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   expires_at TIMESTAMPTZ NOT NULL
 );
+-- Access vs long-lived refresh tokens; only 'refresh' can be exchanged.
+ALTER TABLE auth_tokens ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'access';
 
 CREATE TABLE IF NOT EXISTS sessions (
   id         TEXT PRIMARY KEY,

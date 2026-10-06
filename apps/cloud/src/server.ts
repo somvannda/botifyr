@@ -368,6 +368,21 @@ export async function buildServer(options: ServerOptions) {
     request.userId = userId;
   };
 
+  /**
+   * Issue a short-lived access token plus a long-lived refresh token. The
+   * access token is what every API call carries; the refresh token can only be
+   * exchanged at /auth/refresh and is rotated on each use.
+   */
+  const issueSession = async (
+    userId: string,
+  ): Promise<{ token: string; refreshToken: string; expiresAt: string }> => {
+    const access = createToken(1);
+    const refresh = createToken(30);
+    await store.createToken(access.tokenHash, userId, access.expiresAt, "access");
+    await store.createToken(refresh.tokenHash, userId, refresh.expiresAt, "refresh");
+    return { token: access.token, refreshToken: refresh.token, expiresAt: access.expiresAt };
+  };
+
   const toUser = (record: {
     id: string;
     email: string;
@@ -1186,10 +1201,8 @@ export async function buildServer(options: ServerOptions) {
     };
     await store.createUser(record);
 
-    const { token, tokenHash, expiresAt } = createToken();
-    await store.createToken(tokenHash, record.id, expiresAt);
-
-    const response: AuthResponse = { token, user: toUser(record) };
+    const session = await issueSession(record.id);
+    const response: AuthResponse = { ...session, user: toUser(record) };
     return reply.code(201).send(response);
   });
 
@@ -1205,10 +1218,8 @@ export async function buildServer(options: ServerOptions) {
       record.role = "admin";
     }
 
-    const { token, tokenHash, expiresAt } = createToken();
-    await store.createToken(tokenHash, record.id, expiresAt);
-
-    const response: AuthResponse = { token, user: toUser(record) };
+    const session = await issueSession(record.id);
+    const response: AuthResponse = { ...session, user: toUser(record) };
     return response;
   });
 
@@ -1219,7 +1230,10 @@ export async function buildServer(options: ServerOptions) {
   const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET ?? "";
   const googleRedirect =
     process.env.GOOGLE_REDIRECT_URI ?? `http://localhost:${process.env.PORT ?? 8787}/auth/google/callback`;
-  const pendingSignins = new Map<string, { token: string; createdAt: number }>();
+  const pendingSignins = new Map<
+    string,
+    { token: string; refreshToken: string; expiresAt: string; createdAt: number }
+  >();
 
   const page = (body: string): string =>
     `<!doctype html><html><head><meta charset="utf-8"><title>Botifyr</title>` +
@@ -1323,9 +1337,8 @@ export async function buildServer(options: ServerOptions) {
           record.role = "admin";
         }
 
-        const issued = createToken();
-        await store.createToken(issued.tokenHash, record.id, issued.expiresAt);
-        pendingSignins.set(state, { token: issued.token, createdAt: Date.now() });
+        const session = await issueSession(record.id);
+        pendingSignins.set(state, { ...session, createdAt: Date.now() });
 
         return reply.type("text/html").header("cache-control", "no-store").send(successPage());
       } catch (error) {
@@ -1349,7 +1362,7 @@ export async function buildServer(options: ServerOptions) {
     if (!entry || Date.now() - entry.createdAt > 10 * 60 * 1000) {
       return reply.code(404).send({ error: "pending" });
     }
-    return { token: entry.token };
+    return { token: entry.token, refreshToken: entry.refreshToken, expiresAt: entry.expiresAt };
   });
 
   /* ---------------------------------------------------------------------- */
@@ -1518,11 +1531,32 @@ export async function buildServer(options: ServerOptions) {
   /* Authenticated                                                            */
   /* ------------------------------------------------------------------------ */
 
-  app.post("/auth/logout", { preHandler: requireAuth }, async (request, reply) => {
-    const token = bearer(request);
-    if (token) await store.deleteToken(hashToken(token));
-    return reply.code(204).send();
+  // Exchange a (one-time) refresh token for a fresh access token. Rotation
+  // means a stolen refresh token is usable at most once, and the old one dies.
+  app.post<{ Body: { refreshToken?: string } }>("/auth/refresh", async (request, reply) => {
+    const provided = (request.body?.refreshToken ?? "").trim();
+    if (!provided) return reply.code(400).send({ error: "refreshToken is required" });
+    const hash = hashToken(provided);
+    const userId = await store.getUserIdByTokenHash(hash, "refresh");
+    if (!userId) return reply.code(401).send({ error: "invalid or expired refresh token" });
+    await store.deleteToken(hash);
+    const record = await store.getUserById(userId);
+    if (!record) return reply.code(401).send({ error: "user not found" });
+    const session = await issueSession(userId);
+    return { ...session, user: toUser(record) };
   });
+
+  app.post<{ Body: { refreshToken?: string } }>(
+    "/auth/logout",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const token = bearer(request);
+      if (token) await store.deleteToken(hashToken(token));
+      const refresh = (request.body?.refreshToken ?? "").trim();
+      if (refresh) await store.deleteToken(hashToken(refresh));
+      return reply.code(204).send();
+    },
+  );
 
   app.get("/auth/me", { preHandler: requireAuth }, async (request, reply) => {
     const record = await store.getUserById(request.userId as string);

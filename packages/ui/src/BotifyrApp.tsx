@@ -93,6 +93,7 @@ function cleanEmoji(value: string | undefined, isGroup: boolean): string {
   return trimmed;
 }
 const TOKEN_KEY = "botifyr.token";
+const REFRESH_KEY = "botifyr.refresh";
 
 type ConnectionState = "connecting" | "online" | "offline";
 
@@ -283,16 +284,26 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const executionModeRef = useRef(executionMode);
   executionModeRef.current = executionMode;
 
+  // Persist token rotations (login + silent refresh) so a restart stays signed in.
+  useEffect(() => {
+    client.onToken = (auth) => {
+      localStorage.setItem(TOKEN_KEY, auth.token);
+      if (auth.refreshToken) localStorage.setItem(REFRESH_KEY, auth.refreshToken);
+    };
+  }, [client]);
+
   // Restore a stored token on launch; resume a pending sign-in if any.
   useEffect(() => {
     const stored = localStorage.getItem(TOKEN_KEY);
     if (stored) {
       client.setToken(stored);
+      client.setRefreshToken(localStorage.getItem(REFRESH_KEY));
       client
         .me()
         .then((account) => setUser(account))
         .catch(() => {
           localStorage.removeItem(TOKEN_KEY);
+          localStorage.removeItem(REFRESH_KEY);
           client.setToken(null);
         })
         .finally(() => setAuthChecked(true));
@@ -530,9 +541,11 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       await new Promise((resolve) => setTimeout(resolve, 1500));
       const issued = await client.googleResult(state);
       if (issued) {
-        localStorage.setItem(TOKEN_KEY, issued);
+        localStorage.setItem(TOKEN_KEY, issued.token);
+        if (issued.refreshToken) localStorage.setItem(REFRESH_KEY, issued.refreshToken);
         localStorage.removeItem(PENDING_KEY);
-        client.setToken(issued);
+        client.setToken(issued.token);
+        client.setRefreshToken(issued.refreshToken ?? null);
         const account = await client.me();
         setUser(account);
         void bridge.focusWindow?.();
@@ -587,7 +600,9 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       // ignore
     }
     localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(REFRESH_KEY);
     client.setToken(null);
+    client.setRefreshToken(null);
     setUser(null);
     setConnections([]);
     setConnection("connecting");

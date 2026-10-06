@@ -185,8 +185,8 @@ export interface Store {
   areFriends(a: string, b: string): Promise<boolean>;
   deleteFriendship(a: string, b: string): Promise<boolean>;
 
-  createToken(tokenHash: string, userId: string, expiresAt: string): Promise<void>;
-  getUserIdByTokenHash(tokenHash: string): Promise<string | null>;
+  createToken(tokenHash: string, userId: string, expiresAt: string, kind?: string): Promise<void>;
+  getUserIdByTokenHash(tokenHash: string, kind?: string): Promise<string | null>;
   deleteToken(tokenHash: string): Promise<void>;
 
   createSession(record: SessionRecord): Promise<void>;

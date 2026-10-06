@@ -21,7 +21,7 @@ import type {
 export class MemoryStore implements Store {
   private users = new Map<string, UserRecord>();
   private usersByEmail = new Map<string, string>();
-  private tokens = new Map<string, { userId: string; expiresAt: string }>();
+  private tokens = new Map<string, { userId: string; expiresAt: string; kind: string }>();
   private sessions = new Map<string, SessionRecord>();
   private bots = new Map<string, BotRecord>();
   private tasks = new Map<string, Task>();
@@ -147,17 +147,19 @@ export class MemoryStore implements Store {
     return this.friendships.delete(this.friendKey(a, b));
   }
 
-  async createToken(tokenHash: string, userId: string, expiresAt: string): Promise<void> {
-    this.tokens.set(tokenHash, { userId, expiresAt });
+  async createToken(tokenHash: string, userId: string, expiresAt: string, kind = "access"): Promise<void> {
+    this.tokens.set(tokenHash, { userId, expiresAt, kind });
   }
 
-  async getUserIdByTokenHash(tokenHash: string): Promise<string | null> {
+  async getUserIdByTokenHash(tokenHash: string, kind = "access"): Promise<string | null> {
     const entry = this.tokens.get(tokenHash);
     if (!entry) return null;
     if (new Date(entry.expiresAt).getTime() < Date.now()) {
       this.tokens.delete(tokenHash);
       return null;
     }
+    // Refresh tokens must never authenticate API calls.
+    if (entry.kind !== kind) return null;
     return entry.userId;
   }
 

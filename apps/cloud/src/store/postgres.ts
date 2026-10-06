@@ -186,18 +186,17 @@ export class PostgresStore implements Store {
     return (result.rowCount ?? 0) > 0;
   }
 
-  async createToken(tokenHash: string, userId: string, expiresAt: string): Promise<void> {
-    await this.pool.query("INSERT INTO auth_tokens (token_hash, user_id, expires_at) VALUES ($1, $2, $3)", [
-      tokenHash,
-      userId,
-      expiresAt,
-    ]);
+  async createToken(tokenHash: string, userId: string, expiresAt: string, kind = "access"): Promise<void> {
+    await this.pool.query(
+      "INSERT INTO auth_tokens (token_hash, user_id, expires_at, kind) VALUES ($1, $2, $3, $4)",
+      [tokenHash, userId, expiresAt, kind],
+    );
   }
 
-  async getUserIdByTokenHash(tokenHash: string): Promise<string | null> {
+  async getUserIdByTokenHash(tokenHash: string, kind = "access"): Promise<string | null> {
     const { rows } = await this.pool.query(
-      "SELECT user_id FROM auth_tokens WHERE token_hash = $1 AND expires_at > now()",
-      [tokenHash],
+      "SELECT user_id FROM auth_tokens WHERE token_hash = $1 AND kind = $2 AND expires_at > now()",
+      [tokenHash, kind],
     );
     return rows[0]?.user_id ?? null;
   }

@@ -11,6 +11,7 @@ import { BotLogo, LogoutIcon } from "@botifyr/ui";
 
 const CLOUD_URL = (import.meta.env.VITE_CLOUD_URL as string | undefined) ?? "http://localhost:8787";
 const TOKEN_KEY = "botifyr.admin.token";
+const REFRESH_KEY = "botifyr.admin.refresh";
 
 function messageOf(error: unknown): string {
   if (error instanceof AuthError) return "Not authorized — sign in with an admin account.";
@@ -48,6 +49,7 @@ export function Admin() {
       return;
     }
     client.setToken(stored);
+    client.setRefreshToken(localStorage.getItem(REFRESH_KEY));
     client
       .me()
       .then(async (me) => {
@@ -57,6 +59,7 @@ export function Admin() {
       })
       .catch((err: unknown) => {
         localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem(REFRESH_KEY);
         client.setToken(null);
         setError(messageOf(err));
       })
@@ -78,14 +81,16 @@ export function Admin() {
     const timer = window.setInterval(() => {
       void client
         .googleResult(state)
-        .then(async (token) => {
-          if (!token) {
+        .then(async (session) => {
+          if (!session) {
             if (Date.now() - started > 120_000) window.clearInterval(timer);
             return;
           }
           window.clearInterval(timer);
-          localStorage.setItem(TOKEN_KEY, token);
-          client.setToken(token);
+          localStorage.setItem(TOKEN_KEY, session.token);
+          if (session.refreshToken) localStorage.setItem(REFRESH_KEY, session.refreshToken);
+          client.setToken(session.token);
+          client.setRefreshToken(session.refreshToken ?? null);
           const me = await client.me();
           if (me.role !== "admin") {
             localStorage.removeItem(TOKEN_KEY);
@@ -113,7 +118,9 @@ export function Admin() {
       // ignore
     }
     localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(REFRESH_KEY);
     client.setToken(null);
+    client.setRefreshToken(null);
     setAuthorized(false);
     setUsers([]);
     setSkills([]);

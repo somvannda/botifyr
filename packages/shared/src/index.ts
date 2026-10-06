@@ -161,6 +161,10 @@ export interface User {
 
 export interface AuthResponse {
   token: string;
+  /** Long-lived, rotating token used to mint a fresh access token. */
+  refreshToken?: string;
+  /** When the access token (`token`) expires. */
+  expiresAt?: string;
   user: User;
 }
 

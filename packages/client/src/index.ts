@@ -120,6 +120,10 @@ interface RequestOptions {
 
 export class BotifyrClient {
   private token: string | null = null;
+  private refreshToken: string | null = null;
+
+  /** Called whenever the token pair changes (login, refresh), so hosts can persist it. */
+  onToken?: (auth: Pick<AuthResponse, "token" | "refreshToken" | "expiresAt">) => void;
 
   constructor(private readonly baseUrl: string) {}
 
@@ -131,11 +135,50 @@ export class BotifyrClient {
     return this.token;
   }
 
+  setRefreshToken(token: string | null): void {
+    this.refreshToken = token;
+  }
+
+  getRefreshToken(): string | null {
+    return this.refreshToken;
+  }
+
+  /** Adopt a freshly issued token pair and let the host persist it. */
+  private adopt(auth: Pick<AuthResponse, "token" | "refreshToken" | "expiresAt">): void {
+    this.token = auth.token;
+    if (auth.refreshToken) this.refreshToken = auth.refreshToken;
+    this.onToken?.(auth);
+  }
+
+  /**
+   * Exchange the refresh token for a fresh access token. The server rotates the
+   * refresh token, so the new one is adopted (and persisted by the host).
+   */
+  async refresh(): Promise<boolean> {
+    const refreshToken = this.refreshToken;
+    if (!refreshToken) return false;
+    try {
+      const response = await fetch(this.url("/auth/refresh"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ refreshToken }),
+      });
+      if (!response.ok) {
+        this.refreshToken = null;
+        return false;
+      }
+      this.adopt((await response.json()) as AuthResponse);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   private url(path: string): string {
     return `${this.baseUrl.replace(/\/$/, "")}${path}`;
   }
 
-  private async request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  private async request<T>(path: string, options: RequestOptions = {}, allowRetry = true): Promise<T> {
     const headers: Record<string, string> = {};
     if (this.token) headers.authorization = `Bearer ${this.token}`;
     if (options.json) headers["content-type"] = "application/json";
@@ -154,6 +197,10 @@ export class BotifyrClient {
       } catch {
         // keep the status-based message
       }
+      // An expired access token is recovered by exchanging the refresh token.
+      if (response.status === 401 && allowRetry && this.refreshToken && !path.startsWith("/auth/")) {
+        if (await this.refresh()) return this.request<T>(path, options, false);
+      }
       if (response.status === 401) throw new AuthError(detail);
       throw new Error(detail);
     }
@@ -166,20 +213,24 @@ export class BotifyrClient {
     return this.request("/v1/config");
   }
 
-  signup(email: string, password: string): Promise<AuthResponse> {
-    return this.request("/auth/signup", {
+  async signup(email: string, password: string): Promise<AuthResponse> {
+    const auth = await this.request<AuthResponse>("/auth/signup", {
       method: "POST",
       json: true,
       body: JSON.stringify({ email, password }),
     });
+    this.adopt(auth);
+    return auth;
   }
 
-  login(email: string, password: string): Promise<AuthResponse> {
-    return this.request("/auth/login", {
+  async login(email: string, password: string): Promise<AuthResponse> {
+    const auth = await this.request<AuthResponse>("/auth/login", {
       method: "POST",
       json: true,
       body: JSON.stringify({ email, password }),
     });
+    this.adopt(auth);
+    return auth;
   }
 
   me(): Promise<User> {
@@ -187,7 +238,13 @@ export class BotifyrClient {
   }
 
   logout(): Promise<void> {
-    return this.request("/auth/logout", { method: "POST" });
+    return this.request<void>("/auth/logout", {
+      method: "POST",
+      json: true,
+      body: JSON.stringify({ refreshToken: this.refreshToken }),
+    }).finally(() => {
+      this.refreshToken = null;
+    });
   }
 
   createSession(): Promise<Session> {
@@ -520,14 +577,18 @@ export class BotifyrClient {
     return (await response.json()) as { google: boolean };
   }
 
-  /** Poll for the token produced by the browser sign-in flow. */
-  async googleResult(state: string): Promise<string | null> {
+  /** Poll for the session produced by the browser sign-in flow. */
+  async googleResult(
+    state: string,
+  ): Promise<Pick<AuthResponse, "token" | "refreshToken" | "expiresAt"> | null> {
     const response = await fetch(
       `${this.baseUrl.replace(/\/$/, "")}/auth/google/result?state=${encodeURIComponent(state)}`,
     );
     if (!response.ok) return null;
-    const body = (await response.json()) as { token?: string };
-    return body.token ?? null;
+    const body = (await response.json()) as Pick<AuthResponse, "token" | "refreshToken" | "expiresAt">;
+    if (!body.token) return null;
+    this.adopt(body);
+    return body;
   }
 
   connect(handlers: ConnectHandlers, opts?: { device?: string; deviceName?: string }): () => void {
