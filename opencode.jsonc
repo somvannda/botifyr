@@ -5,14 +5,16 @@
   // DEVELOPMENT spend only — product runtime limits live in docs/cost-controls.md
   // and the BOTIFYR_* env vars (see AGENTS.md §5).
   "model": "deepseek/deepseek-flash",
+  // Cheap model for lightweight helper tasks (titles, summaries).
+  "small_model": "deepseek/deepseek-flash",
 
   // Automatically compact old conversation so huge contexts don't accumulate.
   "compaction": {
     "auto": true,
     "keep": {
-      "tokens": 12000
+      "tokens": 12000,
     },
-    "buffer": 16000
+    "buffer": 16000,
   },
 
   // Don't watch noisy/generated folders (also avoids spurious rebuilds).
@@ -27,14 +29,14 @@
       ".turbo/**",
       "coverage/**",
       ".vite/**",
-      "**/.vite/**"
-    ]
+      "**/.vite/**",
+    ],
   },
 
   // Bound how many agentic steps a single Build request may take.
   "agents": {
     "build": {
-      "steps": 12
-    }
-  }
+      "steps": 12,
+    },
+  },
 }

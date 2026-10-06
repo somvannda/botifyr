@@ -149,6 +149,13 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [replyTo, setReplyTo] = useState<{ id: string; author: string; content: string } | null>(null);
   const [reactFor, setReactFor] = useState<string | null>(null);
   const [moreFor, setMoreFor] = useState<string | null>(null);
+  const [readAt, setReadAt] = useState<Record<string, string>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("botifyr.readAt") ?? "{}") as Record<string, string>;
+    } catch {
+      return {};
+    }
+  });
   const [reactions, setReactions] = useState<Record<string, string>>(() => {
     try {
       return JSON.parse(localStorage.getItem("botifyr.reactions") ?? "{}") as Record<string, string>;
@@ -1215,6 +1222,21 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     .filter((task) => task.approval?.status === "pending")
     .sort((a, b) => (a.approval?.createdAt ?? "").localeCompare(b.approval?.createdAt ?? ""));
   const busy = Boolean(liveTask);
+
+  /** Unread messages in a conversation (incoming, since it was last opened). */
+  const unreadCount = (sessionId: string): number => {
+    if (sessionId === activeSessionId) return 0;
+    const session = sessions.find((entry) => entry.id === sessionId);
+    if (!session) return 0;
+    const since = readAt[sessionId];
+    return session.messages.filter((message) => {
+      if (since && message.createdAt <= since) return false;
+      if (session.kind === "dm" || session.kind === "group") {
+        return Boolean(message.senderId && message.senderId !== user?.id);
+      }
+      return message.role === "assistant";
+    }).length;
+  };
   const downloadUrl = (name: string, download = false): string =>
     `${CLOUD_URL}/v1/tasks/${latestTask?.id}/downloads/${encodeURIComponent(name)}?token=${encodeURIComponent(
       token(),
@@ -1506,6 +1528,16 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       .catch(() => {});
   }, [user, client]);
 
+  // Opening a conversation marks it read (so the unread badge clears).
+  useEffect(() => {
+    if (!activeSessionId) return;
+    setReadAt((prev) => {
+      const next = { ...prev, [activeSessionId]: new Date().toISOString() };
+      localStorage.setItem("botifyr.readAt", JSON.stringify(next));
+      return next;
+    });
+  }, [activeSessionId]);
+
   // Seed the profile editor from the signed-in user.
   useEffect(() => {
     if (!user) return;
@@ -1617,6 +1649,9 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                   <span className="conv-name">{bot.name}</span>
                   <span className="conv-preview">{last?.content?.slice(0, 42) || "No messages yet"}</span>
                 </span>
+                {unreadCount(bot.sessionId) > 0 && (
+                  <span className="unread-badge">{unreadCount(bot.sessionId)}</span>
+                )}
               </button>
             );
           })}
