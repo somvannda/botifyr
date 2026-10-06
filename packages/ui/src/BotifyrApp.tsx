@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import type {
   AuditEvent,
@@ -4040,65 +4040,74 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                   </p>
                   <ul className="downloads-list">
                     {media.length === 0 && <li className="muted">Nothing downloaded yet.</li>}
-                    {media.map((item) => (
-                      <li key={item.id} className="download-row">
-                        <span className="download-ico">{isPlayable(item.name) ? "▶" : "▢"}</span>
-                        <div className="download-main">
-                          <div className="download-name" title={item.name}>
-                            {prettyFileName(item.name)}
-                          </div>
-                          <div className="download-size">
-                            {Math.max(1, Math.round(item.size / 1024)).toLocaleString()} KB ·{" "}
-                            {item.location === "device" ? `On ${item.device ?? "a device"}` : "On server"}
-                            {item.createdAt ? ` · ${new Date(item.createdAt).toLocaleDateString()}` : ""}
-                          </div>
-                        </div>
-                        {isPlayable(item.name) && (
-                          <button
-                            className="ghost small"
-                            type="button"
-                            onClick={() => setPlayerFile({ name: item.name, url: mediaUrl(item) })}
-                          >
-                            Play
-                          </button>
-                        )}
-                        <button
-                          className="ghost small"
-                          type="button"
-                          onClick={() => void openExternal(mediaUrl(item, true))}
-                        >
-                          Save
-                        </button>
-                        <button className="ghost small" type="button" onClick={() => void sendToDevice(item)}>
-                          Send
-                        </button>
-                        <button className="ghost small" type="button" onClick={() => setShareItem(item)}>
-                          Send to friend
-                        </button>
-                        <button
-                          className="ghost small danger"
-                          type="button"
-                          onClick={() => void deleteDownload(item)}
-                        >
-                          Delete
-                        </button>
-                        <button
-                          className="ghost small"
-                          type="button"
-                          onClick={() => void moveToThisComputer(item)}
-                        >
-                          Move to my computer
-                        </button>
-                        {item.location === "device" && (
-                          <button
-                            className="ghost small danger"
-                            type="button"
-                            onClick={() => void removeFromServer(item)}
-                          >
-                            Remove from server
-                          </button>
-                        )}
-                      </li>
+                    {groupByDate(media, (entry) => entry.createdAt).map(([date, dayItems]) => (
+                      <Fragment key={date}>
+                        <li className="date-sep">{date}</li>
+                        {dayItems.map((item) => (
+                          <li key={item.id} className="download-row">
+                            <span className="download-ico">{isPlayable(item.name) ? "▶" : "▢"}</span>
+                            <div className="download-main">
+                              <div className="download-name" title={item.name}>
+                                {prettyFileName(item.name)}
+                              </div>
+                              <div className="download-size">
+                                {Math.max(1, Math.round(item.size / 1024)).toLocaleString()} KB ·{" "}
+                                {item.location === "device" ? `On ${item.device ?? "a device"}` : "On server"}
+                                {item.createdAt ? ` · ${new Date(item.createdAt).toLocaleDateString()}` : ""}
+                              </div>
+                            </div>
+                            {isPlayable(item.name) && (
+                              <button
+                                className="ghost small"
+                                type="button"
+                                onClick={() => setPlayerFile({ name: item.name, url: mediaUrl(item) })}
+                              >
+                                Play
+                              </button>
+                            )}
+                            <button
+                              className="ghost small"
+                              type="button"
+                              onClick={() => void openExternal(mediaUrl(item, true))}
+                            >
+                              Save
+                            </button>
+                            <button
+                              className="ghost small"
+                              type="button"
+                              onClick={() => void sendToDevice(item)}
+                            >
+                              Send
+                            </button>
+                            <button className="ghost small" type="button" onClick={() => setShareItem(item)}>
+                              Send to friend
+                            </button>
+                            <button
+                              className="ghost small danger"
+                              type="button"
+                              onClick={() => void deleteDownload(item)}
+                            >
+                              Delete
+                            </button>
+                            <button
+                              className="ghost small"
+                              type="button"
+                              onClick={() => void moveToThisComputer(item)}
+                            >
+                              Move to my computer
+                            </button>
+                            {item.location === "device" && (
+                              <button
+                                className="ghost small danger"
+                                type="button"
+                                onClick={() => void removeFromServer(item)}
+                              >
+                                Remove from server
+                              </button>
+                            )}
+                          </li>
+                        ))}
+                      </Fragment>
                     ))}
                   </ul>
                 </div>
@@ -4425,3 +4434,16 @@ const LIBRARY_CATS = [
   ["image", "Images"],
   ["file", "Files"],
 ] as const;
+
+/** Group items by their date label (Telegram-style date separators). */
+function groupByDate<T>(items: T[], stamp: (item: T) => string | undefined): Array<[string, T[]]> {
+  const groups = new Map<string, T[]>();
+  for (const item of items) {
+    const raw = stamp(item);
+    const key = raw ? new Date(raw).toLocaleDateString() : "Unknown date";
+    const list = groups.get(key);
+    if (list) list.push(item);
+    else groups.set(key, [item]);
+  }
+  return [...groups.entries()];
+}

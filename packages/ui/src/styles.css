@@ -169,6 +169,16 @@ body {
   min-height: 0;
 }
 
+/* Telegram-style date separators in the download lists. */
+.date-sep {
+  list-style: none;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  padding: 10px 2px 4px;
+}
+
 /* The conversation list scrolls; the footer stays pinned. */
 .sidebar .task-list {
   flex: 1;

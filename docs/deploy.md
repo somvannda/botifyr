@@ -30,6 +30,14 @@ botifyr.xyz {
 }
 ```
 
+The old static `/admin.html` is retired: `/admin` and `/admin.html` now
+**302-redirect** to the admin console. Set the console origin with the `ADMIN_URL`
+build arg (default `http://localhost:4324`):
+
+```bash
+ADMIN_URL=https://admin.botifyr.xyz docker compose up -d --build web
+```
+
 ## 2. The cloud (`api.botifyr.xyz`)
 
 1. Create `apps/cloud/.env` (copy `.env.example`) and set at minimum:
