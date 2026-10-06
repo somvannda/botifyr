@@ -1132,6 +1132,9 @@ export default function App() {
     )}${download ? "&download=1" : ""}`;
   const downloadStep = liveTask?.steps.find((step) => step.title === "Downloads");
   const downloadTotal = downloadStep ? downloadProgress(downloadStep.detail) : null;
+  const downloadActive = Boolean(
+    liveTask?.steps.some((step) => step.title === "youtube.download" || step.title === "Downloads"),
+  );
   const activeBot = bots.find((bot) => bot.id === activeBotId) ?? null;
   const activeScheme = BOT_SCHEMES[(activeBot?.scheme ?? 0) % BOT_SCHEMES.length];
   // A group is a container of bots, not a bot itself — keep them separate.
@@ -1760,7 +1763,7 @@ export default function App() {
                 </div>
               )}
 
-              {(downloads.length > 0 || downloadStep) && (
+              {(downloads.length > 0 || downloadActive || downloadStep) && (
                 <div className="downloads">
                   <div className="downloads-head">
                     <span className="downloads-title">Downloads</span>

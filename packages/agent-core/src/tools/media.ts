@@ -73,19 +73,22 @@ export function createMediaTools(
       const cookies = await cookieArg();
       // Titles keep each file distinct, so a batch doesn't overwrite itself.
       const template = `'${outDir}/%(title)s [%(id)s].%(ext)s'`;
-      const common = `${cookies}--no-playlist --ignore-errors --no-overwrites --no-warnings --no-progress`;
+      const common = `${cookies}--ignore-errors --no-overwrites --no-warnings --no-progress`;
       await backend.exec(`mkdir -p '${outDir}'`);
 
-      // Download one at a time so the transcript can show per-file progress.
       const outputs: string[] = [];
       let ok = true;
       for (let index = 0; index < list.length; index += 1) {
-        if (list.length > 1) context.log(`download ${index + 1}/${list.length} ${list[index]}`);
-        const url = `'${list[index]}'`;
+        const url = list[index];
+        // A channel / playlist URL should download every item; a single video
+        // must NOT pull in its enclosing playlist.
+        const isCollection = /\/(channel|c|user)\/|\/playlist|[@?&]list=/.test(url);
+        const playlistFlag = list.length === 1 && isCollection ? "--yes-playlist" : "--no-playlist";
+        context.log(`download ${index + 1}/${list.length} ${url}`);
         const command = audio
-          ? `yt-dlp ${common} -x --audio-format mp3 -o ${template} ${url}`
-          : `yt-dlp ${common} -f 'bv*[height<=${height}]+ba/b[height<=${height}]' ` +
-            `--merge-output-format mp4 -o ${template} ${url}`;
+          ? `yt-dlp ${common} ${playlistFlag} -x --audio-format mp3 -o ${template} '${url}'`
+          : `yt-dlp ${common} ${playlistFlag} -f 'bv*[height<=${height}]+ba/b[height<=${height}]' ` +
+            `--merge-output-format mp4 -o ${template} '${url}'`;
         const result = await backend.exec(command);
         outputs.push(result.output);
         if (!result.ok) ok = false;

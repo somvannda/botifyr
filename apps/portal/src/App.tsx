@@ -157,6 +157,12 @@ export function Portal() {
     : undefined;
   const downloadStep = liveTask?.steps.find((step) => step.title === "Downloads");
   const downloadTotal = downloadStep ? downloadProgress(downloadStep.detail) : null;
+  const downloadActive = Boolean(
+    liveTask?.steps.some((step) => step.title === "youtube.download" || step.title === "Downloads"),
+  );
+  const downloadRunning =
+    Boolean(liveTask && (liveTask.status === "running" || liveTask.status === "awaiting_approval")) &&
+    downloadActive;
   const downloadUrl = (name: string, download = false): string =>
     `${CLOUD_URL}/v1/tasks/${liveTask?.id}/downloads/${encodeURIComponent(name)}?token=${encodeURIComponent(
       client.getToken() ?? "",
@@ -765,22 +771,25 @@ export function Portal() {
                 </div>
               )}
 
-              {downloadStep &&
+              {(downloadStep || downloadRunning) &&
                 (() => {
-                  const progress = downloadProgress(downloadStep.detail);
+                  const progress = downloadStep ? downloadProgress(downloadStep.detail) : null;
                   return (
                     <div className="msg-assistant">
                       <div className="msg-body">
                         <div className="msg-author">
-                          Downloading{progress ? ` ${progress.done} / ${progress.total}` : ""}
+                          Downloading
+                          {progress ? ` ${progress.done} / ${progress.total}` : "…"}
                         </div>
-                        {progress && (
-                          <div className="step-progress-bar">
-                            <span
-                              style={{ width: `${Math.round((progress.done / progress.total) * 100)}%` }}
-                            />
-                          </div>
-                        )}
+                        <div className={`step-progress-bar${progress ? "" : " indeterminate"}`}>
+                          <span
+                            style={
+                              progress
+                                ? { width: `${Math.round((progress.done / progress.total) * 100)}%` }
+                                : undefined
+                            }
+                          />
+                        </div>
                       </div>
                     </div>
                   );

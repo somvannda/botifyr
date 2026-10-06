@@ -378,8 +378,10 @@ export async function buildServer(options: ServerOptions) {
     // directly (deterministic) instead of hoping the model chooses to.
     const targets = downloadTargets(capped);
     const search = targets ? null : searchIntent(capped);
+    // "highest/best/4k" → ask yt-dlp for 2160p; otherwise the 720p default.
+    const quality = /\b(highest|best|max(?:imum)?|4k|2160)\b/i.test(capped) ? 2160 : undefined;
     const initialToolCall = targets
-      ? { name: "youtube.download", arguments: { urls: targets } }
+      ? { name: "youtube.download", arguments: { urls: targets, ...(quality ? { quality } : {}) } }
       : search
         ? { name: "youtube.search", arguments: { query: search.query, count: search.count } }
         : undefined;
