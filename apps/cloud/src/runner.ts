@@ -16,6 +16,7 @@ import {
 } from "@botifyr/agent-core";
 import { emit } from "./events.js";
 import { clearComputerSandbox, setComputerSandbox, setScreenshot, waitForApproval } from "./runtime.js";
+import { createConnectionTools } from "./connections-tools.js";
 import { createLocalTools, nodeInfo } from "./nodes.js";
 import type { Store } from "./store/index.js";
 
@@ -32,6 +33,8 @@ export interface RunnerDeps {
   summary?: string;
   /** Identity of the bot authoring this reply (used to attribute group messages). */
   author?: { id: string };
+  /** Vault key, so connected-app tools can read stored OAuth tokens. */
+  vaultKey?: Buffer;
 }
 
 type Capability = "browser" | "computer" | "code";
@@ -180,6 +183,11 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
   emit({ type: "task.updated", task });
 
   const { tools, closers, hasComputer } = buildTools(task, userId, Boolean(deps.local));
+  // Connected-app tools (Gmail / Calendar / Drive) when the user has linked any.
+  if (deps.vaultKey) {
+    const connections = await store.listConnections(userId).catch(() => []);
+    if (connections.length > 0) tools.push(...createConnectionTools(store, deps.vaultKey, userId));
+  }
   const localInstruction =
     deps.local && nodeInfo(userId).online
       ? "The user has explicitly enabled their own computer for this request. Perform it on their machine using the local.browser.* and local.shell/local.file tools."
