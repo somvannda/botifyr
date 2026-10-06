@@ -1632,8 +1632,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     ? [...activeSession.messages].reverse().find((message) => message.role === "assistant")?.id
     : undefined;
   const trialPercent =
-    config?.limits && config.limits.dailyTokenBudget > 0
-      ? Math.min(100, Math.round(((config.usage?.tokensToday ?? 0) / config.limits.dailyTokenBudget) * 100))
+    billing && billing.freeMonthlyTokens > 0
+      ? Math.min(100, Math.round((billing.tokensThisMonth / billing.freeMonthlyTokens) * 100))
       : 0;
   const marketMatches = marketQuery.trim()
     ? MARKETPLACE.filter((app) =>
