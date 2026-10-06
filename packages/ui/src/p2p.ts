@@ -5,9 +5,18 @@
  * data channel. Both devices must have Botifyr open.
  */
 
-const ICE: RTCConfiguration = {
+const DEFAULT_ICE: RTCConfiguration = {
   iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
 };
+
+// Overridable at runtime from /v1/config, so a TURN relay can be added for
+// strict NAT without a rebuild.
+let iceConfig: RTCConfiguration = DEFAULT_ICE;
+
+/** Replace the ICE servers (e.g. add a TURN relay from the server config). */
+export function setIceServers(servers: RTCIceServer[]): void {
+  iceConfig = { iceServers: servers.length > 0 ? servers : DEFAULT_ICE.iceServers };
+}
 
 export interface P2PHandlers {
   /** Relay a signaling payload (SDP/ICE) to a peer device. */
@@ -30,7 +39,7 @@ export class P2P {
 
   /** Offer `blob` to another device (by its device id). */
   async sendFile(peer: string, name: string, blob: Blob): Promise<void> {
-    const pc = new RTCPeerConnection(ICE);
+    const pc = new RTCPeerConnection(iceConfig);
     this.peers.set(peer, pc);
     const channel = pc.createDataChannel("file");
     channel.binaryType = "arraybuffer";
@@ -65,7 +74,7 @@ export class P2P {
     const payload = data as { sdp?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit };
     let pc = this.peers.get(from);
     if (!pc) {
-      pc = new RTCPeerConnection(ICE);
+      pc = new RTCPeerConnection(iceConfig);
       this.peers.set(from, pc);
       pc.onicecandidate = (event) => {
         if (event.candidate) this.handlers.signal(from, { candidate: event.candidate });

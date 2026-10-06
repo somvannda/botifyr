@@ -48,7 +48,7 @@ import {
   UsersIcon,
 } from "./Icons";
 import { Markdown } from "./Markdown";
-import { P2P, deviceId, saveBlob } from "./p2p";
+import { P2P, deviceId, saveBlob, setIceServers } from "./p2p";
 import { defaultBridge, type BotBridge } from "./bridge";
 import { mergeTask } from "./taskMerge";
 import "./styles.css";
@@ -403,7 +403,19 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       try {
         client
           .config()
-          .then((info) => mounted && setConfig(info))
+          .then((info) => {
+            if (!mounted) return;
+            setConfig(info);
+            if (info.iceServers) {
+              setIceServers(
+                info.iceServers.map((server) => ({
+                  urls: server.urls,
+                  username: server.username,
+                  credential: server.credential,
+                })),
+              );
+            }
+          })
           .catch(() => {});
       } catch {
         // stale client under dev hot-reload

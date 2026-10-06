@@ -892,12 +892,31 @@ export async function buildServer(options: ServerOptions) {
 
   app.get("/v1/config", { preHandler: requireAuth }, async (request) => {
     const usage = await store.usageSince(request.userId as string, startOfToday());
+    // STUN/TURN for P2P: a full JSON array, or a single TURN relay from env.
+    let iceServers: Array<{ urls: string | string[]; username?: string; credential?: string }> | undefined;
+    if (process.env.BOTIFYR_ICE_SERVERS) {
+      try {
+        const parsed = JSON.parse(process.env.BOTIFYR_ICE_SERVERS);
+        if (Array.isArray(parsed)) iceServers = parsed;
+      } catch {
+        // ignore malformed JSON
+      }
+    } else if (process.env.BOTIFYR_TURN_URL) {
+      iceServers = [
+        {
+          urls: process.env.BOTIFYR_TURN_URL,
+          username: process.env.BOTIFYR_TURN_USERNAME,
+          credential: process.env.BOTIFYR_TURN_CREDENTIAL,
+        },
+      ];
+    }
     return {
       ...runtimeInfo(),
       store: (process.env.BOTIFYR_STORE ?? "memory").toLowerCase(),
       nodeOnline: nodeInfo(request.userId as string).online,
       limits: { rateLimitPerHour, maxOutputTokens, maxHistoryTurns, dailyTokenBudget },
       usage: { tokensToday: usage.tokens, requestsToday: usage.requests },
+      iceServers,
     };
   });
 

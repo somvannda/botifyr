@@ -228,6 +228,8 @@ export interface RuntimeConfig {
     tokensToday: number;
     requestsToday: number;
   };
+  /** ICE servers (STUN/TURN) for device-to-device transfer. */
+  iceServers?: Array<{ urls: string | string[]; username?: string; credential?: string }>;
 }
 
 /* -------------------------------------------------------------------------- */

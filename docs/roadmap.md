@@ -18,7 +18,8 @@ they land. Keep entries short; link code paths instead of explaining them.
 - [x] **Unread badges** — per conversation; opening a chat clears it.
 - [x] **Notifications** — in-app toasts + web OS notifications when the tab is
       hidden; desktop OS notifications still pending (needs the Tauri plugin).
-- [ ] **P2P hardening** — TURN relay for strict NAT; verify across 2 devices.
+- [x] **P2P hardening** — TURN/ICE servers configurable via `/v1/config`
+      (`BOTIFYR_TURN_*` / `BOTIFYR_ICE_SERVERS`); still to verify across 2 devices.
 - [ ] **Mobile PWA offline** (manifest exists; no service worker).
 - [ ] **Real Stripe** — keys, invoices, billing portal.
 - [ ] **Deploy** — TLS, reverse proxy, subdomains (`app.` / `admin.` / `api.`).
