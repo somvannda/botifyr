@@ -139,6 +139,7 @@ function upsertStep(task: Task, update: StepUpdate): void {
 }
 
 function buildTools(
+  store: Store,
   task: Task,
   userId: string,
   local: boolean,
@@ -206,7 +207,7 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
   await store.updateTask(task);
   emit({ type: "task.updated", task });
 
-  const { tools, closers, hasComputer } = buildTools(task, userId, Boolean(deps.local), deps.vaultKey);
+  const { tools, closers, hasComputer } = buildTools(store, task, userId, Boolean(deps.local), deps.vaultKey);
   // Connected-app tools (Gmail / Calendar / Drive) when the user has linked any.
   if (deps.vaultKey) {
     const connections = await store.listConnections(userId).catch(() => []);
