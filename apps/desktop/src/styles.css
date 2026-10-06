@@ -2641,6 +2641,17 @@ body {
 /* Marketplace ------------------------------------------------------------ */
 .apps-panel.marketplace {
   width: 720px;
+  height: 640px;
+  max-height: calc(100vh - 120px);
+  display: flex;
+  flex-direction: column;
+}
+
+.market-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin-top: 4px;
 }
 
 .market-head {
@@ -2705,6 +2716,19 @@ body {
   outline: none;
 }
 
+.market-clear {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+  flex: none;
+}
+
+.market-clear:hover {
+  color: var(--text);
+}
+
 .market-section {
   margin-top: 20px;
 }
@@ -2739,8 +2763,6 @@ body {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 2px 12px;
-  max-height: 380px;
-  overflow-y: auto;
 }
 
 .market-row {

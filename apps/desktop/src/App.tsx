@@ -1523,121 +1523,134 @@ export default function App() {
                 value={marketQuery}
                 onChange={(event) => setMarketQuery(event.target.value)}
               />
+              {marketQuery && (
+                <button className="market-clear" type="button" onClick={() => setMarketQuery("")}>
+                  Clear
+                </button>
+              )}
             </div>
 
-            {(marketViewAll ? ["All plugins"] : MARKET_SECTIONS).map((section) => {
-              const apps = (
-                section === "All plugins" ? MARKETPLACE : MARKETPLACE.filter((app) => app.section === section)
-              ).filter((app) => {
-                const installed = app.provider
-                  ? connections.some((entry) => entry.provider === app.provider)
-                  : false;
-                if (marketFilter === "installed" && !installed) return false;
-                if (!marketQuery.trim()) return true;
-                return `${app.name} ${app.category} ${app.desc}`
-                  .toLowerCase()
-                  .includes(marketQuery.trim().toLowerCase());
-              });
-              if (apps.length === 0) return null;
-              return (
-                <section key={section} className="market-section">
-                  <div className="market-section-head">
-                    <h3>{section}</h3>
-                    {section === "All plugins" ? (
-                      <button
-                        className="market-viewall"
-                        type="button"
-                        onClick={() => setMarketViewAll(false)}
-                      >
-                        Back
-                      </button>
-                    ) : section === "Featured" ? (
-                      <button className="market-viewall" type="button" onClick={() => setMarketViewAll(true)}>
-                        View all
-                      </button>
-                    ) : null}
-                  </div>
-                  <div className="market-rows">
-                    {apps.map((app) => {
-                      const installed = app.provider
-                        ? connections.some((entry) => entry.provider === app.provider)
-                        : false;
-                      return (
-                        <div key={app.id} className="market-row">
-                          <span className="market-ico">{app.icon}</span>
-                          <span className="market-row-text">
-                            <span className="market-name">{app.name}</span>
-                            <span className="market-desc">{app.desc}</span>
-                          </span>
-                          {app.provider ? (
-                            installed ? (
-                              <>
-                                <span className="market-added">
-                                  <CheckIcon size={13} /> Added
-                                </span>
-                                <button
-                                  className="market-remove"
-                                  type="button"
-                                  title="Remove"
-                                  onClick={() => void disconnectApp(app.provider!)}
-                                >
-                                  <CloseIcon size={12} />
-                                </button>
-                              </>
-                            ) : app.tokenApp ? (
-                              tokenInputFor === app.provider ? (
-                                <div className="market-token">
-                                  <input
-                                    type="password"
-                                    placeholder="Token"
-                                    value={tokenValue}
-                                    onChange={(event) => setTokenValue(event.target.value)}
-                                    onKeyDown={(event) => {
-                                      if (event.key === "Enter") void saveToken(app.provider!);
-                                    }}
-                                  />
+            <div className="market-body">
+              {(marketViewAll ? ["All plugins"] : MARKET_SECTIONS).map((section) => {
+                const apps = (
+                  section === "All plugins"
+                    ? MARKETPLACE
+                    : MARKETPLACE.filter((app) => app.section === section)
+                ).filter((app) => {
+                  const installed = app.provider
+                    ? connections.some((entry) => entry.provider === app.provider)
+                    : false;
+                  if (marketFilter === "installed" && !installed) return false;
+                  if (!marketQuery.trim()) return true;
+                  return `${app.name} ${app.category} ${app.desc}`
+                    .toLowerCase()
+                    .includes(marketQuery.trim().toLowerCase());
+                });
+                if (apps.length === 0) return null;
+                return (
+                  <section key={section} className="market-section">
+                    <div className="market-section-head">
+                      <h3>{section}</h3>
+                      {section === "All plugins" ? (
+                        <button
+                          className="market-viewall"
+                          type="button"
+                          onClick={() => setMarketViewAll(false)}
+                        >
+                          Back
+                        </button>
+                      ) : section === "Featured" ? (
+                        <button
+                          className="market-viewall"
+                          type="button"
+                          onClick={() => setMarketViewAll(true)}
+                        >
+                          View all
+                        </button>
+                      ) : null}
+                    </div>
+                    <div className="market-rows">
+                      {apps.map((app) => {
+                        const installed = app.provider
+                          ? connections.some((entry) => entry.provider === app.provider)
+                          : false;
+                        return (
+                          <div key={app.id} className="market-row">
+                            <span className="market-ico">{app.icon}</span>
+                            <span className="market-row-text">
+                              <span className="market-name">{app.name}</span>
+                              <span className="market-desc">{app.desc}</span>
+                            </span>
+                            {app.provider ? (
+                              installed ? (
+                                <>
+                                  <span className="market-added">
+                                    <CheckIcon size={13} /> Added
+                                  </span>
+                                  <button
+                                    className="market-remove"
+                                    type="button"
+                                    title="Remove"
+                                    onClick={() => void disconnectApp(app.provider!)}
+                                  >
+                                    <CloseIcon size={12} />
+                                  </button>
+                                </>
+                              ) : app.tokenApp ? (
+                                tokenInputFor === app.provider ? (
+                                  <div className="market-token">
+                                    <input
+                                      type="password"
+                                      placeholder="Token"
+                                      value={tokenValue}
+                                      onChange={(event) => setTokenValue(event.target.value)}
+                                      onKeyDown={(event) => {
+                                        if (event.key === "Enter") void saveToken(app.provider!);
+                                      }}
+                                    />
+                                    <button
+                                      className="market-btn"
+                                      type="button"
+                                      onClick={() => void saveToken(app.provider!)}
+                                    >
+                                      Save
+                                    </button>
+                                  </div>
+                                ) : (
                                   <button
                                     className="market-btn"
                                     type="button"
-                                    onClick={() => void saveToken(app.provider!)}
+                                    onClick={() => {
+                                      setTokenInputFor(app.provider);
+                                      setTokenValue("");
+                                    }}
                                   >
-                                    Save
+                                    Add
                                   </button>
-                                </div>
+                                )
                               ) : (
                                 <button
                                   className="market-btn"
                                   type="button"
-                                  onClick={() => {
-                                    setTokenInputFor(app.provider);
-                                    setTokenValue("");
-                                  }}
+                                  disabled={connectingApp === app.provider}
+                                  onClick={() => void connectApp(app.provider!)}
                                 >
-                                  Add
+                                  {connectingApp === app.provider ? "Adding…" : "Add"}
                                 </button>
                               )
                             ) : (
-                              <button
-                                className="market-btn"
-                                type="button"
-                                disabled={connectingApp === app.provider}
-                                onClick={() => void connectApp(app.provider!)}
-                              >
-                                {connectingApp === app.provider ? "Adding…" : "Add"}
+                              <button className="market-btn" type="button" disabled>
+                                Add
                               </button>
-                            )
-                          ) : (
-                            <button className="market-btn" type="button" disabled>
-                              Add
-                            </button>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </section>
-              );
-            })}
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}
