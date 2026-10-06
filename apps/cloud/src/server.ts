@@ -457,16 +457,20 @@ export async function buildServer(options: ServerOptions) {
     // "highest/best/4k" → ask yt-dlp for 2160p; otherwise the 720p default.
     const quality = /\b(highest|best|max(?:imum)?|4k|2160)\b/i.test(capped) ? 2160 : undefined;
     const wantsAll = /\b(all|every|entire|whole|full)\b/i.test(capped);
+    // An explicit count ("only 5 videos") wins over "all".
+    const countMatch = /\b(\d{1,3})\s*(?:videos?|songs?|links?|clips?|items?|results?)\b/i.exec(capped);
+    const limit = countMatch ? Math.min(500, Number(countMatch[1])) : wantsAll ? 0 : undefined;
     const wantsDownload = /\b(download|grab|save|fetch|rip)\b/i.test(capped);
     const wantsAudio = /\b(mp3|audio|music)\b/i.test(capped) && !/\bvideo\b/i.test(capped);
     const mediaArgs = {
       ...(quality ? { quality } : {}),
       ...(wantsAudio ? { audio_only: true } : {}),
+      ...(limit !== undefined ? { limit } : {}),
     };
     const initialToolCall = targets
       ? {
           name: "youtube.download",
-          arguments: { urls: targets, ...mediaArgs, ...(wantsAll ? { limit: 0 } : {}) },
+          arguments: { urls: targets, ...mediaArgs },
         }
       : search
         ? wantsDownload
