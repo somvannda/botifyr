@@ -81,6 +81,31 @@ download(domain) ──► yt-dlp ──ok──► done
 4. **Browser network sniffing** — expose the sandbox page's network log to the bot
    so it can find the real media request without hand-held patterns.
 
+## Researched domains (starting points for recipes)
+
+| Platform | Web home | Notes |
+| --- | --- | --- |
+| DramaBox | `https://www.dramabox.com` (also `dramabox.co.uk`, `dramaboxapp.com`) | SSR SPA; media via CDN/API |
+| GoodShort | `https://www.goodshort.com` | Vue SSR; assets on `acfs3.goodshort.com`; media via JSON |
+| NetShort | `https://netshort.com` | SPA |
+| ShortMax | `https://www.shorttv.live` | SPA |
+| DramaWave | `https://mydramawave.com` | app-first; site may be thin |
+| FreeReels | `https://free-reels.com` | app-first |
+| iDrama | `https://www.idrama.video` | app-first |
+| ReelShort | `https://www.reelshort.com` | SPA (often already works) |
+| ShortFlix | `https://www.shortflix.net` | fan library, web-first |
+| Hongguo (红果), QQTV, RaptDrama, ReelLife, DramaTV, DotDrama | app-only / region-locked | may have no usable web player |
+
+**Takeaway:** these sites are **SPA/API-driven** — the media URL is fetched over XHR/JSON,
+not present in the initial HTML, so the generic HTML sniffer usually won't find it.
+That's exactly what the recipe + network-sniffing approach is for: point the bot's
+browser at a show page, capture the media request, and store the pattern.
+
+**Next concrete step:** run one of these home URLs through the bot's browser sandbox
+with network capture (phase 4), distill the first media request into a recipe, and
+verify a download. `goodshort.com` and `netshort.com` are the best first targets
+(web-first, English).
+
 ## Legal note
 
 Extracting from third-party apps may breach their terms of service. Recipe support
