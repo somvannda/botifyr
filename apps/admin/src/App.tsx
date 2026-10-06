@@ -136,7 +136,7 @@ export function Admin() {
     }
   }
 
-  async function setPlan(user: AdminUser, plan: "trial" | "pro") {
+  async function setPlan(user: AdminUser, plan: "free" | "pro" | "business") {
     setError(null);
     try {
       await client.adminSetPlan(user.id, plan);
@@ -276,7 +276,7 @@ export function Admin() {
                       <button
                         className="ghost small"
                         type="button"
-                        onClick={() => void setPlan(user, user.plan === "pro" ? "trial" : "pro")}
+                        onClick={() => void setPlan(user, user.plan === "pro" ? "free" : "pro")}
                       >
                         {user.plan === "pro" ? "Downgrade" : "Make Pro"}
                       </button>

@@ -3,7 +3,7 @@ import type { BotSchedule, ChatMessage, Task } from "@botifyr/shared";
 /** Persistence contracts shared by the memory and Postgres stores. */
 
 /** Subscription plan. "trial" is the free tier. */
-export type Plan = "trial" | "pro";
+export type Plan = "free" | "pro" | "business";
 
 export interface UserRecord {
   id: string;
@@ -16,6 +16,15 @@ export interface UserRecord {
   displayName?: string;
   avatarEmoji?: string;
   avatarScheme?: number;
+  /** Billing: free | plan | payg. */
+  billingMode?: "free" | "plan" | "payg";
+  /** Current paid period (prepaid plans). */
+  periodStart?: string;
+  periodEnd?: string;
+  /** Grace deadline after an unpaid period end. */
+  graceUntil?: string;
+  /** active | grace | expired | free. */
+  subStatus?: "active" | "grace" | "expired" | "free";
   createdAt: string;
 }
 
@@ -255,4 +264,124 @@ export interface Store {
   deleteMedia(userId: string, id: string): Promise<boolean>;
   /** Remove every media record a task produced (used by retention cleanup). */
   deleteMediaByTask(taskId: string): Promise<number>;
+
+  /* Billing */
+  getPlatformSettings(): Promise<PlatformSettings>;
+  savePlatformSettings(settings: PlatformSettings): Promise<void>;
+  listModelPricing(): Promise<ModelPricingRecord[]>;
+  saveModelPricing(record: ModelPricingRecord): Promise<void>;
+  deleteModelPricing(model: string): Promise<boolean>;
+  createInvoice(record: InvoiceRecord): Promise<void>;
+  updateInvoice(record: InvoiceRecord): Promise<void>;
+  getInvoice(id: string): Promise<InvoiceRecord | null>;
+  getInvoiceByProviderPayment(providerPaymentId: string): Promise<InvoiceRecord | null>;
+  listInvoices(userId: string, status?: string): Promise<InvoiceRecord[]>;
+  listOpenInvoices(): Promise<InvoiceRecord[]>;
+  getWallet(userId: string): Promise<WalletRecord>;
+  addWalletCents(userId: string, deltaCents: number): Promise<WalletRecord>;
+  addLedger(record: LedgerRecord): Promise<void>;
+  listLedger(userId: string, limit?: number): Promise<LedgerRecord[]>;
+  createNotification(record: NotificationRecord): Promise<void>;
+  updateNotification(record: NotificationRecord): Promise<void>;
+  listPendingNotifications(): Promise<NotificationRecord[]>;
+  setUserBilling(
+    id: string,
+    fields: Partial<
+      Pick<UserRecord, "plan" | "billingMode" | "periodStart" | "periodEnd" | "graceUntil" | "subStatus">
+    >,
+  ): Promise<void>;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Billing records                                                            */
+/* -------------------------------------------------------------------------- */
+
+export interface PlatformSettings {
+  plans: {
+    proPriceCents: number;
+    businessPriceCents: number;
+    proPeriodDays: number;
+    /** Included tokens per period on each paid plan. */
+    includedTokens: { pro: number; business: number };
+    currency: string;
+  };
+  freeMonthlyTokens: number;
+  lowBalanceCents: number;
+  graceDays: number;
+  reminderDays: number[];
+  reminderChannels: { os: boolean; email: boolean; telegram: boolean };
+  onDemand: {
+    enabled: boolean;
+    markupPercent: number;
+    minTopUpCents: number;
+    allowPro: boolean;
+    onEmpty: "block" | "free";
+  };
+  fallbackPlan: Plan;
+}
+
+export interface ModelPricingRecord {
+  model: string;
+  provider?: string;
+  /** What we pay the provider, in cents per 1M tokens. */
+  inputCentsPerM: number;
+  outputCentsPerM: number;
+  /** Optional per-model override of the global markup. */
+  markupPercent?: number;
+  enabled: boolean;
+  updatedAt: string;
+}
+
+export type InvoiceKind = "plan" | "topup";
+
+export interface InvoiceRecord {
+  id: string;
+  userId: string;
+  kind: InvoiceKind;
+  plan?: Plan;
+  amountCents: number;
+  currency: string;
+  referenceId?: string;
+  providerPaymentId?: string;
+  checkoutUrl?: string;
+  qrString?: string;
+  providerStatus: "pending" | "paid" | "expired" | "failed" | "superseded" | "reversed";
+  status: "open" | "paid" | "void";
+  periodStart?: string;
+  periodEnd?: string;
+  /** Which reminders have fired, e.g. { d7: true }. */
+  reminders: Record<string, boolean>;
+  expiresAt?: string;
+  paidAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WalletRecord {
+  userId: string;
+  balanceCents: number;
+  updatedAt: string;
+}
+
+export interface LedgerRecord {
+  id: string;
+  userId: string;
+  kind: "topup" | "usage" | "refund" | "grant";
+  amountCents: number;
+  tokens?: number;
+  model?: string;
+  note?: string;
+  createdAt: string;
+}
+
+export interface NotificationRecord {
+  id: string;
+  userId: string;
+  kind: string;
+  subject?: string;
+  body?: string;
+  channels: string[];
+  sent: Record<string, boolean>;
+  createdAt: string;
+  updatedAt: string;
 }

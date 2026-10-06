@@ -151,7 +151,7 @@ export interface User {
   email: string;
   createdAt: string;
   role: "user" | "admin";
-  plan?: "trial" | "pro";
+  plan?: "free" | "pro" | "business";
   /** Public @handle for finding people. */
   handle?: string;
   displayName?: string;

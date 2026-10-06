@@ -6,14 +6,20 @@ import type {
   ConnectionRecord,
   FileRecord,
   FriendRequestRecord,
+  InvoiceRecord,
   LearnedSkillRecord,
+  LedgerRecord,
   MediaRecord,
+  ModelPricingRecord,
+  NotificationRecord,
   Plan,
+  PlatformSettings,
   SecretRecord,
   SessionRecord,
   Store,
   UsageRecord,
   UserRecord,
+  WalletRecord,
 } from "./types.js";
 
 /** Zero-setup store for development and tests. Nothing survives a restart. */
@@ -35,6 +41,12 @@ export class MemoryStore implements Store {
   private media = new Map<string, MediaRecord>();
   private friendRequests = new Map<string, FriendRequestRecord>();
   private friendships = new Set<string>();
+  private settings: PlatformSettings | null = null;
+  private modelPricing = new Map<string, ModelPricingRecord>();
+  private invoices = new Map<string, InvoiceRecord>();
+  private wallets = new Map<string, WalletRecord>();
+  private ledger: LedgerRecord[] = [];
+  private notifications = new Map<string, NotificationRecord>();
 
   async init(): Promise<void> {}
   async close(): Promise<void> {}
@@ -453,4 +465,135 @@ export class MemoryStore implements Store {
     }
     return removed;
   }
+
+  /* Billing --------------------------------------------------------------- */
+
+  async getPlatformSettings(): Promise<PlatformSettings> {
+    return this.settings ?? DEFAULT_SETTINGS();
+  }
+
+  async savePlatformSettings(settings: PlatformSettings): Promise<void> {
+    this.settings = settings;
+  }
+
+  async listModelPricing(): Promise<ModelPricingRecord[]> {
+    return [...this.modelPricing.values()].map((record) => ({ ...record }));
+  }
+
+  async saveModelPricing(record: ModelPricingRecord): Promise<void> {
+    this.modelPricing.set(record.model, { ...record });
+  }
+
+  async deleteModelPricing(model: string): Promise<boolean> {
+    return this.modelPricing.delete(model);
+  }
+
+  async createInvoice(record: InvoiceRecord): Promise<void> {
+    this.invoices.set(record.id, { ...record });
+  }
+
+  async updateInvoice(record: InvoiceRecord): Promise<void> {
+    this.invoices.set(record.id, { ...record });
+  }
+
+  async getInvoice(id: string): Promise<InvoiceRecord | null> {
+    const record = this.invoices.get(id);
+    return record ? { ...record } : null;
+  }
+
+  async getInvoiceByProviderPayment(providerPaymentId: string): Promise<InvoiceRecord | null> {
+    for (const record of this.invoices.values()) {
+      if (record.providerPaymentId === providerPaymentId) return { ...record };
+    }
+    return null;
+  }
+
+  async listInvoices(userId: string, status?: string): Promise<InvoiceRecord[]> {
+    return [...this.invoices.values()]
+      .filter((record) => record.userId === userId && (!status || record.status === status))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map((record) => ({ ...record }));
+  }
+
+  async listOpenInvoices(): Promise<InvoiceRecord[]> {
+    return [...this.invoices.values()]
+      .filter((record) => record.status === "open")
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      .map((record) => ({ ...record }));
+  }
+
+  async getWallet(userId: string): Promise<WalletRecord> {
+    return this.wallets.get(userId) ?? { userId, balanceCents: 0, updatedAt: new Date().toISOString() };
+  }
+
+  async addWalletCents(userId: string, deltaCents: number): Promise<WalletRecord> {
+    const current = this.wallets.get(userId) ?? {
+      userId,
+      balanceCents: 0,
+      updatedAt: new Date().toISOString(),
+    };
+    const next = {
+      ...current,
+      balanceCents: current.balanceCents + deltaCents,
+      updatedAt: new Date().toISOString(),
+    };
+    this.wallets.set(userId, next);
+    return { ...next };
+  }
+
+  async addLedger(record: LedgerRecord): Promise<void> {
+    this.ledger.push({ ...record });
+  }
+
+  async listLedger(userId: string, limit = 50): Promise<LedgerRecord[]> {
+    return this.ledger
+      .filter((entry) => entry.userId === userId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, limit)
+      .map((entry) => ({ ...entry }));
+  }
+
+  async createNotification(record: NotificationRecord): Promise<void> {
+    this.notifications.set(record.id, { ...record });
+  }
+
+  async updateNotification(record: NotificationRecord): Promise<void> {
+    this.notifications.set(record.id, { ...record });
+  }
+
+  async listPendingNotifications(): Promise<NotificationRecord[]> {
+    return [...this.notifications.values()]
+      .filter((record) => Object.values(record.sent).some((value) => !value))
+      .map((record) => ({ ...record }));
+  }
+
+  async setUserBilling(
+    id: string,
+    fields: Partial<
+      Pick<UserRecord, "plan" | "billingMode" | "periodStart" | "periodEnd" | "graceUntil" | "subStatus">
+    >,
+  ): Promise<void> {
+    const record = this.users.get(id);
+    if (record) Object.assign(record, fields);
+  }
+}
+
+/** Default billing policy (matches the seeded `platform_settings` row). */
+function DEFAULT_SETTINGS(): PlatformSettings {
+  return {
+    plans: {
+      proPriceCents: 500,
+      businessPriceCents: 1900,
+      proPeriodDays: 30,
+      includedTokens: { pro: 5_000_000, business: 50_000_000 },
+      currency: "USD",
+    },
+    freeMonthlyTokens: 20_000,
+    lowBalanceCents: 100,
+    graceDays: 7,
+    reminderDays: [7, 3, 1],
+    reminderChannels: { os: true, email: true, telegram: true },
+    onDemand: { enabled: true, markupPercent: 15, minTopUpCents: 100, allowPro: false, onEmpty: "block" },
+    fallbackPlan: "free",
+  };
 }

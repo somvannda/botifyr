@@ -268,7 +268,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   );
   const [autoUpdate, setAutoUpdate] = useState(() => localStorage.getItem("botifyr.autoUpdate") !== "0");
   const [checkNote, setCheckNote] = useState<string | null>(null);
-  const [plan, setPlan] = useState<"trial" | "pro">("trial");
+  const [plan, setPlan] = useState<"free" | "pro" | "business">("free");
   const [stripeConfigured, setStripeConfigured] = useState(false);
   const [trialStart] = useState(() => {
     const existing = Number(localStorage.getItem("botifyr.trialStart"));

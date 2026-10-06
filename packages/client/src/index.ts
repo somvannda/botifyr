@@ -82,7 +82,7 @@ export interface AdminUser {
   id: string;
   email: string;
   role: "user" | "admin";
-  plan: "trial" | "pro";
+  plan: "free" | "pro" | "business";
   createdAt: string;
 }
 
@@ -263,7 +263,7 @@ export class BotifyrClient {
     return this.request("/v1/learned-skills");
   }
 
-  billing(): Promise<{ plan: "trial" | "pro"; stripeConfigured: boolean }> {
+  billing(): Promise<{ plan: "free" | "pro" | "business"; stripeConfigured: boolean }> {
     return this.request("/v1/billing");
   }
 
@@ -300,7 +300,7 @@ export class BotifyrClient {
     });
   }
 
-  adminSetPlan(id: string, plan: "trial" | "pro"): Promise<{ ok: boolean }> {
+  adminSetPlan(id: string, plan: "free" | "pro" | "business"): Promise<{ ok: boolean }> {
     return this.request(`/admin/users/${id}/plan`, {
       method: "POST",
       json: true,

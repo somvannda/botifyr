@@ -22,8 +22,11 @@ they land. Keep entries short; link code paths instead of explaining them.
       (`BOTIFYR_TURN_*` / `BOTIFYR_ICE_SERVERS`); still to verify across 2 devices.
 - [ ] **Mobile PWA offline** (manifest exists; no service worker).
 - [ ] **Prepaid billing via ChmabaPay** (KHQR / ABA PayWay) — monthly prepaid
-      plans, invoices, reminders 7/3/1 days, 7-day grace, downgrade to free.
-      Full design: [`docs/billing.md`](billing.md). Not implemented yet.
+      plans **+ on-demand credits**, admin-set pricing/grace/reminders, 7/3/1-day
+      reminders, 7-day grace, hard-stop then downgrade to free.
+      Design: [`docs/billing.md`](billing.md). **Data model done** (settings,
+      model pricing, invoices, wallet, ledger, notifications); client + routes +
+      UI still to come.
 - [ ] **Deploy** — TLS, reverse proxy, subdomains (`app.` / `admin.` / `api.`).
 - [x] **Retire static `/admin.html`** — `/admin` now 302-redirects to the console.
 

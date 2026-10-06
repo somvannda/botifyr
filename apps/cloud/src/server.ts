@@ -470,7 +470,7 @@ export async function buildServer(options: ServerOptions) {
     email: record.email,
     createdAt: record.createdAt,
     role: record.role === "admin" ? "admin" : "user",
-    plan: record.plan === "pro" ? "pro" : "trial",
+    plan: record.plan === "pro" ? "pro" : record.plan === "business" ? "business" : "free",
     handle: record.handle,
     displayName: record.displayName,
     avatarEmoji: record.avatarEmoji,
@@ -1082,7 +1082,7 @@ export async function buildServer(options: ServerOptions) {
       id: user.id,
       email: user.email,
       role: user.role,
-      plan: user.plan === "pro" ? "pro" : "trial",
+      plan: user.plan ?? "free",
       createdAt: user.createdAt,
     })),
   );
@@ -1105,8 +1105,8 @@ export async function buildServer(options: ServerOptions) {
     { preHandler: requireAdmin },
     async (request, reply) => {
       const plan = request.body?.plan;
-      if (plan !== "trial" && plan !== "pro")
-        return reply.code(400).send({ error: "plan must be trial or pro" });
+      if (plan !== "free" && plan !== "pro" && plan !== "business")
+        return reply.code(400).send({ error: "plan must be free, pro, or business" });
       await store.setUserPlan(request.params.id, plan);
       auditAdmin(request, "user.plan", `${request.params.id} -> ${plan}`);
       return { ok: true };
@@ -1146,7 +1146,7 @@ export async function buildServer(options: ServerOptions) {
   app.get("/v1/billing", { preHandler: requireAuth }, async (request) => {
     const record = await store.getUserById(request.userId as string);
     return {
-      plan: record?.plan === "pro" ? "pro" : "trial",
+      plan: record?.plan === "pro" ? "pro" : "free",
       stripeConfigured,
     };
   });
@@ -1208,7 +1208,7 @@ export async function buildServer(options: ServerOptions) {
     if (userId && event.type === "checkout.session.completed") {
       await store.setUserPlan(userId, "pro");
     } else if (userId && event.type === "customer.subscription.deleted") {
-      await store.setUserPlan(userId, "trial");
+      await store.setUserPlan(userId, "free");
     }
     return reply.code(204).send();
   });

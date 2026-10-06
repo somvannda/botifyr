@@ -160,4 +160,95 @@ CREATE TABLE IF NOT EXISTS media (
   UNIQUE (task_id, name)
 );
 CREATE INDEX IF NOT EXISTS media_user_idx ON media (user_id, created_at);
+
+/* --- Billing (prepaid plans + on-demand credits via ChmabaPay) ------------- */
+ALTER TABLE users ADD COLUMN IF NOT EXISTS billing_mode TEXT NOT NULL DEFAULT 'free';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS period_start TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS period_end TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS grace_until TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS sub_status TEXT NOT NULL DEFAULT 'free';
+ALTER TABLE users ALTER COLUMN plan SET DEFAULT 'free';
+UPDATE users SET plan = 'free' WHERE plan IS NULL OR plan = 'trial';
+
+ALTER TABLE usage_events ADD COLUMN IF NOT EXISTS model TEXT;
+
+-- One row (id='global'): all pricing/policy an admin can change without a deploy.
+CREATE TABLE IF NOT EXISTS platform_settings (
+  id         TEXT PRIMARY KEY,
+  data       JSONB NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Per-model provider cost, so on-demand pricing = cost × (1 + markup).
+CREATE TABLE IF NOT EXISTS model_pricing (
+  model               TEXT PRIMARY KEY,
+  provider            TEXT,
+  input_cents_per_m   INTEGER NOT NULL DEFAULT 0,
+  output_cents_per_m  INTEGER NOT NULL DEFAULT 0,
+  markup_percent      INTEGER,
+  enabled             BOOLEAN NOT NULL DEFAULT true,
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS invoices (
+  id                 TEXT PRIMARY KEY,
+  user_id            TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  kind               TEXT NOT NULL DEFAULT 'plan',
+  plan               TEXT,
+  amount_cents       INTEGER NOT NULL,
+  currency           TEXT NOT NULL DEFAULT 'USD',
+  reference_id       TEXT,
+  provider_payment_id TEXT,
+  checkout_url       TEXT,
+  qr_string          TEXT,
+  provider_status    TEXT NOT NULL DEFAULT 'pending',
+  status             TEXT NOT NULL DEFAULT 'open',
+  period_start       TIMESTAMPTZ,
+  period_end         TIMESTAMPTZ,
+  reminders          JSONB NOT NULL DEFAULT '{}',
+  expires_at         TIMESTAMPTZ,
+  paid_at            TIMESTAMPTZ,
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS invoices_user_idx ON invoices (user_id, status);
+CREATE UNIQUE INDEX IF NOT EXISTS invoices_provider_payment_idx ON invoices (provider_payment_id);
+
+CREATE TABLE IF NOT EXISTS wallets (
+  user_id       TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  balance_cents INTEGER NOT NULL DEFAULT 0,
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS ledger (
+  id           TEXT PRIMARY KEY,
+  user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  kind         TEXT NOT NULL,
+  amount_cents INTEGER NOT NULL,
+  tokens       INTEGER,
+  model        TEXT,
+  note         TEXT,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ledger_user_idx ON ledger (user_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS notifications (
+  id         TEXT PRIMARY KEY,
+  user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  kind       TEXT NOT NULL,
+  subject    TEXT,
+  body       TEXT,
+  channels   JSONB NOT NULL DEFAULT '[]',
+  sent       JSONB NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS notifications_user_idx ON notifications (user_id, created_at DESC);
+
+-- Seed the default policy and a starter model price (editable in admin).
+INSERT INTO platform_settings (id, data) VALUES ('global', '{"plans":{"proPriceCents":500,"businessPriceCents":1900,"proPeriodDays":30,"includedTokens":{"pro":5000000,"business":50000000},"currency":"USD"},"freeMonthlyTokens":20000,"lowBalanceCents":100,"graceDays":7,"reminderDays":[7,3,1],"reminderChannels":{"os":true,"email":true,"telegram":true},"onDemand":{"enabled":true,"markupPercent":15,"minTopUpCents":100,"allowPro":false,"onEmpty":"block"},"fallbackPlan":"free"}')
+  ON CONFLICT (id) DO NOTHING;
+INSERT INTO model_pricing (model, provider, input_cents_per_m, output_cents_per_m) VALUES
+  ('deepseek-chat', 'deepseek', 27, 110)
+  ON CONFLICT (model) DO NOTHING;
 `;

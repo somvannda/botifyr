@@ -7,14 +7,20 @@ import type {
   ConnectionRecord,
   FileRecord,
   FriendRequestRecord,
+  InvoiceRecord,
   LearnedSkillRecord,
+  LedgerRecord,
   MediaRecord,
+  ModelPricingRecord,
+  NotificationRecord,
   Plan,
+  PlatformSettings,
   SecretRecord,
   SessionRecord,
   Store,
   UsageRecord,
   UserRecord,
+  WalletRecord,
 } from "./types.js";
 import { SCHEMA_SQL } from "./schema.js";
 
@@ -59,7 +65,7 @@ export class PostgresStore implements Store {
         record.email,
         record.passwordHash,
         record.role ?? "user",
-        record.plan ?? "trial",
+        record.plan ?? "free",
         record.handle ?? null,
         record.displayName ?? null,
         record.avatarEmoji ?? null,
@@ -634,6 +640,226 @@ export class PostgresStore implements Store {
     const result = await this.pool.query("DELETE FROM media WHERE task_id = $1", [taskId]);
     return result.rowCount ?? 0;
   }
+
+  /* Billing --------------------------------------------------------------- */
+
+  async getPlatformSettings(): Promise<PlatformSettings> {
+    const { rows } = await this.pool.query("SELECT data FROM platform_settings WHERE id = 'global'");
+    return (rows[0]?.data as PlatformSettings) ?? DEFAULT_SETTINGS();
+  }
+
+  async savePlatformSettings(settings: PlatformSettings): Promise<void> {
+    await this.pool.query(
+      "INSERT INTO platform_settings (id, data, updated_at) VALUES ('global', $1, now()) " +
+        "ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = now()",
+      [settings],
+    );
+  }
+
+  async listModelPricing(): Promise<ModelPricingRecord[]> {
+    const { rows } = await this.pool.query("SELECT * FROM model_pricing ORDER BY model ASC");
+    return rows.map(toModelPricing);
+  }
+
+  async saveModelPricing(record: ModelPricingRecord): Promise<void> {
+    await this.pool.query(
+      "INSERT INTO model_pricing (model, provider, input_cents_per_m, output_cents_per_m, markup_percent, enabled, updated_at) " +
+        "VALUES ($1,$2,$3,$4,$5,$6,now()) " +
+        "ON CONFLICT (model) DO UPDATE SET provider = EXCLUDED.provider, input_cents_per_m = EXCLUDED.input_cents_per_m, " +
+        "output_cents_per_m = EXCLUDED.output_cents_per_m, markup_percent = EXCLUDED.markup_percent, " +
+        "enabled = EXCLUDED.enabled, updated_at = now()",
+      [
+        record.model,
+        record.provider ?? null,
+        record.inputCentsPerM,
+        record.outputCentsPerM,
+        record.markupPercent ?? null,
+        record.enabled,
+      ],
+    );
+  }
+
+  async deleteModelPricing(model: string): Promise<boolean> {
+    const result = await this.pool.query("DELETE FROM model_pricing WHERE model = $1", [model]);
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async createInvoice(record: InvoiceRecord): Promise<void> {
+    await this.pool.query(
+      "INSERT INTO invoices (id, user_id, kind, plan, amount_cents, currency, reference_id, provider_payment_id, " +
+        "checkout_url, qr_string, provider_status, status, period_start, period_end, reminders, expires_at, paid_at, " +
+        "created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)",
+      [
+        record.id,
+        record.userId,
+        record.kind,
+        record.plan ?? null,
+        record.amountCents,
+        record.currency,
+        record.referenceId ?? null,
+        record.providerPaymentId ?? null,
+        record.checkoutUrl ?? null,
+        record.qrString ?? null,
+        record.providerStatus,
+        record.status,
+        record.periodStart ?? null,
+        record.periodEnd ?? null,
+        record.reminders,
+        record.expiresAt ?? null,
+        record.paidAt ?? null,
+        record.createdAt,
+        record.updatedAt,
+      ],
+    );
+  }
+
+  async updateInvoice(record: InvoiceRecord): Promise<void> {
+    await this.pool.query(
+      "UPDATE invoices SET plan = $1, amount_cents = $2, currency = $3, reference_id = $4, " +
+        "provider_payment_id = $5, checkout_url = $6, qr_string = $7, provider_status = $8, status = $9, " +
+        "period_start = $10, period_end = $11, reminders = $12, expires_at = $13, paid_at = $14, updated_at = $15 " +
+        "WHERE id = $16",
+      [
+        record.plan ?? null,
+        record.amountCents,
+        record.currency,
+        record.referenceId ?? null,
+        record.providerPaymentId ?? null,
+        record.checkoutUrl ?? null,
+        record.qrString ?? null,
+        record.providerStatus,
+        record.status,
+        record.periodStart ?? null,
+        record.periodEnd ?? null,
+        record.reminders,
+        record.expiresAt ?? null,
+        record.paidAt ?? null,
+        record.updatedAt,
+        record.id,
+      ],
+    );
+  }
+
+  async getInvoice(id: string): Promise<InvoiceRecord | null> {
+    const { rows } = await this.pool.query("SELECT * FROM invoices WHERE id = $1", [id]);
+    return rows[0] ? toInvoice(rows[0]) : null;
+  }
+
+  async getInvoiceByProviderPayment(providerPaymentId: string): Promise<InvoiceRecord | null> {
+    const { rows } = await this.pool.query("SELECT * FROM invoices WHERE provider_payment_id = $1", [
+      providerPaymentId,
+    ]);
+    return rows[0] ? toInvoice(rows[0]) : null;
+  }
+
+  async listInvoices(userId: string, status?: string): Promise<InvoiceRecord[]> {
+    const { rows } = await this.pool.query(
+      "SELECT * FROM invoices WHERE user_id = $1 AND ($2::text IS NULL OR status = $2) ORDER BY created_at DESC",
+      [userId, status ?? null],
+    );
+    return rows.map(toInvoice);
+  }
+
+  async listOpenInvoices(): Promise<InvoiceRecord[]> {
+    const { rows } = await this.pool.query(
+      "SELECT * FROM invoices WHERE status = 'open' ORDER BY created_at ASC LIMIT 500",
+    );
+    return rows.map(toInvoice);
+  }
+
+  async getWallet(userId: string): Promise<WalletRecord> {
+    const { rows } = await this.pool.query("SELECT * FROM wallets WHERE user_id = $1", [userId]);
+    if (rows[0]) return toWallet(rows[0]);
+    return { userId, balanceCents: 0, updatedAt: new Date().toISOString() };
+  }
+
+  async addWalletCents(userId: string, deltaCents: number): Promise<WalletRecord> {
+    const { rows } = await this.pool.query(
+      "INSERT INTO wallets (user_id, balance_cents, updated_at) VALUES ($1, $2, now()) " +
+        "ON CONFLICT (user_id) DO UPDATE SET balance_cents = wallets.balance_cents + $2, updated_at = now() " +
+        "RETURNING *",
+      [userId, deltaCents],
+    );
+    return toWallet(rows[0]);
+  }
+
+  async addLedger(record: LedgerRecord): Promise<void> {
+    await this.pool.query(
+      "INSERT INTO ledger (id, user_id, kind, amount_cents, tokens, model, note, created_at) " +
+        "VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
+      [
+        record.id,
+        record.userId,
+        record.kind,
+        record.amountCents,
+        record.tokens ?? null,
+        record.model ?? null,
+        record.note ?? null,
+        record.createdAt,
+      ],
+    );
+  }
+
+  async listLedger(userId: string, limit = 50): Promise<LedgerRecord[]> {
+    const { rows } = await this.pool.query(
+      "SELECT * FROM ledger WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2",
+      [userId, limit],
+    );
+    return rows.map(toLedger);
+  }
+
+  async createNotification(record: NotificationRecord): Promise<void> {
+    await this.pool.query(
+      "INSERT INTO notifications (id, user_id, kind, subject, body, channels, sent, created_at, updated_at) " +
+        "VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
+      [
+        record.id,
+        record.userId,
+        record.kind,
+        record.subject ?? null,
+        record.body ?? null,
+        record.channels,
+        record.sent,
+        record.createdAt,
+        record.updatedAt,
+      ],
+    );
+  }
+
+  async updateNotification(record: NotificationRecord): Promise<void> {
+    await this.pool.query("UPDATE notifications SET sent = $1, updated_at = $2 WHERE id = $3", [
+      record.sent,
+      record.updatedAt,
+      record.id,
+    ]);
+  }
+
+  async listPendingNotifications(): Promise<NotificationRecord[]> {
+    const { rows } = await this.pool.query("SELECT * FROM notifications ORDER BY created_at ASC LIMIT 200");
+    return rows.map(toNotification).filter((record) => Object.values(record.sent).some((value) => !value));
+  }
+
+  async setUserBilling(
+    id: string,
+    fields: Partial<
+      Pick<UserRecord, "plan" | "billingMode" | "periodStart" | "periodEnd" | "graceUntil" | "subStatus">
+    >,
+  ): Promise<void> {
+    await this.pool.query(
+      "UPDATE users SET plan = COALESCE($1, plan), billing_mode = COALESCE($2, billing_mode), " +
+        "period_start = COALESCE($3, period_start), period_end = COALESCE($4, period_end), " +
+        "grace_until = COALESCE($5, grace_until), sub_status = COALESCE($6, sub_status) WHERE id = $7",
+      [
+        fields.plan ?? null,
+        fields.billingMode ?? null,
+        fields.periodStart ?? null,
+        fields.periodEnd ?? null,
+        fields.graceUntil ?? null,
+        fields.subStatus ?? null,
+        id,
+      ],
+    );
+  }
 }
 
 function toMedia(row: any): MediaRecord {
@@ -676,17 +902,114 @@ function toApiKey(row: any): ApiKeyRecord {
 }
 
 function toUser(row: any): UserRecord {
+  const plan: Plan = row.plan === "pro" ? "pro" : row.plan === "business" ? "business" : "free";
   return {
     id: row.id,
     email: row.email,
     passwordHash: row.password_hash,
     role: row.role ?? "user",
-    plan: row.plan === "pro" ? "pro" : "trial",
+    plan,
     handle: row.handle ?? undefined,
     displayName: row.display_name ?? undefined,
     avatarEmoji: row.avatar_emoji ?? undefined,
     avatarScheme: row.avatar_scheme ?? undefined,
+    billingMode: row.billing_mode ?? undefined,
+    periodStart: row.period_start ? new Date(row.period_start).toISOString() : undefined,
+    periodEnd: row.period_end ? new Date(row.period_end).toISOString() : undefined,
+    graceUntil: row.grace_until ? new Date(row.grace_until).toISOString() : undefined,
+    subStatus: row.sub_status ?? undefined,
     createdAt: row.created_at.toISOString(),
+  };
+}
+
+function toInvoice(row: any): InvoiceRecord {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    kind: row.kind,
+    plan: row.plan ?? undefined,
+    amountCents: Number(row.amount_cents ?? 0),
+    currency: row.currency,
+    referenceId: row.reference_id ?? undefined,
+    providerPaymentId: row.provider_payment_id ?? undefined,
+    checkoutUrl: row.checkout_url ?? undefined,
+    qrString: row.qr_string ?? undefined,
+    providerStatus: row.provider_status,
+    status: row.status,
+    periodStart: row.period_start ? new Date(row.period_start).toISOString() : undefined,
+    periodEnd: row.period_end ? new Date(row.period_end).toISOString() : undefined,
+    reminders: row.reminders ?? {},
+    expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : undefined,
+    paidAt: row.paid_at ? new Date(row.paid_at).toISOString() : undefined,
+    createdAt: new Date(row.created_at).toISOString(),
+    updatedAt: new Date(row.updated_at).toISOString(),
+  };
+}
+
+function toModelPricing(row: any): ModelPricingRecord {
+  return {
+    model: row.model,
+    provider: row.provider ?? undefined,
+    inputCentsPerM: Number(row.input_cents_per_m ?? 0),
+    outputCentsPerM: Number(row.output_cents_per_m ?? 0),
+    markupPercent: row.markup_percent ?? undefined,
+    enabled: row.enabled !== false,
+    updatedAt: new Date(row.updated_at).toISOString(),
+  };
+}
+
+function toWallet(row: any): WalletRecord {
+  return {
+    userId: row.user_id,
+    balanceCents: Number(row.balance_cents ?? 0),
+    updatedAt: new Date(row.updated_at).toISOString(),
+  };
+}
+
+function toLedger(row: any): LedgerRecord {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    kind: row.kind,
+    amountCents: Number(row.amount_cents ?? 0),
+    tokens: row.tokens ?? undefined,
+    model: row.model ?? undefined,
+    note: row.note ?? undefined,
+    createdAt: new Date(row.created_at).toISOString(),
+  };
+}
+
+function toNotification(row: any): NotificationRecord {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    kind: row.kind,
+    subject: row.subject ?? undefined,
+    body: row.body ?? undefined,
+    channels: row.channels ?? [],
+    sent: row.sent ?? {},
+    createdAt: new Date(row.created_at).toISOString(),
+    updatedAt: new Date(row.updated_at).toISOString(),
+  };
+}
+
+/** Default billing policy (matches the seeded `platform_settings` row). */
+function DEFAULT_SETTINGS(): PlatformSettings {
+  return {
+    plans: {
+      proPriceCents: 500,
+      businessPriceCents: 1900,
+      proPeriodDays: 30,
+      includedTokens: { pro: 5_000_000, business: 50_000_000 },
+      currency: "USD",
+    },
+    freeMonthlyTokens: 20_000,
+    lowBalanceCents: 100,
+    graceDays: 7,
+    reminderDays: [7, 3, 1],
+    reminderChannels: { os: true, email: true, telegram: true },
+    onDemand: { enabled: true, markupPercent: 15, minTopUpCents: 100, allowPro: false, onEmpty: "block" },
+    fallbackPlan: "free",
   };
 }
 
