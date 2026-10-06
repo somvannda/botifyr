@@ -106,6 +106,7 @@ export default function App() {
   const [tokenValue, setTokenValue] = useState("");
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [historyIndex, setHistoryIndex] = useState<number | null>(null);
+  const [mentionIndex, setMentionIndex] = useState(0);
   const [listening, setListening] = useState(false);
   const recognitionRef = useRef<{ start: () => void; stop: () => void } | null>(null);
   const [bots, setBots] = useState<Bot[]>([]);
@@ -621,6 +622,7 @@ export default function App() {
     }
     const match = /(?:^|\s)@([\w -]*)$/.exec(value);
     setMentionQuery(match ? match[1] : null);
+    setMentionIndex(0);
   }
 
   function insertMention(name: string) {
@@ -854,6 +856,12 @@ export default function App() {
         .map((id) => bots.find((bot) => bot.id === id))
         .filter((bot): bot is Bot => Boolean(bot))
     : [];
+  const mentionMatches =
+    mentionQuery !== null
+      ? groupMemberBots
+          .filter((bot) => bot.name.toLowerCase().includes(mentionQuery.toLowerCase()))
+          .slice(0, 6)
+      : [];
   const inGroup = Boolean(activeBot?.memberIds && activeBot.memberIds.length > 0);
   const streamBot = stream?.botId ? (bots.find((bot) => bot.id === stream.botId) ?? null) : null;
   const streamScheme = BOT_SCHEMES[(streamBot?.scheme ?? activeBot?.scheme ?? 0) % BOT_SCHEMES.length];
@@ -1372,22 +1380,20 @@ export default function App() {
             void send();
           }}
         >
-          {mentionQuery !== null && groupMemberBots.length > 0 && (
+          {mentionQuery !== null && mentionMatches.length > 0 && (
             <div className="mention-popup">
-              {groupMemberBots
-                .filter((bot) => bot.name.toLowerCase().includes(mentionQuery.toLowerCase()))
-                .slice(0, 6)
-                .map((bot) => (
-                  <button
-                    key={bot.id}
-                    type="button"
-                    className="mention-item"
-                    onClick={() => insertMention(bot.name)}
-                  >
-                    <BotLogo size={18} scheme={BOT_SCHEMES[bot.scheme % BOT_SCHEMES.length]} />
-                    {bot.name}
-                  </button>
-                ))}
+              {mentionMatches.map((bot, index) => (
+                <button
+                  key={bot.id}
+                  type="button"
+                  className={`mention-item${index === mentionIndex ? " active" : ""}`}
+                  onMouseEnter={() => setMentionIndex(index)}
+                  onClick={() => insertMention(bot.name)}
+                >
+                  <BotLogo size={18} scheme={BOT_SCHEMES[bot.scheme % BOT_SCHEMES.length]} />
+                  {bot.name}
+                </button>
+              ))}
             </div>
           )}
           <div className="composer-bar">
@@ -1401,6 +1407,28 @@ export default function App() {
               rows={1}
               disabled={busy}
               onKeyDown={(event) => {
+                if (mentionQuery !== null && mentionMatches.length > 0) {
+                  if (event.key === "ArrowDown") {
+                    event.preventDefault();
+                    setMentionIndex((index) => Math.min(mentionMatches.length - 1, index + 1));
+                    return;
+                  }
+                  if (event.key === "ArrowUp") {
+                    event.preventDefault();
+                    setMentionIndex((index) => Math.max(0, index - 1));
+                    return;
+                  }
+                  if (event.key === "Enter" || event.key === "Tab") {
+                    event.preventDefault();
+                    insertMention(mentionMatches[mentionIndex]?.name ?? mentionMatches[0].name);
+                    return;
+                  }
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    setMentionQuery(null);
+                    return;
+                  }
+                }
                 if (event.key === "Enter" && !event.shiftKey) {
                   event.preventDefault();
                   void send();

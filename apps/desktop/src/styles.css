@@ -1345,6 +1345,10 @@ body {
   background: var(--hover);
 }
 
+.mention-item.active {
+  background: var(--hover);
+}
+
 .member-actions {
   display: flex;
   align-items: center;
