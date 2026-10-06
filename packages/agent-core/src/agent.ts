@@ -29,6 +29,8 @@ export interface RunAgentOptions {
   history?: HistoryMessage[];
   /** Extra system guidance for this run (e.g. "use the user's computer"). */
   instructions?: string;
+  /** Summary of older turns, so long conversations keep their memory. */
+  summary?: string;
   /** Hard cap on output tokens per model call (cost control). */
   maxTokens?: number;
   provider: ModelProvider;
@@ -82,7 +84,15 @@ export async function runAgent(options: RunAgentOptions): Promise<AgentResult> {
   const messages: AgentMessage[] = [
     {
       role: "system",
-      content: options.instructions ? `${SYSTEM_PROMPT} ${options.instructions}` : SYSTEM_PROMPT,
+      content: [
+        SYSTEM_PROMPT,
+        options.instructions,
+        options.summary
+          ? `Summary of earlier conversation with the user (facts to remember): ${options.summary}`
+          : undefined,
+      ]
+        .filter(Boolean)
+        .join(" "),
     },
     ...(options.history ?? []).map((message): AgentMessage => ({
       role: message.role,

@@ -22,6 +22,8 @@ tasks. They are part of the **shipped product**, not the development process
 | `BOTIFYR_RATE_LIMIT_PER_HOUR` | `60` | Per-user sliding window. `0` disables. Exceeded → **HTTP 429**. |
 | `BOTIFYR_DAILY_TOKEN_BUDGET` | `200000` | Per-user daily budget. Exceeded → **warning only** (requests still work). `0` disables. |
 | `BOTIFYR_CACHE_TTL_SECONDS` | `300` | Exact-match **response cache**. A hit costs **zero tokens**. `0` disables. |
+| `BOTIFYR_SUMMARY` | `1` | Compress older turns into a **rolling summary** instead of dropping them. `0` disables. |
+| `BOTIFYR_SUMMARY_MAX_TOKENS` | `300` | Output cap for the summarization call (cheap, runs rarely). |
 
 ## Behaviour
 - **Rate limit** → `429 Too Many Requests`.
@@ -38,5 +40,7 @@ tasks. They are part of the **shipped product**, not the development process
   maxTokens) and in-process; cache hits are returned with zero usage so they are
   never counted as spend. A shared cache (Redis/Postgres) would improve the hit
   rate across instances.
-- **History summarization** (compress old turns instead of dropping them) is a
-  possible future improvement for long conversations.
+- **History summarization**: the last N turns are sent verbatim and everything
+  older is folded into a rolling summary (stored on the session, updated only
+  when the window advances), so long conversations keep their memory without
+  resending the whole transcript.

@@ -77,6 +77,10 @@ export interface Session {
   createdAt: string;
   /** The bot this thread belongs to. One bot === one conversation. */
   botId?: string;
+  /** Rolling summary of older turns, so long chats don't lose memory. */
+  summary?: string;
+  /** How many leading messages are already covered by `summary`. */
+  summaryUpTo?: number;
 }
 
 /**

@@ -29,7 +29,7 @@ import { resolveTaskApproval } from "./approvals.js";
 import { handleNodeMessage, nodeInfo, registerNode } from "./nodes.js";
 import { createToken, hashPassword, hashToken, verifyPassword } from "./auth.js";
 import { encryptSecret } from "./vault.js";
-import { runTask, runtimeInfo } from "./runner.js";
+import { runTask, runtimeInfo, summarizeConversation } from "./runner.js";
 import type { Store } from "./store/index.js";
 
 declare module "fastify" {
@@ -90,6 +90,7 @@ export async function buildServer(options: ServerOptions) {
   const maxOutputTokens = Number(process.env.BOTIFYR_MAX_OUTPUT_TOKENS ?? 1024);
   const maxHistoryTurns = Number(process.env.BOTIFYR_MAX_HISTORY_TURNS ?? 12);
   const maxMessageChars = Number(process.env.BOTIFYR_MAX_MESSAGE_CHARS ?? 4000);
+  const summarizeEnabled = (process.env.BOTIFYR_SUMMARY ?? "1") !== "0";
   const rateWindows = new Map<string, number[]>();
 
   /** Sliding-window per-user rate limit. 0 disables it. */
@@ -202,8 +203,28 @@ export async function buildServer(options: ServerOptions) {
   async function startTask(session: Session, text: string, userId: string, local = false): Promise<Task> {
     // Cost control: cap the incoming message and the history sent to the model.
     const capped = text.slice(0, maxMessageChars);
+    const windowSize = maxHistoryTurns * 2;
+
+    // Compress older turns into a rolling summary (keeps memory, bounds tokens).
+    if (summarizeEnabled && session.messages.length > windowSize) {
+      const boundary = session.messages.length - windowSize;
+      const already = session.summaryUpTo ?? 0;
+      if (boundary > already) {
+        const older = session.messages
+          .slice(already, boundary)
+          .map((message) => `${message.role}: ${message.content.slice(0, maxMessageChars)}`)
+          .join("\n");
+        const summary = await summarizeConversation(session.summary ? `${session.summary}\n${older}` : older);
+        if (summary) {
+          session.summary = summary;
+          session.summaryUpTo = boundary;
+          await store.updateSession(session);
+        }
+      }
+    }
+
     const history = session.messages
-      .slice(-maxHistoryTurns * 2)
+      .slice(-windowSize)
       .map((message) => ({ role: message.role, content: message.content.slice(0, maxMessageChars) }));
     // A bot owns its thread, so keep the bot's name as the title.
     if (session.messages.length === 0 && !session.botId) session.title = capped.slice(0, 60);
@@ -245,9 +266,9 @@ export async function buildServer(options: ServerOptions) {
       void (async () => {
         for (const member of members) {
           const latest = (await store.getSession(session.id)) ?? session;
-          const memberHistory = latest.messages.map((message) => ({
+          const memberHistory = latest.messages.slice(-windowSize).map((message) => ({
             role: message.role,
-            content: message.content,
+            content: message.content.slice(0, maxMessageChars),
           }));
           await runTask(
             {
@@ -256,6 +277,7 @@ export async function buildServer(options: ServerOptions) {
               history: memberHistory,
               local,
               instructions: `In this group chat you are "${member.name}". ${member.instructions}`.trim(),
+              summary: latest.summary,
               author: { id: member.id },
             },
             task,
@@ -270,6 +292,7 @@ export async function buildServer(options: ServerOptions) {
           history,
           local,
           instructions: bot?.instructions,
+          summary: session.summary,
           author: bot ? { id: bot.id } : undefined,
         },
         task,

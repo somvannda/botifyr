@@ -76,7 +76,13 @@ export class PostgresStore implements Store {
     await this.pool.query("INSERT INTO sessions (id, user_id, data, created_at) VALUES ($1, $2, $3, $4)", [
       record.id,
       record.userId,
-      { title: record.title, messages: record.messages, botId: record.botId },
+      {
+        title: record.title,
+        messages: record.messages,
+        botId: record.botId,
+        summary: record.summary,
+        summaryUpTo: record.summaryUpTo,
+      },
       record.createdAt,
     ]);
   }
@@ -88,7 +94,13 @@ export class PostgresStore implements Store {
       [
         record.id,
         record.userId,
-        { title: record.title, messages: record.messages, botId: record.botId },
+        {
+          title: record.title,
+          messages: record.messages,
+          botId: record.botId,
+          summary: record.summary,
+          summaryUpTo: record.summaryUpTo,
+        },
         record.createdAt,
       ],
     );
@@ -323,6 +335,8 @@ function toSession(row: any): SessionRecord {
     title: row.data?.title ?? "New chat",
     messages: row.data?.messages ?? [],
     botId: row.data?.botId,
+    summary: row.data?.summary,
+    summaryUpTo: row.data?.summaryUpTo,
     createdAt: row.created_at.toISOString(),
   };
 }

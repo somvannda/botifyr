@@ -116,4 +116,27 @@ describe("runAgent", () => {
     expect(result.ok).toBe(false);
     expect(result.summary).toContain("Model error");
   });
+
+  it("includes the rolling summary in the system prompt", async () => {
+    let system = "";
+    const provider: ModelProvider = {
+      name: "capture",
+      async complete({ messages }) {
+        system = messages[0]?.content ?? "";
+        return { text: "ok", toolCalls: [] };
+      },
+    };
+
+    await runAgent({
+      goal: "hi",
+      summary: "The user is called Sam and prefers blue.",
+      provider,
+      tools: [],
+      workspaceDir: ".",
+      requestApproval: async () => true,
+      onStep: () => {},
+    });
+
+    expect(system).toContain("Sam");
+  });
 });

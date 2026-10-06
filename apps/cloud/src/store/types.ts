@@ -17,6 +17,8 @@ export interface SessionRecord {
   messages: ChatMessage[];
   createdAt: string;
   botId?: string;
+  summary?: string;
+  summaryUpTo?: number;
 }
 
 /** A bot: a named agent that owns one conversation thread. */

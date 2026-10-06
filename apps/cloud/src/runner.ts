@@ -28,6 +28,8 @@ export interface RunnerDeps {
   local?: boolean;
   /** Standing instructions for the bot that owns this conversation. */
   instructions?: string;
+  /** Rolling summary of older turns (memory for long chats). */
+  summary?: string;
   /** Identity of the bot authoring this reply (used to attribute group messages). */
   author?: { id: string };
 }
@@ -67,6 +69,28 @@ function getProvider(): ModelProvider {
     provider = withResponseCache(base, Number(process.env.BOTIFYR_CACHE_TTL_SECONDS ?? 300));
   }
   return provider;
+}
+
+/** Summarize older turns cheaply so long chats keep their memory. */
+export async function summarizeConversation(text: string): Promise<string> {
+  const maxTokens = Number(process.env.BOTIFYR_SUMMARY_MAX_TOKENS ?? 300);
+  try {
+    const response = await getProvider().complete({
+      messages: [
+        {
+          role: "system",
+          content:
+            "You compress conversation history. Preserve names, facts, decisions, preferences and open tasks. Reply with a concise summary and nothing else.",
+        },
+        { role: "user", content: text },
+      ],
+      tools: [],
+      maxTokens,
+    });
+    return (response.text ?? "").trim().slice(0, 2000);
+  } catch {
+    return "";
+  }
 }
 
 export function runtimeInfo(): {
@@ -202,6 +226,7 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
       goal: task.goal,
       history,
       instructions,
+      summary: deps.summary,
       provider: getProvider(),
       tools,
       workspaceDir: process.cwd(),
