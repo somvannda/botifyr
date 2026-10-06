@@ -51,3 +51,22 @@ add runtime-limit code to solve a development-cost problem, and vice-versa.
 - Prefer the **cheapest model** that can do the job — for both the product default
   and the coding agent.
 - Keep prompts short; avoid sending large diffs or files when a summary will do.
+
+## 7. One UI, two hosts — never fork the UI
+The desktop app and the web portal must be **pixel-identical**. There is exactly
+**one** interface: `BotifyrApp` in `packages/ui/src/BotifyrApp.tsx`, plus the
+shared styles in `packages/ui/src/styles.css`.
+
+Rules:
+- **Never build a second UI.** Do not write platform-specific screens, styles or
+  copies of components in `apps/desktop` or `apps/portal`.
+- **Hosts stay thin.** `apps/desktop/src/App.tsx` = `BotifyrApp` + a Tauri
+  `BotBridge`; `apps/portal/src/App.tsx` = `BotifyrApp` + `webBridge`. Nothing
+  else. Put host differences behind `BotBridge` (`packages/ui/src/bridge.ts`) —
+  e.g. `openExternal`, `focusWindow`, `startLocalNode`/`stopLocalNode`.
+- **Host-specific values** (like the desktop's 34px title bar) are CSS variables
+  set by the host (`--titlebar`), never hard-coded in the shared app.
+- **Fix the UI once** in `packages/ui`; both platforms get it.
+- `pnpm`/`npm` guard: `packages/ui/src/parity.test.ts` asserts both hosts still
+  render `BotifyrApp` and stay thin. A new bespoke UI file in a host should be
+  treated as a bug.
