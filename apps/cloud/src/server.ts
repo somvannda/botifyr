@@ -772,7 +772,7 @@ export async function buildServer(options: ServerOptions) {
 
   app.put<{
     Params: { id: string };
-    Body: { name?: string; emoji?: string; scheme?: number; instructions?: string };
+    Body: { name?: string; emoji?: string; scheme?: number; instructions?: string; memberIds?: string[] };
   }>("/v1/bots/:id", { preHandler: requireAuth }, async (request, reply) => {
     const userId = request.userId as string;
     const bot = await store.getBot(request.params.id);
@@ -794,6 +794,14 @@ export async function buildServer(options: ServerOptions) {
     if (Number.isInteger(request.body?.scheme)) bot.scheme = Number(request.body?.scheme);
     if (typeof request.body?.instructions === "string")
       bot.instructions = request.body.instructions.slice(0, 4000);
+
+    // Group membership: keep only ids the user owns (excluding the bot itself).
+    if (Array.isArray(request.body?.memberIds)) {
+      const owned = await store.listBots(userId);
+      const ownedIds = new Set(owned.filter((entry) => entry.id !== bot.id).map((entry) => entry.id));
+      const members = request.body.memberIds.filter((id) => ownedIds.has(id));
+      bot.memberIds = members.length > 0 ? members : undefined;
+    }
 
     await store.updateBot(bot);
     return bot;

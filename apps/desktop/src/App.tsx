@@ -355,7 +355,7 @@ export default function App() {
     setBotEmoji(bot.emoji);
     setBotScheme(bot.scheme % BOT_SCHEMES.length);
     setBotIntro(bot.instructions);
-    setGroupMembers([]);
+    setGroupMembers(bot.memberIds ?? []);
   }
 
   function closeBotModal() {
@@ -373,6 +373,7 @@ export default function App() {
           emoji: botEmoji.trim() || "🤖",
           scheme: botScheme,
           instructions: botIntro.trim(),
+          memberIds: groupMembers,
         });
         setBots((prev) => prev.map((entry) => (entry.id === updated.id ? updated : entry)));
         setSessions((prev) =>
@@ -1180,7 +1181,7 @@ export default function App() {
               ))}
             </div>
 
-            {createBotMode === "group" && (
+            {(createBotMode === "group" || createBotMode === "edit") && (
               <ul className="member-list">
                 {bots.map((bot) => (
                   <li key={bot.id}>

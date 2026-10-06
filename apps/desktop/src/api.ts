@@ -122,7 +122,7 @@ export class BotifyrClient {
 
   updateBot(
     id: string,
-    input: { name?: string; emoji?: string; scheme?: number; instructions?: string },
+    input: { name?: string; emoji?: string; scheme?: number; instructions?: string; memberIds?: string[] },
   ): Promise<Bot> {
     return this.request(`/v1/bots/${id}`, { method: "PUT", json: true, body: JSON.stringify(input) });
   }
