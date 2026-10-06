@@ -96,6 +96,7 @@ export default function App() {
   const [connections, setConnections] = useState<ConnectionInfo[]>([]);
   const [connectingApp, setConnectingApp] = useState<string | null>(null);
   const [marketQuery, setMarketQuery] = useState("");
+  const [marketFilter, setMarketFilter] = useState<"all" | "installed">("all");
   const [tokenInputFor, setTokenInputFor] = useState<string | null>(null);
   const [tokenValue, setTokenValue] = useState("");
   const [bots, setBots] = useState<Bot[]>([]);
@@ -1454,96 +1455,126 @@ export default function App() {
       {showConnectApps && (
         <div className="apps-overlay" onClick={() => setShowConnectApps(false)}>
           <div className="apps-panel marketplace" onClick={(event) => event.stopPropagation()}>
-            <div className="apps-head">
+            <div className="market-head">
               <span className="apps-title">Marketplace</span>
-              <button className="round small" type="button" onClick={() => setShowConnectApps(false)}>
-                ✕
-              </button>
+              <div className="market-head-right">
+                <button
+                  className={`market-installed${marketFilter === "installed" ? " active" : ""}`}
+                  type="button"
+                  onClick={() => setMarketFilter((value) => (value === "installed" ? "all" : "installed"))}
+                >
+                  <span className="market-installed-dot" />
+                  {connections.length} installed <span className="account-chev">›</span>
+                </button>
+                <button className="round small" type="button" onClick={() => setShowConnectApps(false)}>
+                  <CloseIcon size={13} />
+                </button>
+              </div>
             </div>
-            <p className="apps-sub">
-              Connect the apps you already use. Each connection is authorized with the provider, and you can
-              revoke it any time.
-            </p>
-            <input
-              className="market-search"
-              placeholder="Search apps…"
-              value={marketQuery}
-              onChange={(event) => setMarketQuery(event.target.value)}
-            />
-            <div className="market-grid">
-              {MARKETPLACE.filter((app) =>
-                marketQuery.trim()
-                  ? `${app.name} ${app.category}`.toLowerCase().includes(marketQuery.trim().toLowerCase())
-                  : true,
-              ).map((app) => {
-                const connected = app.provider
+
+            <div className="market-search-wrap">
+              <SearchIcon size={15} />
+              <input
+                className="market-search"
+                placeholder="Search plugins"
+                value={marketQuery}
+                onChange={(event) => setMarketQuery(event.target.value)}
+              />
+            </div>
+
+            {MARKET_SECTIONS.map((section) => {
+              const apps = MARKETPLACE.filter((app) => app.section === section).filter((app) => {
+                const installed = app.provider
                   ? connections.some((entry) => entry.provider === app.provider)
                   : false;
-                return (
-                  <div key={app.id} className="market-card">
-                    <span className="market-ico">{app.icon}</span>
-                    <span className="market-name">{app.name}</span>
-                    <span className="market-desc">{app.desc}</span>
-                    {app.provider ? (
-                      connected ? (
-                        <button
-                          className="ghost small"
-                          type="button"
-                          onClick={() => void disconnectApp(app.provider!)}
-                        >
-                          Disconnect
-                        </button>
-                      ) : app.tokenApp ? (
-                        tokenInputFor === app.provider ? (
-                          <div className="market-token">
-                            <input
-                              type="password"
-                              placeholder="Personal access token"
-                              value={tokenValue}
-                              onChange={(event) => setTokenValue(event.target.value)}
-                              onKeyDown={(event) => {
-                                if (event.key === "Enter") void saveToken(app.provider!);
-                              }}
-                            />
-                            <button
-                              className="ghost small"
-                              type="button"
-                              onClick={() => void saveToken(app.provider!)}
-                            >
-                              Save
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            className="ghost small"
-                            type="button"
-                            onClick={() => {
-                              setTokenInputFor(app.provider);
-                              setTokenValue("");
-                            }}
-                          >
-                            Connect
-                          </button>
-                        )
-                      ) : (
-                        <button
-                          className="ghost small"
-                          type="button"
-                          disabled={connectingApp === app.provider}
-                          onClick={() => void connectApp(app.provider!)}
-                        >
-                          {connectingApp === app.provider ? "Connecting…" : "Connect"}
-                        </button>
-                      )
-                    ) : (
-                      <button className="ghost small" type="button" disabled>
-                        Coming soon
-                      </button>
-                    )}
+                if (marketFilter === "installed" && !installed) return false;
+                if (!marketQuery.trim()) return true;
+                return `${app.name} ${app.category} ${app.desc}`
+                  .toLowerCase()
+                  .includes(marketQuery.trim().toLowerCase());
+              });
+              if (apps.length === 0) return null;
+              return (
+                <section key={section} className="market-section">
+                  <div className="market-section-head">
+                    <h3>{section}</h3>
+                    {section === "Featured" && <span className="market-viewall">View all</span>}
                   </div>
-                );
-              })}
-            </div>
+                  <div className="market-rows">
+                    {apps.map((app) => {
+                      const installed = app.provider
+                        ? connections.some((entry) => entry.provider === app.provider)
+                        : false;
+                      return (
+                        <div key={app.id} className="market-row">
+                          <span className="market-ico">{app.icon}</span>
+                          <span className="market-row-text">
+                            <span className="market-name">{app.name}</span>
+                            <span className="market-desc">{app.desc}</span>
+                          </span>
+                          {app.provider ? (
+                            installed ? (
+                              <button
+                                className="market-btn"
+                                type="button"
+                                onClick={() => void disconnectApp(app.provider!)}
+                              >
+                                Disconnect
+                              </button>
+                            ) : app.tokenApp ? (
+                              tokenInputFor === app.provider ? (
+                                <div className="market-token">
+                                  <input
+                                    type="password"
+                                    placeholder="Token"
+                                    value={tokenValue}
+                                    onChange={(event) => setTokenValue(event.target.value)}
+                                    onKeyDown={(event) => {
+                                      if (event.key === "Enter") void saveToken(app.provider!);
+                                    }}
+                                  />
+                                  <button
+                                    className="market-btn"
+                                    type="button"
+                                    onClick={() => void saveToken(app.provider!)}
+                                  >
+                                    Save
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  className="market-btn"
+                                  type="button"
+                                  onClick={() => {
+                                    setTokenInputFor(app.provider);
+                                    setTokenValue("");
+                                  }}
+                                >
+                                  Add
+                                </button>
+                              )
+                            ) : (
+                              <button
+                                className="market-btn"
+                                type="button"
+                                disabled={connectingApp === app.provider}
+                                onClick={() => void connectApp(app.provider!)}
+                              >
+                                {connectingApp === app.provider ? "Connecting…" : "Add"}
+                              </button>
+                            )
+                          ) : (
+                            <button className="market-btn" type="button" disabled>
+                              Add
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+              );
+            })}
           </div>
         </div>
       )}
@@ -2020,16 +2051,50 @@ interface MarketApp {
   tokenApp?: boolean;
   name: string;
   category: string;
+  section: string;
   desc: string;
   icon: ReactNode;
 }
 
+const MARKET_SECTIONS = ["For you", "Featured", "Developer", "Design", "Files", "Social"];
+
 const MARKETPLACE: MarketApp[] = [
+  {
+    id: "github",
+    provider: "github",
+    tokenApp: true,
+    name: "GitHub",
+    category: "Developer",
+    section: "For you",
+    desc: "Read repositories and issues",
+    icon: <span className="market-emoji">🐙</span>,
+  },
+  {
+    id: "slack",
+    provider: "slack",
+    tokenApp: true,
+    name: "Slack",
+    category: "Communication",
+    section: "For you",
+    desc: "Send and read team messages",
+    icon: <span className="market-emoji">💬</span>,
+  },
+  {
+    id: "telegram",
+    provider: "telegram",
+    tokenApp: true,
+    name: "Telegram",
+    category: "Communication",
+    section: "For you",
+    desc: "Send messages from your Telegram bot",
+    icon: <span className="market-emoji">✈️</span>,
+  },
   {
     id: "gmail",
     provider: "gmail",
     name: "Gmail",
     category: "Communication",
+    section: "Featured",
     desc: "Read, search, and draft email",
     icon: <GmailIcon size={26} />,
   },
@@ -2038,6 +2103,7 @@ const MARKETPLACE: MarketApp[] = [
     provider: "calendar",
     name: "Google Calendar",
     category: "Productivity",
+    section: "Featured",
     desc: "See your schedule and create events",
     icon: <CalendarIcon size={26} />,
   },
@@ -2046,17 +2112,9 @@ const MARKETPLACE: MarketApp[] = [
     provider: "drive",
     name: "Google Drive",
     category: "Files",
+    section: "Featured",
     desc: "Find, read, and organize your files",
     icon: <DriveIcon size={26} />,
-  },
-  {
-    id: "slack",
-    provider: "slack",
-    tokenApp: true,
-    name: "Slack",
-    category: "Communication",
-    desc: "Send and read team messages",
-    icon: <span className="market-emoji">💬</span>,
   },
   {
     id: "notion",
@@ -2064,40 +2122,25 @@ const MARKETPLACE: MarketApp[] = [
     tokenApp: true,
     name: "Notion",
     category: "Productivity",
+    section: "Featured",
     desc: "Search and update your pages",
     icon: <span className="market-emoji">📝</span>,
-  },
-  {
-    id: "github",
-    provider: "github",
-    tokenApp: true,
-    name: "GitHub",
-    category: "Developer",
-    desc: "Read repositories and issues",
-    icon: <span className="market-emoji">🐙</span>,
   },
   {
     id: "linear",
     provider: null,
     name: "Linear",
     category: "Developer",
+    section: "Developer",
     desc: "Track issues and projects",
     icon: <span className="market-emoji">📐</span>,
-  },
-  {
-    id: "telegram",
-    provider: "telegram",
-    tokenApp: true,
-    name: "Telegram",
-    category: "Communication",
-    desc: "Send messages from your Telegram bot",
-    icon: <span className="market-emoji">✈️</span>,
   },
   {
     id: "figma",
     provider: null,
     name: "Figma",
     category: "Design",
+    section: "Design",
     desc: "Read design files and comments",
     icon: <span className="market-emoji">🎨</span>,
   },
@@ -2106,6 +2149,7 @@ const MARKETPLACE: MarketApp[] = [
     provider: null,
     name: "Dropbox",
     category: "Files",
+    section: "Files",
     desc: "Find and read your files",
     icon: <span className="market-emoji">📦</span>,
   },
@@ -2114,6 +2158,7 @@ const MARKETPLACE: MarketApp[] = [
     provider: null,
     name: "X",
     category: "Social",
+    section: "Social",
     desc: "Draft and schedule posts",
     icon: <span className="market-emoji">𝕏</span>,
   },
