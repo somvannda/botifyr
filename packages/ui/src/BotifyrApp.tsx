@@ -2802,6 +2802,24 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                           Play
                         </button>
                       )}
+                      {mediaKind(item.name) === "image" && (
+                        <button
+                          className="ghost small"
+                          type="button"
+                          onClick={() => setPlayerFile({ name: item.name, url: mediaUrl(item) })}
+                        >
+                          View
+                        </button>
+                      )}
+                      {mediaKind(item.name) === "file" && (
+                        <button
+                          className="ghost small"
+                          type="button"
+                          onClick={() => void openExternal(mediaUrl(item))}
+                        >
+                          Open
+                        </button>
+                      )}
                       <button
                         className="ghost small"
                         type="button"
@@ -3423,7 +3441,9 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                 ✕
               </button>
             </div>
-            {/\.(mp3|m4a|aac|ogg|wav)$/i.test(playerFile.name) ? (
+            {/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(playerFile.name) ? (
+              <img className="player-media" src={playerFile.url} alt={playerFile.name} />
+            ) : /\.(mp3|m4a|aac|ogg|wav|flac)$/i.test(playerFile.name) ? (
               <audio className="player-media" src={playerFile.url} controls autoPlay />
             ) : (
               <video className="player-media" src={playerFile.url} controls autoPlay />
