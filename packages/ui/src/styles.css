@@ -52,6 +52,15 @@
   box-sizing: border-box;
 }
 
+/* One font everywhere: form controls don't inherit the page font by default,
+   which made buttons/inputs look like a different typeface than the chat. */
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
 html,
 body,
 #root {
