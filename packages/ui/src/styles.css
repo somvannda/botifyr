@@ -1662,6 +1662,34 @@ body {
   white-space: nowrap;
 }
 
+.thread-search {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--muted);
+}
+
+.thread-search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+}
+
+.thread-search-count {
+  font-size: 11px;
+  color: var(--muted);
+}
+
 .pill-avatar {
   width: 16px;
   height: 16px;

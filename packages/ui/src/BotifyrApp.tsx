@@ -298,6 +298,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
 
   const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [showAudit, setShowAudit] = useState(false);
+  const [findOpen, setFindOpen] = useState(false);
+  const [findQuery, setFindQuery] = useState("");
 
   const activeIdRef = useRef<string | null>(null);
   activeIdRef.current = activeSessionId;
@@ -1350,6 +1352,13 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   }
 
   const activeSession = sessions.find((s) => s.id === activeSessionId) ?? null;
+  const findTerm = findQuery.trim().toLowerCase();
+  const visibleMessages = activeSession
+    ? findTerm
+      ? activeSession.messages.filter((message) => message.content.toLowerCase().includes(findTerm))
+      : activeSession.messages
+    : [];
+  const findMatches = findTerm ? visibleMessages.length : 0;
   const sessionTasks = Object.values(tasks).filter((t) => t.sessionId === activeSessionId);
   const liveTask =
     sessionTasks
@@ -2142,17 +2151,52 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
 
         {!showNewChat && (
           <header className="topbar">
-            <span className="thread-pill">
-              <BotLogo size={18} scheme={activeScheme} />
-              {activeBot && (
-                <span className="newchat-emoji">
-                  {cleanEmoji(activeBot.emoji, (activeBot.memberIds?.length ?? 0) > 0)}
-                </span>
-              )}
-              {liveTask && <span className={`status-dot status-${liveTask.status}`} />}
-              <span className="thread-pill-name">{activeBotName}</span>
-            </span>
+            {findOpen ? (
+              <div className="thread-search">
+                <SearchIcon size={15} />
+                <input
+                  placeholder="Search this chat"
+                  value={findQuery}
+                  onChange={(event) => setFindQuery(event.target.value)}
+                  autoFocus
+                />
+                {findQuery.trim() && <span className="thread-search-count">{findMatches}</span>}
+                <button
+                  className="icon-btn sm"
+                  type="button"
+                  aria-label="Close search"
+                  onClick={() => {
+                    setFindOpen(false);
+                    setFindQuery("");
+                  }}
+                >
+                  <CloseIcon size={13} />
+                </button>
+              </div>
+            ) : (
+              <span className="thread-pill">
+                <BotLogo size={18} scheme={activeScheme} />
+                {activeBot && (
+                  <span className="newchat-emoji">
+                    {cleanEmoji(activeBot.emoji, (activeBot.memberIds?.length ?? 0) > 0)}
+                  </span>
+                )}
+                {liveTask && <span className={`status-dot status-${liveTask.status}`} />}
+                <span className="thread-pill-name">{activeBotName}</span>
+              </span>
+            )}
             <div className="topbar-right">
+              <button
+                className="bot-menu-btn"
+                type="button"
+                title={findOpen ? "Close search" : "Search this chat"}
+                onClick={() => {
+                  setFindOpen((value) => !value);
+                  setFindQuery("");
+                }}
+              >
+                <SearchIcon size={16} />
+              </button>
               <button
                 className="bot-menu-btn"
                 type="button"
@@ -2211,7 +2255,10 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                 </div>
               )}
 
-              {activeSession.messages.map((message) => {
+              {findTerm && visibleMessages.length === 0 && (
+                <div className="bot-panel-empty">No matches in this chat.</div>
+              )}
+              {visibleMessages.map((message) => {
                 if (activeSession.kind === "dm" || activeSession.kind === "group") {
                   const mine = message.senderId === user.id;
                   const person = friends.find((entry) => entry.id === message.senderId);
