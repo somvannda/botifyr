@@ -10,6 +10,7 @@ import type {
   InvoiceRecord,
   LearnedSkillRecord,
   LedgerRecord,
+  MediaRecipe,
   MediaRecord,
   ModelPricingRecord,
   NotificationRecord,
@@ -861,6 +862,44 @@ export class PostgresStore implements Store {
       ],
     );
   }
+
+  async listMediaRecipes(): Promise<MediaRecipe[]> {
+    const { rows } = await this.pool.query("SELECT * FROM media_recipes ORDER BY domain ASC");
+    return rows.map(toMediaRecipe);
+  }
+
+  async getMediaRecipe(domain: string): Promise<MediaRecipe | null> {
+    const { rows } = await this.pool.query("SELECT * FROM media_recipes WHERE domain = $1", [
+      domain.toLowerCase(),
+    ]);
+    return rows[0] ? toMediaRecipe(rows[0]) : null;
+  }
+
+  async saveMediaRecipe(record: MediaRecipe): Promise<void> {
+    await this.pool.query(
+      "INSERT INTO media_recipes (domain, pattern, headers, status, created_by, note, created_at, updated_at) " +
+        "VALUES ($1,$2,$3,$4,$5,$6,$7,$8) " +
+        "ON CONFLICT (domain) DO UPDATE SET pattern = EXCLUDED.pattern, headers = EXCLUDED.headers, " +
+        "status = EXCLUDED.status, created_by = EXCLUDED.created_by, note = EXCLUDED.note, updated_at = EXCLUDED.updated_at",
+      [
+        record.domain.toLowerCase(),
+        record.pattern,
+        record.headers ?? null,
+        record.status,
+        record.createdBy ?? null,
+        record.note ?? null,
+        record.createdAt,
+        record.updatedAt,
+      ],
+    );
+  }
+
+  async deleteMediaRecipe(domain: string): Promise<boolean> {
+    const result = await this.pool.query("DELETE FROM media_recipes WHERE domain = $1", [
+      domain.toLowerCase(),
+    ]);
+    return (result.rowCount ?? 0) > 0;
+  }
 }
 
 function toMedia(row: any): MediaRecord {
@@ -990,6 +1029,19 @@ function toNotification(row: any): NotificationRecord {
     body: row.body ?? undefined,
     channels: row.channels ?? [],
     sent: row.sent ?? {},
+    createdAt: new Date(row.created_at).toISOString(),
+    updatedAt: new Date(row.updated_at).toISOString(),
+  };
+}
+
+function toMediaRecipe(row: any): MediaRecipe {
+  return {
+    domain: row.domain,
+    pattern: row.pattern,
+    headers: row.headers ?? undefined,
+    status: row.status,
+    createdBy: row.created_by ?? undefined,
+    note: row.note ?? undefined,
     createdAt: new Date(row.created_at).toISOString(),
     updatedAt: new Date(row.updated_at).toISOString(),
   };

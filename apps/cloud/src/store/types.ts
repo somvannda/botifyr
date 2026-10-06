@@ -1,6 +1,13 @@
-import type { BotSchedule, ChatMessage, ModelPricingRecord, PlatformSettings, Task } from "@botifyr/shared";
+import type {
+  BotSchedule,
+  ChatMessage,
+  MediaRecipe,
+  ModelPricingRecord,
+  PlatformSettings,
+  Task,
+} from "@botifyr/shared";
 
-export type { ModelPricingRecord, PlatformSettings };
+export type { MediaRecipe, ModelPricingRecord, PlatformSettings };
 
 /** Persistence contracts shared by the memory and Postgres stores. */
 
@@ -296,6 +303,12 @@ export interface Store {
       Pick<UserRecord, "plan" | "billingMode" | "periodStart" | "periodEnd" | "graceUntil" | "subStatus">
     >,
   ): Promise<void>;
+
+  /* Media extraction recipes (self-learned, moderated). */
+  listMediaRecipes(): Promise<MediaRecipe[]>;
+  getMediaRecipe(domain: string): Promise<MediaRecipe | null>;
+  saveMediaRecipe(record: MediaRecipe): Promise<void>;
+  deleteMediaRecipe(domain: string): Promise<boolean>;
 }
 
 /* -------------------------------------------------------------------------- */

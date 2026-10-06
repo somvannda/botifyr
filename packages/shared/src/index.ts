@@ -273,6 +273,24 @@ export interface ModelPricingRecord {
   updatedAt: string;
 }
 
+/**
+ * A self-learned extraction recipe for a domain yt-dlp doesn't support: how to
+ * find the media URL on that site, learned once and reused deterministically.
+ */
+export interface MediaRecipe {
+  domain: string;
+  /** Regex matched against the page source / API body to find the stream URL. */
+  pattern: string;
+  /** Headers to send when fetching (Referer / User-Agent / cookies). */
+  headers?: Record<string, string>;
+  status: "pending" | "approved" | "rejected";
+  createdBy?: string;
+  /** Free-form note from the learner (e.g. the sample page used). */
+  note?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Realtime events (cloud -> client over the websocket stream)                 */
 /* -------------------------------------------------------------------------- */

@@ -161,6 +161,19 @@ CREATE TABLE IF NOT EXISTS media (
 );
 CREATE INDEX IF NOT EXISTS media_user_idx ON media (user_id, created_at);
 
+/* Self-learned per-domain extraction recipes (yt-dlp-unsupported sites). */
+CREATE TABLE IF NOT EXISTS media_recipes (
+  domain     TEXT PRIMARY KEY,
+  pattern    TEXT NOT NULL,
+  headers    JSONB,
+  status     TEXT NOT NULL DEFAULT 'pending',
+  created_by TEXT,
+  note       TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS media_recipes_status_idx ON media_recipes (status);
+
 /* --- Billing (prepaid plans + on-demand credits via ChmabaPay) ------------- */
 ALTER TABLE users ADD COLUMN IF NOT EXISTS billing_mode TEXT NOT NULL DEFAULT 'free';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS period_start TIMESTAMPTZ;

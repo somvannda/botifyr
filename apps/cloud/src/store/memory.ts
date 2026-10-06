@@ -9,6 +9,7 @@ import type {
   InvoiceRecord,
   LearnedSkillRecord,
   LedgerRecord,
+  MediaRecipe,
   MediaRecord,
   ModelPricingRecord,
   NotificationRecord,
@@ -39,6 +40,7 @@ export class MemoryStore implements Store {
   private learnedSkills = new Map<string, LearnedSkillRecord>();
   private apiKeys = new Map<string, ApiKeyRecord>();
   private media = new Map<string, MediaRecord>();
+  private mediaRecipes = new Map<string, MediaRecipe>();
   private friendRequests = new Map<string, FriendRequestRecord>();
   private friendships = new Set<string>();
   private settings: PlatformSettings | null = null;
@@ -575,6 +577,25 @@ export class MemoryStore implements Store {
   ): Promise<void> {
     const record = this.users.get(id);
     if (record) Object.assign(record, fields);
+  }
+
+  async listMediaRecipes(): Promise<MediaRecipe[]> {
+    return [...this.mediaRecipes.values()]
+      .sort((a, b) => a.domain.localeCompare(b.domain))
+      .map((record) => ({ ...record }));
+  }
+
+  async getMediaRecipe(domain: string): Promise<MediaRecipe | null> {
+    const record = this.mediaRecipes.get(domain.toLowerCase());
+    return record ? { ...record } : null;
+  }
+
+  async saveMediaRecipe(record: MediaRecipe): Promise<void> {
+    this.mediaRecipes.set(record.domain.toLowerCase(), { ...record });
+  }
+
+  async deleteMediaRecipe(domain: string): Promise<boolean> {
+    return this.mediaRecipes.delete(domain.toLowerCase());
   }
 }
 
