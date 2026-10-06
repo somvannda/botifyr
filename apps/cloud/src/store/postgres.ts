@@ -16,6 +16,21 @@ import type {
 } from "./types.js";
 import { SCHEMA_SQL } from "./schema.js";
 
+/** Serialize writes per session so concurrent runs can't clobber each other. */
+const sessionWriteLocks = new Map<string, Promise<unknown>>();
+function withLock<T>(id: string, fn: () => Promise<T>): Promise<T> {
+  const previous = sessionWriteLocks.get(id) ?? Promise.resolve();
+  const run = previous.then(fn, fn);
+  sessionWriteLocks.set(
+    id,
+    run.then(
+      () => undefined,
+      () => undefined,
+    ),
+  );
+  return run;
+}
+
 /** Durable store backed by Postgres. Tasks are stored as JSONB documents. */
 
 export class PostgresStore implements Store {
@@ -114,22 +129,37 @@ export class PostgresStore implements Store {
   }
 
   async updateSession(record: SessionRecord): Promise<void> {
-    await this.pool.query(
-      "INSERT INTO sessions (id, user_id, data, created_at) VALUES ($1, $2, $3, $4) " +
-        "ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data",
-      [
-        record.id,
-        record.userId,
-        {
-          title: record.title,
-          messages: record.messages,
-          botId: record.botId,
-          summary: record.summary,
-          summaryUpTo: record.summaryUpTo,
-        },
-        record.createdAt,
-      ],
-    );
+    await withLock(record.id, async () => {
+      const { rows } = await this.pool.query("SELECT data FROM sessions WHERE id = $1", [record.id]);
+      const existing = rows[0]?.data as
+        { messages?: SessionRecord["messages"]; summary?: string; summaryUpTo?: number } | undefined;
+      const existingMessages = existing?.messages ?? [];
+      const incoming = record.messages ?? [];
+      let messages = incoming;
+      // A writer holding a stale snapshot must never drop messages another run
+      // already appended: union by id and restore chronological order.
+      if (existingMessages.length > incoming.length) {
+        const seen = new Set(incoming.map((message) => message.id));
+        messages = [...incoming, ...existingMessages.filter((message) => !seen.has(message.id))];
+        messages.sort((a, b) => (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0));
+      }
+      await this.pool.query(
+        "INSERT INTO sessions (id, user_id, data, created_at) VALUES ($1, $2, $3, $4) " +
+          "ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data",
+        [
+          record.id,
+          record.userId,
+          {
+            title: record.title,
+            messages,
+            botId: record.botId,
+            summary: record.summary ?? existing?.summary,
+            summaryUpTo: record.summaryUpTo ?? existing?.summaryUpTo,
+          },
+          record.createdAt,
+        ],
+      );
+    });
   }
 
   async getSession(id: string): Promise<SessionRecord | null> {
