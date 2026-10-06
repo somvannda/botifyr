@@ -577,8 +577,8 @@ export default function App() {
     }
   }
 
-  async function send() {
-    const trimmed = text.trim();
+  async function sendMessage(raw: string) {
+    const trimmed = raw.trim();
     if (!trimmed || !activeSessionId || sending) return;
     setSending(true);
     setError(null);
@@ -593,6 +593,10 @@ export default function App() {
     } finally {
       setSending(false);
     }
+  }
+
+  async function send() {
+    await sendMessage(text);
   }
 
   function saveLabel() {
@@ -1201,12 +1205,28 @@ export default function App() {
                 const msgBot =
                   (message.botId && bots.find((entry) => entry.id === message.botId)) || activeBot;
                 const msgScheme = BOT_SCHEMES[(msgBot?.scheme ?? 0) % BOT_SCHEMES.length];
+                const parsed = parseOptions(message.content);
                 return (
                   <div key={message.id} className="msg-assistant">
                     <BotLogo size={26} scheme={msgScheme} className="msg-bot-logo" />
                     <div className="msg-body">
                       {msgBot && <div className="msg-author">{msgBot.name}</div>}
-                      <Markdown text={message.content} />
+                      <Markdown text={parsed.body} />
+                      {parsed.options.length > 0 && (
+                        <div className="quick-replies">
+                          {parsed.options.map((option, index) => (
+                            <button
+                              key={index}
+                              className="quick-reply"
+                              type="button"
+                              disabled={busy}
+                              onClick={() => void sendMessage(option)}
+                            >
+                              {option}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                       <div className="msg-actions">
                         <button
                           className="msg-action"
@@ -1239,7 +1259,7 @@ export default function App() {
                   <div className="msg-body">
                     {streamBot && <div className="msg-author">{streamBot.name}</div>}
                     {stream && stream.text ? (
-                      <span className="reveal">{stream.text}</span>
+                      <span className="reveal">{stream.text.split("```options")[0]}</span>
                     ) : (
                       <span className="think-dots">
                         <i />
@@ -2378,6 +2398,18 @@ function initials(email: string): string {
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/** Split an assistant message into its text and any trailing ```options block. */
+function parseOptions(text: string): { body: string; options: string[] } {
+  const match = /```options\s*\n([\s\S]*?)```/i.exec(text);
+  if (!match) return { body: text, options: [] };
+  const options = match[1]
+    .split("\n")
+    .map((line) => line.replace(/^\s*[-*]\s*/, "").trim())
+    .filter(Boolean);
+  const body = (text.slice(0, match.index) + text.slice(match.index + match[0].length)).trimEnd();
+  return { body, options };
 }
 
 function iconFor(status: Task["steps"][number]["status"]): string {
