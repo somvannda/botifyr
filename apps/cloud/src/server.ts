@@ -355,6 +355,42 @@ export async function buildServer(options: ServerOptions) {
     return task;
   }
 
+  /** Run a bot's scheduled prompt with no incoming user message. */
+  async function runScheduled(session: Session, bot: Bot, prompt: string): Promise<void> {
+    const windowSize = maxHistoryTurns * 2;
+    const history = session.messages
+      .slice(-windowSize)
+      .map((message) => ({ role: message.role, content: message.content.slice(0, maxMessageChars) }));
+    const now = new Date().toISOString();
+    const task: Task = {
+      id: randomUUID(),
+      sessionId: session.id,
+      goal: prompt,
+      status: "queued",
+      steps: [],
+      createdAt: now,
+      updatedAt: now,
+    };
+    await store.createTask(task);
+    rememberSession(session.id, bot.userId);
+    rememberTask(task.id, session.id, bot.userId);
+    emit({ type: "task.created", task });
+
+    void runTask(
+      {
+        store,
+        userId: bot.userId,
+        history,
+        local: false,
+        instructions: bot.instructions,
+        summary: session.summary,
+        vaultKey,
+        author: { id: bot.id },
+      },
+      task,
+    ).catch((error) => app.log.error({ err: error, taskId: task.id }, "scheduled run failed"));
+  }
+
   /** Create a bot together with the conversation thread it owns. */
   async function createBotFor(
     userId: string,
@@ -775,7 +811,14 @@ export async function buildServer(options: ServerOptions) {
 
   app.put<{
     Params: { id: string };
-    Body: { name?: string; emoji?: string; scheme?: number; instructions?: string; memberIds?: string[] };
+    Body: {
+      name?: string;
+      emoji?: string;
+      scheme?: number;
+      instructions?: string;
+      memberIds?: string[];
+      schedule?: { prompt?: string; everyMinutes?: number; enabled?: boolean };
+    };
   }>("/v1/bots/:id", { preHandler: requireAuth }, async (request, reply) => {
     const userId = request.userId as string;
     const bot = await store.getBot(request.params.id);
@@ -804,6 +847,26 @@ export async function buildServer(options: ServerOptions) {
       const ownedIds = new Set(owned.filter((entry) => entry.id !== bot.id).map((entry) => entry.id));
       const members = request.body.memberIds.filter((id) => ownedIds.has(id));
       bot.memberIds = members.length > 0 ? members : undefined;
+    }
+
+    // Schedule: run a prompt automatically every N minutes.
+    if (request.body?.schedule && typeof request.body.schedule === "object") {
+      const prompt = (request.body.schedule.prompt ?? "").trim().slice(0, 2000);
+      const everyMinutes = Math.max(1, Math.min(10080, Number(request.body.schedule.everyMinutes ?? 60)));
+      if (!prompt) {
+        bot.schedule = undefined;
+      } else {
+        const previous = bot.schedule;
+        const changed = !previous || previous.prompt !== prompt || previous.everyMinutes !== everyMinutes;
+        bot.schedule = {
+          prompt,
+          everyMinutes,
+          enabled: request.body.schedule.enabled !== false,
+          nextRunAt: changed
+            ? new Date(Date.now() + everyMinutes * 60_000).toISOString()
+            : previous?.nextRunAt,
+        };
+      }
     }
 
     await store.updateBot(bot);
@@ -1142,6 +1205,35 @@ export async function buildServer(options: ServerOptions) {
     await store.createToken(tokenHash, request.userId as string, expiresAt);
     return { token, expiresAt };
   });
+
+  // Always-on bots: fire scheduled prompts while the cloud is running.
+  const scheduler = setInterval(() => {
+    void (async () => {
+      try {
+        const now = Date.now();
+        const scheduled = await store.listScheduledBots();
+        for (const bot of scheduled) {
+          const schedule = bot.schedule;
+          if (!schedule?.enabled) continue;
+          if (schedule.nextRunAt && new Date(schedule.nextRunAt).getTime() > now) continue;
+          // Advance first so a slow run can't double-fire.
+          bot.schedule = {
+            ...schedule,
+            nextRunAt: new Date(now + schedule.everyMinutes * 60_000).toISOString(),
+          };
+          await store.updateBot(bot);
+          const session = await store.getSession(bot.sessionId);
+          if (session) {
+            app.log.info({ botId: bot.id, userId: bot.userId }, "scheduler: firing scheduled bot");
+            await runScheduled(session, bot, schedule.prompt);
+          }
+        }
+      } catch (error) {
+        app.log.error({ err: error }, "scheduler tick failed");
+      }
+    })();
+  }, 30_000);
+  app.addHook("onClose", async () => clearInterval(scheduler));
 
   return app;
 }

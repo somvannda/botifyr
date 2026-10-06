@@ -95,6 +95,10 @@ export class MemoryStore implements Store {
       .map((bot) => structuredClone(bot));
   }
 
+  async listScheduledBots(): Promise<BotRecord[]> {
+    return [...this.bots.values()].filter((bot) => bot.schedule).map((bot) => structuredClone(bot));
+  }
+
   async deleteBot(userId: string, id: string): Promise<boolean> {
     const record = this.bots.get(id);
     if (!record || record.userId !== userId) return false;

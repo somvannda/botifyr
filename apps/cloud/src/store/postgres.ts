@@ -142,6 +142,11 @@ export class PostgresStore implements Store {
     return rows.map((row) => row.data as BotRecord);
   }
 
+  async listScheduledBots(): Promise<BotRecord[]> {
+    const { rows } = await this.pool.query("SELECT data FROM bots WHERE data->'schedule' IS NOT NULL");
+    return rows.map((row) => row.data as BotRecord);
+  }
+
   async deleteBot(userId: string, id: string): Promise<boolean> {
     const result = await this.pool.query("DELETE FROM bots WHERE user_id = $1 AND id = $2", [userId, id]);
     return (result.rowCount ?? 0) > 0;

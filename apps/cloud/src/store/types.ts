@@ -1,4 +1,4 @@
-import type { ChatMessage, Task } from "@botifyr/shared";
+import type { BotSchedule, ChatMessage, Task } from "@botifyr/shared";
 
 /** Persistence contracts shared by the memory and Postgres stores. */
 
@@ -30,6 +30,7 @@ export interface BotRecord {
   scheme: number;
   instructions: string;
   memberIds?: string[];
+  schedule?: BotSchedule;
   sessionId: string;
   createdAt: string;
 }
@@ -95,6 +96,8 @@ export interface Store {
   createBot(record: BotRecord): Promise<void>;
   getBot(id: string): Promise<BotRecord | null>;
   listBots(userId: string): Promise<BotRecord[]>;
+  /** All bots that have a schedule (for the scheduler ticker). */
+  listScheduledBots(): Promise<BotRecord[]>;
   updateBot(record: BotRecord): Promise<void>;
   deleteBot(userId: string, id: string): Promise<boolean>;
 

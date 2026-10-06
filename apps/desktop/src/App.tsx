@@ -81,6 +81,9 @@ export default function App() {
   const [botScheme, setBotScheme] = useState(0);
   const [botIntro, setBotIntro] = useState("");
   const [groupMembers, setGroupMembers] = useState<string[]>([]);
+  const [schedulePrompt, setSchedulePrompt] = useState("");
+  const [scheduleEvery, setScheduleEvery] = useState(60);
+  const [scheduleEnabled, setScheduleEnabled] = useState(false);
   const [secrets, setSecrets] = useState<SecretSummary[]>([]);
   const [showSettings, setShowSettings] = useState(false);
   const [secretName, setSecretName] = useState("");
@@ -345,6 +348,9 @@ export default function App() {
     setBotScheme(bots.length % BOT_SCHEMES.length);
     setBotIntro("");
     setGroupMembers([]);
+    setSchedulePrompt("");
+    setScheduleEvery(60);
+    setScheduleEnabled(false);
     setShowNewChat(false);
   }
 
@@ -356,6 +362,9 @@ export default function App() {
     setBotScheme(bot.scheme % BOT_SCHEMES.length);
     setBotIntro(bot.instructions);
     setGroupMembers(bot.memberIds ?? []);
+    setSchedulePrompt(bot.schedule?.prompt ?? "");
+    setScheduleEvery(bot.schedule?.everyMinutes ?? 60);
+    setScheduleEnabled(bot.schedule?.enabled ?? false);
   }
 
   function closeBotModal() {
@@ -374,6 +383,9 @@ export default function App() {
           scheme: botScheme,
           instructions: botIntro.trim(),
           memberIds: groupMembers,
+          schedule: schedulePrompt.trim()
+            ? { prompt: schedulePrompt.trim(), everyMinutes: scheduleEvery, enabled: scheduleEnabled }
+            : undefined,
         });
         setBots((prev) => prev.map((entry) => (entry.id === updated.id ? updated : entry)));
         setSessions((prev) =>
@@ -1214,6 +1226,36 @@ export default function App() {
               onChange={(event) => setBotIntro(event.target.value)}
               rows={3}
             />
+
+            {createBotMode === "edit" && (
+              <div className="schedule-box">
+                <label className="schedule-toggle">
+                  <input
+                    type="checkbox"
+                    checked={scheduleEnabled}
+                    onChange={(event) => setScheduleEnabled(event.target.checked)}
+                  />
+                  <span>Always-on schedule</span>
+                </label>
+                <textarea
+                  className="bot-instructions"
+                  placeholder="What should this bot do on each run? (empty disables the schedule)"
+                  value={schedulePrompt}
+                  onChange={(event) => setSchedulePrompt(event.target.value)}
+                  rows={2}
+                />
+                <label className="schedule-every">
+                  every
+                  <input
+                    type="number"
+                    min={1}
+                    value={scheduleEvery}
+                    onChange={(event) => setScheduleEvery(Math.max(1, Number(event.target.value) || 1))}
+                  />
+                  minutes
+                </label>
+              </div>
+            )}
 
             <div className="apps-actions">
               {createBotMode === "edit" && editingBotId && (

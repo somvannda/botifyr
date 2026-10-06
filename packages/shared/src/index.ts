@@ -83,6 +83,15 @@ export interface Session {
   summaryUpTo?: number;
 }
 
+/** A bot that runs a prompt automatically on a schedule. */
+export interface BotSchedule {
+  prompt: string;
+  everyMinutes: number;
+  enabled: boolean;
+  /** When the scheduler should next fire (ISO). */
+  nextRunAt?: string;
+}
+
 /**
  * A bot is an agent the user talks to. It owns a single conversation thread,
  * has its own name, avatar colour and standing instructions.
@@ -98,6 +107,8 @@ export interface Bot {
   instructions: string;
   /** For group chats: the bot ids that take turns replying. */
   memberIds?: string[];
+  /** Optional schedule: run `prompt` every N minutes. */
+  schedule?: BotSchedule;
   /** The conversation thread for this bot. */
   sessionId: string;
   createdAt: string;
