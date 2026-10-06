@@ -67,6 +67,8 @@ export interface ChatMessage {
   taskId?: string;
   /** The bot that authored an assistant message (set in group chats). */
   botId?: string;
+  /** The user who sent a message in a human (friend) conversation. */
+  senderId?: string;
 }
 
 export interface Session {
@@ -77,6 +79,10 @@ export interface Session {
   createdAt: string;
   /** The bot this thread belongs to. One bot === one conversation. */
   botId?: string;
+  /** "bot" (default), a 1:1 "dm" between two users, or a friend "group". */
+  kind?: "bot" | "dm" | "group";
+  /** For human conversations: the user ids in the thread. */
+  participants?: string[];
   /** Rolling summary of older turns, so long chats don't lose memory. */
   summary?: string;
   /** How many leading messages are already covered by `summary`. */

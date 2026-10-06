@@ -374,7 +374,7 @@ export async function buildServer(options: ServerOptions) {
     switch (event.type) {
       case "session.created":
       case "session.updated":
-        return event.session.userId === userId;
+        return event.session.userId === userId || (event.session.participants ?? []).includes(userId);
       case "assistant.delta":
       case "assistant.reset":
         // Route by task owner (set for every run) and fall back to session owner.
@@ -1801,6 +1801,85 @@ export async function buildServer(options: ServerOptions) {
 
       const task = await startTask(session, text, userId, request.body?.local === true);
       return { session, task, warning: warning ?? undefined };
+    },
+  );
+
+  /* Direct messages and friend group chats between users. */
+  app.get("/v1/conversations", { preHandler: requireAuth }, async (request) => {
+    const userId = request.userId as string;
+    const sessions = await store.listConversations(userId);
+    return sessions
+      .filter((session) => session.kind === "dm" || session.kind === "group")
+      .map((session) => ({
+        id: session.id,
+        kind: session.kind,
+        title: session.title,
+        participants: session.participants ?? [],
+        last: session.messages[session.messages.length - 1],
+        createdAt: session.createdAt,
+      }));
+  });
+
+  app.post<{ Params: { userId: string } }>(
+    "/v1/dm/:userId",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const otherId = request.params.userId;
+      if (otherId === userId) return reply.code(400).send({ error: "you can't message yourself" });
+      if (!(await store.areFriends(userId, otherId))) {
+        return reply.code(403).send({ error: "you're not friends yet" });
+      }
+      const other = await store.getUserById(otherId);
+      if (!other) return reply.code(404).send({ error: "user not found" });
+      const existing = (await store.listConversations(userId)).find(
+        (session) =>
+          session.kind === "dm" &&
+          (session.participants ?? []).length === 2 &&
+          (session.participants ?? []).includes(otherId),
+      );
+      if (existing) return existing;
+      const session = {
+        id: randomUUID(),
+        userId,
+        title: other.displayName || (other.handle ? `@${other.handle}` : other.email),
+        messages: [],
+        createdAt: new Date().toISOString(),
+        kind: "dm" as const,
+        participants: [userId, otherId],
+      };
+      await store.createSession(session);
+      emit({ type: "session.created", session });
+      return session;
+    },
+  );
+
+  app.post<{ Params: { id: string }; Body: { text?: string } }>(
+    "/v1/dm/:id/messages",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const session = await store.getSession(request.params.id);
+      if (!session || !(session.participants ?? []).includes(userId)) {
+        return reply.code(404).send({ error: "conversation not found" });
+      }
+      const text = (request.body?.text ?? "").trim().slice(0, maxMessageChars);
+      if (!text) return reply.code(400).send({ error: "text is required" });
+      const message = {
+        id: randomUUID(),
+        role: "user" as const,
+        content: text,
+        createdAt: new Date().toISOString(),
+        senderId: userId,
+      };
+      await withSessionLock(session.id, async () => {
+        const fresh = (await store.getSession(session.id)) ?? session;
+        fresh.messages.push(message);
+        await store.updateSession(fresh);
+        session.messages = fresh.messages;
+      });
+      emit({ type: "session.updated", session });
+      return { session };
     },
   );
 

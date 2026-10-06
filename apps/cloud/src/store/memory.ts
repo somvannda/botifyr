@@ -185,6 +185,13 @@ export class MemoryStore implements Store {
       .map((session) => structuredClone(session));
   }
 
+  async listConversations(userId: string): Promise<SessionRecord[]> {
+    return [...this.sessions.values()]
+      .filter((session) => session.userId === userId || (session.participants ?? []).includes(userId))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map((session) => structuredClone(session));
+  }
+
   async createBot(record: BotRecord): Promise<void> {
     this.bots.set(record.id, structuredClone(record));
   }

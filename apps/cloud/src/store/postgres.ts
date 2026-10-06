@@ -246,6 +246,8 @@ export class PostgresStore implements Store {
             title: record.title,
             messages,
             botId: record.botId,
+            kind: record.kind,
+            participants: record.participants,
             summary: record.summary ?? existing?.summary,
             summaryUpTo: record.summaryUpTo ?? existing?.summaryUpTo,
           },
@@ -266,6 +268,15 @@ export class PostgresStore implements Store {
   async listSessions(userId: string): Promise<SessionRecord[]> {
     const { rows } = await this.pool.query(
       "SELECT id, user_id, data, created_at FROM sessions WHERE user_id = $1 ORDER BY created_at DESC",
+      [userId],
+    );
+    return rows.map(toSession);
+  }
+
+  async listConversations(userId: string): Promise<SessionRecord[]> {
+    const { rows } = await this.pool.query(
+      "SELECT id, user_id, data, created_at FROM sessions " +
+        "WHERE user_id = $1 OR (data->'participants') ? $1 ORDER BY created_at DESC",
       [userId],
     );
     return rows.map(toSession);
@@ -711,6 +722,8 @@ function toSession(row: any): SessionRecord {
     title: row.data?.title ?? "New chat",
     messages: row.data?.messages ?? [],
     botId: row.data?.botId,
+    kind: row.data?.kind,
+    participants: row.data?.participants,
     summary: row.data?.summary,
     summaryUpTo: row.data?.summaryUpTo,
     createdAt: row.created_at.toISOString(),

@@ -54,6 +54,29 @@ export interface MediaItem {
   createdAt: string;
 }
 
+/** A person (friend or search hit) from the platform directory. */
+export interface Person {
+  id: string;
+  handle?: string;
+  displayName?: string;
+  avatarEmoji?: string;
+  avatarScheme?: number;
+  online: boolean;
+  friend?: boolean;
+  requested?: boolean;
+  incoming?: boolean;
+}
+
+/** A human conversation (DM or friend group). */
+export interface Conversation {
+  id: string;
+  kind: "dm" | "group";
+  title: string;
+  participants: string[];
+  last?: { id: string; role: string; content: string; createdAt: string; senderId?: string };
+  createdAt: string;
+}
+
 /** A platform user as seen by the admin console. */
 export interface AdminUser {
   id: string;
@@ -354,6 +377,65 @@ export class BotifyrClient {
 
   cancelSession(sessionId: string): Promise<{ stopped: number }> {
     return this.request(`/v1/sessions/${sessionId}/cancel`, { method: "POST", json: true, body: "{}" });
+  }
+
+  /* Direct messages with friends. */
+  listConversations(): Promise<Conversation[]> {
+    return this.request("/v1/conversations");
+  }
+
+  openDm(userId: string): Promise<Session> {
+    return this.request(`/v1/dm/${userId}`, { method: "POST", json: true, body: "{}" });
+  }
+
+  sendDm(sessionId: string, text: string): Promise<{ session: Session }> {
+    return this.request(`/v1/dm/${sessionId}/messages`, {
+      method: "POST",
+      json: true,
+      body: JSON.stringify({ text }),
+    });
+  }
+
+  /* Friends & people directory. */
+  listFriends(): Promise<Person[]> {
+    return this.request("/v1/friends");
+  }
+
+  listFriendRequests(): Promise<Array<{ id: string; direction: "incoming" | "outgoing"; person: Person }>> {
+    return this.request("/v1/friend-requests");
+  }
+
+  searchPeople(query: string): Promise<Person[]> {
+    return this.request(`/v1/people?q=${encodeURIComponent(query)}`);
+  }
+
+  addFriend(userId: string): Promise<{ ok: boolean; friend?: boolean; pending?: boolean }> {
+    return this.request("/v1/friend-requests", {
+      method: "POST",
+      json: true,
+      body: JSON.stringify({ userId }),
+    });
+  }
+
+  respondFriendRequest(id: string, action: "accept" | "decline"): Promise<{ ok: boolean; friend?: boolean }> {
+    return this.request(`/v1/friend-requests/${id}`, {
+      method: "POST",
+      json: true,
+      body: JSON.stringify({ action }),
+    });
+  }
+
+  removeFriend(userId: string): Promise<void> {
+    return this.request(`/v1/friends/${userId}`, { method: "DELETE" });
+  }
+
+  updateProfile(input: {
+    handle?: string;
+    displayName?: string;
+    avatarEmoji?: string;
+    avatarScheme?: number;
+  }): Promise<User> {
+    return this.request("/v1/profile", { method: "PATCH", json: true, body: JSON.stringify(input) });
   }
 
   cancelTask(taskId: string): Promise<void> {

@@ -37,6 +37,10 @@ export interface SessionRecord {
   messages: ChatMessage[];
   createdAt: string;
   botId?: string;
+  /** "bot" (default), a 1:1 "dm" between users, or a friend "group". */
+  kind?: "bot" | "dm" | "group";
+  /** For human conversations: the user ids in the thread. */
+  participants?: string[];
   summary?: string;
   summaryUpTo?: number;
 }
@@ -189,6 +193,8 @@ export interface Store {
   updateSession(record: SessionRecord): Promise<void>;
   getSession(id: string): Promise<SessionRecord | null>;
   listSessions(userId: string): Promise<SessionRecord[]>;
+  /** Sessions the user owns or participates in (human/DM chats). */
+  listConversations(userId: string): Promise<SessionRecord[]>;
 
   createBot(record: BotRecord): Promise<void>;
   getBot(id: string): Promise<BotRecord | null>;
