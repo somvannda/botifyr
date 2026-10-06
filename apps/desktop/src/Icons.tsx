@@ -152,3 +152,32 @@ export function CloseIcon({ size = 13, className }: IconProps) {
     </svg>
   );
 }
+
+export function MonitorIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden className={className} {...stroke}>
+      <rect x="3" y="4" width="18" height="12" rx="2" />
+      <line x1="12" y1="16" x2="12" y2="20" />
+      <line x1="8" y1="20" x2="16" y2="20" />
+    </svg>
+  );
+}
+
+export function DownloadIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden className={className} {...stroke}>
+      <path d="M12 3v12" />
+      <path d="M7 11l5 5 5-5" />
+      <path d="M4 20h16" />
+    </svg>
+  );
+}
+
+export function LockIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden className={className} {...stroke}>
+      <rect x="4.5" y="10.5" width="15" height="10" rx="2" />
+      <path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" />
+    </svg>
+  );
+}

@@ -18,10 +18,14 @@ import { CalendarIcon, DriveIcon, GmailIcon } from "./AppIcons";
 import { BOT_SCHEMES, BotLogo } from "./BotLogo";
 import {
   ChartIcon,
+  CloseIcon,
+  DownloadIcon,
   GearIcon,
   HelpIcon,
+  LockIcon,
   LogoutIcon,
   MobileIcon,
+  MonitorIcon,
   MoreIcon,
   PanelIcon,
   PlusIcon,
@@ -39,11 +43,11 @@ const TOKEN_KEY = "botifyr.token";
 type ConnectionState = "connecting" | "online" | "offline";
 
 const SETTINGS_TABS = [
-  { id: "general", label: "General", icon: "⚙" },
-  { id: "computer", label: "Computer", icon: "▢" },
-  { id: "usage", label: "Usage & Billing", icon: "▤" },
-  { id: "updates", label: "Updates", icon: "⤓" },
-  { id: "vault", label: "Vault", icon: "🔒" },
+  { id: "general", label: "General", icon: <GearIcon size={16} /> },
+  { id: "computer", label: "Computer", icon: <MonitorIcon size={16} /> },
+  { id: "usage", label: "Usage & Billing", icon: <ChartIcon size={16} /> },
+  { id: "updates", label: "Updates", icon: <DownloadIcon size={16} /> },
+  { id: "vault", label: "Vault", icon: <LockIcon size={16} /> },
 ] as const;
 
 type SettingsTab = (typeof SETTINGS_TABS)[number]["id"];
@@ -1388,7 +1392,7 @@ export default function App() {
                         type="button"
                         onClick={() => void deleteLibFile(file.id)}
                       >
-                        ✕
+                        <CloseIcon size={12} />
                       </button>
                     </li>
                   ))}
