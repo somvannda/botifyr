@@ -178,6 +178,16 @@
       baseEl.value = localStorage.getItem("botifyr.admin.base") || "http://localhost:8787";
       tokenEl.value = localStorage.getItem("botifyr.admin.token") || "";
 
+      // The app can pass the token in the URL fragment (#token=...) — read it
+      // once, then strip it from the address bar.
+      const hash = window.location.hash || "";
+      const fromHash = /(?:^|[#&])token=([^&]+)/.exec(hash);
+      if (fromHash) {
+        tokenEl.value = decodeURIComponent(fromHash[1]);
+        localStorage.setItem("botifyr.admin.token", tokenEl.value);
+        history.replaceState(null, "", window.location.pathname);
+      }
+
       async function api(path, options = {}) {
         const base = baseEl.value.replace(/\/$/, "");
         const res = await fetch(base + path, {

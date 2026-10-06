@@ -1303,7 +1303,9 @@ export default function App() {
                 className="account-item"
                 type="button"
                 onClick={() => {
-                  void openExternal(ADMIN_URL);
+                  const current = token();
+                  if (current) void navigator.clipboard?.writeText(current);
+                  void openExternal(`${ADMIN_URL}#token=${encodeURIComponent(current)}`);
                   setShowAccountMenu(false);
                 }}
               >
