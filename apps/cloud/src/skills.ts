@@ -38,6 +38,7 @@ export const SKILLS: SkillDefinition[] = [
       "YouTube workflow (runs in the code sandbox; needs the 'code' capability).",
       "Inspect first: youtube.info(url) returns the title, duration and available formats.",
       "Download: youtube.download({ url, audio_only, quality }) saves video.mp4 (or audio.mp3) into the downloads folder, which the app serves back to the user as a Download link.",
+      "If the user says 'download those links' without repeating them, list the links you can see (including from your own earlier chat with them) and confirm which ones to download before starting — end your reply with a fenced `options` block (e.g. each candidate link, plus 'All of them').",
       "If a download fails with HTTP 429 or a 'Sign in to confirm you're not a bot' error, the sandbox IP is being rate-limited by YouTube. Offer the user options (end your reply with a fenced `options` block): 'Add my YouTube cookies', 'Retry without cookies', 'Try a different URL'.",
       "The user can paste their cookies.txt (Netscape format) under Settings > Downloads (stored encrypted as the YOUTUBE_COOKIES secret); yt-dlp then uses it automatically on the next attempt.",
       "Then process with shell/code: ffmpeg can trim, convert, extract audio, resize, or burn subtitles.",

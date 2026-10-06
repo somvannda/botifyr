@@ -296,6 +296,18 @@ export async function buildServer(options: ServerOptions) {
             const speaker = nameById.get(message.botId ?? "") ?? "another bot";
             return { role: "user" as const, content: `[${speaker}]: ${content}` };
           });
+          // The member's own separate one-to-one chat with the user, so it can
+          // recall context the user shared with it elsewhere (e.g. links).
+          const ownSession = member.sessionId ? await store.getSession(member.sessionId) : null;
+          const ownRecent = ownSession
+            ? ownSession.messages
+                .slice(-6)
+                .map(
+                  (message) =>
+                    `${message.role === "user" ? "User" : "You"}: ${message.content.slice(0, 600)}`,
+                )
+                .join("\n")
+            : "";
           await runTask(
             {
               store,
@@ -304,8 +316,12 @@ export async function buildServer(options: ServerOptions) {
               local,
               instructions: [
                 `In this group chat you are "${member.name}".`,
+                "The user may address one or more members with @name. Answer when you are addressed; if you need another member, or the user clearly also needs their answer, @mention them by name to bring them in.",
                 "Messages from other bots are shown as coming from them (prefixed with [their name]); your own earlier replies are your turns.",
-                "To hand work off, @mention another member by name.",
+                ownRecent
+                  ? `Context from your OWN separate one-to-one chat with the user (use it — e.g. links they shared with you earlier):\n${ownRecent}`
+                  : "",
+                "If the user refers to links/items from earlier, list what you found and confirm which ones they want before acting (end with an options block).",
                 member.instructions,
                 skillInstructions(member.skills),
               ]
