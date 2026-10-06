@@ -17,6 +17,17 @@ const tauriBridge: BotBridge = {
     await win.unminimize();
     await win.setFocus();
   },
+  notify: (title: string, body: string) => {
+    // Best-effort OS notification from the webview. For a first-class desktop
+    // notification, add @tauri-apps/plugin-notification and wire it here.
+    try {
+      if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+        new Notification(title, { body });
+      }
+    } catch {
+      // Notifications are best-effort; never block the app.
+    }
+  },
   startLocalNode: async (token: string) => {
     await invoke("start_local_node", { token });
   },
