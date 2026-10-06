@@ -17,8 +17,8 @@ they land. Keep entries short; link code paths instead of explaining them.
 - [x] **Profile editing UI** — set @handle / display name / avatar
       (`PATCH /v1/profile`; UI in the People panel).
 - [x] **Unread badges** — per conversation; opening a chat clears it.
-- [x] **Notifications** — in-app toasts for new messages and finished tasks;
-      OS-level notifications still pending.
+- [x] **Notifications** — in-app toasts + web OS notifications when the tab is
+      hidden; desktop OS notifications still pending (needs the Tauri plugin).
 - [ ] **P2P hardening** — TURN relay for strict NAT; verify across 2 devices.
 - [ ] **Mobile PWA offline** (manifest exists; no service worker).
 - [ ] **Real Stripe** — keys, invoices, billing portal.

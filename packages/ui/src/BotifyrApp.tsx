@@ -550,11 +550,18 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     setActiveSessionId(sessionId);
   }
 
-  function pushToast(toast: Omit<Toast, "id">): void {
-    const id = Math.random().toString(36).slice(2);
-    setToasts((prev) => [...prev.slice(-2), { ...toast, id }]);
-    window.setTimeout(() => setToasts((prev) => prev.filter((entry) => entry.id !== id)), 6000);
-  }
+  const pushToast = useCallback(
+    (toast: Omit<Toast, "id">): void => {
+      const id = Math.random().toString(36).slice(2);
+      setToasts((prev) => [...prev.slice(-2), { ...toast, id }]);
+      // If the window isn't visible, also raise an OS-level notification.
+      if (typeof document !== "undefined" && document.hidden) {
+        void bridge.notify?.(toast.title, toast.body);
+      }
+      window.setTimeout(() => setToasts((prev) => prev.filter((entry) => entry.id !== id)), 6000);
+    },
+    [bridge],
+  );
 
   function dismissToast(id: string): void {
     setToasts((prev) => prev.filter((entry) => entry.id !== id));
@@ -1616,7 +1623,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
         });
       }
     }
-  }, [sessions, activeSessionId, user, bots]);
+  }, [sessions, activeSessionId, user, bots, pushToast]);
 
   // Raise a toast when a task finishes or fails while you're elsewhere.
   useEffect(() => {
@@ -1636,7 +1643,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
         sessionId: task.sessionId,
       });
     }
-  }, [tasks, sessions, bots, activeSessionId]);
+  }, [tasks, sessions, bots, activeSessionId, pushToast]);
 
   // Seed the profile editor from the signed-in user.
   useEffect(() => {
