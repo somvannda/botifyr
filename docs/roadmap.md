@@ -33,8 +33,8 @@ they land. Keep entries short; link code paths instead of explaining them.
       exceed it. No resumable background job queue.
 - [ ] **Media storage** — server volume only; no quota / auto-cleanup; “Move”
       is copy + mark, purge is manual.
-- [ ] **Security** — CORS reflects any origin; bearer tokens without refresh;
-      DMs are server-readable (no E2E); P2P without TURN.
+- [ ] **Security** — CORS allowlist and access/refresh tokens are done;
+      DMs are still server-readable (no E2E); P2P without TURN.
 - [ ] **Cost** — daily token budget is warning-only; add enforcement + per-task
       cap and a usage view.
 - [ ] **Testing** — unit tests for media only; no API/UI integration or E2E.
@@ -47,7 +47,8 @@ they land. Keep entries short; link code paths instead of explaining them.
 - [ ] **Media retention & quota** — auto-clean old task folders.
 - [ ] **Profile & notifications** — profile UI + DM unread.
 - [ ] **Local model option** — Ollama / OpenAI-compatible config switch.
-- [ ] **Security pass** — restrict CORS, refresh tokens, optional E2E for DMs.
+- [x] **Security pass** — CORS allowlist + rotating refresh tokens done;
+      optional E2E for DMs still open.
 - [ ] **Cost enforcement** — hard daily cap + per-task budget.
 - [ ] **Deploy pipeline** — proxy + subdomains + Stripe.
 - [ ] **Test coverage** — API integration + UI smoke test.
