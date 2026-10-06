@@ -265,15 +265,39 @@ export class BotifyrClient {
     return this.request("/v1/learned-skills");
   }
 
-  billing(): Promise<{ plan: "free" | "pro" | "business"; stripeConfigured: boolean }> {
+  billing(): Promise<{
+    plan: "free" | "pro" | "business";
+    billingMode: string;
+    subStatus: string;
+    periodEnd?: string;
+    graceUntil?: string;
+    walletCents: number;
+    tokensThisMonth: number;
+    freeMonthlyTokens: number;
+    lowBalanceCents: number;
+    includedTokens: { pro: number; business: number };
+    prices: { proCents: number; businessCents: number; periodDays: number; currency: string };
+    onDemand: {
+      enabled: boolean;
+      markupPercent: number;
+      minTopUpCents: number;
+      allowPro: boolean;
+      onEmpty: string;
+    };
+    billingConfigured: boolean;
+  }> {
     return this.request("/v1/billing");
   }
 
-  billingCheckout(returnUrl: string): Promise<{ url: string }> {
+  billingCheckout(body: {
+    kind: "plan" | "topup";
+    plan?: "pro" | "business";
+    amountCents?: number;
+  }): Promise<{ invoiceId: string; url?: string; qr?: string }> {
     return this.request("/v1/billing/checkout", {
       method: "POST",
       json: true,
-      body: JSON.stringify({ returnUrl }),
+      body: JSON.stringify(body),
     });
   }
 

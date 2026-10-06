@@ -1234,6 +1234,7 @@ export async function buildServer(options: ServerOptions) {
       walletCents: wallet.balanceCents,
       tokensThisMonth: usage.tokens,
       freeMonthlyTokens: settings.freeMonthlyTokens,
+      lowBalanceCents: settings.lowBalanceCents,
       includedTokens: settings.plans.includedTokens,
       prices: {
         proCents: settings.plans.proPriceCents,

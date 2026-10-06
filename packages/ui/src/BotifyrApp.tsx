@@ -269,7 +269,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [autoUpdate, setAutoUpdate] = useState(() => localStorage.getItem("botifyr.autoUpdate") !== "0");
   const [checkNote, setCheckNote] = useState<string | null>(null);
   const [plan, setPlan] = useState<"free" | "pro" | "business">("free");
-  const [stripeConfigured, setStripeConfigured] = useState(false);
+  const [billing, setBilling] = useState<Awaited<ReturnType<BotifyrClient["billing"]>> | null>(null);
   const [trialStart] = useState(() => {
     const existing = Number(localStorage.getItem("botifyr.trialStart"));
     if (existing) return existing;
@@ -381,7 +381,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
         setSkills(skillList);
         setLearnedSkills(learnedList);
         setPlan(billing.plan);
-        setStripeConfigured(billing.stripeConfigured);
+        setBilling(billing);
         // Open the last-used chat, else the most recently active one.
         const lastAt = (bot: Bot): string => {
           const session = sessionList.find((entry) => entry.id === bot.sessionId);
@@ -835,12 +835,23 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     window.setTimeout(() => closeBotModal(), 750);
   }
 
-  async function upgradePlan() {
+  async function upgradePlan(target: "pro" | "business" = "pro") {
     setCheckNote(null);
-    const returnUrl = SKILLS_URL.replace(/\/skills\/?$/, "");
     try {
-      const { url } = await client.billingCheckout(returnUrl);
-      void openExternal(url);
+      const { url } = await client.billingCheckout({ kind: "plan", plan: target });
+      if (url) void openExternal(url);
+      setCheckNote("Opening secure checkout…");
+    } catch (err: unknown) {
+      setCheckNote(messageOf(err));
+    }
+  }
+
+  async function topUp() {
+    setCheckNote(null);
+    const amountCents = billing?.onDemand.minTopUpCents ?? 500;
+    try {
+      const { url } = await client.billingCheckout({ kind: "topup", amountCents });
+      if (url) void openExternal(url);
       setCheckNote("Opening secure checkout…");
     } catch (err: unknown) {
       setCheckNote(messageOf(err));
@@ -1408,6 +1419,24 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       : botMedia.filter((item) => mediaKind(item.name) === libraryCategory);
   const downloadsMedia =
     downloadsCategory === "all" ? media : media.filter((item) => mediaKind(item.name) === downloadsCategory);
+
+  // Billing banner: payment due, renewal soon, free tokens spent, low credits.
+  const billingNotice = (() => {
+    const b = billing;
+    if (!b) return null;
+    if (b.subStatus === "grace") return "Payment due — pay now to avoid dropping to the free plan.";
+    if (b.periodEnd) {
+      const days = Math.ceil((Date.parse(b.periodEnd) - Date.now()) / 86_400_000);
+      if (days >= 0 && days <= 7) {
+        return `Your ${b.plan} plan renews in ${days} day${days === 1 ? "" : "s"}.`;
+      }
+    }
+    if (b.plan === "free" && b.tokensThisMonth >= b.freeMonthlyTokens) {
+      return "You've used this month's free tokens — upgrade or top up credits to continue.";
+    }
+    if (b.walletCents > 0 && b.walletCents < b.lowBalanceCents) return "Your credits are running low.";
+    return null;
+  })();
 
   const mediaUrl = (item: MediaItem, download = false): string =>
     `${CLOUD_URL}/v1/tasks/${item.taskId}/downloads/${encodeURIComponent(item.name)}?token=${encodeURIComponent(
@@ -2237,6 +2266,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
         )}
 
         {(limitWarning ?? budgetNotice) && <div className="notice warn">{limitWarning ?? budgetNotice}</div>}
+
+        {billingNotice && <div className="notice warn">{billingNotice}</div>}
 
         <section className="content" ref={scrollRef}>
           {error && <div className="error">{error}</div>}
@@ -4069,45 +4100,71 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                     </div>
                   )}
 
-                  <div className="settings-section-title">Manage Plan</div>
+                  <div className="settings-section-title">Plan &amp; credits</div>
                   <div className="settings-row">
                     <span className="settings-row-main">
                       <span className="settings-row-name">
-                        Current plan: {plan === "pro" ? "Pro" : "Trial"}
+                        Current plan: {plan === "business" ? "Business" : plan === "pro" ? "Pro" : "Free"}
                       </span>
                       <span className="settings-row-sub">
-                        {config?.usage
-                          ? `${config.usage.tokensToday.toLocaleString()} tokens · ${config.usage.requestsToday} requests today`
-                          : "No usage yet"}
+                        {billing?.periodEnd
+                          ? `Renews ${new Date(billing.periodEnd).toLocaleDateString()}`
+                          : plan === "free"
+                            ? `${(billing?.tokensThisMonth ?? 0).toLocaleString()} / ${(billing?.freeMonthlyTokens ?? 0).toLocaleString()} free tokens this month`
+                            : "No active period"}
+                        {(billing?.walletCents ?? 0) > 0
+                          ? ` · $${((billing?.walletCents ?? 0) / 100).toFixed(2)} credits`
+                          : ""}
                       </span>
                     </span>
-                    {plan === "pro" ? (
-                      <span className="settings-badge">Active</span>
-                    ) : (
-                      <button className="btn primary" type="button" onClick={() => void upgradePlan()}>
-                        Upgrade to Pro
+                    {plan === "free" ? (
+                      <button
+                        className="btn primary"
+                        type="button"
+                        disabled={billing?.billingConfigured === false}
+                        onClick={() => void upgradePlan("pro")}
+                      >
+                        Upgrade to Pro (${((billing?.prices.proCents ?? 500) / 100).toFixed(2)})
                       </button>
+                    ) : (
+                      <span className="settings-badge">Active</span>
                     )}
                   </div>
-                  {plan !== "pro" && (
+                  {plan !== "free" && (
                     <div className="settings-row">
                       <span className="settings-row-main">
-                        <span className="settings-row-name">Cancel Trial</span>
-                        <span className="settings-row-sub">Stop the trial at the end of the period</span>
+                        <span className="settings-row-name">Renew now</span>
+                        <span className="settings-row-sub">Prepay another period up front</span>
                       </span>
                       <button
                         className="ghost small"
                         type="button"
-                        onClick={() => setCheckNote("Your trial will end at the end of the current period.")}
+                        onClick={() => void upgradePlan(plan === "business" ? "business" : "pro")}
                       >
-                        Cancel Trial
+                        Renew
                       </button>
                     </div>
                   )}
-                  {!stripeConfigured && plan !== "pro" && (
+                  <div className="settings-row">
+                    <span className="settings-row-main">
+                      <span className="settings-row-name">On-demand credits</span>
+                      <span className="settings-row-sub">
+                        Top up to keep working past your included tokens
+                      </span>
+                    </span>
+                    <button
+                      className="ghost small"
+                      type="button"
+                      disabled={billing?.billingConfigured === false}
+                      onClick={() => void topUp()}
+                    >
+                      Top up ${((billing?.onDemand.minTopUpCents ?? 100) / 100).toFixed(2)}
+                    </button>
+                  </div>
+                  {billing?.billingConfigured === false && (
                     <p className="settings-note">
-                      Billing isn't configured on this server — self-host for unlimited use, or set
-                      STRIPE_SECRET_KEY and STRIPE_PRICE_ID to enable upgrades.
+                      Billing isn't configured on this server — set the CHMABA_* environment variables to
+                      enable upgrades and top-ups.
                     </p>
                   )}
                   {checkNote && <p className="settings-note">{checkNote}</p>}
