@@ -25,7 +25,7 @@ ENV VITE_CLOUD_URL=$VITE_CLOUD_URL
 RUN npm run build -w @botifyr/portal -- --base=/portal/
 
 FROM nginx:1.27-alpine
-COPY apps/web/index.html apps/web/help.html apps/web/admin.html apps/web/skills.html apps/web/styles.css apps/web/favicon.svg /usr/share/nginx/html/
+COPY apps/web/index.html apps/web/help.html apps/web/admin.html apps/web/skills.html apps/web/developers.html apps/web/styles.css apps/web/favicon.svg /usr/share/nginx/html/
 COPY --from=portal /repo/apps/portal/dist /usr/share/nginx/html/portal
 
 RUN printf '%s\n' \

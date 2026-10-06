@@ -23,6 +23,7 @@ createServer(async (request, response) => {
     if (path === "/help" || path === "/docs") path = "/help.html";
     if (path === "/admin") path = "/admin.html";
     if (path === "/skills") path = "/skills.html";
+    if (path === "/developers") path = "/developers.html";
     const file = join(root, normalize(path).replace(/^(\.\.[/\\])+/, ""));
     const body = await readFile(file);
     response.writeHead(200, {
