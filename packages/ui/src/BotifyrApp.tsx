@@ -285,6 +285,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [editingLabel, setEditingLabel] = useState(false);
   const [labelDraft, setLabelDraft] = useState("");
   const [botFiles, setBotFiles] = useState<BotFile[]>([]);
+  const [libraryCategory, setLibraryCategory] = useState<MediaKind | "all">("all");
   const [libName, setLibName] = useState("");
   const [libOpen, setLibOpen] = useState<{ id: string; name: string } | null>(null);
   const [libContent, setLibContent] = useState("");
@@ -1352,6 +1353,10 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       .map((task) => task.id),
   );
   const botMedia = media.filter((item) => sessionTaskIds.has(item.taskId));
+  const libraryMedia =
+    libraryCategory === "all"
+      ? botMedia
+      : botMedia.filter((item) => mediaKind(item.name) === libraryCategory);
 
   const mediaUrl = (item: MediaItem, download = false): string =>
     `${CLOUD_URL}/v1/tasks/${item.taskId}/downloads/${encodeURIComponent(item.name)}?token=${encodeURIComponent(
@@ -2749,12 +2754,34 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
 
             {botPanelTab === "library" && (
               <div className="library">
-                <div className="settings-section-title">Downloads ({botMedia.length})</div>
-                {botMedia.length === 0 && (
-                  <div className="bot-panel-empty">Videos and audio this bot downloads show here.</div>
+                <div className="library-cats">
+                  {LIBRARY_CATS.map(([id, label]) => {
+                    const count =
+                      id === "all"
+                        ? botMedia.length
+                        : botMedia.filter((item) => mediaKind(item.name) === id).length;
+                    return (
+                      <button
+                        key={id}
+                        className={`library-cat ${libraryCategory === id ? "active" : ""}`}
+                        type="button"
+                        onClick={() => setLibraryCategory(id)}
+                      >
+                        {label}
+                        <span className="library-cat-count">{count}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {libraryMedia.length === 0 && (
+                  <div className="bot-panel-empty">
+                    {botMedia.length === 0
+                      ? "Videos and audio this bot downloads show here."
+                      : "Nothing in this category."}
+                  </div>
                 )}
                 <ul className="downloads-list">
-                  {botMedia.map((item) => (
+                  {libraryMedia.map((item) => (
                     <li key={item.id} className="download-row">
                       <span className="download-ico">{isPlayable(item.name) ? "▶" : "▢"}</span>
                       <div className="download-main">
@@ -4314,3 +4341,23 @@ function sharedTokenOf(text: string): string | null {
   const match = /\/shared\/([A-Za-z0-9._-]+)/.exec(text);
   return match ? match[1] : null;
 }
+
+type MediaKind = "video" | "audio" | "image" | "file";
+
+/** Classify a downloaded file by extension (Telegram-style media categories). */
+export function mediaKind(name: string): MediaKind {
+  const ext = name.toLowerCase().split(".").pop() ?? "";
+  if (["mp4", "webm", "m4v", "mov", "mkv", "avi"].includes(ext)) return "video";
+  if (["mp3", "m4a", "aac", "ogg", "wav", "flac"].includes(ext)) return "audio";
+  if (["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg"].includes(ext)) return "image";
+  return "file";
+}
+
+/** Library category tabs (id matches `mediaKind`, plus "all"). */
+const LIBRARY_CATS = [
+  ["all", "All"],
+  ["video", "Videos"],
+  ["audio", "Audio"],
+  ["image", "Images"],
+  ["file", "Files"],
+] as const;

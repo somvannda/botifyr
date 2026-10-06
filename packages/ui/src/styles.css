@@ -3927,6 +3927,48 @@ body {
   gap: 10px;
 }
 
+.library-cats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.library-cat {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--muted);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.library-cat.active {
+  color: var(--text);
+  border-color: var(--accent);
+  background: rgba(109, 139, 255, 0.14);
+}
+
+.library-cat-count {
+  font-size: 11px;
+  color: var(--muted);
+  background: var(--panel-2);
+  border-radius: 999px;
+  padding: 0 6px;
+  min-width: 18px;
+  text-align: center;
+}
+
+.library-cat.active .library-cat-count {
+  color: var(--text);
+}
+
 .library-new {
   display: flex;
   gap: 8px;
