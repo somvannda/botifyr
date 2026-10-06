@@ -1102,6 +1102,9 @@ export default function App() {
   const busy = Boolean(liveTask);
   const activeBot = bots.find((bot) => bot.id === activeBotId) ?? null;
   const activeScheme = BOT_SCHEMES[(activeBot?.scheme ?? 0) % BOT_SCHEMES.length];
+  // A group is a container of bots, not a bot itself — keep them separate.
+  const standaloneBots = bots.filter((bot) => !(bot.memberIds && bot.memberIds.length > 0));
+  const groupBots = bots.filter((bot) => bot.memberIds && bot.memberIds.length > 0);
   const activeBotName = activeBot?.name ?? "Botifyr";
   const botLabel = activeBotId ? (labels[activeBotId] ?? "") : "";
   const groupMemberBots: Bot[] = activeBot?.memberIds
@@ -1426,19 +1429,50 @@ export default function App() {
 
               {bots.length > 0 && <div className="newchat-sep" />}
 
-              {bots.map((bot) => (
-                <button
-                  key={bot.id}
-                  className={`newchat-item ${bot.id === activeBotId ? "active" : ""}`}
-                  type="button"
-                  onClick={() => selectBot(bot)}
-                >
-                  <span className="conv-avatar">
-                    <BotLogo size={26} scheme={BOT_SCHEMES[bot.scheme % BOT_SCHEMES.length]} />
-                  </span>
-                  <span className="newchat-name">{bot.name}</span>
-                </button>
-              ))}
+              {standaloneBots.length > 0 && (
+                <>
+                  <div className="newchat-section">Bots</div>
+                  {standaloneBots.map((bot) => (
+                    <button
+                      key={bot.id}
+                      className={`newchat-item ${bot.id === activeBotId ? "active" : ""}`}
+                      type="button"
+                      onClick={() => selectBot(bot)}
+                    >
+                      <span className="conv-avatar">
+                        <BotLogo size={26} scheme={BOT_SCHEMES[bot.scheme % BOT_SCHEMES.length]} />
+                      </span>
+                      <span className="newchat-name">
+                        <span className="newchat-emoji">{cleanEmoji(bot.emoji, false)}</span>
+                        {bot.name}
+                      </span>
+                    </button>
+                  ))}
+                </>
+              )}
+
+              {groupBots.length > 0 && (
+                <>
+                  <div className="newchat-section">Groups</div>
+                  {groupBots.map((bot) => (
+                    <button
+                      key={bot.id}
+                      className={`newchat-item ${bot.id === activeBotId ? "active" : ""}`}
+                      type="button"
+                      onClick={() => selectBot(bot)}
+                    >
+                      <span className="conv-avatar">
+                        <BotLogo size={26} scheme={BOT_SCHEMES[bot.scheme % BOT_SCHEMES.length]} />
+                      </span>
+                      <span className="newchat-name">
+                        <span className="newchat-emoji">{cleanEmoji(bot.emoji, true)}</span>
+                        {bot.name}
+                      </span>
+                      <span className="newchat-meta">{bot.memberIds?.length ?? 0} bots</span>
+                    </button>
+                  ))}
+                </>
+              )}
             </div>
           </div>
         )}
@@ -1447,6 +1481,11 @@ export default function App() {
           <header className="topbar">
             <span className="thread-pill">
               <BotLogo size={18} scheme={activeScheme} />
+              {activeBot && (
+                <span className="newchat-emoji">
+                  {cleanEmoji(activeBot.emoji, (activeBot.memberIds?.length ?? 0) > 0)}
+                </span>
+              )}
               {liveTask && <span className={`status-dot status-${liveTask.status}`} />}
               <span className="thread-pill-name">{activeBotName}</span>
             </span>
