@@ -26,6 +26,9 @@ RUN npm run build -w @botifyr/portal -- --base=/portal/
 
 FROM nginx:1.27-alpine
 COPY apps/web/index.html apps/web/help.html apps/web/skills.html apps/web/developers.html apps/web/styles.css apps/web/favicon.svg /usr/share/nginx/html/
+# The shared UI's @font-face uses absolute /fonts/… paths; serve them at the root
+# so the portal (which lives under /portal) loads the same fonts as the desktop.
+COPY apps/portal/public/fonts /usr/share/nginx/html/fonts
 COPY --from=portal /repo/apps/portal/dist /usr/share/nginx/html/portal
 
 ARG ADMIN_URL=http://localhost:4324
