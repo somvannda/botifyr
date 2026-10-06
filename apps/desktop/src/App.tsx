@@ -16,7 +16,7 @@ import type {
   User,
 } from "@botifyr/shared";
 import { invoke } from "@tauri-apps/api/core";
-import { AuthError, BotifyrClient } from "@botifyr/client";
+import { AuthError, BotifyrClient, type MediaItem } from "@botifyr/client";
 import { CalendarIcon, DriveIcon, GmailIcon } from "@botifyr/ui";
 import { GithubBrand, NotionBrand, SlackBrand, TelegramBrand } from "@botifyr/ui";
 import { BOT_SCHEMES, BotLogo } from "@botifyr/ui";
@@ -93,6 +93,7 @@ const SETTINGS_TABS = [
   { id: "computer", label: "Computer", icon: <MonitorIcon size={16} /> },
   { id: "usage", label: "Usage & Billing", icon: <ChartIcon size={16} /> },
   { id: "skills", label: "Learned skills", icon: <SparkIcon size={16} /> },
+  { id: "media", label: "Media", icon: <PanelIcon size={16} /> },
   { id: "updates", label: "Updates", icon: <DownloadIcon size={16} /> },
   { id: "vault", label: "Vault", icon: <LockIcon size={16} /> },
 ] as const;
@@ -188,6 +189,7 @@ export default function App() {
   const [learnedSkills, setLearnedSkills] = useState<LearnedSkill[]>([]);
   const [downloads, setDownloads] = useState<Array<{ name: string; size: number }>>([]);
   const [playerFile, setPlayerFile] = useState<{ name: string; url: string } | null>(null);
+  const [media, setMedia] = useState<MediaItem[]>([]);
   const [ytCookies, setYtCookies] = useState("");
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
   const [skillQuery, setSkillQuery] = useState("");
@@ -1135,6 +1137,31 @@ export default function App() {
   const downloadActive = Boolean(
     liveTask?.steps.some((step) => step.title === "youtube.download" || step.title === "Downloads"),
   );
+
+  const mediaUrl = (item: MediaItem, download = false): string =>
+    `${CLOUD_URL}/v1/tasks/${item.taskId}/downloads/${encodeURIComponent(item.name)}?token=${encodeURIComponent(
+      token(),
+    )}${download ? "&download=1" : ""}`;
+
+  async function moveToThisComputer(item: MediaItem): Promise<void> {
+    // Download a copy to this machine, then record where it lives.
+    void openExternal(mediaUrl(item, true));
+    try {
+      await client.markMediaOnDevice(item.id, computerName);
+      setMedia(await client.listMedia());
+    } catch (err: unknown) {
+      setError(messageOf(err));
+    }
+  }
+
+  async function removeFromServer(item: MediaItem): Promise<void> {
+    try {
+      await client.deleteMedia(item.id, true);
+      setMedia(await client.listMedia());
+    } catch (err: unknown) {
+      setError(messageOf(err));
+    }
+  }
   const activeBot = bots.find((bot) => bot.id === activeBotId) ?? null;
   const activeScheme = BOT_SCHEMES[(activeBot?.scheme ?? 0) % BOT_SCHEMES.length];
   // A group is a container of bots, not a bot itself — keep them separate.
@@ -1221,6 +1248,21 @@ export default function App() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [latestTask?.id, latestTask?.status, client]);
+
+  // Load the media manifest whenever the Media settings tab is open.
+  useEffect(() => {
+    if (!showSettings || settingsTab !== "media") return;
+    let active = true;
+    client
+      .listMedia()
+      .then((items) => {
+        if (active) setMedia(items);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [showSettings, settingsTab, client]);
 
   if (!authChecked) return <div className="center">Loading…</div>;
 
@@ -2994,6 +3036,58 @@ export default function App() {
                       <span className={`skill-status skill-${skill.status}`}>{skill.status}</span>
                     </div>
                   ))}
+                </div>
+              )}
+
+              {settingsTab === "media" && (
+                <div className="settings-sections">
+                  <div className="settings-section-title">Media ({media.length})</div>
+                  <p className="settings-note">
+                    Files your bots downloaded. They live on the server until you move them to a computer; the
+                    list stays in sync across your devices.
+                  </p>
+                  <ul className="downloads-list">
+                    {media.length === 0 && <li className="muted">Nothing downloaded yet.</li>}
+                    {media.map((item) => (
+                      <li key={item.id} className="download-row">
+                        <span className="download-ico">{isPlayable(item.name) ? "▶" : "▢"}</span>
+                        <div className="download-main">
+                          <div className="download-name" title={item.name}>
+                            {prettyFileName(item.name)}
+                          </div>
+                          <div className="download-size">
+                            {Math.max(1, Math.round(item.size / 1024)).toLocaleString()} KB ·{" "}
+                            {item.location === "device" ? `On ${item.device ?? "a device"}` : "On server"}
+                          </div>
+                        </div>
+                        {isPlayable(item.name) && (
+                          <button
+                            className="ghost small"
+                            type="button"
+                            onClick={() => setPlayerFile({ name: item.name, url: mediaUrl(item) })}
+                          >
+                            Play
+                          </button>
+                        )}
+                        <button
+                          className="ghost small"
+                          type="button"
+                          onClick={() => void moveToThisComputer(item)}
+                        >
+                          Move to my computer
+                        </button>
+                        {item.location === "device" && (
+                          <button
+                            className="ghost small danger"
+                            type="button"
+                            onClick={() => void removeFromServer(item)}
+                          >
+                            Remove from server
+                          </button>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               )}
 
