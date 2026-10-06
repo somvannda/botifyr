@@ -271,13 +271,6 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [plan, setPlan] = useState<"free" | "pro" | "business">("free");
   const [billing, setBilling] = useState<Awaited<ReturnType<BotifyrClient["billing"]>> | null>(null);
   const [topUpOpen, setTopUpOpen] = useState(false);
-  const [trialStart] = useState(() => {
-    const existing = Number(localStorage.getItem("botifyr.trialStart"));
-    if (existing) return existing;
-    const now = Date.now();
-    localStorage.setItem("botifyr.trialStart", String(now));
-    return now;
-  });
   const [showBotPanel, setShowBotPanel] = useState(() => localStorage.getItem("botifyr.botPanel") !== "0");
   const [botPanelTab, setBotPanelTab] = useState<"details" | "library" | "computer">("details");
   const [labels, setLabels] = useState<Record<string, string>>(() => {
@@ -1638,7 +1631,6 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     config?.limits && config.limits.dailyTokenBudget > 0
       ? Math.min(100, Math.round(((config.usage?.tokensToday ?? 0) / config.limits.dailyTokenBudget) * 100))
       : 0;
-  const trialDaysLeft = Math.max(0, 7 - Math.floor((Date.now() - trialStart) / 86_400_000));
   const marketMatches = marketQuery.trim()
     ? MARKETPLACE.filter((app) =>
         `${app.name} ${app.category} ${app.desc}`.toLowerCase().includes(marketQuery.trim().toLowerCase()),
@@ -4104,26 +4096,30 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
 
               {settingsTab === "usage" && (
                 <div className="settings-sections">
-                  {plan === "pro" ? (
+                  {plan === "free" && (
                     <div className="trial-card">
                       <div className="trial-head">
-                        <span>Pro plan</span>
-                        <span>Active</span>
-                      </div>
-                      <div className="trial-foot">
-                        Unlimited bots, always-on schedules and priority sandboxes.
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="trial-card">
-                      <div className="trial-head">
-                        <span>Trial usage</span>
-                        <span>{trialPercent}%</span>
+                        <span>Free plan usage</span>
+                        <span>
+                          {(billing?.tokensThisMonth ?? 0).toLocaleString()} /{" "}
+                          {(billing?.freeMonthlyTokens ?? 0).toLocaleString()}
+                        </span>
                       </div>
                       <div className="trial-bar">
-                        <span style={{ width: `${trialPercent}%` }} />
+                        <span
+                          style={{
+                            width: `${
+                              billing?.freeMonthlyTokens
+                                ? Math.min(
+                                    100,
+                                    Math.round((billing.tokensThisMonth / billing.freeMonthlyTokens) * 100),
+                                  )
+                                : 0
+                            }%`,
+                          }}
+                        />
                       </div>
-                      <div className="trial-foot">Ends in {trialDaysLeft} days</div>
+                      <div className="trial-foot">Resets at the start of each month</div>
                     </div>
                   )}
 
@@ -4145,12 +4141,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                       </span>
                     </span>
                     {plan === "free" ? (
-                      <button
-                        className="btn primary"
-                        type="button"
-                        disabled={billing?.billingConfigured === false}
-                        onClick={() => void upgradePlan("pro")}
-                      >
+                      <button className="btn primary" type="button" onClick={() => void upgradePlan("pro")}>
                         Upgrade to Pro (${((billing?.prices.proCents ?? 500) / 100).toFixed(2)})
                       </button>
                     ) : (
@@ -4179,12 +4170,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                         Top up to keep working past your included tokens
                       </span>
                     </span>
-                    <button
-                      className="ghost small"
-                      type="button"
-                      disabled={billing?.billingConfigured === false}
-                      onClick={() => setTopUpOpen(true)}
-                    >
+                    <button className="ghost small" type="button" onClick={() => setTopUpOpen(true)}>
                       Top up credits
                     </button>
                   </div>

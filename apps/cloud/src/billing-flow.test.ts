@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createLocalChannel } from "@botifyr/channels";
 import { notify, runBillingTick, settleInvoice, type ChmabaConfig } from "./billing.js";
@@ -192,5 +193,108 @@ describe("reminders", () => {
 
     expect(calls.some((url) => url.includes("api.telegram.org"))).toBe(false);
     expect(calls.some((url) => url.includes("api.resend.com"))).toBe(true);
+  });
+});
+
+describe("ChmabaPay checkout → webhook", () => {
+  const saved = {
+    key: process.env.CHMABA_API_KEY,
+    store: process.env.CHMABA_STORE,
+    secret: process.env.CHMABA_WEBHOOK_SECRET,
+  };
+  afterEach(() => {
+    const restore: Record<string, string | undefined> = {
+      CHMABA_API_KEY: saved.key,
+      CHMABA_STORE: saved.store,
+      CHMABA_WEBHOOK_SECRET: saved.secret,
+    };
+    for (const [key, value] of Object.entries(restore)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    vi.unstubAllGlobals();
+  });
+
+  function configure() {
+    process.env.CHMABA_API_KEY = "ck_live_test";
+    process.env.CHMABA_STORE = "st_test";
+    process.env.CHMABA_WEBHOOK_SECRET = "whsec_test";
+  }
+
+  it("creates an invoice, then activates the plan from a signed webhook", async () => {
+    configure();
+    vi.stubGlobal("fetch", (url: string) => {
+      if (String(url).endsWith("/v1/payments")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              id: "pay_1",
+              status: "pending",
+              qr_string: "QR",
+              checkout_url: "https://pay.chmaba.com/pay/pay_1",
+              expires_at: new Date(Date.now() + 180_000).toISOString(),
+            }),
+            { status: 201, headers: { "content-type": "application/json" } },
+          ),
+        );
+      }
+      return Promise.resolve(new Response("{}", { status: 200 }));
+    });
+
+    const store = new MemoryStore();
+    const app = await buildServer({ store, vaultKey: Buffer.alloc(32), localChannel: createLocalChannel() });
+    await app.ready();
+    const signup = await app.inject({
+      method: "POST",
+      url: "/auth/signup",
+      payload: { email: "buyer@example.com", password: "password123" },
+    });
+    const { token } = signup.json() as { token: string };
+    const auth = { authorization: `Bearer ${token}` };
+
+    const checkout = await app.inject({
+      method: "POST",
+      url: "/v1/billing/checkout",
+      headers: auth,
+      payload: { kind: "plan", plan: "pro" },
+    });
+    expect(checkout.statusCode).toBe(200);
+    expect((checkout.json() as { url?: string }).url).toContain("/pay/");
+
+    const body = JSON.stringify({
+      type: "payment.completed",
+      data: { payment: { id: "pay_1", status: "paid" } },
+    });
+    const t = Math.floor(Date.now() / 1000).toString();
+    const v1 = createHmac("sha256", "whsec_test").update(`${t}.${body}`).digest("hex");
+    const hook = await app.inject({
+      method: "POST",
+      url: "/v1/billing/chmaba/webhook",
+      headers: { "content-type": "application/json", "x-chambapay-signature": `t=${t},v1=${v1}` },
+      payload: body,
+    });
+    expect(hook.statusCode).toBe(204);
+    expect(
+      ((await app.inject({ method: "GET", url: "/auth/me", headers: auth })).json() as { plan: string }).plan,
+    ).toBe("pro");
+    await app.close();
+  });
+
+  it("rejects a webhook with a bad signature", async () => {
+    configure();
+    const store = new MemoryStore();
+    const app = await buildServer({ store, vaultKey: Buffer.alloc(32), localChannel: createLocalChannel() });
+    await app.ready();
+    const hook = await app.inject({
+      method: "POST",
+      url: "/v1/billing/chmaba/webhook",
+      headers: { "content-type": "application/json", "x-chambapay-signature": "t=1,v1=deadbeef" },
+      payload: JSON.stringify({
+        type: "payment.completed",
+        data: { payment: { id: "pay_1", status: "paid" } },
+      }),
+    });
+    expect(hook.statusCode).toBe(400);
+    await app.close();
   });
 });
