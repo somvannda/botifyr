@@ -23,10 +23,10 @@ they land. Keep entries short; link code paths instead of explaining them.
 - [ ] **Mobile PWA offline** (manifest exists; no service worker).
 - [ ] **Prepaid billing via ChmabaPay** (KHQR / ABA PayWay) — monthly prepaid
       plans **+ on-demand credits**, admin-set pricing/grace/reminders, 7/3/1-day
-      reminders, 7-day grace, hard-stop then downgrade to free.
-      Design: [`docs/billing.md`](billing.md). **Data model done** (settings,
-      model pricing, invoices, wallet, ledger, notifications); client + routes +
-      UI still to come.
+      reminders, 7-day grace, hard-stop then downgrade to free. Design:
+      [`docs/billing.md`](billing.md). **Implemented**: data model, ChmabaPay
+      client + pricing, routes + webhook + scheduler, hard-stop, admin billing UI,
+      user Usage & Billing. Remaining: live **0.01** validation + email/Telegram go-live.
 - [ ] **Deploy** — TLS, reverse proxy, subdomains (`app.` / `admin.` / `api.`).
 - [x] **Retire static `/admin.html`** — `/admin` now 302-redirects to the console.
 
