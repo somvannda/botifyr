@@ -1050,12 +1050,18 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     }
   }
 
-  /** Allow now and remember: turn on this bot's "Always allow" for next time. */
+  /** Allow now and remember: turn on "Always allow" so it won't ask again. */
   async function allowAlways(): Promise<void> {
     try {
       if (activeBot) {
-        const updated = await client.updateBot(activeBot.id, { autoApprove: true });
-        setBots((prev) => prev.map((bot) => (bot.id === updated.id ? updated : bot)));
+        const targets =
+          activeBot.memberIds && activeBot.memberIds.length > 0
+            ? bots.filter((bot) => activeBot.memberIds?.includes(bot.id))
+            : [activeBot];
+        const updatedList = await Promise.all(
+          targets.map((bot) => client.updateBot(bot.id, { autoApprove: true })),
+        );
+        setBots((prev) => prev.map((bot) => updatedList.find((u) => u.id === bot.id) ?? bot));
       }
       await decide("allow");
     } catch (err: unknown) {
