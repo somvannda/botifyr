@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { FormEvent } from "react";
+import type { FormEvent, ReactNode } from "react";
 import type {
   AuditEvent,
   Bot,
@@ -76,6 +76,7 @@ export default function App() {
   const [showConnectApps, setShowConnectApps] = useState(false);
   const [connections, setConnections] = useState<ConnectionInfo[]>([]);
   const [connectingApp, setConnectingApp] = useState<string | null>(null);
+  const [marketQuery, setMarketQuery] = useState("");
   const [bots, setBots] = useState<Bot[]>([]);
   const [activeBotId, setActiveBotId] = useState<string | null>(null);
   const [stream, setStream] = useState<{
@@ -120,6 +121,17 @@ export default function App() {
     localStorage.setItem("botifyr.trialStart", String(now));
     return now;
   });
+  const [showBotPanel, setShowBotPanel] = useState(() => localStorage.getItem("botifyr.botPanel") !== "0");
+  const [botPanelTab, setBotPanelTab] = useState<"details" | "library" | "computer">("details");
+  const [labels, setLabels] = useState<Record<string, string>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("botifyr.labels") ?? "{}") as Record<string, string>;
+    } catch {
+      return {};
+    }
+  });
+  const [editingLabel, setEditingLabel] = useState(false);
+  const [labelDraft, setLabelDraft] = useState("");
   const [secretName, setSecretName] = useState("");
   const [secretValue, setSecretValue] = useState("");
 
@@ -247,6 +259,10 @@ export default function App() {
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
+
+  useEffect(() => {
+    localStorage.setItem("botifyr.botPanel", showBotPanel ? "1" : "0");
+  }, [showBotPanel]);
 
   function applyEvent(event: ServerEvent) {
     switch (event.type) {
@@ -529,6 +545,14 @@ export default function App() {
     }
   }
 
+  function saveLabel() {
+    if (!activeBotId) return;
+    const next = { ...labels, [activeBotId]: labelDraft.trim() };
+    setLabels(next);
+    localStorage.setItem("botifyr.labels", JSON.stringify(next));
+    setEditingLabel(false);
+  }
+
   async function retry() {
     if (!activeSessionId || busy) return;
     setError(null);
@@ -647,6 +671,7 @@ export default function App() {
   const activeBot = bots.find((bot) => bot.id === activeBotId) ?? null;
   const activeScheme = BOT_SCHEMES[(activeBot?.scheme ?? 0) % BOT_SCHEMES.length];
   const activeBotName = activeBot?.name ?? "Botifyr";
+  const botLabel = activeBotId ? (labels[activeBotId] ?? "") : "";
   const inGroup = Boolean(activeBot?.memberIds && activeBot.memberIds.length > 0);
   const streamBot = stream?.botId ? (bots.find((bot) => bot.id === stream.botId) ?? null) : null;
   const streamScheme = BOT_SCHEMES[(streamBot?.scheme ?? activeBot?.scheme ?? 0) % BOT_SCHEMES.length];
@@ -728,7 +753,7 @@ export default function App() {
   }
 
   return (
-    <div className="app">
+    <div className={`app${showBotPanel && activeBot ? " with-panel" : ""}`}>
       <aside className="sidebar">
         <div className="sidebar-top">
           <button className="round" type="button" title="Search" onClick={() => setSearchOpen((v) => !v)}>
@@ -824,7 +849,7 @@ export default function App() {
               className="account-item"
               type="button"
               onClick={() => {
-                void openExternal("https://docs.x.ai/grok-bot/overview");
+                void openExternal("https://botifyr.xyz/help");
                 setShowAccountMenu(false);
               }}
             >
@@ -913,6 +938,14 @@ export default function App() {
               {activeBotName}
             </span>
             <div className="topbar-right">
+              <button
+                className="bot-menu-btn"
+                type="button"
+                title={showBotPanel ? "Hide bot panel" : "Show bot panel"}
+                onClick={() => setShowBotPanel((value) => !value)}
+              >
+                ▢
+              </button>
               {activeBot && (
                 <button
                   className="bot-menu-btn"
@@ -1143,51 +1176,178 @@ export default function App() {
         </form>
       </main>
 
+      {showBotPanel && activeBot && (
+        <aside className="bot-panel">
+          <div className="bot-panel-head">
+            <BotLogo size={96} scheme={activeScheme} />
+            <div className="bot-panel-name">{activeBotName}</div>
+            {editingLabel ? (
+              <input
+                className="bot-panel-label-input"
+                autoFocus
+                placeholder="Label"
+                value={labelDraft}
+                onChange={(event) => setLabelDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") saveLabel();
+                  if (event.key === "Escape") setEditingLabel(false);
+                }}
+                onBlur={saveLabel}
+              />
+            ) : botLabel ? (
+              <button
+                className="bot-panel-label"
+                type="button"
+                onClick={() => {
+                  setLabelDraft(botLabel);
+                  setEditingLabel(true);
+                }}
+              >
+                {botLabel}
+              </button>
+            ) : (
+              <button
+                className="bot-panel-addlabel"
+                type="button"
+                onClick={() => {
+                  setLabelDraft("");
+                  setEditingLabel(true);
+                }}
+              >
+                Add a label
+              </button>
+            )}
+          </div>
+
+          <div className="bot-panel-tabs">
+            {(["details", "library", "computer"] as const).map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                className={`bot-panel-tab ${botPanelTab === tab ? "active" : ""}`}
+                onClick={() => setBotPanelTab(tab)}
+              >
+                {tab === "details" ? "Details" : tab === "library" ? "Library" : "Computer"}
+              </button>
+            ))}
+          </div>
+
+          <div className="bot-panel-body">
+            {botPanelTab === "details" && (
+              <div className="bot-panel-details">
+                <div className="bot-panel-kv">
+                  <span>Name</span>
+                  <span>{activeBotName}</span>
+                </div>
+                <div className="bot-panel-kv">
+                  <span>Type</span>
+                  <span>{inGroup ? "Group" : "Bot"}</span>
+                </div>
+                {inGroup && (
+                  <div className="bot-panel-kv">
+                    <span>Members</span>
+                    <span>{activeBot.memberIds?.length ?? 0}</span>
+                  </div>
+                )}
+                {activeBot.schedule && (
+                  <div className="bot-panel-kv">
+                    <span>Schedule</span>
+                    <span>every {activeBot.schedule.everyMinutes}m</span>
+                  </div>
+                )}
+                {activeBot.instructions && <p className="bot-panel-instructions">{activeBot.instructions}</p>}
+              </div>
+            )}
+
+            {botPanelTab === "library" && (
+              <p className="bot-panel-empty">No items yet. Files a bot saves will show up here.</p>
+            )}
+
+            {botPanelTab === "computer" && (
+              <div className="bot-panel-screen">
+                {liveTask && (liveTask.liveStream || liveTask.screenshotAt) ? (
+                  <img
+                    className="bot-panel-screen-img"
+                    src={
+                      liveTask.liveStream
+                        ? `${CLOUD_URL}/v1/tasks/${liveTask.id}/stream?token=${encodeURIComponent(token())}`
+                        : `${CLOUD_URL}/v1/tasks/${liveTask.id}/screenshot?v=${encodeURIComponent(liveTask.screenshotAt ?? "")}&token=${encodeURIComponent(token())}`
+                    }
+                    alt="Bot screen"
+                  />
+                ) : (
+                  <div className="bot-panel-screen-empty">
+                    <span className="bot-panel-screen-ico">▢</span>
+                    <span>{activeBotName}&apos;s screen</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </aside>
+      )}
+
       {showConnectApps && (
         <div className="apps-overlay" onClick={() => setShowConnectApps(false)}>
-          <div className="apps-panel" onClick={(event) => event.stopPropagation()}>
+          <div className="apps-panel marketplace" onClick={(event) => event.stopPropagation()}>
             <div className="apps-head">
-              <span className="apps-title">Connect apps</span>
+              <span className="apps-title">Marketplace</span>
               <button className="round small" type="button" onClick={() => setShowConnectApps(false)}>
                 ✕
               </button>
             </div>
             <p className="apps-sub">
-              Let Botifyr work with the apps you already use. Each connection is authorized with Google, and
-              you can revoke it any time.
+              Connect the apps you already use. Each connection is authorized with the provider, and you can
+              revoke it any time.
             </p>
-            <ul className="apps-list">
-              {CONNECT_APPS.map((app) => {
-                const connected = connections.some((entry) => entry.provider === app.id);
+            <input
+              className="market-search"
+              placeholder="Search apps…"
+              value={marketQuery}
+              onChange={(event) => setMarketQuery(event.target.value)}
+            />
+            <div className="market-grid">
+              {MARKETPLACE.filter((app) =>
+                marketQuery.trim()
+                  ? `${app.name} ${app.category}`.toLowerCase().includes(marketQuery.trim().toLowerCase())
+                  : true,
+              ).map((app) => {
+                const connected = app.provider
+                  ? connections.some((entry) => entry.provider === app.provider)
+                  : false;
                 return (
-                  <li key={app.id} className="apps-item">
-                    <span className="apps-ico">{app.icon}</span>
-                    <span className="apps-meta">
-                      <span className="apps-name">{app.name}</span>
-                      <span className="apps-desc">{app.desc}</span>
-                    </span>
-                    {connected ? (
-                      <button
-                        className="ghost small"
-                        type="button"
-                        onClick={() => void disconnectApp(app.id)}
-                      >
-                        Disconnect
-                      </button>
+                  <div key={app.id} className="market-card">
+                    <span className="market-ico">{app.icon}</span>
+                    <span className="market-name">{app.name}</span>
+                    <span className="market-desc">{app.desc}</span>
+                    {app.provider ? (
+                      connected ? (
+                        <button
+                          className="ghost small"
+                          type="button"
+                          onClick={() => void disconnectApp(app.provider!)}
+                        >
+                          Disconnect
+                        </button>
+                      ) : (
+                        <button
+                          className="ghost small"
+                          type="button"
+                          disabled={connectingApp === app.provider}
+                          onClick={() => void connectApp(app.provider!)}
+                        >
+                          {connectingApp === app.provider ? "Connecting…" : "Connect"}
+                        </button>
+                      )
                     ) : (
-                      <button
-                        className="ghost small"
-                        type="button"
-                        disabled={connectingApp === app.id}
-                        onClick={() => void connectApp(app.id)}
-                      >
-                        {connectingApp === app.id ? "Connecting…" : "Connect"}
+                      <button className="ghost small" type="button" disabled>
+                        Coming soon
                       </button>
                     )}
-                  </li>
+                  </div>
                 );
               })}
-            </ul>
+            </div>
           </div>
         </div>
       )}
@@ -1656,19 +1816,96 @@ export default function App() {
   );
 }
 
-const CONNECT_APPS = [
-  { id: "gmail", name: "Gmail", desc: "Read, search, and draft email", icon: <GmailIcon size={22} /> },
+interface MarketApp {
+  id: string;
+  /** Connection provider id, or null when the app is not available yet. */
+  provider: string | null;
+  name: string;
+  category: string;
+  desc: string;
+  icon: ReactNode;
+}
+
+const MARKETPLACE: MarketApp[] = [
+  {
+    id: "gmail",
+    provider: "gmail",
+    name: "Gmail",
+    category: "Communication",
+    desc: "Read, search, and draft email",
+    icon: <GmailIcon size={26} />,
+  },
   {
     id: "calendar",
+    provider: "calendar",
     name: "Google Calendar",
+    category: "Productivity",
     desc: "See your schedule and create events",
-    icon: <CalendarIcon size={22} />,
+    icon: <CalendarIcon size={26} />,
   },
   {
     id: "drive",
+    provider: "drive",
     name: "Google Drive",
+    category: "Files",
     desc: "Find, read, and organize your files",
-    icon: <DriveIcon size={22} />,
+    icon: <DriveIcon size={26} />,
+  },
+  {
+    id: "slack",
+    provider: null,
+    name: "Slack",
+    category: "Communication",
+    desc: "Send and read team messages",
+    icon: <span className="market-emoji">💬</span>,
+  },
+  {
+    id: "notion",
+    provider: null,
+    name: "Notion",
+    category: "Productivity",
+    desc: "Search and update your pages",
+    icon: <span className="market-emoji">📝</span>,
+  },
+  {
+    id: "github",
+    provider: null,
+    name: "GitHub",
+    category: "Developer",
+    desc: "Read repos, issues, and pull requests",
+    icon: <span className="market-emoji">🐙</span>,
+  },
+  {
+    id: "linear",
+    provider: null,
+    name: "Linear",
+    category: "Developer",
+    desc: "Track issues and projects",
+    icon: <span className="market-emoji">📐</span>,
+  },
+  {
+    id: "figma",
+    provider: null,
+    name: "Figma",
+    category: "Design",
+    desc: "Read design files and comments",
+    icon: <span className="market-emoji">🎨</span>,
+  },
+  {
+    id: "dropbox",
+    provider: null,
+    name: "Dropbox",
+    category: "Files",
+    desc: "Find and read your files",
+    icon: <span className="market-emoji">📦</span>,
+  },
+  {
+    id: "x",
+    provider: null,
+    name: "X",
+    category: "Social",
+    desc: "Draft and schedule posts",
+    icon: <span className="market-emoji">𝕏</span>,
   },
 ];
 

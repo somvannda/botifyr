@@ -2409,6 +2409,207 @@ body {
   background: #ffffff;
 }
 
+/* Bot panel (per conversation) ------------------------------------------- */
+.app.with-panel {
+  grid-template-columns: 270px 1fr 320px;
+}
+
+.bot-panel {
+  border-left: 1px solid var(--border);
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px 18px;
+  overflow-y: auto;
+}
+
+.bot-panel-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.bot-panel-name {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.bot-panel-addlabel,
+.bot-panel-label {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.bot-panel-addlabel:hover,
+.bot-panel-label:hover {
+  color: var(--text);
+  text-decoration: underline;
+}
+
+.bot-panel-label-input {
+  width: 100%;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  color: var(--text);
+  font-size: 12.5px;
+  text-align: center;
+}
+
+.bot-panel-tabs {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+}
+
+.bot-panel-tab {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12.5px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.bot-panel-tab:hover {
+  color: var(--text);
+}
+
+.bot-panel-tab.active {
+  background: var(--panel-2);
+  color: var(--text);
+  font-weight: 500;
+}
+
+.bot-panel-kv {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12.5px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.bot-panel-kv > span:first-child {
+  color: var(--muted);
+}
+
+.bot-panel-instructions {
+  margin-top: 12px;
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.bot-panel-empty {
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.bot-panel-screen {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--panel);
+  min-height: 180px;
+  display: grid;
+  place-items: center;
+}
+
+.bot-panel-screen-img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.bot-panel-screen-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.bot-panel-screen-ico {
+  font-size: 28px;
+  opacity: 0.6;
+}
+
+/* Marketplace ------------------------------------------------------------ */
+.apps-panel.marketplace {
+  width: 640px;
+}
+
+.market-search {
+  width: 100%;
+  background: #0e0e10;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: var(--text);
+  font-size: 13px;
+  margin-bottom: 14px;
+  outline: none;
+}
+
+.market-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.market-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.market-ico {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  background: #fff;
+  border-radius: 9px;
+}
+
+.market-emoji {
+  font-size: 20px;
+}
+
+.market-name {
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.market-desc {
+  font-size: 11.5px;
+  color: var(--muted);
+  flex: 1;
+}
+
+.market-card .ghost {
+  align-self: flex-start;
+}
+
 .apps-actions {
   display: flex;
   justify-content: flex-end;
