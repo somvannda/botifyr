@@ -164,4 +164,24 @@ describe("MemoryStore", () => {
 
     expect(await store.usageSince("u1", "2026-01-15T00:00:00Z")).toEqual({ tokens: 27, requests: 1 });
   });
+
+  it("stores API keys hashed and resolves/touches/revokes them", async () => {
+    const store = new MemoryStore();
+    await store.createApiKey({
+      id: "k1",
+      userId: "u1",
+      name: "CI",
+      prefix: "bk_abc",
+      keyHash: "hash1",
+      createdAt: now,
+    });
+
+    expect((await store.getApiKeyByHash("hash1"))?.userId).toBe("u1");
+    expect(await store.listApiKeys("u1")).toHaveLength(1);
+    await store.touchApiKey("k1");
+    expect((await store.getApiKeyByHash("hash1"))?.lastUsedAt).toBeTruthy();
+    expect(await store.revokeApiKey("u2", "k1")).toBe(false);
+    expect(await store.revokeApiKey("u1", "k1")).toBe(true);
+    expect(await store.getApiKeyByHash("hash1")).toBeNull();
+  });
 });

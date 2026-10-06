@@ -107,6 +107,18 @@ export interface LearnedSkillRecord {
   updatedAt: string;
 }
 
+/** A hashed developer API key for the public API platform. */
+export interface ApiKeyRecord {
+  id: string;
+  userId: string;
+  name: string;
+  /** First few characters, shown in the UI so a key can be identified. */
+  prefix: string;
+  keyHash: string;
+  createdAt: string;
+  lastUsedAt?: string;
+}
+
 export interface Store {
   init(): Promise<void>;
   close(): Promise<void>;
@@ -166,4 +178,10 @@ export interface Store {
   getLearnedSkill(id: string): Promise<LearnedSkillRecord | null>;
   getLearnedSkillByName(name: string): Promise<LearnedSkillRecord | null>;
   deleteLearnedSkill(userId: string, id: string): Promise<boolean>;
+
+  createApiKey(record: ApiKeyRecord): Promise<void>;
+  listApiKeys(userId: string): Promise<ApiKeyRecord[]>;
+  getApiKeyByHash(keyHash: string): Promise<ApiKeyRecord | null>;
+  touchApiKey(id: string): Promise<void>;
+  revokeApiKey(userId: string, id: string): Promise<boolean>;
 }

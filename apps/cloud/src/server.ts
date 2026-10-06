@@ -2,7 +2,7 @@ import Fastify from "fastify";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import cors from "@fastify/cors";
 import websocket from "@fastify/websocket";
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { readFile, readdir, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
@@ -188,15 +188,35 @@ export async function buildServer(options: ServerOptions) {
     return typeof value === "string" ? value : null;
   };
 
-  const requireAuth = async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
-    const token = bearer(request) ?? tokenFromQuery(request);
-    if (!token) {
-      await reply.code(401).send({ error: "missing bearer token" });
-      return;
+  /** A developer key from `x-api-key` or a `bk_…` bearer token. */
+  const apiKeyFromRequest = (request: FastifyRequest): string | null => {
+    const header = request.headers["x-api-key"];
+    if (typeof header === "string" && header.trim()) return header.trim();
+    const token = bearer(request);
+    return token && token.startsWith("bk_") ? token : null;
+  };
+
+  /**
+   * Resolve the caller to a user from either a session bearer token or a
+   * developer API key. API keys are hashed at rest and their last use is
+   * recorded so the portal can show activity.
+   */
+  const resolveUserId = async (request: FastifyRequest): Promise<string | null> => {
+    const apiKey = apiKeyFromRequest(request);
+    if (apiKey) {
+      const record = await store.getApiKeyByHash(hashToken(apiKey));
+      if (!record) return null;
+      void store.touchApiKey(record.id).catch(() => {});
+      return record.userId;
     }
-    const userId = await store.getUserIdByTokenHash(hashToken(token));
+    const token = bearer(request) ?? tokenFromQuery(request);
+    return token ? store.getUserIdByTokenHash(hashToken(token)) : null;
+  };
+
+  const requireAuth = async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    const userId = await resolveUserId(request);
     if (!userId) {
-      await reply.code(401).send({ error: "invalid or expired token" });
+      await reply.code(401).send({ error: "invalid or missing credentials" });
       return;
     }
     request.userId = userId;
@@ -845,6 +865,56 @@ export async function buildServer(options: ServerOptions) {
     }
     return reply.code(204).send();
   });
+
+  /* API keys — the credential for the public API platform. The secret is shown
+     once at creation; only a hash is stored. */
+  app.get("/v1/api-keys", { preHandler: requireAuth }, async (request) => {
+    const userId = request.userId as string;
+    return (await store.listApiKeys(userId)).map((key) => ({
+      id: key.id,
+      name: key.name,
+      prefix: key.prefix,
+      createdAt: key.createdAt,
+      lastUsedAt: key.lastUsedAt,
+    }));
+  });
+
+  app.post<{ Body: { name?: string } }>(
+    "/v1/api-keys",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const name = (request.body?.name ?? "").trim().slice(0, 60) || "API key";
+      const secret = `bk_${randomBytes(24).toString("hex")}`;
+      const record = {
+        id: randomUUID(),
+        userId,
+        name,
+        prefix: secret.slice(0, 11),
+        keyHash: hashToken(secret),
+        createdAt: new Date().toISOString(),
+      };
+      await store.createApiKey(record);
+      // The plaintext key is returned exactly once.
+      return reply.code(201).send({
+        id: record.id,
+        name: record.name,
+        prefix: record.prefix,
+        key: secret,
+        createdAt: record.createdAt,
+      });
+    },
+  );
+
+  app.delete<{ Params: { id: string } }>(
+    "/v1/api-keys/:id",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const removed = await store.revokeApiKey(request.userId as string, request.params.id);
+      if (!removed) return reply.code(404).send({ error: "key not found" });
+      return reply.code(204).send();
+    },
+  );
 
   app.post<{ Body: { email?: string; password?: string } }>("/auth/signup", async (request, reply) => {
     const email = (request.body?.email ?? "").trim();

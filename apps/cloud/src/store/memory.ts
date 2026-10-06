@@ -1,5 +1,6 @@
 import type { Task } from "@botifyr/shared";
 import type {
+  ApiKeyRecord,
   AuditRecord,
   BotRecord,
   ConnectionRecord,
@@ -28,6 +29,7 @@ export class MemoryStore implements Store {
   private usage: UsageRecord[] = [];
   private files = new Map<string, FileRecord>();
   private learnedSkills = new Map<string, LearnedSkillRecord>();
+  private apiKeys = new Map<string, ApiKeyRecord>();
 
   async init(): Promise<void> {}
   async close(): Promise<void> {}
@@ -260,6 +262,36 @@ export class MemoryStore implements Store {
     const record = this.learnedSkills.get(id);
     if (!record || record.createdBy !== userId) return false;
     this.learnedSkills.delete(id);
+    return true;
+  }
+
+  async createApiKey(record: ApiKeyRecord): Promise<void> {
+    this.apiKeys.set(record.id, { ...record });
+  }
+
+  async listApiKeys(userId: string): Promise<ApiKeyRecord[]> {
+    return [...this.apiKeys.values()]
+      .filter((record) => record.userId === userId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map((record) => ({ ...record }));
+  }
+
+  async getApiKeyByHash(keyHash: string): Promise<ApiKeyRecord | null> {
+    for (const record of this.apiKeys.values()) {
+      if (record.keyHash === keyHash) return { ...record };
+    }
+    return null;
+  }
+
+  async touchApiKey(id: string): Promise<void> {
+    const record = this.apiKeys.get(id);
+    if (record) record.lastUsedAt = new Date().toISOString();
+  }
+
+  async revokeApiKey(userId: string, id: string): Promise<boolean> {
+    const record = this.apiKeys.get(id);
+    if (!record || record.userId !== userId) return false;
+    this.apiKeys.delete(id);
     return true;
   }
 }

@@ -1,6 +1,7 @@
 import { Pool } from "pg";
 import type { Task } from "@botifyr/shared";
 import type {
+  ApiKeyRecord,
   AuditRecord,
   BotRecord,
   ConnectionRecord,
@@ -393,6 +394,50 @@ export class PostgresStore implements Store {
     ]);
     return (result.rowCount ?? 0) > 0;
   }
+
+  async createApiKey(record: ApiKeyRecord): Promise<void> {
+    await this.pool.query(
+      "INSERT INTO api_keys (id, user_id, name, prefix, key_hash, created_at) VALUES ($1, $2, $3, $4, $5, $6)",
+      [record.id, record.userId, record.name, record.prefix, record.keyHash, record.createdAt],
+    );
+  }
+
+  async listApiKeys(userId: string): Promise<ApiKeyRecord[]> {
+    const { rows } = await this.pool.query(
+      "SELECT id, user_id, name, prefix, key_hash, created_at, last_used_at FROM api_keys WHERE user_id = $1 ORDER BY created_at DESC",
+      [userId],
+    );
+    return rows.map(toApiKey);
+  }
+
+  async getApiKeyByHash(keyHash: string): Promise<ApiKeyRecord | null> {
+    const { rows } = await this.pool.query(
+      "SELECT id, user_id, name, prefix, key_hash, created_at, last_used_at FROM api_keys WHERE key_hash = $1",
+      [keyHash],
+    );
+    return rows[0] ? toApiKey(rows[0]) : null;
+  }
+
+  async touchApiKey(id: string): Promise<void> {
+    await this.pool.query("UPDATE api_keys SET last_used_at = now() WHERE id = $1", [id]);
+  }
+
+  async revokeApiKey(userId: string, id: string): Promise<boolean> {
+    const result = await this.pool.query("DELETE FROM api_keys WHERE id = $1 AND user_id = $2", [id, userId]);
+    return (result.rowCount ?? 0) > 0;
+  }
+}
+
+function toApiKey(row: any): ApiKeyRecord {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    name: row.name,
+    prefix: row.prefix,
+    keyHash: row.key_hash,
+    createdAt: row.created_at.toISOString(),
+    lastUsedAt: row.last_used_at ? row.last_used_at.toISOString() : undefined,
+  };
 }
 
 function toUser(row: any): UserRecord {
