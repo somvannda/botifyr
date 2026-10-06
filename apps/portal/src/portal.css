@@ -94,6 +94,13 @@
   flex: 1;
 }
 
+/* The portal footer is a single row (email + sign-out). */
+.sidebar-footer {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
 .portal-mobile-only {
   display: none;
 }

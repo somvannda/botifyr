@@ -1170,6 +1170,13 @@ export default function App() {
   const downloadActive = Boolean(
     liveTask?.steps.some((step) => step.title === "youtube.download" || step.title === "Downloads"),
   );
+  // Media downloaded by tasks in the current chat (for the bot Library).
+  const sessionTaskIds = new Set(
+    Object.values(tasks)
+      .filter((task) => task.sessionId === activeSessionId)
+      .map((task) => task.id),
+  );
+  const botMedia = media.filter((item) => sessionTaskIds.has(item.taskId));
 
   const mediaUrl = (item: MediaItem, download = false): string =>
     `${CLOUD_URL}/v1/tasks/${item.taskId}/downloads/${encodeURIComponent(item.name)}?token=${encodeURIComponent(
@@ -1404,6 +1411,15 @@ export default function App() {
     void loadPeople();
   }, [user, loadPeople]);
 
+  // Keep the media manifest handy (bot Library + Media tab).
+  useEffect(() => {
+    if (!user) return;
+    void client
+      .listMedia()
+      .then(setMedia)
+      .catch(() => {});
+  }, [user, client]);
+
   if (!authChecked) return <div className="center">Loading…</div>;
 
   if (!user) {
@@ -1514,12 +1530,13 @@ export default function App() {
 
         <footer className="sidebar-footer">
           <button
-            className="user-avatar"
+            className="sidebar-account"
             type="button"
             title={`${user.email} · ${connection === "online" ? "Connected" : connection === "connecting" ? "Connecting…" : "Offline"}`}
             onClick={() => setShowAccountMenu((value) => !value)}
           >
-            {initials(user.email)}
+            <span className="user-avatar">{initials(user.email)}</span>
+            <span className="sidebar-account-email">{user.email}</span>
           </button>
           <button
             className="connect-apps"
@@ -1535,9 +1552,7 @@ export default function App() {
                 ? ` · ${friendRequests.filter((r) => r.direction === "incoming").length} new`
                 : ""}
             </span>
-            <span className="connect-apps-icons">
-              <UsersIcon size={16} />
-            </span>
+            <UsersIcon size={16} />
           </button>
           <button className="connect-apps" type="button" onClick={() => setShowConnectApps(true)}>
             <span>Connect apps</span>
@@ -2336,6 +2351,44 @@ export default function App() {
 
             {botPanelTab === "library" && (
               <div className="library">
+                <div className="settings-section-title">Downloads ({botMedia.length})</div>
+                {botMedia.length === 0 && (
+                  <div className="bot-panel-empty">Videos and audio this bot downloads show here.</div>
+                )}
+                <ul className="downloads-list">
+                  {botMedia.map((item) => (
+                    <li key={item.id} className="download-row">
+                      <span className="download-ico">{isPlayable(item.name) ? "▶" : "▢"}</span>
+                      <div className="download-main">
+                        <div className="download-name" title={item.name}>
+                          {prettyFileName(item.name)}
+                        </div>
+                        <div className="download-size">
+                          {Math.max(1, Math.round(item.size / 1024)).toLocaleString()} KB
+                          {item.location === "device" ? " · on your computer" : " · on server"}
+                        </div>
+                      </div>
+                      {isPlayable(item.name) && (
+                        <button
+                          className="ghost small"
+                          type="button"
+                          onClick={() => setPlayerFile({ name: item.name, url: mediaUrl(item) })}
+                        >
+                          Play
+                        </button>
+                      )}
+                      <button
+                        className="ghost small"
+                        type="button"
+                        onClick={() => void openExternal(mediaUrl(item, true))}
+                      >
+                        Save
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+
+                <div className="settings-section-title">Notes &amp; files</div>
                 <div className="library-new">
                   <input
                     placeholder="new file name"
