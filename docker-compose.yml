@@ -55,29 +55,17 @@ services:
     networks:
       - botifyr
 
-  # Marketing + help site. Deploy this image at botifyr.xyz in production.
+  # Website + user portal: marketing pages at `/`, the React portal at `/portal`.
   web:
     build:
-      context: apps/web
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_CLOUD_URL: ${VITE_CLOUD_URL:-http://localhost:8787}
     container_name: botifyr-web
     restart: unless-stopped
     ports:
       - "${WEB_PORT:-4322}:80"
-    networks:
-      - botifyr
-
-  # Web portal: the same account, bots and chats in the browser. A pure client
-  # of the cloud API, so it ships as a static image.
-  portal:
-    build:
-      context: .
-      dockerfile: apps/portal/Dockerfile
-      args:
-        VITE_CLOUD_URL: ${VITE_CLOUD_URL:-http://localhost:8787}
-    container_name: botifyr-portal
-    restart: unless-stopped
-    ports:
-      - "${PORTAL_PORT:-4323}:80"
     networks:
       - botifyr
 
