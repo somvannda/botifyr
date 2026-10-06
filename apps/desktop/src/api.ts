@@ -131,7 +131,11 @@ export class BotifyrClient {
     return this.request("/v1/sessions");
   }
 
-  sendMessage(sessionId: string, text: string, local = false): Promise<{ session: Session; task: Task }> {
+  sendMessage(
+    sessionId: string,
+    text: string,
+    local = false,
+  ): Promise<{ session: Session; task: Task; warning?: string }> {
     return this.request(`/v1/sessions/${sessionId}/messages`, {
       method: "POST",
       json: true,

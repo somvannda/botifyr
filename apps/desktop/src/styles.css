@@ -1600,6 +1600,12 @@ body {
   color: #ffd98a;
 }
 
+.notice.warn {
+  border-bottom-color: rgba(242, 181, 68, 0.55);
+  color: #ffd98a;
+  font-weight: 500;
+}
+
 .chip {
   font-size: 11px;
   color: var(--muted);

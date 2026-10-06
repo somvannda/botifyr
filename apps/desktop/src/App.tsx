@@ -56,6 +56,7 @@ export default function App() {
   const [tasks, setTasks] = useState<Record<string, Task>>({});
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [limitWarning, setLimitWarning] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [useComputer, setUseComputer] = useState(() => localStorage.getItem("botifyr.useComputer") === "1");
 
@@ -450,9 +451,10 @@ export default function App() {
     setSending(true);
     setError(null);
     try {
-      const { session } = await client.sendMessage(activeSessionId, trimmed, useComputer);
+      const { session, warning } = await client.sendMessage(activeSessionId, trimmed, useComputer);
       setSessions((prev) => prev.map((s) => (s.id === session.id ? session : s)));
       setText("");
+      setLimitWarning(warning ?? null);
     } catch (err: unknown) {
       setError(messageOf(err));
     } finally {
@@ -577,6 +579,12 @@ export default function App() {
   const thinking =
     (sending || busy) &&
     (activeSession ? activeSession.messages[activeSession.messages.length - 1]?.role === "user" : false);
+  const budgetNotice =
+    config?.limits &&
+    config.limits.dailyTokenBudget > 0 &&
+    (config.usage?.tokensToday ?? 0) >= config.limits.dailyTokenBudget
+      ? `Daily token budget reached (${(config.usage?.tokensToday ?? 0).toLocaleString()} / ${config.limits.dailyTokenBudget.toLocaleString()}). Messages still work — raise BOTIFYR_DAILY_TOKEN_BUDGET to increase it.`
+      : null;
 
   if (!authChecked) return <div className="center">Loading…</div>;
 
@@ -862,6 +870,8 @@ export default function App() {
             BOTIFYR_PROVIDER + an API key for real reasoning.
           </div>
         )}
+
+        {(limitWarning ?? budgetNotice) && <div className="notice warn">{limitWarning ?? budgetNotice}</div>}
 
         <section className="content" ref={scrollRef}>
           {error && <div className="error">{error}</div>}

@@ -112,16 +112,12 @@ export async function buildServer(options: ServerOptions) {
     return date.toISOString();
   }
 
-  /** Returns an error string when the user is over budget, otherwise null. */
-  async function budgetExceeded(userId: string): Promise<string | null> {
-    if (!rateLimitOk(userId)) {
-      return "You've reached the message limit for now — please try again later.";
-    }
-    if (dailyTokenBudget > 0) {
-      const { tokens } = await store.usageSince(userId, startOfToday());
-      if (tokens >= dailyTokenBudget) {
-        return "Daily token budget reached. Try again tomorrow, or raise BOTIFYR_DAILY_TOKEN_BUDGET.";
-      }
+  /** Returns a non-blocking warning when the user is over the daily budget. */
+  async function budgetWarning(userId: string): Promise<string | null> {
+    if (dailyTokenBudget <= 0) return null;
+    const { tokens } = await store.usageSince(userId, startOfToday());
+    if (tokens >= dailyTokenBudget) {
+      return `Daily token budget reached (${tokens.toLocaleString()} tokens). Messages still work — raise BOTIFYR_DAILY_TOKEN_BUDGET to increase it.`;
     }
     return null;
   }
@@ -775,11 +771,15 @@ export async function buildServer(options: ServerOptions) {
       if (!text) return reply.code(400).send({ error: "text is required" });
 
       const userId = request.userId as string;
-      const limit = await budgetExceeded(userId);
-      if (limit) return reply.code(429).send({ error: limit });
+      if (!rateLimitOk(userId)) {
+        return reply
+          .code(429)
+          .send({ error: "You've reached the message limit for now — please try again later." });
+      }
+      const warning = await budgetWarning(userId);
 
       const task = await startTask(session, text, userId, request.body?.local === true);
-      return { session, task };
+      return { session, task, warning: warning ?? undefined };
     },
   );
 
@@ -795,8 +795,11 @@ export async function buildServer(options: ServerOptions) {
       if (!goal) return reply.code(400).send({ error: "goal is required" });
 
       const userId = request.userId as string;
-      const limit = await budgetExceeded(userId);
-      if (limit) return reply.code(429).send({ error: limit });
+      if (!rateLimitOk(userId)) {
+        return reply
+          .code(429)
+          .send({ error: "You've reached the message limit for now — please try again later." });
+      }
 
       return startTask(session, goal, userId);
     },
