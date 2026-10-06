@@ -783,7 +783,7 @@ export default function App() {
           ? await client.sendDm(sessionId, payload)
           : await client.sendMessage(sessionId, payload, useComputer);
       const session = result.session;
-      const warning = "warning" in result ? result.warning : undefined;
+      const warning = (result as { warning?: string }).warning;
       setSessions((prev) => prev.map((s) => (s.id === session.id ? session : s)));
       setLimitWarning(warning ?? null);
     } catch (err: unknown) {
