@@ -2225,7 +2225,7 @@ body {
   position: relative;
   flex: 0 1 auto;
   min-width: 0;
-  max-width: min(720px, 78%);
+  max-width: min(720px, 72%);
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 16px;
@@ -2583,11 +2583,13 @@ body {
   right: 10px;
 }
 
-/* "…" menu for secondary message actions (Grok-style). */
+/* "…" menu for secondary message actions (Grok-style). Floats and grows
+   leftward so it never adds a horizontal scrollbar. */
 .msg-more {
   position: absolute;
   top: 30px;
-  left: 0;
+  right: 0;
+  left: auto;
   z-index: 30;
   min-width: 156px;
   display: flex;
