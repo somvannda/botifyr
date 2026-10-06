@@ -121,6 +121,52 @@ function searchIntent(text: string): { query: string; count: number } | null {
   return { query, count };
 }
 
+interface MediaPlan {
+  mediaTask: boolean;
+  initialToolCall?: { name: string; arguments: Record<string, unknown> };
+  initialToolOnly: boolean;
+}
+
+/**
+ * Decide whether a message is a deterministic media request and, if so, which
+ * yt-dlp tool to invoke directly. Used by both the first send and retries, so a
+ * retried download never falls back to the model (which would probe the user's
+ * local machine).
+ */
+export function planMedia(text: string): MediaPlan {
+  const targets = downloadTargets(text);
+  const search = targets ? null : searchIntent(text);
+  // "highest/best/4k" → ask yt-dlp for 2160p; otherwise the 720p default.
+  const quality = /\b(highest|best|max(?:imum)?|4k|2160)\b/i.test(text) ? 2160 : undefined;
+  const wantsAll = /\b(all|every|entire|whole|full)\b/i.test(text);
+  // An explicit count ("only 5 videos") wins over "all".
+  const countMatch = /\b(\d{1,3})\s*(?:videos?|songs?|links?|clips?|items?|results?)\b/i.exec(text);
+  const limit = countMatch ? Math.min(500, Number(countMatch[1])) : wantsAll ? 0 : undefined;
+  const wantsDownload = /\b(download|grab|save|fetch|rip)\b/i.test(text);
+  const wantsAudio = /\b(mp3|audio|music)\b/i.test(text) && !/\bvideo\b/i.test(text);
+  const mediaArgs = {
+    ...(quality ? { quality } : {}),
+    ...(wantsAudio ? { audio_only: true } : {}),
+    ...(limit !== undefined ? { limit } : {}),
+  };
+  const initialToolCall = targets
+    ? { name: "youtube.download", arguments: { urls: targets, ...mediaArgs } }
+    : search
+      ? wantsDownload
+        ? {
+            name: "youtube.download_search",
+            arguments: { query: search.query, count: search.count, ...mediaArgs },
+          }
+        : { name: "youtube.search", arguments: { query: search.query, count: search.count } }
+      : undefined;
+  return {
+    mediaTask: Boolean(initialToolCall?.name.startsWith("youtube.")),
+    initialToolCall,
+    initialToolOnly:
+      initialToolCall?.name === "youtube.download" || initialToolCall?.name === "youtube.download_search",
+  };
+}
+
 export interface ServerOptions {
   store: Store;
   vaultKey: Buffer;
@@ -514,40 +560,10 @@ export async function buildServer(options: ServerOptions) {
     if (session.messages.length === 0 && !session.botId) session.title = capped.slice(0, 60);
 
     // If the user pasted links and asked to download them, run the download tool
-    // directly (deterministic) instead of hoping the model chooses to.
-    const targets = downloadTargets(capped);
-    const search = targets ? null : searchIntent(capped);
-    // "highest/best/4k" → ask yt-dlp for 2160p; otherwise the 720p default.
-    const quality = /\b(highest|best|max(?:imum)?|4k|2160)\b/i.test(capped) ? 2160 : undefined;
-    const wantsAll = /\b(all|every|entire|whole|full)\b/i.test(capped);
-    // An explicit count ("only 5 videos") wins over "all".
-    const countMatch = /\b(\d{1,3})\s*(?:videos?|songs?|links?|clips?|items?|results?)\b/i.exec(capped);
-    const limit = countMatch ? Math.min(500, Number(countMatch[1])) : wantsAll ? 0 : undefined;
-    const wantsDownload = /\b(download|grab|save|fetch|rip)\b/i.test(capped);
-    const wantsAudio = /\b(mp3|audio|music)\b/i.test(capped) && !/\bvideo\b/i.test(capped);
-    const mediaArgs = {
-      ...(quality ? { quality } : {}),
-      ...(wantsAudio ? { audio_only: true } : {}),
-      ...(limit !== undefined ? { limit } : {}),
-    };
-    const initialToolCall = targets
-      ? {
-          name: "youtube.download",
-          arguments: { urls: targets, ...mediaArgs },
-        }
-      : search
-        ? wantsDownload
-          ? {
-              name: "youtube.download_search",
-              arguments: { query: search.query, count: search.count, ...mediaArgs },
-            }
-          : { name: "youtube.search", arguments: { query: search.query, count: search.count } }
-        : undefined;
-    // Media steps run in the cloud sandbox (they need yt-dlp), never on the
-    // user's machine; a deterministic one finishes without consulting the model.
-    const mediaTask = Boolean(initialToolCall?.name.startsWith("youtube."));
-    const initialToolOnly =
-      initialToolCall?.name === "youtube.download" || initialToolCall?.name === "youtube.download_search";
+    // directly (deterministic) instead of hoping the model chooses to. Media
+    // steps run in the cloud sandbox (they need yt-dlp), never on the user's
+    // machine; a deterministic one finishes without consulting the model.
+    const { mediaTask, initialToolCall, initialToolOnly } = planMedia(capped);
 
     const bot = session.botId ? await store.getBot(session.botId) : null;
     // Group chats: every member bot replies in turn.
@@ -757,17 +773,21 @@ export async function buildServer(options: ServerOptions) {
     emit({ type: "session.updated", session });
     emit({ type: "task.created", task });
 
+    const { mediaTask, initialToolCall, initialToolOnly } = planMedia(goal);
     void runTask(
       {
         store,
         userId,
         history,
-        local,
+        local: mediaTask ? false : local,
         instructions:
           [bot?.instructions, skillInstructions(bot?.skills)].filter(Boolean).join("\n\n") || undefined,
         summary: session.summary,
         vaultKey,
         author: bot ? { id: bot.id } : undefined,
+        autoApprove: bot?.autoApprove === true,
+        initialToolCall,
+        initialToolOnly,
       },
       task,
     ).catch((error) => app.log.error({ err: error, taskId: task.id }, "retry run failed"));

@@ -165,9 +165,12 @@ function buildTools(
   userId: string,
   local: boolean,
   vaultKey?: Buffer,
+  media = false,
 ): { tools: ToolDefinition[]; closers: Array<() => Promise<void>>; hasComputer: boolean } {
+  // Media (yt-dlp) tasks always run in the cloud sandbox, never on the user's
+  // machine, so don't offer local tools even when their node is online.
   // "Run on my computer": use only the user's own machine tools.
-  if (local && nodeInfo(userId).online) {
+  if (local && !media && nodeInfo(userId).online) {
     return { tools: createLocalTools(userId), closers: [], hasComputer: false };
   }
 
@@ -217,8 +220,9 @@ function buildTools(
       }).tools,
     );
   }
-  // Local tools operate the user's own machine; only when their node is online.
-  if (nodeInfo(userId).online) {
+  // Local tools operate the user's own machine; only when their node is online
+  // and this isn't a media task (those run in the cloud sandbox).
+  if (!media && nodeInfo(userId).online) {
     tools.push(...createLocalTools(userId));
   }
   return { tools, closers, hasComputer };
@@ -234,7 +238,15 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
   emit({ type: "task.updated", task });
   markTaskRunning(task.id, task.sessionId);
 
-  const { tools, closers, hasComputer } = buildTools(store, task, userId, Boolean(deps.local), deps.vaultKey);
+  const media = Boolean(deps.initialToolCall?.name.startsWith("youtube."));
+  const { tools, closers, hasComputer } = buildTools(
+    store,
+    task,
+    userId,
+    Boolean(deps.local),
+    deps.vaultKey,
+    media,
+  );
   // Abort the run's sandboxes when the task is cancelled.
   let sandboxesClosed = false;
   const closeSandboxes = async (): Promise<void> => {
