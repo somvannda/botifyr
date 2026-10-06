@@ -355,6 +355,9 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
           text: delta,
         });
       },
+      onStreamReset: () => {
+        emit({ type: "assistant.reset", sessionId: task.sessionId, taskId: task.id, botId: deps.author?.id });
+      },
       onScreenshot: (png) => {
         setScreenshot(task.id, png);
         task.screenshotAt = new Date().toISOString();

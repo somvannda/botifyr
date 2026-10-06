@@ -59,6 +59,8 @@ export interface RunAgentOptions {
   onToken?: (text: string) => void;
   onScreenshot?: (png: Uint8Array) => void;
   onLog?: (message: string) => void;
+  /** Called when the streamed reply so far is discarded (e.g. a refusal retry). */
+  onStreamReset?: () => void;
 }
 
 export interface AgentResult {
@@ -225,6 +227,7 @@ export async function runAgent(options: RunAgentOptions): Promise<AgentResult> {
       if (tools.length > 0 && refusalRetries < 2 && looksLikeRefusal(text)) {
         refusalRetries += 1;
         forceToolCall = true;
+        options.onStreamReset?.();
         log("refusal detected; re-directing the agent to use its tools");
         messages.push({ role: "assistant", content: text });
         messages.push({ role: "user", content: REFUSAL_REDIRECT });

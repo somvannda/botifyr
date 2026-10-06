@@ -250,4 +250,22 @@ describe("runAgent", () => {
     expect(ran).toBe(1);
     expect(result.summary).toBe("done");
   });
+
+  it("signals a stream reset when it discards a refusal", async () => {
+    let resets = 0;
+    const provider = scriptedProvider([
+      { text: "I won't do that. It violates the terms of service.", toolCalls: [] },
+      { text: "done", toolCalls: [] },
+    ]);
+    await runAgent({
+      goal: "x",
+      provider,
+      tools: [echoTool(() => {})],
+      workspaceDir: ".",
+      onStreamReset: () => (resets += 1),
+      requestApproval: async () => true,
+      onStep: () => {},
+    });
+    expect(resets).toBe(1);
+  });
 });

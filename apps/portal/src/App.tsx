@@ -74,6 +74,14 @@ function isGroup(bot: Bot): boolean {
   return Boolean(bot.memberIds && bot.memberIds.length > 0);
 }
 
+/** Parse "6/20 …" download progress from a task step's detail. */
+function downloadProgress(detail: string | undefined): { done: number; total: number } | null {
+  const match = /^(\d+)\s*\/\s*(\d+)\b/.exec((detail ?? "").trim());
+  if (!match) return null;
+  const total = Number(match[2]);
+  return total > 0 ? { done: Number(match[1]), total } : null;
+}
+
 export function Portal() {
   const client = useMemo(() => new BotifyrClient(CLOUD_URL), []);
 
@@ -207,6 +215,9 @@ export function Portal() {
               ...prev,
               [event.sessionId]: (prev[event.sessionId] ?? "") + event.text,
             }));
+            break;
+          case "assistant.reset":
+            setStreams((prev) => ({ ...prev, [event.sessionId]: "" }));
             break;
           case "group.working":
             setGroupWorking((prev) => ({ ...prev, [event.sessionId]: event.names }));
@@ -711,13 +722,26 @@ export function Portal() {
                 </div>
               )}
 
-              {downloadStep && (
-                <div className="msg-assistant">
-                  <div className="msg-body">
-                    <div className="msg-author">Downloading · {downloadStep.detail}</div>
-                  </div>
-                </div>
-              )}
+              {downloadStep &&
+                (() => {
+                  const progress = downloadProgress(downloadStep.detail);
+                  return (
+                    <div className="msg-assistant">
+                      <div className="msg-body">
+                        <div className="msg-author">
+                          Downloading{progress ? ` ${progress.done} / ${progress.total}` : ""}
+                        </div>
+                        {progress && (
+                          <div className="step-progress-bar">
+                            <span
+                              style={{ width: `${Math.round((progress.done / progress.total) * 100)}%` }}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
 
               {liveTask?.approval && liveTask.approval.status === "pending" && (
                 <div className="approval">

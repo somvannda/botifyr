@@ -434,6 +434,9 @@ export default function App() {
             : { sessionId: event.sessionId, taskId: event.taskId, botId: event.botId, text: event.text },
         );
         break;
+      case "assistant.reset":
+        setStream((prev) => (prev && prev.taskId === event.taskId ? null : prev));
+        break;
       case "group.working":
         setGroupWorking({ sessionId: event.sessionId, names: event.names });
         break;
@@ -1694,15 +1697,36 @@ export default function App() {
                   ) : null}
 
                   <ol className="steps">
-                    {liveTask.steps.map((step) => (
-                      <li key={step.id} className={`step step-${step.status}`}>
-                        <span className="step-icon">{iconFor(step.status)}</span>
-                        <div>
-                          <div className="step-title">{step.title}</div>
-                          {step.detail && <div className="step-detail">{step.detail}</div>}
-                        </div>
-                      </li>
-                    ))}
+                    {liveTask.steps.map((step) => {
+                      const progress = step.title === "Downloads" ? downloadProgress(step.detail) : null;
+                      if (progress) {
+                        const pct = Math.round((progress.done / progress.total) * 100);
+                        return (
+                          <li key={step.id} className="step step-download">
+                            <div className="step-progress-wrap">
+                              <div className="step-progress-head">
+                                <span className="step-title">Downloading</span>
+                                <span className="step-progress-count">
+                                  {progress.done} / {progress.total}
+                                </span>
+                              </div>
+                              <div className="step-progress-bar">
+                                <span style={{ width: `${pct}%` }} />
+                              </div>
+                            </div>
+                          </li>
+                        );
+                      }
+                      return (
+                        <li key={step.id} className={`step step-${step.status}`}>
+                          <span className="step-icon">{iconFor(step.status)}</span>
+                          <div>
+                            <div className="step-title">{step.title}</div>
+                            {step.detail && <div className="step-detail">{step.detail}</div>}
+                          </div>
+                        </li>
+                      );
+                    })}
                   </ol>
 
                   {liveTask.approval && liveTask.approval.status === "pending" && (
@@ -3131,4 +3155,13 @@ function iconFor(status: Task["steps"][number]["status"]): string {
     case "skipped":
       return "–";
   }
+}
+
+/** Parse "6/20 …" download progress from a task step's detail. */
+function downloadProgress(detail: string | undefined): { done: number; total: number } | null {
+  const match = /^(\d+)\s*\/\s*(\d+)\b/.exec((detail ?? "").trim());
+  if (!match) return null;
+  const done = Number(match[1]);
+  const total = Number(match[2]);
+  return total > 0 ? { done, total } : null;
 }

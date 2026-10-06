@@ -310,6 +310,7 @@ export async function buildServer(options: ServerOptions) {
       case "session.updated":
         return event.session.userId === userId;
       case "assistant.delta":
+      case "assistant.reset":
         // Route by task owner (set for every run) and fall back to session owner.
         return ownerOfEventTask(event.taskId) === userId || ownerOfSession(event.sessionId) === userId;
       case "group.working":

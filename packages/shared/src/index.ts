@@ -223,6 +223,7 @@ export type ServerEvent =
   | { type: "session.created"; session: Session }
   | { type: "session.updated"; session: Session }
   | { type: "assistant.delta"; sessionId: string; taskId: string; botId?: string; text: string }
+  | { type: "assistant.reset"; sessionId: string; taskId: string; botId?: string }
   | { type: "group.working"; sessionId: string; names: string[] }
   | { type: "task.created"; task: Task }
   | { type: "task.updated"; task: Task }
