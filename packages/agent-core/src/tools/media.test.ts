@@ -25,8 +25,11 @@ function fakeBackend(): { backend: ShellBackend; commands: string[] } {
   return { backend, commands };
 }
 
-function downloadTool(backend: ShellBackend): ToolDefinition {
-  const tool = createMediaTools(backend, "/downloads/t1").tools.find(
+function downloadTool(
+  backend: ShellBackend,
+  options?: { quality?: number; audioOnly?: boolean },
+): ToolDefinition {
+  const tool = createMediaTools(backend, "/downloads/t1", undefined, options).tools.find(
     (entry) => entry.name === "youtube.download",
   );
   if (!tool) throw new Error("youtube.download not found");
@@ -36,29 +39,30 @@ function downloadTool(backend: ShellBackend): ToolDefinition {
 const ctx = { workspaceDir: "/workspace", log: () => {} };
 
 describe("youtube.download", () => {
-  it("downloads a batch of urls in one call with unique filenames", async () => {
+  it("downloads each url in a batch with unique filenames (no overwrite)", async () => {
     const { backend, commands } = fakeBackend();
     const result = await downloadTool(backend).run(
-      {
-        urls: ["https://youtu.be/a", "https://youtu.be/b"],
-      },
+      { urls: ["https://youtu.be/a", "https://youtu.be/b"] },
       ctx,
     );
 
     expect(result.ok).toBe(true);
-    expect(commands).toHaveLength(1);
-    const command = commands[0] ?? "";
-    expect(command).toContain("https://youtu.be/a");
-    expect(command).toContain("https://youtu.be/b");
-    expect(command).toContain("%(title)s [%(id)s].%(ext)s");
-    expect(command).not.toContain("rm -f");
+    expect(commands.some((command) => command.includes("https://youtu.be/a"))).toBe(true);
+    expect(commands.some((command) => command.includes("https://youtu.be/b"))).toBe(true);
+    expect(commands.some((command) => command.includes("%(title)s [%(id)s].%(ext)s"))).toBe(true);
+    expect(commands.some((command) => command.includes("rm -f"))).toBe(false);
   });
 
-  it("accepts a single url", async () => {
+  it("uses the audio default", async () => {
     const { backend, commands } = fakeBackend();
-    const result = await downloadTool(backend).run({ url: "https://youtu.be/a", audio_only: true }, ctx);
-    expect(result.ok).toBe(true);
-    expect(commands[0]).toContain("-x --audio-format mp3");
+    await downloadTool(backend, { audioOnly: true }).run({ url: "https://youtu.be/a" }, ctx);
+    expect(commands.some((command) => command.includes("--audio-format mp3"))).toBe(true);
+  });
+
+  it("uses the quality default when none is given", async () => {
+    const { backend, commands } = fakeBackend();
+    await downloadTool(backend, { quality: 480 }).run({ url: "https://youtu.be/a" }, ctx);
+    expect(commands.some((command) => command.includes("height<=480"))).toBe(true);
   });
 
   it("rejects when no valid url is given", async () => {

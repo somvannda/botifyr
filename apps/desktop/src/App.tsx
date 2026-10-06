@@ -180,6 +180,7 @@ export default function App() {
   const [botIntro, setBotIntro] = useState("");
   const [groupMembers, setGroupMembers] = useState<string[]>([]);
   const [autonomous, setAutonomous] = useState(false);
+  const [autoApprove, setAutoApprove] = useState(false);
   const [schedulePrompt, setSchedulePrompt] = useState("");
   const [scheduleEvery, setScheduleEvery] = useState(60);
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
@@ -561,6 +562,7 @@ export default function App() {
     setBotIntro("");
     setGroupMembers([]);
     setAutonomous(false);
+    setAutoApprove(false);
     setSchedulePrompt("");
     setScheduleEvery(60);
     setScheduleEnabled(false);
@@ -577,6 +579,7 @@ export default function App() {
     setBotIntro(bot.instructions);
     setGroupMembers((bot.memberIds ?? []).filter((id) => id !== bot.id));
     setAutonomous(bot.autonomous === true);
+    setAutoApprove(bot.autoApprove === true);
     setSchedulePrompt(bot.schedule?.prompt ?? "");
     setScheduleEvery(bot.schedule?.everyMinutes ?? 60);
     setScheduleEnabled(bot.schedule?.enabled ?? false);
@@ -608,6 +611,7 @@ export default function App() {
           instructions: botIntro.trim(),
           memberIds: groupMembers,
           autonomous,
+          autoApprove,
           skills: selectedSkills,
           schedule: schedulePrompt.trim()
             ? { prompt: schedulePrompt.trim(), everyMinutes: scheduleEvery, enabled: scheduleEnabled }
@@ -650,6 +654,7 @@ export default function App() {
         instructions,
         memberIds,
         autonomous,
+        autoApprove,
         skills: selectedSkills,
       });
       setBots((prev) => [...prev, bot]);
@@ -2384,6 +2389,15 @@ export default function App() {
                   />
                 </label>
               )}
+
+              <label className="settings-line">
+                <span>Always allow — run consequential actions (send, pay, delete) without asking</span>
+                <input
+                  type="checkbox"
+                  checked={autoApprove}
+                  onChange={(event) => setAutoApprove(event.target.checked)}
+                />
+              </label>
 
               <div className="settings-section-title">Capability packs</div>
               <ul className="skill-list">

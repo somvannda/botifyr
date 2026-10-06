@@ -244,6 +244,7 @@ export class BotifyrClient {
     memberIds?: string[];
     autonomous?: boolean;
     skills?: string[];
+    autoApprove?: boolean;
   }): Promise<Bot> {
     return this.request("/v1/bots", { method: "POST", json: true, body: JSON.stringify(input) });
   }
@@ -262,6 +263,7 @@ export class BotifyrClient {
       memberIds?: string[];
       autonomous?: boolean;
       skills?: string[];
+      autoApprove?: boolean;
       schedule?: { prompt: string; everyMinutes: number; enabled: boolean };
     },
   ): Promise<Bot> {

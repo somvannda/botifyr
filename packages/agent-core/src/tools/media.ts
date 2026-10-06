@@ -18,11 +18,21 @@ export interface MediaTools {
   tools: ToolDefinition[];
 }
 
+export interface MediaToolOptions {
+  /** Default max video height when the model doesn't specify one. */
+  quality?: number;
+  /** Default to audio-only (much faster for big batches). */
+  audioOnly?: boolean;
+}
+
 export function createMediaTools(
   backend: ShellBackend,
   outDir = "/workspace",
   getCookies?: () => Promise<string | null>,
+  options: MediaToolOptions = {},
 ): MediaTools {
+  const defaultQuality = Math.min(2160, Math.max(144, Number(options.quality) || 720));
+  const defaultAudio = options.audioOnly === true;
   const cookieArg = async (): Promise<string> => {
     if (!getCookies) return "";
     try {
@@ -49,28 +59,41 @@ export function createMediaTools(
           description: "Multiple URLs to download in one call (preferred for lists of links).",
         },
         audio_only: { type: "boolean", description: "Extract audio as mp3 instead of video." },
-        quality: { type: "number", description: "Max video height, e.g. 720 or 1080 (default 1080)." },
+        quality: { type: "number", description: "Max video height, e.g. 720 or 1080." },
       },
     },
     requiresApproval: true,
-    run: async (args) => {
+    run: async (args, context) => {
       const raw = Array.isArray(args.urls) ? args.urls : args.url !== undefined ? [args.url] : [];
       const urls = raw.map(safeUrl).filter((value): value is string => Boolean(value));
       if (urls.length === 0) return { ok: false, output: "At least one valid http(s) URL is required." };
       const list = urls.slice(0, 50);
-      const audio = args.audio_only === true;
-      const height = Math.min(2160, Math.max(144, Number(args.quality) || 1080));
+      const audio = args.audio_only === true || (args.audio_only === undefined && defaultAudio);
+      const height = Math.min(2160, Math.max(144, Number(args.quality) || defaultQuality));
       const cookies = await cookieArg();
-      const quoted = list.map((url) => `'${url}'`).join(" ");
       // Titles keep each file distinct, so a batch doesn't overwrite itself.
       const template = `'${outDir}/%(title)s [%(id)s].%(ext)s'`;
       const common = `${cookies}--no-playlist --ignore-errors --no-overwrites`;
-      const command = audio
-        ? `mkdir -p '${outDir}' && yt-dlp ${common} -x --audio-format mp3 -o ${template} ${quoted}; ` +
-          `echo '--- files ---'; ls -lh '${outDir}'`
-        : `mkdir -p '${outDir}' && yt-dlp ${common} -f 'bv*[height<=${height}]+ba/b[height<=${height}]' ` +
-          `--merge-output-format mp4 -o ${template} ${quoted}; echo '--- files ---'; ls -lh '${outDir}'`;
-      return backend.exec(command);
+      await backend.exec(`mkdir -p '${outDir}'`);
+
+      // Download one at a time so the transcript can show per-file progress.
+      const outputs: string[] = [];
+      let ok = true;
+      for (let index = 0; index < list.length; index += 1) {
+        if (list.length > 1) context.log(`download ${index + 1}/${list.length} ${list[index]}`);
+        const url = `'${list[index]}'`;
+        const command = audio
+          ? `yt-dlp ${common} -x --audio-format mp3 -o ${template} ${url}`
+          : `yt-dlp ${common} -f 'bv*[height<=${height}]+ba/b[height<=${height}]' ` +
+            `--merge-output-format mp4 -o ${template} ${url}`;
+        const result = await backend.exec(command);
+        outputs.push(result.output);
+        if (!result.ok) ok = false;
+      }
+
+      const listing = await backend.exec(`ls -lh '${outDir}'`);
+      const tail = outputs.join("\n").slice(-6000);
+      return { ok, output: `${tail}\n--- files ---\n${listing.output}`.slice(0, 12_000) };
     },
   };
 

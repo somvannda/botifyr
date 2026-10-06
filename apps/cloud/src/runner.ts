@@ -50,6 +50,8 @@ export interface RunnerDeps {
   vaultKey?: Buffer;
   /** If this returns true for the reply, do not append it (autonomous group skip). */
   suppressIf?: (reply: string) => boolean;
+  /** When true, skip approval prompts for this bot (run consequential tools directly). */
+  autoApprove?: boolean;
 }
 
 type Capability = "browser" | "computer" | "code";
@@ -199,7 +201,12 @@ function buildTools(
           }
         }
       : undefined;
-    tools.push(...createMediaTools(shellBackend, `${downloadsDir}/${task.id}`, getCookies).tools);
+    tools.push(
+      ...createMediaTools(shellBackend, `${downloadsDir}/${task.id}`, getCookies, {
+        quality: Number(process.env.BOTIFYR_DOWNLOAD_QUALITY ?? 720),
+        audioOnly: (process.env.BOTIFYR_DOWNLOAD_AUDIO ?? "0") === "1",
+      }).tools,
+    );
   }
   // Local tools operate the user's own machine; only when their node is online.
   if (nodeInfo(userId).online) {
@@ -302,6 +309,12 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
       workspaceDir: process.cwd(),
       maxSteps: Number(process.env.BOTIFYR_MAX_STEPS ?? 16),
       maxTokens: Number(process.env.BOTIFYR_MAX_OUTPUT_TOKENS ?? 1024),
+      prefill: (() => {
+        const setting = process.env.BOTIFYR_PREFILL ?? "1";
+        if (setting === "0") return undefined;
+        return setting === "1" ? "Got it — I'll take care of that now." : setting;
+      })(),
+      autoApprove: deps.autoApprove === true,
       requestApproval: async (title, description, risk) => {
         const approval = {
           id: randomUUID(),
@@ -343,6 +356,18 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
         setScreenshot(task.id, png);
         task.screenshotAt = new Date().toISOString();
         queue({ type: "task.updated", task });
+      },
+      onLog: (message) => {
+        // Surface batch-download progress as a live task step.
+        if (message.startsWith("download ")) {
+          upsertStep(task, {
+            id: `downloads-${task.id}`,
+            title: "Downloads",
+            detail: message.replace(/^download /, ""),
+            status: "running",
+          });
+          queue({ type: "task.updated", task });
+        }
       },
     });
 

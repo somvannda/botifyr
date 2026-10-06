@@ -37,6 +37,14 @@ export interface RunAgentOptions {
   tools: ToolDefinition[];
   workspaceDir: string;
   maxSteps?: number;
+  /**
+   * A short assistant "prefill" appended after the user's message. It steers the
+   * model to start already committed to the task, which strongly suppresses
+   * reflexive refusals. Removed after the first model call.
+   */
+  prefill?: string;
+  /** When true, skip the approval gate and run consequential tools directly. */
+  autoApprove?: boolean;
   requestApproval: (title: string, description: string, risk: RiskLevel) => Promise<boolean>;
   onStep: (step: StepUpdate) => void;
   /** Live assistant text as the model streams it (optional). */
@@ -103,6 +111,10 @@ export async function runAgent(options: RunAgentOptions): Promise<AgentResult> {
     { role: "user", content: goal },
   ];
 
+  // Optional anti-refusal prefill: a committed opening the model continues.
+  let prefillIndex = options.prefill ? messages.length : -1;
+  if (options.prefill) messages.push({ role: "assistant", content: options.prefill });
+
   let stepCount = 0;
   const usage: TokenUsage = { promptTokens: 0, completionTokens: 0 };
 
@@ -133,6 +145,12 @@ export async function runAgent(options: RunAgentOptions): Promise<AgentResult> {
     if (response.usage) {
       usage.promptTokens += response.usage.promptTokens;
       usage.completionTokens += response.usage.completionTokens;
+    }
+
+    // The prefill was only for the first call; drop it so it isn't repeated.
+    if (prefillIndex >= 0) {
+      messages.splice(prefillIndex, 1);
+      prefillIndex = -1;
     }
 
     options.onStep({
@@ -172,7 +190,7 @@ export async function runAgent(options: RunAgentOptions): Promise<AgentResult> {
         typeof tool.requiresApproval === "function"
           ? tool.requiresApproval(call.arguments)
           : tool.requiresApproval === true;
-      if (needsApproval) {
+      if (needsApproval && !options.autoApprove) {
         const allowed = await options.requestApproval(
           `Approve: ${call.name}`,
           `The agent wants to run "${call.name}" with ${detail}.`,

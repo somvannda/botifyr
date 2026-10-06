@@ -114,6 +114,7 @@ export function Portal() {
   const [fInstructions, setFInstructions] = useState("");
   const [fMembers, setFMembers] = useState<string[]>([]);
   const [fAutonomous, setFAutonomous] = useState(false);
+  const [fAutoApprove, setFAutoApprove] = useState(false);
   const [fSkills, setFSkills] = useState<string[]>([]);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -367,6 +368,7 @@ export function Portal() {
     setFInstructions("");
     setFMembers([]);
     setFAutonomous(false);
+    setFAutoApprove(false);
     setFSkills([]);
     setFormError(null);
     setSavedOk(false);
@@ -382,6 +384,7 @@ export function Portal() {
     setFInstructions(bot.instructions ?? "");
     setFMembers(bot.memberIds ?? []);
     setFAutonomous(bot.autonomous === true);
+    setFAutoApprove(bot.autoApprove === true);
     setFSkills(bot.skills ?? []);
     setFormError(null);
     setSavedOk(false);
@@ -402,6 +405,7 @@ export function Portal() {
           instructions: fInstructions.trim(),
           memberIds: fMembers,
           autonomous: fAutonomous,
+          autoApprove: fAutoApprove,
           skills: fSkills,
         });
         setBots((prev) => prev.map((bot) => (bot.id === updated.id ? updated : bot)));
@@ -427,6 +431,7 @@ export function Portal() {
           instructions,
           memberIds: isGroup ? fMembers : undefined,
           autonomous: fAutonomous,
+          autoApprove: fAutoApprove,
           skills: fSkills,
         });
         setBots((prev) => [...prev, bot]);
@@ -881,6 +886,15 @@ export function Portal() {
                   </label>
                 </>
               )}
+
+              <label className="settings-line">
+                <span>Always allow — run consequential actions without asking</span>
+                <input
+                  type="checkbox"
+                  checked={fAutoApprove}
+                  onChange={(event) => setFAutoApprove(event.target.checked)}
+                />
+              </label>
 
               <div className="settings-section-title">Capability packs</div>
               <ul className="skill-list">

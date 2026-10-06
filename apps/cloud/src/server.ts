@@ -431,6 +431,7 @@ export async function buildServer(options: ServerOptions) {
               summary: latest.summary,
               vaultKey,
               author: { id: member.id },
+              autoApprove: member.autoApprove === true,
               suppressIf: autonomous ? (reply) => reply.trim().startsWith("[SKIP]") : undefined,
             },
             task,
@@ -483,6 +484,7 @@ export async function buildServer(options: ServerOptions) {
           summary: session.summary,
           vaultKey,
           author: bot ? { id: bot.id } : undefined,
+          autoApprove: bot?.autoApprove === true,
         },
         task,
       ).catch((error) => {
@@ -588,6 +590,7 @@ export async function buildServer(options: ServerOptions) {
       memberIds?: string[];
       autonomous?: boolean;
       skills?: string[];
+      autoApprove?: boolean;
     },
   ): Promise<Bot> {
     const now = new Date().toISOString();
@@ -607,6 +610,7 @@ export async function buildServer(options: ServerOptions) {
       instructions: input.instructions,
       memberIds: input.memberIds && input.memberIds.length > 0 ? input.memberIds : undefined,
       autonomous: input.autonomous === true ? true : undefined,
+      autoApprove: input.autoApprove === true ? true : undefined,
       skills: input.skills && input.skills.length > 0 ? input.skills : undefined,
       sessionId: session.id,
       createdAt: now,
@@ -1342,6 +1346,7 @@ export async function buildServer(options: ServerOptions) {
       memberIds?: string[];
       autonomous?: boolean;
       skills?: string[];
+      autoApprove?: boolean;
     };
   }>("/v1/bots", { preHandler: requireAuth }, async (request, reply) => {
     const userId = request.userId as string;
@@ -1370,6 +1375,7 @@ export async function buildServer(options: ServerOptions) {
       instructions,
       memberIds,
       autonomous: request.body?.autonomous === true,
+      autoApprove: request.body?.autoApprove === true,
       skills: Array.isArray(request.body?.skills)
         ? request.body.skills.filter((id) => SKILLS.some((skill) => skill.id === id))
         : undefined,
@@ -1399,6 +1405,7 @@ export async function buildServer(options: ServerOptions) {
       memberIds?: string[];
       autonomous?: boolean;
       skills?: string[];
+      autoApprove?: boolean;
       schedule?: { prompt?: string; everyMinutes?: number; enabled?: boolean };
     };
   }>("/v1/bots/:id", { preHandler: requireAuth }, async (request, reply) => {
@@ -1444,6 +1451,10 @@ export async function buildServer(options: ServerOptions) {
 
     if (typeof request.body?.autonomous === "boolean") {
       bot.autonomous = request.body.autonomous || undefined;
+    }
+
+    if (typeof request.body?.autoApprove === "boolean") {
+      bot.autoApprove = request.body.autoApprove || undefined;
     }
 
     // Schedule: run a prompt automatically every N minutes.

@@ -127,6 +127,8 @@ export interface Bot {
   autonomous?: boolean;
   /** Skill ids this bot has been taught (injected into its instructions). */
   skills?: string[];
+  /** When true, consequential tools run without asking for approval. */
+  autoApprove?: boolean;
   /** Optional schedule: run `prompt` every N minutes. */
   schedule?: BotSchedule;
   /** The conversation thread for this bot. */

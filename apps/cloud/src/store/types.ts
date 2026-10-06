@@ -37,6 +37,7 @@ export interface BotRecord {
   memberIds?: string[];
   autonomous?: boolean;
   skills?: string[];
+  autoApprove?: boolean;
   schedule?: BotSchedule;
   sessionId: string;
   createdAt: string;
