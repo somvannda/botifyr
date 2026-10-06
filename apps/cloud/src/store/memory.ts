@@ -243,6 +243,15 @@ export class MemoryStore implements Store {
     );
   }
 
+  async listTasksForUser(userId: string): Promise<Task[]> {
+    const sessionIds = new Set(
+      [...this.sessions.values()].filter((entry) => entry.userId === userId).map((entry) => entry.id),
+    );
+    return [...this.tasks.values()]
+      .filter((task) => sessionIds.has(task.sessionId))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
   async appendAudit(record: AuditRecord): Promise<void> {
     this.audit.push(record);
   }

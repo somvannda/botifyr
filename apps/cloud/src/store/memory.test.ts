@@ -230,4 +230,31 @@ describe("MemoryStore", () => {
     const active = await store.listActiveTasks();
     expect(active.map((entry) => entry.id).sort()).toEqual(["t-approve", "t-queue", "t-run"]);
   });
+
+  it("lists a user's tasks by their sessions, for the downloads history", async () => {
+    const store = new MemoryStore();
+    const session = (id: string, userId: string): SessionRecord => ({
+      id,
+      userId,
+      title: "t",
+      messages: [],
+      createdAt: now,
+    });
+    await store.createSession(session("s1", "u1"));
+    await store.createSession(session("s2", "u2"));
+    const task = (id: string, sessionId: string): Task => ({
+      id,
+      sessionId,
+      goal: "g",
+      status: "completed",
+      steps: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await store.createTask(task("t1", "s1"));
+    await store.createTask(task("t2", "s2"));
+
+    const mine = await store.listTasksForUser("u1");
+    expect(mine.map((entry) => entry.id)).toEqual(["t1"]);
+  });
 });

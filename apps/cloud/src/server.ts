@@ -2319,6 +2319,39 @@ export async function buildServer(options: ServerOptions) {
   /* Downloads produced by a task (e.g. youtube.download), served to the user. */
   const downloadsRoot = process.env.BOTIFYR_DOWNLOADS_DIR ?? "/downloads";
 
+  /** Read a task's download folder and record each file in the media manifest. */
+  const trackTaskMedia = async (userId: string, taskId: string): Promise<void> => {
+    try {
+      const dir = join(downloadsRoot, taskId);
+      const entries = await readdir(dir);
+      for (const name of entries) {
+        const info = await stat(join(dir, name)).catch(() => null);
+        if (!info?.isFile()) continue;
+        const mime = name.endsWith(".mp3")
+          ? "audio/mpeg"
+          : name.endsWith(".mp4")
+            ? "video/mp4"
+            : "application/octet-stream";
+        const stamp = new Date().toISOString();
+        await store
+          .upsertMedia({
+            id: `${taskId}:${name}`,
+            userId,
+            taskId,
+            name,
+            size: info.size,
+            mime,
+            location: "server",
+            createdAt: stamp,
+            updatedAt: stamp,
+          })
+          .catch(() => {});
+      }
+    } catch {
+      // No folder for this task yet.
+    }
+  };
+
   app.get<{ Params: { id: string } }>(
     "/v1/tasks/:id/downloads",
     { preHandler: requireAuth },
@@ -2327,33 +2360,13 @@ export async function buildServer(options: ServerOptions) {
       if (!task) return reply.code(404).send({ error: "task not found" });
       const userId = request.userId as string;
       try {
+        await trackTaskMedia(userId, task.id);
         const dir = join(downloadsRoot, task.id);
         const entries = await readdir(dir);
         const files: Array<{ name: string; size: number }> = [];
         for (const name of entries) {
           const info = await stat(join(dir, name));
-          if (!info.isFile()) continue;
-          files.push({ name, size: info.size });
-          // Track it in the media manifest (idempotent) so devices can sync.
-          const mime = name.endsWith(".mp3")
-            ? "audio/mpeg"
-            : name.endsWith(".mp4")
-              ? "video/mp4"
-              : "application/octet-stream";
-          const stamp = new Date().toISOString();
-          await store
-            .upsertMedia({
-              id: `${task.id}:${name}`,
-              userId,
-              taskId: task.id,
-              name,
-              size: info.size,
-              mime,
-              location: "server",
-              createdAt: stamp,
-              updatedAt: stamp,
-            })
-            .catch(() => {});
+          if (info.isFile()) files.push({ name, size: info.size });
         }
         return files;
       } catch {
@@ -2364,7 +2377,14 @@ export async function buildServer(options: ServerOptions) {
 
   /* Media manifest: what the user has downloaded and where each item lives. */
   app.get("/v1/media", { preHandler: requireAuth }, async (request) => {
-    const items = await store.listMedia(request.userId as string);
+    const userId = request.userId as string;
+    // Backfill from the volume so the history is complete even for older tasks
+    // that were never opened in the app.
+    const tasks = await store.listTasksForUser(userId).catch(() => []);
+    for (const task of tasks) {
+      await trackTaskMedia(userId, task.id);
+    }
+    const items = await store.listMedia(userId);
     return items.map((item) => ({
       id: item.id,
       taskId: item.taskId,

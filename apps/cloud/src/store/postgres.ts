@@ -348,6 +348,15 @@ export class PostgresStore implements Store {
     return rows.map((row) => row.data as Task);
   }
 
+  async listTasksForUser(userId: string): Promise<Task[]> {
+    const { rows } = await this.pool.query(
+      "SELECT t.data FROM tasks t JOIN sessions s ON s.id = t.session_id " +
+        "WHERE s.user_id = $1 ORDER BY t.created_at DESC LIMIT 200",
+      [userId],
+    );
+    return rows.map((row) => row.data as Task);
+  }
+
   async appendAudit(record: AuditRecord): Promise<void> {
     await this.pool.query(
       "INSERT INTO audit_events (id, task_id, user_id, type, tool_name, detail, created_at) " +

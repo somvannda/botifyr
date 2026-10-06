@@ -209,6 +209,8 @@ export interface Store {
   getTask(id: string): Promise<Task | null>;
   /** Tasks left in a non-terminal state (used to reconcile after a restart). */
   listActiveTasks(): Promise<Task[]>;
+  /** All tasks the user owns (for a complete downloads history). */
+  listTasksForUser(userId: string): Promise<Task[]>;
 
   appendAudit(record: AuditRecord): Promise<void>;
   listAudit(taskId: string): Promise<AuditRecord[]>;
