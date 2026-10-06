@@ -233,6 +233,47 @@ export interface RuntimeConfig {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Billing (prepaid plans + on-demand credits)                                 */
+/* -------------------------------------------------------------------------- */
+
+export type BillingPlan = "free" | "pro" | "business";
+
+/** Admin-editable billing policy (single `platform_settings` row). */
+export interface PlatformSettings {
+  plans: {
+    proPriceCents: number;
+    businessPriceCents: number;
+    proPeriodDays: number;
+    includedTokens: { pro: number; business: number };
+    currency: string;
+  };
+  freeMonthlyTokens: number;
+  lowBalanceCents: number;
+  graceDays: number;
+  reminderDays: number[];
+  reminderChannels: { os: boolean; email: boolean; telegram: boolean };
+  onDemand: {
+    enabled: boolean;
+    markupPercent: number;
+    minTopUpCents: number;
+    allowPro: boolean;
+    onEmpty: "block" | "free";
+  };
+  fallbackPlan: BillingPlan;
+}
+
+/** Per-model provider cost; user price = cost × (1 + markup%). */
+export interface ModelPricingRecord {
+  model: string;
+  provider?: string;
+  inputCentsPerM: number;
+  outputCentsPerM: number;
+  markupPercent?: number;
+  enabled: boolean;
+  updatedAt: string;
+}
+
+/* -------------------------------------------------------------------------- */
 /* Realtime events (cloud -> client over the websocket stream)                 */
 /* -------------------------------------------------------------------------- */
 

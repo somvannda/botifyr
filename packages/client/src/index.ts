@@ -5,6 +5,8 @@ import type {
   BotFile,
   ConnectionInfo,
   LearnedSkill,
+  ModelPricingRecord,
+  PlatformSettings,
   RuntimeConfig,
   SecretSummary,
   ServerEvent,
@@ -306,6 +308,31 @@ export class BotifyrClient {
       json: true,
       body: JSON.stringify({ plan }),
     });
+  }
+
+  /* Billing policy + per-model pricing (admin). */
+  adminSettings(): Promise<PlatformSettings> {
+    return this.request("/admin/settings");
+  }
+
+  adminSaveSettings(settings: Partial<PlatformSettings>): Promise<PlatformSettings> {
+    return this.request("/admin/settings", { method: "PUT", json: true, body: JSON.stringify(settings) });
+  }
+
+  adminModelPricing(): Promise<ModelPricingRecord[]> {
+    return this.request("/admin/model-pricing");
+  }
+
+  adminSaveModelPricing(model: string, body: Partial<ModelPricingRecord>): Promise<ModelPricingRecord> {
+    return this.request(`/admin/model-pricing/${encodeURIComponent(model)}`, {
+      method: "PUT",
+      json: true,
+      body: JSON.stringify(body),
+    });
+  }
+
+  adminDeleteModelPricing(model: string): Promise<void> {
+    return this.request(`/admin/model-pricing/${encodeURIComponent(model)}`, { method: "DELETE" });
   }
 
   adminSkills(): Promise<AdminSkill[]> {

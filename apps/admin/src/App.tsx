@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AuthError, BotifyrClient } from "@botifyr/client";
 import type { AdminAuditEvent, AdminSkill, AdminUser } from "@botifyr/client";
+import type { ModelPricingRecord, PlatformSettings } from "@botifyr/shared";
 import { BotLogo, LogoutIcon } from "@botifyr/ui";
 
 /**
@@ -25,21 +26,27 @@ export function Admin() {
   const [authorized, setAuthorized] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<"users" | "skills" | "audit">("users");
+  const [tab, setTab] = useState<"users" | "skills" | "audit" | "billing">("users");
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [skills, setSkills] = useState<AdminSkill[]>([]);
   const [audit, setAudit] = useState<AdminAuditEvent[]>([]);
+  const [settings, setSettings] = useState<PlatformSettings | null>(null);
+  const [pricing, setPricing] = useState<ModelPricingRecord[]>([]);
   const [openSkill, setOpenSkill] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const [userList, skillList, auditList] = await Promise.all([
+    const [userList, skillList, auditList, settingsData, pricingList] = await Promise.all([
       client.adminUsers(),
       client.adminSkills(),
       client.adminAudit(),
+      client.adminSettings(),
+      client.adminModelPricing(),
     ]);
     setUsers(userList);
     setSkills(skillList);
     setAudit(auditList);
+    setSettings(settingsData);
+    setPricing(pricingList);
   }, [client]);
 
   useEffect(() => {
@@ -166,6 +173,35 @@ export function Admin() {
     }
   }
 
+  async function saveSettings(next: PlatformSettings) {
+    setError(null);
+    try {
+      setSettings(await client.adminSaveSettings(next));
+    } catch (err: unknown) {
+      setError(messageOf(err));
+    }
+  }
+
+  async function savePricingRow(record: ModelPricingRecord) {
+    setError(null);
+    try {
+      await client.adminSaveModelPricing(record.model, record);
+      await load();
+    } catch (err: unknown) {
+      setError(messageOf(err));
+    }
+  }
+
+  async function deletePricingRow(model: string) {
+    setError(null);
+    try {
+      await client.adminDeleteModelPricing(model);
+      await load();
+    } catch (err: unknown) {
+      setError(messageOf(err));
+    }
+  }
+
   if (!ready) {
     return (
       <div className="admin-signin">
@@ -237,6 +273,13 @@ export function Admin() {
             onClick={() => setTab("audit")}
           >
             Audit log
+          </button>
+          <button
+            className={`admin-tab ${tab === "billing" ? "active" : ""}`}
+            type="button"
+            onClick={() => setTab("billing")}
+          >
+            Billing
           </button>
         </div>
 
@@ -367,6 +410,377 @@ export function Admin() {
               ))}
             </tbody>
           </table>
+        )}
+
+        {tab === "billing" && settings && (
+          <div>
+            <div className="admin-card">
+              <strong>Plans &amp; limits</strong>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+                  gap: 10,
+                  marginTop: 10,
+                }}
+              >
+                <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12 }}>
+                  Pro price (cents)
+                  <input
+                    type="number"
+                    value={settings.plans.proPriceCents}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        plans: { ...settings.plans, proPriceCents: Number(e.target.value) },
+                      })
+                    }
+                  />
+                </label>
+                <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12 }}>
+                  Business price (cents)
+                  <input
+                    type="number"
+                    value={settings.plans.businessPriceCents}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        plans: { ...settings.plans, businessPriceCents: Number(e.target.value) },
+                      })
+                    }
+                  />
+                </label>
+                <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12 }}>
+                  Period (days)
+                  <input
+                    type="number"
+                    value={settings.plans.proPeriodDays}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        plans: { ...settings.plans, proPeriodDays: Number(e.target.value) },
+                      })
+                    }
+                  />
+                </label>
+                <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12 }}>
+                  Pro included tokens
+                  <input
+                    type="number"
+                    value={settings.plans.includedTokens.pro}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        plans: {
+                          ...settings.plans,
+                          includedTokens: { ...settings.plans.includedTokens, pro: Number(e.target.value) },
+                        },
+                      })
+                    }
+                  />
+                </label>
+                <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12 }}>
+                  Business included tokens
+                  <input
+                    type="number"
+                    value={settings.plans.includedTokens.business}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        plans: {
+                          ...settings.plans,
+                          includedTokens: {
+                            ...settings.plans.includedTokens,
+                            business: Number(e.target.value),
+                          },
+                        },
+                      })
+                    }
+                  />
+                </label>
+                <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12 }}>
+                  Free monthly tokens
+                  <input
+                    type="number"
+                    value={settings.freeMonthlyTokens}
+                    onChange={(e) => setSettings({ ...settings, freeMonthlyTokens: Number(e.target.value) })}
+                  />
+                </label>
+                <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12 }}>
+                  Low balance (cents)
+                  <input
+                    type="number"
+                    value={settings.lowBalanceCents}
+                    onChange={(e) => setSettings({ ...settings, lowBalanceCents: Number(e.target.value) })}
+                  />
+                </label>
+                <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12 }}>
+                  Grace days
+                  <input
+                    type="number"
+                    value={settings.graceDays}
+                    onChange={(e) => setSettings({ ...settings, graceDays: Number(e.target.value) })}
+                  />
+                </label>
+                <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12 }}>
+                  Reminder days (before &amp; during)
+                  <input
+                    value={settings.reminderDays.join(", ")}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        reminderDays: e.target.value
+                          .split(",")
+                          .map((part) => Number(part.trim()))
+                          .filter((n) => n > 0),
+                      })
+                    }
+                  />
+                </label>
+                <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12 }}>
+                  Global markup %
+                  <input
+                    type="number"
+                    value={settings.onDemand.markupPercent}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        onDemand: { ...settings.onDemand, markupPercent: Number(e.target.value) },
+                      })
+                    }
+                  />
+                </label>
+                <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12 }}>
+                  Min top-up (cents)
+                  <input
+                    type="number"
+                    value={settings.onDemand.minTopUpCents}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        onDemand: { ...settings.onDemand, minTopUpCents: Number(e.target.value) },
+                      })
+                    }
+                  />
+                </label>
+                <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12 }}>
+                  Fallback plan
+                  <select
+                    value={settings.fallbackPlan}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        fallbackPlan: e.target.value as PlatformSettings["fallbackPlan"],
+                      })
+                    }
+                  >
+                    <option value="free">free</option>
+                    <option value="pro">pro</option>
+                    <option value="business">business</option>
+                  </select>
+                </label>
+                <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12 }}>
+                  On empty
+                  <select
+                    value={settings.onDemand.onEmpty}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        onDemand: { ...settings.onDemand, onEmpty: e.target.value as "block" | "free" },
+                      })
+                    }
+                  >
+                    <option value="block">block</option>
+                    <option value="free">fall back to free</option>
+                  </select>
+                </label>
+              </div>
+              <div className="admin-actions" style={{ marginTop: 12, gap: 16 }}>
+                <label style={{ fontSize: 12 }}>
+                  <input
+                    type="checkbox"
+                    checked={settings.onDemand.enabled}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        onDemand: { ...settings.onDemand, enabled: e.target.checked },
+                      })
+                    }
+                  />{" "}
+                  On-demand credits
+                </label>
+                <label style={{ fontSize: 12 }}>
+                  <input
+                    type="checkbox"
+                    checked={settings.onDemand.allowPro}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        onDemand: { ...settings.onDemand, allowPro: e.target.checked },
+                      })
+                    }
+                  />{" "}
+                  Allow pro overage
+                </label>
+                <label style={{ fontSize: 12 }}>
+                  <input
+                    type="checkbox"
+                    checked={settings.reminderChannels.email}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        reminderChannels: { ...settings.reminderChannels, email: e.target.checked },
+                      })
+                    }
+                  />{" "}
+                  Email reminders
+                </label>
+                <label style={{ fontSize: 12 }}>
+                  <input
+                    type="checkbox"
+                    checked={settings.reminderChannels.telegram}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        reminderChannels: { ...settings.reminderChannels, telegram: e.target.checked },
+                      })
+                    }
+                  />{" "}
+                  Telegram reminders
+                </label>
+              </div>
+              <button
+                className="btn primary"
+                style={{ marginTop: 12 }}
+                type="button"
+                onClick={() => void saveSettings(settings)}
+              >
+                Save settings
+              </button>
+            </div>
+
+            <div className="admin-card" style={{ marginTop: 14 }}>
+              <strong>Model pricing</strong>
+              <p className="admin-muted" style={{ marginTop: 6 }}>
+                User price = provider cost × (1 + markup), rounded up. A run with an unknown model uses the
+                most expensive enabled row.
+              </p>
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th>Model</th>
+                    <th>Input ¢/1M</th>
+                    <th>Output ¢/1M</th>
+                    <th>Markup %</th>
+                    <th>On</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {pricing.map((row, index) => (
+                    <tr key={row.model}>
+                      <td>{row.model}</td>
+                      <td>
+                        <input
+                          type="number"
+                          value={row.inputCentsPerM}
+                          onChange={(e) =>
+                            setPricing(
+                              pricing.map((r, i) =>
+                                i === index ? { ...r, inputCentsPerM: Number(e.target.value) } : r,
+                              ),
+                            )
+                          }
+                        />
+                      </td>
+                      <td>
+                        <input
+                          type="number"
+                          value={row.outputCentsPerM}
+                          onChange={(e) =>
+                            setPricing(
+                              pricing.map((r, i) =>
+                                i === index ? { ...r, outputCentsPerM: Number(e.target.value) } : r,
+                              ),
+                            )
+                          }
+                        />
+                      </td>
+                      <td>
+                        <input
+                          type="number"
+                          placeholder="global"
+                          value={row.markupPercent ?? ""}
+                          onChange={(e) =>
+                            setPricing(
+                              pricing.map((r, i) =>
+                                i === index
+                                  ? {
+                                      ...r,
+                                      markupPercent:
+                                        e.target.value === "" ? undefined : Number(e.target.value),
+                                    }
+                                  : r,
+                              ),
+                            )
+                          }
+                        />
+                      </td>
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={row.enabled}
+                          onChange={(e) =>
+                            setPricing(
+                              pricing.map((r, i) => (i === index ? { ...r, enabled: e.target.checked } : r)),
+                            )
+                          }
+                        />
+                      </td>
+                      <td>
+                        <div className="admin-actions">
+                          <button
+                            className="ghost small"
+                            type="button"
+                            onClick={() => void savePricingRow(pricing[index])}
+                          >
+                            Save
+                          </button>
+                          <button
+                            className="ghost small danger"
+                            type="button"
+                            onClick={() => void deletePricingRow(row.model)}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <button
+                className="ghost small"
+                style={{ marginTop: 10 }}
+                type="button"
+                onClick={() =>
+                  setPricing([
+                    ...pricing,
+                    {
+                      model: "new-model",
+                      provider: "",
+                      inputCentsPerM: 0,
+                      outputCentsPerM: 0,
+                      enabled: true,
+                      updatedAt: new Date().toISOString(),
+                    },
+                  ])
+                }
+              >
+                Add model
+              </button>
+            </div>
+          </div>
         )}
       </div>
     </div>

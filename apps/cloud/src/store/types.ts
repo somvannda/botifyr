@@ -1,4 +1,6 @@
-import type { BotSchedule, ChatMessage, Task } from "@botifyr/shared";
+import type { BotSchedule, ChatMessage, ModelPricingRecord, PlatformSettings, Task } from "@botifyr/shared";
+
+export type { ModelPricingRecord, PlatformSettings };
 
 /** Persistence contracts shared by the memory and Postgres stores. */
 
@@ -299,42 +301,6 @@ export interface Store {
 /* -------------------------------------------------------------------------- */
 /* Billing records                                                            */
 /* -------------------------------------------------------------------------- */
-
-export interface PlatformSettings {
-  plans: {
-    proPriceCents: number;
-    businessPriceCents: number;
-    proPeriodDays: number;
-    /** Included tokens per period on each paid plan. */
-    includedTokens: { pro: number; business: number };
-    currency: string;
-  };
-  freeMonthlyTokens: number;
-  lowBalanceCents: number;
-  graceDays: number;
-  reminderDays: number[];
-  reminderChannels: { os: boolean; email: boolean; telegram: boolean };
-  onDemand: {
-    enabled: boolean;
-    markupPercent: number;
-    minTopUpCents: number;
-    allowPro: boolean;
-    onEmpty: "block" | "free";
-  };
-  fallbackPlan: Plan;
-}
-
-export interface ModelPricingRecord {
-  model: string;
-  provider?: string;
-  /** What we pay the provider, in cents per 1M tokens. */
-  inputCentsPerM: number;
-  outputCentsPerM: number;
-  /** Optional per-model override of the global markup. */
-  markupPercent?: number;
-  enabled: boolean;
-  updatedAt: string;
-}
 
 export type InvoiceKind = "plan" | "topup";
 
