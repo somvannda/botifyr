@@ -30,13 +30,21 @@ spent (admin toggle).
 `trial` is renamed to **free** (migration maps existing `trial` → `free`).
 
 ### On-demand (charge per token)
-- Every completed run records tokens in `usage_events` (already exists). For
-  `payg` users we also write a **ledger debit**: `tokens / 1,000,000 × pricePer1MTokens`
-  in cents (rate is admin-set, e.g. $0.50 / 1M tokens).
-- A **wallet** holds `balanceCents`. Top-ups are ChmabaPay payments that credit
-  the wallet on `payment.completed` (same webhook, different `metadata.kind`).
-- When `balanceCents ≤ 0`: **block** with an upgrade/top-up CTA, or fall back to
-  the free allowance first — an admin choice (`onDemand.onEmpty`).
+- The charge is derived **per model** from an admin-maintained **model-pricing
+  table** (§2.1): for each model, the provider cost we pay (`inputCentsPerM`,
+  `outputCentsPerM`, per 1M tokens) plus a **markup** (global default **15%**,
+  per-model override). User price = `providerCost × (1 + markup%)`.
+- Every completed run records tokens **and the model** in `usage_events`. For
+  `payg` users we write a **ledger debit**:
+  `cost = prompt/1e6·inputCentsPerM + completion/1e6·outputCentsPerM`, then
+  `charge = round(cost × (1 + markup/100))` cents.
+- A **wallet** holds `balanceCents`. Top-ups are ChmabaPay payments crediting the
+  wallet on `payment.completed` (`metadata.kind = "topup"`).
+- When `balanceCents ≤ 0`: **block** with a top-up CTA, or fall back to the free
+  allowance first — admin choice (`onDemand.onEmpty`).
+- The **free allowance** is a token count (`freeMonthlyTokens`); its dollar value
+  is priced with the same model table. DeepSeek is cheap, so 20k free tokens cost
+  us a fraction of a cent — the markup only matters on paid volume.
 
 ## 2. Platform settings (admin-controlled)
 
@@ -44,25 +52,47 @@ One `platform_settings` row (JSON), read by billing + cost controls and edited i
 **apps/admin → Settings**. Cached in memory, invalidated on write.
 
 ```
-plans:            { proPriceCents, businessPriceCents, proPeriodDays, currency }
+plans:            { proPriceCents: 500, businessPriceCents: 1900,
+                    proPeriodDays: 30, currency: "USD" }
 freeMonthlyTokens: 20000
+lowBalanceCents:  100              # warn/top-up prompt below this
 graceDays:        7
 reminderDays:     [7, 3, 1]
 reminderChannels: { os: true, email: true, telegram: true }
-onDemand:         { enabled: true, pricePerMTokensCents: 50, minTopUpCents: 100,
+onDemand:         { enabled: true, markupPercent: 15, minTopUpCents: 100,
                     allowPro: false, onEmpty: "block" | "free" }
 fallbackPlan:     "free"
 ```
 
 - **API:** `GET /admin/settings` and `PUT /admin/settings` (admin-only, audited).
-- **Client/admin UI:** `apps/admin` gains a **Settings** tab (plans, free quota,
-  grace, reminder days/channels, on-demand). The user app reads the public subset
-  via `/v1/billing`.
+- **Admin UI:** `apps/admin` gains a **Settings** tab. The user app reads the
+  public subset via `/v1/billing`.
+
+### 2.1 Model pricing (drives on-demand + free-allowance value)
+
+An admin-maintained table (one row per model), separate from the single settings
+row. Edit in **apps/admin → Settings → Model pricing**:
+
+```
+model_pricing
+  model            e.g. "deepseek-chat"
+  provider         e.g. "deepseek"
+  inputCentsPerM   what we pay the provider, per 1M input tokens
+  outputCentsPerM  per 1M output tokens
+  markupPercent    optional override of the global 15%
+  enabled
+  updatedAt
+```
+
+> Prices are set from real provider rates (DeepSeek published pricing), then the
+> markup (≥15%) is applied on top. Keep a row per model we ship; a run with no
+> matching row falls back to the most expensive enabled row (never under-charge).
 
 ## 3. Entities
 
 ```
 platform_settings   (single row)                         # §2
+model_pricing       (one row per model)                  # §2.1
 
 subscription (1/user)
   userId, billingMode: free|plan|payg
@@ -162,8 +192,8 @@ CHMABA_BASE_URL=https://pay.chmaba.com
 CHMABA_API_KEY=ck_live_...
 CHMABA_STORE=st_...            # or CHMABA_MERCHANT=botifyr (external_id)
 CHMABA_WEBHOOK_SECRET=whsec_...
+RESEND_API_KEY=re_...
 MAIL_FROM="Botifyr <billing@botifyr.xyz>"
-SMTP_URL=smtp://user:pass@host:587      # or RESEND_API_KEY=...
 TELEGRAM_BOT_TOKEN=...
 ```
 Numeric policy (prices, quotas, grace, reminders, rates) lives in
@@ -195,14 +225,16 @@ Numeric policy (prices, quotas, grace, reminders, rates) lives in
 - Admin comp (grant plan/credits) writes a `grant` ledger entry, no invoice.
 
 ## 12. Decisions (answered)
-1. On-demand per-token billing: **yes** — prepaid credit wallet, rate set in admin.
-2. Reminders: **OS notification + email + Telegram**.
-3. Grace behaviour: **admin-set** (`graceDays` = 7 default).
-4. Free allowance: **admin-set** (`freeMonthlyTokens`), monthly reset.
+1. On-demand per-token billing: **yes** — prepaid credits; price is **per-model**
+   (provider cost + **≥15% markup**), maintained in admin (§2.1).
+2. Reminders: **OS notification + email (Resend) + Telegram**; Telegram only for
+   users who linked it.
+3. Grace: **admin-set** (`graceDays`, default 7).
+4. Free allowance: **admin-set** (`freeMonthlyTokens`), monthly reset; low-balance
+   threshold also admin-set.
+5. Tiers: **free · pro · business** (business = higher price + capacity).
 
 ## 13. Still open
-1. Default numbers: pro price, `pricePerMTokensCents`, `freeMonthlyTokens`, low-balance threshold.
-2. Email provider (SMTP vs Resend/SendGrid) + from-address/domain.
-3. Telegram: only users who linked Telegram, or a fallback chat?
-4. Do `pro` users also draw on-demand overage (admin toggle `onDemand.allowPro`)?
-5. Business tier — needed now or keep free/pro?
+1. Default numbers: business price, DeepSeek model cost rows, low-balance default.
+2. Resend from-address + verified domain.
+3. Do `pro` users also draw on-demand overage (admin toggle `onDemand.allowPro`)?
