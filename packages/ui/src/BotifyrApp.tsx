@@ -1050,6 +1050,19 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     }
   }
 
+  /** Allow now and remember: turn on this bot's "Always allow" for next time. */
+  async function allowAlways(): Promise<void> {
+    try {
+      if (activeBot) {
+        const updated = await client.updateBot(activeBot.id, { autoApprove: true });
+        setBots((prev) => prev.map((bot) => (bot.id === updated.id ? updated : bot)));
+      }
+      await decide("allow");
+    } catch (err: unknown) {
+      setError(messageOf(err));
+    }
+  }
+
   async function addSecret(event: FormEvent) {
     event.preventDefault();
     if (!secretName.trim() || !secretValue) return;
@@ -2086,6 +2099,9 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                         <button className="btn allow" type="button" onClick={() => decide("allow")}>
                           Allow once
                         </button>
+                        <button className="ghost small" type="button" onClick={() => void allowAlways()}>
+                          Always allow
+                        </button>
                       </div>
                     </div>
                   )}
@@ -2200,7 +2216,10 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
               <span className="approval-bar-sub">{liveTask.approval.description}</span>
             </span>
             <button className="btn primary" type="button" onClick={() => void decide("allow")}>
-              Allow
+              Allow once
+            </button>
+            <button className="ghost small" type="button" onClick={() => void allowAlways()}>
+              Always allow
             </button>
             <button className="ghost small" type="button" onClick={() => void decide("deny")}>
               Deny
