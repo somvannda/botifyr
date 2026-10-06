@@ -111,6 +111,8 @@ export interface UsageRecord {
   taskId: string | null;
   promptTokens: number;
   completionTokens: number;
+  /** The model that produced this usage (for per-model pricing). */
+  model?: string;
   createdAt: string;
 }
 

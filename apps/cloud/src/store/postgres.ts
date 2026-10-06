@@ -461,14 +461,15 @@ export class PostgresStore implements Store {
 
   async addUsage(record: UsageRecord): Promise<void> {
     await this.pool.query(
-      "INSERT INTO usage_events (id, user_id, task_id, prompt_tokens, completion_tokens, created_at) " +
-        "VALUES ($1, $2, $3, $4, $5, $6)",
+      "INSERT INTO usage_events (id, user_id, task_id, prompt_tokens, completion_tokens, model, created_at) " +
+        "VALUES ($1, $2, $3, $4, $5, $6, $7)",
       [
         record.id,
         record.userId,
         record.taskId,
         record.promptTokens,
         record.completionTokens,
+        record.model ?? null,
         record.createdAt,
       ],
     );

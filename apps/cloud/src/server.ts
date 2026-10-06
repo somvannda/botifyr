@@ -366,6 +366,42 @@ export async function buildServer(options: ServerOptions) {
     const { tokens } = await store.usageSince(userId, startOfToday());
     return tokens >= dailyTokenBudget;
   }
+
+  /**
+   * Hard-stop: refuse new work when the account is out of allowance. Free users
+   * get a monthly token pool; plan users get their period's included tokens;
+   * pay-as-you-go users need a positive credit balance (unless they may fall
+   * back to the free pool). Returns a user-facing reason, or null to allow.
+   */
+  async function billingBlockReason(userId: string): Promise<string | null> {
+    const record = await store.getUserById(userId);
+    if (!record) return null;
+    const settings = await store.getPlatformSettings();
+    const plan = record.plan ?? "free";
+    const paidPlan = plan === "pro" || plan === "business";
+
+    if (paidPlan) {
+      const { tokens } = await store.usageSince(userId, record.periodStart ?? startOfMonth());
+      const included =
+        plan === "business" ? settings.plans.includedTokens.business : settings.plans.includedTokens.pro;
+      if (tokens < included) return null;
+    } else {
+      const { tokens } = await store.usageSince(userId, startOfMonth());
+      if (tokens < settings.freeMonthlyTokens) return null;
+    }
+
+    // Over allowance: credits can cover it (payg, or overage allowed for plans).
+    const wallet = await store.getWallet(userId);
+    const creditsUsable =
+      settings.onDemand.enabled &&
+      wallet.balanceCents > 0 &&
+      (record.billingMode === "payg" || settings.onDemand.allowPro);
+    if (creditsUsable || settings.onDemand.onEmpty === "free") return null;
+
+    return paidPlan
+      ? "You've used this period's included tokens — renew to continue, or top up credits."
+      : "You've used this month's free tokens — upgrade or top up credits to continue.";
+  }
   const app = Fastify({ logger: true });
 
   // Keep the raw body as well as the parsed JSON, so webhook handlers (Stripe)
@@ -2023,6 +2059,8 @@ export async function buildServer(options: ServerOptions) {
           .code(429)
           .send({ error: "Daily token budget reached — try again tomorrow or raise the budget." });
       }
+      const billingReason = await billingBlockReason(userId);
+      if (billingReason) return reply.code(402).send({ error: billingReason });
       const warning = await budgetWarning(userId);
 
       // Natural-language stop: "stop", "cancel", "stop this download".
@@ -2213,6 +2251,8 @@ export async function buildServer(options: ServerOptions) {
           .code(429)
           .send({ error: "Daily token budget reached — try again tomorrow or raise the budget." });
       }
+      const billingReason = await billingBlockReason(userId);
+      if (billingReason) return reply.code(402).send({ error: billingReason });
       const warning = await budgetWarning(userId);
       try {
         const task = await retryTask(session, userId, request.body?.local === true);
@@ -2246,6 +2286,8 @@ export async function buildServer(options: ServerOptions) {
           .code(429)
           .send({ error: "Daily token budget reached — try again tomorrow or raise the budget." });
       }
+      const billingReason = await billingBlockReason(userId);
+      if (billingReason) return reply.code(402).send({ error: billingReason });
 
       return startTask(session, goal, userId);
     },

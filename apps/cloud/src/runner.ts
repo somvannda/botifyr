@@ -36,6 +36,7 @@ import { createLearnedSkillTools } from "./learned-skills-tools.js";
 import { createNotionTools, createSlackTools, createTelegramTools } from "./token-apps-tools.js";
 import { decryptSecret } from "./vault.js";
 import { createLocalTools, nodeInfo } from "./nodes.js";
+import { priceFor } from "./billing.js";
 import type { Store } from "./store/index.js";
 
 export interface RunnerDeps {
@@ -417,14 +418,45 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
     // Best-effort cost accounting: never let a failed write break the task.
     try {
       if (result.usage && (result.usage.promptTokens > 0 || result.usage.completionTokens > 0)) {
+        const model = process.env.BOTIFYR_MODEL;
+        const now = new Date().toISOString();
         await store.addUsage({
           id: randomUUID(),
           userId,
           taskId: task.id,
           promptTokens: result.usage.promptTokens,
           completionTokens: result.usage.completionTokens,
-          createdAt: new Date().toISOString(),
+          model,
+          createdAt: now,
         });
+        // On-demand / overage: debit the prepaid credit wallet at the per-model rate.
+        const settings = await store.getPlatformSettings();
+        const record = await store.getUserById(userId);
+        if (record && settings.onDemand.enabled) {
+          const charge = priceFor(
+            await store.listModelPricing(),
+            model,
+            result.usage.promptTokens,
+            result.usage.completionTokens,
+            settings.onDemand.markupPercent,
+          );
+          const wallet = await store.getWallet(userId);
+          const drawsCredits =
+            record.billingMode === "payg" || (settings.onDemand.allowPro && wallet.balanceCents > 0);
+          if (charge > 0 && drawsCredits) {
+            await store.addWalletCents(userId, -charge);
+            await store.addLedger({
+              id: randomUUID(),
+              userId,
+              kind: "usage",
+              amountCents: -charge,
+              tokens: result.usage.promptTokens + result.usage.completionTokens,
+              model,
+              note: task.id,
+              createdAt: now,
+            });
+          }
+        }
       }
     } catch {
       // usage recording is best-effort
