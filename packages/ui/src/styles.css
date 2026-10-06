@@ -765,6 +765,13 @@ body {
   background: rgba(239, 68, 68, 0.08);
 }
 
+.topup-amounts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
 .approval h3 {
   margin: 8px 0 6px;
   font-size: 15px;

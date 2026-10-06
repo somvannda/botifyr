@@ -270,6 +270,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [checkNote, setCheckNote] = useState<string | null>(null);
   const [plan, setPlan] = useState<"free" | "pro" | "business">("free");
   const [billing, setBilling] = useState<Awaited<ReturnType<BotifyrClient["billing"]>> | null>(null);
+  const [topUpOpen, setTopUpOpen] = useState(false);
   const [trialStart] = useState(() => {
     const existing = Number(localStorage.getItem("botifyr.trialStart"));
     if (existing) return existing;
@@ -846,9 +847,9 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     }
   }
 
-  async function topUp() {
+  async function topUp(amountCents: number) {
+    setTopUpOpen(false);
     setCheckNote(null);
-    const amountCents = billing?.onDemand.minTopUpCents ?? 500;
     try {
       const { url } = await client.billingCheckout({ kind: "topup", amountCents });
       if (url) void openExternal(url);
@@ -3656,6 +3657,32 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
         </div>
       )}
 
+      {topUpOpen && (
+        <div className="apps-overlay" onClick={() => setTopUpOpen(false)}>
+          <div className="apps-panel" onClick={(event) => event.stopPropagation()}>
+            <div className="apps-head">
+              <span className="apps-title">Top up credits</span>
+              <button className="icon-btn sm" type="button" onClick={() => setTopUpOpen(false)}>
+                ✕
+              </button>
+            </div>
+            <p className="apps-sub">
+              Credits are used once your included tokens run out. Minimum $
+              {((billing?.onDemand.minTopUpCents ?? 100) / 100).toFixed(2)}.
+            </p>
+            <div className="topup-amounts">
+              {[100, 500, 1000, 2000]
+                .filter((cents) => cents >= (billing?.onDemand.minTopUpCents ?? 100))
+                .map((cents) => (
+                  <button key={cents} className="btn" type="button" onClick={() => void topUp(cents)}>
+                    ${(cents / 100).toFixed(2)}
+                  </button>
+                ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {shareItem && (
         <div className="apps-overlay" onClick={() => setShareItem(null)}>
           <div className="apps-panel" onClick={(event) => event.stopPropagation()}>
@@ -4156,9 +4183,9 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                       className="ghost small"
                       type="button"
                       disabled={billing?.billingConfigured === false}
-                      onClick={() => void topUp()}
+                      onClick={() => setTopUpOpen(true)}
                     >
-                      Top up ${((billing?.onDemand.minTopUpCents ?? 100) / 100).toFixed(2)}
+                      Top up credits
                     </button>
                   </div>
                   {billing?.billingConfigured === false && (
