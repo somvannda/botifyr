@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mediaKind } from "./BotifyrApp";
+import { mediaKind } from "./mediaUtils";
 
 describe("mediaKind", () => {
   it("classifies media by file extension, case-insensitively", () => {

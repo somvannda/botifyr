@@ -51,6 +51,7 @@ import { Markdown } from "./Markdown";
 import { P2P, deviceId, saveBlob, setIceServers } from "./p2p";
 import { defaultBridge, type BotBridge } from "./bridge";
 import { mergeTask } from "./taskMerge";
+import { mediaKind, type MediaKind } from "./mediaUtils";
 import "./styles.css";
 
 const CLOUD_URL = (import.meta.env.VITE_CLOUD_URL as string | undefined) ?? "http://localhost:8787";
@@ -4651,17 +4652,6 @@ function prettyFileName(name: string): string {
 function sharedTokenOf(text: string): string | null {
   const match = /\/shared\/([A-Za-z0-9._-]+)/.exec(text);
   return match ? match[1] : null;
-}
-
-type MediaKind = "video" | "audio" | "image" | "file";
-
-/** Classify a downloaded file by extension (Telegram-style media categories). */
-export function mediaKind(name: string): MediaKind {
-  const ext = name.toLowerCase().split(".").pop() ?? "";
-  if (["mp4", "webm", "m4v", "mov", "mkv", "avi"].includes(ext)) return "video";
-  if (["mp3", "m4a", "aac", "ogg", "wav", "flac"].includes(ext)) return "audio";
-  if (["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg"].includes(ext)) return "image";
-  return "file";
 }
 
 /** Library category tabs (id matches `mediaKind`, plus "all"). */
