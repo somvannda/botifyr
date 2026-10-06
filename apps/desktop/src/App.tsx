@@ -9,6 +9,7 @@ import type {
   SecretSummary,
   ServerEvent,
   Session,
+  Skill,
   Task,
   User,
 } from "@botifyr/shared";
@@ -124,6 +125,8 @@ export default function App() {
   const [schedulePrompt, setSchedulePrompt] = useState("");
   const [scheduleEvery, setScheduleEvery] = useState(60);
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
+  const [skills, setSkills] = useState<Skill[]>([]);
+  const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
   const [secrets, setSecrets] = useState<SecretSummary[]>([]);
   const [showSettings, setShowSettings] = useState(false);
   const [showAccountMenu, setShowAccountMenu] = useState(false);
@@ -218,12 +221,13 @@ export default function App() {
     setAudit([]);
     setShowAudit(false);
 
-    Promise.all([client.listBots(), client.listSessions(), client.listConnections()])
-      .then(([botList, sessionList, connectionList]) => {
+    Promise.all([client.listBots(), client.listSessions(), client.listConnections(), client.listSkills()])
+      .then(([botList, sessionList, connectionList, skillList]) => {
         if (!mounted) return;
         setBots(botList);
         setSessions(sessionList);
         setConnections(connectionList);
+        setSkills(skillList);
         const first = botList[0];
         if (first) {
           setActiveBotId(first.id);
@@ -462,6 +466,7 @@ export default function App() {
     setSchedulePrompt("");
     setScheduleEvery(60);
     setScheduleEnabled(false);
+    setSelectedSkills([]);
     setShowNewChat(false);
   }
 
@@ -476,6 +481,7 @@ export default function App() {
     setSchedulePrompt(bot.schedule?.prompt ?? "");
     setScheduleEvery(bot.schedule?.everyMinutes ?? 60);
     setScheduleEnabled(bot.schedule?.enabled ?? false);
+    setSelectedSkills(bot.skills ?? []);
   }
 
   function closeBotModal() {
@@ -494,6 +500,7 @@ export default function App() {
           scheme: botScheme,
           instructions: botIntro.trim(),
           memberIds: groupMembers,
+          skills: selectedSkills,
           schedule: schedulePrompt.trim()
             ? { prompt: schedulePrompt.trim(), everyMinutes: scheduleEvery, enabled: scheduleEnabled }
             : undefined,
@@ -532,6 +539,7 @@ export default function App() {
         scheme: botScheme,
         instructions,
         memberIds,
+        skills: selectedSkills,
       });
       setBots((prev) => [...prev, bot]);
       const session: Session = {
@@ -1816,6 +1824,28 @@ export default function App() {
                 </ul>
               </>
             )}
+
+            <div className="settings-section-title">Skills</div>
+            <ul className="skill-list">
+              {skills.length === 0 && <li className="muted">No skills available.</li>}
+              {skills.map((skill) => (
+                <li key={skill.id}>
+                  <label className="member-item">
+                    <input
+                      type="checkbox"
+                      checked={selectedSkills.includes(skill.id)}
+                      onChange={(event) =>
+                        setSelectedSkills((prev) =>
+                          event.target.checked ? [...prev, skill.id] : prev.filter((id) => id !== skill.id),
+                        )
+                      }
+                    />
+                    <span className="skill-name">{skill.name}</span>
+                    <span className="skill-desc">{skill.description}</span>
+                  </label>
+                </li>
+              ))}
+            </ul>
 
             <textarea
               className="bot-instructions"

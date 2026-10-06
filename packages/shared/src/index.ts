@@ -92,6 +92,13 @@ export interface BotSchedule {
   nextRunAt?: string;
 }
 
+/** A built-in knowledge pack a bot can be taught. */
+export interface Skill {
+  id: string;
+  name: string;
+  description: string;
+}
+
 /**
  * A bot is an agent the user talks to. It owns a single conversation thread,
  * has its own name, avatar colour and standing instructions.
@@ -107,6 +114,8 @@ export interface Bot {
   instructions: string;
   /** For group chats: the bot ids that take turns replying. */
   memberIds?: string[];
+  /** Skill ids this bot has been taught (injected into its instructions). */
+  skills?: string[];
   /** Optional schedule: run `prompt` every N minutes. */
   schedule?: BotSchedule;
   /** The conversation thread for this bot. */

@@ -31,6 +31,7 @@ import { handleNodeMessage, nodeInfo, registerNode } from "./nodes.js";
 import { createToken, hashPassword, hashToken, verifyPassword } from "./auth.js";
 import { encryptSecret } from "./vault.js";
 import { runTask, runtimeInfo, summarizeConversation } from "./runner.js";
+import { SKILLS, skillInstructions } from "./skills.js";
 import type { Store } from "./store/index.js";
 import type { FileRecord } from "./store/types.js";
 
@@ -293,10 +294,13 @@ export async function buildServer(options: ServerOptions) {
               userId,
               history: memberHistory,
               local,
-              instructions:
-                `In this group chat you are "${member.name}". ` +
-                `You may @mention another member by name to hand work off to them. ` +
-                `${member.instructions}`.trim(),
+              instructions: [
+                `In this group chat you are "${member.name}". You may @mention another member by name to hand work off to them.`,
+                member.instructions,
+                skillInstructions(member.skills),
+              ]
+                .filter(Boolean)
+                .join("\n\n"),
               summary: latest.summary,
               vaultKey,
               author: { id: member.id },
@@ -326,7 +330,8 @@ export async function buildServer(options: ServerOptions) {
           userId,
           history,
           local,
-          instructions: bot?.instructions,
+          instructions:
+            [bot?.instructions, skillInstructions(bot?.skills)].filter(Boolean).join("\n\n") || undefined,
           summary: session.summary,
           vaultKey,
           author: bot ? { id: bot.id } : undefined,
@@ -376,7 +381,8 @@ export async function buildServer(options: ServerOptions) {
         userId,
         history,
         local,
-        instructions: bot?.instructions,
+        instructions:
+          [bot?.instructions, skillInstructions(bot?.skills)].filter(Boolean).join("\n\n") || undefined,
         summary: session.summary,
         vaultKey,
         author: bot ? { id: bot.id } : undefined,
@@ -414,7 +420,7 @@ export async function buildServer(options: ServerOptions) {
         userId: bot.userId,
         history,
         local: false,
-        instructions: bot.instructions,
+        instructions: [bot.instructions, skillInstructions(bot.skills)].filter(Boolean).join("\n\n"),
         summary: session.summary,
         vaultKey,
         author: { id: bot.id },
@@ -426,7 +432,14 @@ export async function buildServer(options: ServerOptions) {
   /** Create a bot together with the conversation thread it owns. */
   async function createBotFor(
     userId: string,
-    input: { name: string; emoji: string; scheme: number; instructions: string; memberIds?: string[] },
+    input: {
+      name: string;
+      emoji: string;
+      scheme: number;
+      instructions: string;
+      memberIds?: string[];
+      skills?: string[];
+    },
   ): Promise<Bot> {
     const now = new Date().toISOString();
     const session: Session = {
@@ -444,6 +457,7 @@ export async function buildServer(options: ServerOptions) {
       scheme: input.scheme,
       instructions: input.instructions,
       memberIds: input.memberIds && input.memberIds.length > 0 ? input.memberIds : undefined,
+      skills: input.skills && input.skills.length > 0 ? input.skills : undefined,
       sessionId: session.id,
       createdAt: now,
     };
@@ -480,6 +494,11 @@ export async function buildServer(options: ServerOptions) {
       usage: { tokensToday: usage.tokens, requestsToday: usage.requests },
     };
   });
+
+  /** Built-in knowledge packs a bot can be taught. */
+  app.get("/v1/skills", { preHandler: requireAuth }, async () =>
+    SKILLS.map((skill) => ({ id: skill.id, name: skill.name, description: skill.description })),
+  );
 
   app.post<{ Body: { email?: string; password?: string } }>("/auth/signup", async (request, reply) => {
     const email = (request.body?.email ?? "").trim();
@@ -835,7 +854,14 @@ export async function buildServer(options: ServerOptions) {
   });
 
   app.post<{
-    Body: { name?: string; emoji?: string; scheme?: number; instructions?: string; memberIds?: string[] };
+    Body: {
+      name?: string;
+      emoji?: string;
+      scheme?: number;
+      instructions?: string;
+      memberIds?: string[];
+      skills?: string[];
+    };
   }>("/v1/bots", { preHandler: requireAuth }, async (request, reply) => {
     const userId = request.userId as string;
     const name = (request.body?.name ?? "").trim();
@@ -853,7 +879,16 @@ export async function buildServer(options: ServerOptions) {
       if (memberIds.length === 0) memberIds = undefined;
     }
 
-    const bot = await createBotFor(userId, { name, emoji, scheme, instructions, memberIds });
+    const bot = await createBotFor(userId, {
+      name,
+      emoji,
+      scheme,
+      instructions,
+      memberIds,
+      skills: Array.isArray(request.body?.skills)
+        ? request.body.skills.filter((id) => SKILLS.some((skill) => skill.id === id))
+        : undefined,
+    });
     return reply.code(201).send(bot);
   });
 
@@ -877,6 +912,7 @@ export async function buildServer(options: ServerOptions) {
       scheme?: number;
       instructions?: string;
       memberIds?: string[];
+      skills?: string[];
       schedule?: { prompt?: string; everyMinutes?: number; enabled?: boolean };
     };
   }>("/v1/bots/:id", { preHandler: requireAuth }, async (request, reply) => {
@@ -907,6 +943,12 @@ export async function buildServer(options: ServerOptions) {
       const ownedIds = new Set(owned.filter((entry) => entry.id !== bot.id).map((entry) => entry.id));
       const members = request.body.memberIds.filter((id) => ownedIds.has(id));
       bot.memberIds = members.length > 0 ? members : undefined;
+    }
+
+    // Skills: keep only known ids.
+    if (Array.isArray(request.body?.skills)) {
+      const skills = request.body.skills.filter((id) => SKILLS.some((skill) => skill.id === id));
+      bot.skills = skills.length > 0 ? skills : undefined;
     }
 
     // Schedule: run a prompt automatically every N minutes.

@@ -8,6 +8,7 @@ import type {
   SecretSummary,
   ServerEvent,
   Session,
+  Skill,
   Task,
   User,
 } from "@botifyr/shared";
@@ -107,12 +108,17 @@ export class BotifyrClient {
     return this.request("/v1/bots");
   }
 
+  listSkills(): Promise<Skill[]> {
+    return this.request("/v1/skills");
+  }
+
   createBot(input: {
     name: string;
     emoji: string;
     scheme: number;
     instructions: string;
     memberIds?: string[];
+    skills?: string[];
   }): Promise<Bot> {
     return this.request("/v1/bots", { method: "POST", json: true, body: JSON.stringify(input) });
   }

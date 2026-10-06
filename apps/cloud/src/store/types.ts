@@ -30,6 +30,7 @@ export interface BotRecord {
   scheme: number;
   instructions: string;
   memberIds?: string[];
+  skills?: string[];
   schedule?: BotSchedule;
   sessionId: string;
   createdAt: string;
