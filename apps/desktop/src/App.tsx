@@ -749,6 +749,16 @@ export default function App() {
               </ul>
             </div>
 
+            <div className="settings-title">Usage today</div>
+            <div className="settings-body">
+              <p className="muted">
+                {config?.usage
+                  ? `${config.usage.tokensToday.toLocaleString()} tokens · ${config.usage.requestsToday} requests`
+                  : "—"}
+                {config?.limits ? ` · budget ${config.limits.dailyTokenBudget.toLocaleString()}` : ""}
+              </p>
+            </div>
+
             <div className="settings-title">Account</div>
             <div className="settings-body">
               <button className="ghost small" type="button" onClick={logout}>

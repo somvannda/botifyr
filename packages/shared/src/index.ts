@@ -153,6 +153,18 @@ export interface RuntimeConfig {
   demo: boolean;
   /** True when a local node (on the user's machine) is connected. */
   nodeOnline: boolean;
+  /** Cost-control limits enforced by the cloud. */
+  limits?: {
+    rateLimitPerHour: number;
+    maxOutputTokens: number;
+    maxHistoryTurns: number;
+    dailyTokenBudget: number;
+  };
+  /** The user's token usage since midnight. */
+  usage?: {
+    tokensToday: number;
+    requestsToday: number;
+  };
 }
 
 /* -------------------------------------------------------------------------- */

@@ -4,6 +4,7 @@ import type {
   ModelProvider,
   RiskLevel,
   StepUpdate,
+  TokenUsage,
   ToolDefinition,
   ToolSpec,
 } from "./types.js";
@@ -28,6 +29,8 @@ export interface RunAgentOptions {
   history?: HistoryMessage[];
   /** Extra system guidance for this run (e.g. "use the user's computer"). */
   instructions?: string;
+  /** Hard cap on output tokens per model call (cost control). */
+  maxTokens?: number;
   provider: ModelProvider;
   tools: ToolDefinition[];
   workspaceDir: string;
@@ -45,6 +48,8 @@ export interface AgentResult {
   summary: string;
   steps: number;
   provider: string;
+  /** Aggregated token usage across all model calls in this run. */
+  usage?: TokenUsage;
 }
 
 const SYSTEM_PROMPT = [
@@ -87,6 +92,7 @@ export async function runAgent(options: RunAgentOptions): Promise<AgentResult> {
   ];
 
   let stepCount = 0;
+  const usage: TokenUsage = { promptTokens: 0, completionTokens: 0 };
 
   for (let iteration = 0; iteration < maxSteps; iteration += 1) {
     const thinkId = randomUUID();
@@ -96,8 +102,11 @@ export async function runAgent(options: RunAgentOptions): Promise<AgentResult> {
     try {
       response =
         options.onToken && provider.completeStream
-          ? await provider.completeStream({ messages, tools: tools.map(toSpec) }, options.onToken)
-          : await provider.complete({ messages, tools: tools.map(toSpec) });
+          ? await provider.completeStream(
+              { messages, tools: tools.map(toSpec), maxTokens: options.maxTokens },
+              options.onToken,
+            )
+          : await provider.complete({ messages, tools: tools.map(toSpec), maxTokens: options.maxTokens });
     } catch (error) {
       options.onStep({ id: thinkId, title: "Thinking", detail: messageOf(error), status: "failed" });
       return {
@@ -105,7 +114,13 @@ export async function runAgent(options: RunAgentOptions): Promise<AgentResult> {
         summary: `Model error: ${messageOf(error)}`,
         steps: stepCount,
         provider: provider.name,
+        usage,
       };
+    }
+
+    if (response.usage) {
+      usage.promptTokens += response.usage.promptTokens;
+      usage.completionTokens += response.usage.completionTokens;
     }
 
     options.onStep({
@@ -121,6 +136,7 @@ export async function runAgent(options: RunAgentOptions): Promise<AgentResult> {
         summary: response.text?.trim() || "Task finished.",
         steps: stepCount,
         provider: provider.name,
+        usage,
       };
     }
 
@@ -157,6 +173,7 @@ export async function runAgent(options: RunAgentOptions): Promise<AgentResult> {
             summary: "Stopped by you at the approval gate.",
             steps: stepCount,
             provider: provider.name,
+            usage,
           };
         }
       }
@@ -189,5 +206,6 @@ export async function runAgent(options: RunAgentOptions): Promise<AgentResult> {
     summary: `Reached the step budget (${maxSteps}) without finishing.`,
     steps: stepCount,
     provider: provider.name,
+    usage,
   };
 }

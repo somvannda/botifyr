@@ -203,6 +203,7 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
       tools,
       workspaceDir: process.cwd(),
       maxSteps: Number(process.env.BOTIFYR_MAX_STEPS ?? 12),
+      maxTokens: Number(process.env.BOTIFYR_MAX_OUTPUT_TOKENS ?? 1024),
       requestApproval: async (title, description, risk) => {
         const approval = {
           id: randomUUID(),
@@ -250,6 +251,22 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
     await chain;
     ok = result.ok;
     reply = result.summary;
+
+    // Best-effort cost accounting: never let a failed write break the task.
+    try {
+      if (result.usage && (result.usage.promptTokens > 0 || result.usage.completionTokens > 0)) {
+        await store.addUsage({
+          id: randomUUID(),
+          userId,
+          taskId: task.id,
+          promptTokens: result.usage.promptTokens,
+          completionTokens: result.usage.completionTokens,
+          createdAt: new Date().toISOString(),
+        });
+      }
+    } catch {
+      // usage recording is best-effort
+    }
     task.status = ok ? "completed" : "failed";
     if (ok) task.result = reply;
     else task.error = reply;

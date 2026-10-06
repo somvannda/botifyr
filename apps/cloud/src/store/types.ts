@@ -63,6 +63,16 @@ export interface ConnectionRecord {
   createdAt: string;
 }
 
+/** One model call's token usage, for cost control. */
+export interface UsageRecord {
+  id: string;
+  userId: string;
+  taskId: string | null;
+  promptTokens: number;
+  completionTokens: number;
+  createdAt: string;
+}
+
 export interface Store {
   init(): Promise<void>;
   close(): Promise<void>;
@@ -102,4 +112,8 @@ export interface Store {
   listConnections(userId: string): Promise<ConnectionRecord[]>;
   getConnection(userId: string, provider: string): Promise<ConnectionRecord | null>;
   deleteConnection(userId: string, provider: string): Promise<boolean>;
+
+  addUsage(record: UsageRecord): Promise<void>;
+  /** Total tokens + request count for a user since an ISO timestamp. */
+  usageSince(userId: string, sinceIso: string): Promise<{ tokens: number; requests: number }>;
 }

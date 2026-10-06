@@ -19,12 +19,19 @@ export interface ToolSpec {
   parameters: Record<string, unknown>;
 }
 
+export interface TokenUsage {
+  promptTokens: number;
+  completionTokens: number;
+}
+
 export interface ModelResponse {
   /** Free-form assistant text (final answer or reasoning). */
   text?: string;
   /** Optional short reasoning summary for the UI. */
   reasoning?: string;
   toolCalls: ToolCall[];
+  /** Provider-reported token usage for this call, when available. */
+  usage?: TokenUsage;
 }
 
 /** A provider-agnostic chat message. */
@@ -38,10 +45,14 @@ export interface AgentMessage {
 
 export interface ModelProvider {
   readonly name: string;
-  complete(input: { messages: AgentMessage[]; tools: ToolSpec[] }): Promise<ModelResponse>;
+  complete(input: {
+    messages: AgentMessage[];
+    tools: ToolSpec[];
+    maxTokens?: number;
+  }): Promise<ModelResponse>;
   /** Optional token streaming; when present the loop can surface live text. */
   completeStream?(
-    input: { messages: AgentMessage[]; tools: ToolSpec[] },
+    input: { messages: AgentMessage[]; tools: ToolSpec[]; maxTokens?: number },
     onDelta: (text: string) => void,
   ): Promise<ModelResponse>;
 }

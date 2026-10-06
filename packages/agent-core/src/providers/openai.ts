@@ -1,4 +1,4 @@
-import type { AgentMessage, ModelProvider, ModelResponse, ToolCall, ToolSpec } from "../types.js";
+import type { AgentMessage, ModelProvider, ModelResponse, TokenUsage, ToolCall, ToolSpec } from "../types.js";
 
 /**
  * Any OpenAI-compatible chat-completions endpoint: OpenAI, OpenRouter,
@@ -57,15 +57,18 @@ export function createOpenAIProvider(options: OpenAIProviderOptions): ModelProvi
     async complete({
       messages,
       tools,
+      maxTokens,
     }: {
       messages: AgentMessage[];
       tools: ToolSpec[];
+      maxTokens?: number;
     }): Promise<ModelResponse> {
       const body: Record<string, unknown> = {
         model: options.model,
         messages: messages.map(toOpenAIMessage),
         temperature: 0.2,
       };
+      if (maxTokens && maxTokens > 0) body.max_tokens = maxTokens;
 
       // OpenAI-compatible APIs only allow [a-zA-Z0-9_-] in function names, so
       // dotted names like "browser.goto" are sanitized on the wire and mapped
@@ -105,6 +108,7 @@ export function createOpenAIProvider(options: OpenAIProviderOptions): ModelProvi
 
       const json = (await response.json()) as {
         choices?: Array<{ message?: OpenAIChoiceMessage }>;
+        usage?: { prompt_tokens?: number; completion_tokens?: number };
       };
       const message = json.choices?.[0]?.message ?? {};
 
@@ -122,15 +126,23 @@ export function createOpenAIProvider(options: OpenAIProviderOptions): ModelProvi
       return {
         text: message.content ?? undefined,
         toolCalls,
+        usage: json.usage
+          ? {
+              promptTokens: json.usage.prompt_tokens ?? 0,
+              completionTokens: json.usage.completion_tokens ?? 0,
+            }
+          : undefined,
       };
     },
-    async completeStream({ messages, tools }, onDelta) {
+    async completeStream({ messages, tools, maxTokens }, onDelta) {
       const body: Record<string, unknown> = {
         model: options.model,
         messages: messages.map(toOpenAIMessage),
         temperature: 0.2,
         stream: true,
+        stream_options: { include_usage: true },
       };
+      if (maxTokens && maxTokens > 0) body.max_tokens = maxTokens;
 
       const nameMap = new Map<string, string>();
       const toWireName = (name: string): string => {
@@ -167,6 +179,7 @@ export function createOpenAIProvider(options: OpenAIProviderOptions): ModelProvi
       const decoder = new TextDecoder();
       let buffer = "";
       let text = "";
+      let streamUsage: TokenUsage | undefined;
       const calls = new Map<number, { id: string; name: string; args: string }>();
 
       for (;;) {
@@ -192,11 +205,18 @@ export function createOpenAIProvider(options: OpenAIProviderOptions): ModelProvi
                 }>;
               };
             }>;
+            usage?: { prompt_tokens?: number; completion_tokens?: number };
           };
           try {
             chunk = JSON.parse(data);
           } catch {
             continue;
+          }
+          if (chunk.usage) {
+            streamUsage = {
+              promptTokens: chunk.usage.prompt_tokens ?? 0,
+              completionTokens: chunk.usage.completion_tokens ?? 0,
+            };
           }
           const delta = chunk.choices?.[0]?.delta;
           if (!delta) continue;
@@ -226,6 +246,7 @@ export function createOpenAIProvider(options: OpenAIProviderOptions): ModelProvi
             name: nameMap.get(call.name) ?? call.name,
             arguments: safeJson(call.args),
           })),
+        usage: streamUsage,
       };
     },
   };

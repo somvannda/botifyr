@@ -6,6 +6,7 @@ import type {
   SecretRecord,
   SessionRecord,
   Store,
+  UsageRecord,
   UserRecord,
 } from "./types.js";
 
@@ -21,6 +22,7 @@ export class MemoryStore implements Store {
   private audit: AuditRecord[] = [];
   private secrets = new Map<string, SecretRecord>();
   private connections = new Map<string, ConnectionRecord>();
+  private usage: UsageRecord[] = [];
 
   async init(): Promise<void> {}
   async close(): Promise<void> {}
@@ -160,5 +162,20 @@ export class MemoryStore implements Store {
 
   async deleteConnection(userId: string, provider: string): Promise<boolean> {
     return this.connections.delete(`${userId}:${provider}`);
+  }
+
+  async addUsage(record: UsageRecord): Promise<void> {
+    this.usage.push(record);
+  }
+
+  async usageSince(userId: string, sinceIso: string): Promise<{ tokens: number; requests: number }> {
+    const since = new Date(sinceIso).getTime();
+    const rows = this.usage.filter(
+      (record) => record.userId === userId && new Date(record.createdAt).getTime() >= since,
+    );
+    return {
+      tokens: rows.reduce((sum, record) => sum + record.promptTokens + record.completionTokens, 0),
+      requests: rows.length,
+    };
   }
 }

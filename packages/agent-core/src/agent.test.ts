@@ -75,6 +75,27 @@ describe("runAgent", () => {
     expect(result.summary).toContain("Stopped by you");
   });
 
+  it("aggregates token usage across model calls", async () => {
+    const provider = scriptedProvider([
+      {
+        toolCalls: [{ id: "1", name: "demo_echo", arguments: { value: "a" } }],
+        usage: { promptTokens: 10, completionTokens: 5 },
+      },
+      { text: "done", toolCalls: [], usage: { promptTokens: 20, completionTokens: 7 } },
+    ]);
+
+    const result = await runAgent({
+      goal: "x",
+      provider,
+      tools: [echoTool(() => {})],
+      workspaceDir: ".",
+      requestApproval: async () => true,
+      onStep: () => {},
+    });
+
+    expect(result.usage).toEqual({ promptTokens: 30, completionTokens: 12 });
+  });
+
   it("surfaces a model error as a failed run", async () => {
     const provider: ModelProvider = {
       name: "boom",

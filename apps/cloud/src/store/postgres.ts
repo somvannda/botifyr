@@ -7,6 +7,7 @@ import type {
   SecretRecord,
   SessionRecord,
   Store,
+  UsageRecord,
   UserRecord,
 } from "./types.js";
 import { SCHEMA_SQL } from "./schema.js";
@@ -255,6 +256,30 @@ export class PostgresStore implements Store {
       provider,
     ]);
     return (result.rowCount ?? 0) > 0;
+  }
+
+  async addUsage(record: UsageRecord): Promise<void> {
+    await this.pool.query(
+      "INSERT INTO usage_events (id, user_id, task_id, prompt_tokens, completion_tokens, created_at) " +
+        "VALUES ($1, $2, $3, $4, $5, $6)",
+      [
+        record.id,
+        record.userId,
+        record.taskId,
+        record.promptTokens,
+        record.completionTokens,
+        record.createdAt,
+      ],
+    );
+  }
+
+  async usageSince(userId: string, sinceIso: string): Promise<{ tokens: number; requests: number }> {
+    const { rows } = await this.pool.query(
+      "SELECT COALESCE(SUM(prompt_tokens + completion_tokens), 0) AS tokens, COUNT(*) AS requests " +
+        "FROM usage_events WHERE user_id = $1 AND created_at >= $2",
+      [userId, sinceIso],
+    );
+    return { tokens: Number(rows[0]?.tokens ?? 0), requests: Number(rows[0]?.requests ?? 0) };
   }
 }
 

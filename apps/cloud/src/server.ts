@@ -81,6 +81,50 @@ export interface ServerOptions {
 
 export async function buildServer(options: ServerOptions) {
   const { store, vaultKey, localChannel } = options;
+
+  /* ------------------------------------------------------------------------ */
+  /* Cost controls (modelled on Chmaba's limits)                              */
+  /* ------------------------------------------------------------------------ */
+  const rateLimitPerHour = Number(process.env.BOTIFYR_RATE_LIMIT_PER_HOUR ?? 60);
+  const dailyTokenBudget = Number(process.env.BOTIFYR_DAILY_TOKEN_BUDGET ?? 200_000);
+  const maxOutputTokens = Number(process.env.BOTIFYR_MAX_OUTPUT_TOKENS ?? 1024);
+  const maxHistoryTurns = Number(process.env.BOTIFYR_MAX_HISTORY_TURNS ?? 12);
+  const maxMessageChars = Number(process.env.BOTIFYR_MAX_MESSAGE_CHARS ?? 4000);
+  const rateWindows = new Map<string, number[]>();
+
+  /** Sliding-window per-user rate limit. 0 disables it. */
+  function rateLimitOk(userId: string): boolean {
+    if (rateLimitPerHour <= 0) return true;
+    const now = Date.now();
+    const window = (rateWindows.get(userId) ?? []).filter((t) => now - t < 3_600_000);
+    if (window.length >= rateLimitPerHour) {
+      rateWindows.set(userId, window);
+      return false;
+    }
+    window.push(now);
+    rateWindows.set(userId, window);
+    return true;
+  }
+
+  function startOfToday(): string {
+    const date = new Date();
+    date.setHours(0, 0, 0, 0);
+    return date.toISOString();
+  }
+
+  /** Returns an error string when the user is over budget, otherwise null. */
+  async function budgetExceeded(userId: string): Promise<string | null> {
+    if (!rateLimitOk(userId)) {
+      return "You've reached the message limit for now — please try again later.";
+    }
+    if (dailyTokenBudget > 0) {
+      const { tokens } = await store.usageSince(userId, startOfToday());
+      if (tokens >= dailyTokenBudget) {
+        return "Daily token budget reached. Try again tomorrow, or raise BOTIFYR_DAILY_TOKEN_BUDGET.";
+      }
+    }
+    return null;
+  }
   const app = Fastify({ logger: true });
 
   await app.register(cors, { origin: true });
@@ -160,9 +204,13 @@ export async function buildServer(options: ServerOptions) {
 
   /** Append the user turn, create a task, and run the agent with prior context. */
   async function startTask(session: Session, text: string, userId: string, local = false): Promise<Task> {
-    const history = session.messages.map((message) => ({ role: message.role, content: message.content }));
+    // Cost control: cap the incoming message and the history sent to the model.
+    const capped = text.slice(0, maxMessageChars);
+    const history = session.messages
+      .slice(-maxHistoryTurns * 2)
+      .map((message) => ({ role: message.role, content: message.content.slice(0, maxMessageChars) }));
     // A bot owns its thread, so keep the bot's name as the title.
-    if (session.messages.length === 0 && !session.botId) session.title = text.slice(0, 60);
+    if (session.messages.length === 0 && !session.botId) session.title = capped.slice(0, 60);
 
     const bot = session.botId ? await store.getBot(session.botId) : null;
     // Group chats: every member bot replies in turn.
@@ -177,13 +225,19 @@ export async function buildServer(options: ServerOptions) {
     const task: Task = {
       id: randomUUID(),
       sessionId: session.id,
-      goal: text,
+      goal: capped,
       status: "queued",
       steps: [],
       createdAt: now,
       updatedAt: now,
     };
-    session.messages.push({ id: randomUUID(), role: "user", content: text, createdAt: now, taskId: task.id });
+    session.messages.push({
+      id: randomUUID(),
+      role: "user",
+      content: capped,
+      createdAt: now,
+      taskId: task.id,
+    });
 
     await store.updateSession(session);
     await store.createTask(task);
@@ -278,11 +332,16 @@ export async function buildServer(options: ServerOptions) {
 
   app.get("/demo", async (_request, reply) => reply.type("text/html; charset=utf-8").send(DEMO_HTML));
 
-  app.get("/v1/config", { preHandler: requireAuth }, async (request) => ({
-    ...runtimeInfo(),
-    store: (process.env.BOTIFYR_STORE ?? "memory").toLowerCase(),
-    nodeOnline: nodeInfo(request.userId as string).online,
-  }));
+  app.get("/v1/config", { preHandler: requireAuth }, async (request) => {
+    const usage = await store.usageSince(request.userId as string, startOfToday());
+    return {
+      ...runtimeInfo(),
+      store: (process.env.BOTIFYR_STORE ?? "memory").toLowerCase(),
+      nodeOnline: nodeInfo(request.userId as string).online,
+      limits: { rateLimitPerHour, maxOutputTokens, maxHistoryTurns, dailyTokenBudget },
+      usage: { tokensToday: usage.tokens, requestsToday: usage.requests },
+    };
+  });
 
   app.post<{ Body: { email?: string; password?: string } }>("/auth/signup", async (request, reply) => {
     const email = (request.body?.email ?? "").trim();
@@ -715,7 +774,11 @@ export async function buildServer(options: ServerOptions) {
       const text = (request.body?.text ?? "").trim();
       if (!text) return reply.code(400).send({ error: "text is required" });
 
-      const task = await startTask(session, text, request.userId as string, request.body?.local === true);
+      const userId = request.userId as string;
+      const limit = await budgetExceeded(userId);
+      if (limit) return reply.code(429).send({ error: limit });
+
+      const task = await startTask(session, text, userId, request.body?.local === true);
       return { session, task };
     },
   );
@@ -730,7 +793,12 @@ export async function buildServer(options: ServerOptions) {
       }
       const goal = (request.body?.goal ?? "").trim();
       if (!goal) return reply.code(400).send({ error: "goal is required" });
-      return startTask(session, goal, request.userId as string);
+
+      const userId = request.userId as string;
+      const limit = await budgetExceeded(userId);
+      if (limit) return reply.code(429).send({ error: limit });
+
+      return startTask(session, goal, userId);
     },
   );
 
