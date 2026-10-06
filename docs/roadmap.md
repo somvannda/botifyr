@@ -48,7 +48,8 @@ they land. Keep entries short; link code paths instead of explaining them.
       reconciliation on restart; a persisted per-file job queue is still open.
 - [x] **Media retention & quota** — age-based + quota sweep (`BOTIFYR_MEDIA_*`).
 - [x] **Profile & notifications** — profile UI + unread badges + in-app toasts.
-- [ ] **Local model option** — Ollama / OpenAI-compatible config switch.
+- [x] **Local model option** — `BOTIFYR_PROVIDER=ollama` (+ `BOTIFYR_BASE_URL`,
+      `BOTIFYR_MODEL`) for OpenAI-compatible local models.
 - [x] **Security pass** — CORS allowlist + rotating refresh tokens done;
       optional E2E for DMs still open.
 - [x] **Cost enforcement** — opt-in hard daily cap (`BOTIFYR_ENFORCE_BUDGET`) and
