@@ -47,6 +47,43 @@ import "./styles.css";
 const CLOUD_URL = (import.meta.env.VITE_CLOUD_URL as string | undefined) ?? "http://localhost:8787";
 const ADMIN_URL = (import.meta.env.VITE_ADMIN_URL as string | undefined) ?? "http://localhost:4322/admin";
 const SKILLS_URL = (import.meta.env.VITE_SKILLS_URL as string | undefined) ?? "http://localhost:4322/skills";
+
+/** A small, curated emoji palette for bot/group identity. */
+const EMOJI_CHOICES = [
+  "🤖",
+  "👥",
+  "🧠",
+  "🦾",
+  "✨",
+  "🎬",
+  "🎵",
+  "📊",
+  "🔍",
+  "✍️",
+  "🧑‍💻",
+  "🛠️",
+  "📚",
+  "🧭",
+  "⚡",
+  "🌐",
+  "📦",
+  "🎨",
+  "🛰️",
+  "🔬",
+  "💡",
+  "🗂️",
+  "🧪",
+  "🚀",
+];
+const DEFAULT_EMOJI = "🤖";
+const DEFAULT_GROUP_EMOJI = "👥";
+
+/** Older data (or a mangled write) may hold "??" — treat that as “no emoji”. */
+function cleanEmoji(value: string | undefined, isGroup: boolean): string {
+  const trimmed = (value ?? "").trim();
+  if (!trimmed || trimmed.includes("?")) return isGroup ? DEFAULT_GROUP_EMOJI : DEFAULT_EMOJI;
+  return trimmed;
+}
 const TOKEN_KEY = "botifyr.token";
 
 type ConnectionState = "connecting" | "online" | "offline";
@@ -135,6 +172,7 @@ export default function App() {
     text: string;
   } | null>(null);
   const [createBotMode, setCreateBotMode] = useState<"bot" | "group" | "edit" | null>(null);
+  const [emojiOpen, setEmojiOpen] = useState(false);
   const [editingBotId, setEditingBotId] = useState<string | null>(null);
   const [botName, setBotName] = useState("");
   const [botEmoji, setBotEmoji] = useState("🤖");
@@ -513,7 +551,7 @@ export default function App() {
     setCreateBotMode(mode);
     setEditingBotId(null);
     setBotName("");
-    setBotEmoji(mode === "group" ? "👥" : "🤖");
+    setBotEmoji(mode === "group" ? DEFAULT_GROUP_EMOJI : DEFAULT_EMOJI);
     setBotScheme(bots.length % BOT_SCHEMES.length);
     setBotIntro("");
     setGroupMembers([]);
@@ -529,7 +567,7 @@ export default function App() {
     setCreateBotMode("edit");
     setEditingBotId(bot.id);
     setBotName(bot.name);
-    setBotEmoji(bot.emoji);
+    setBotEmoji(cleanEmoji(bot.emoji, (bot.memberIds?.length ?? 0) > 0));
     setBotScheme(bot.scheme % BOT_SCHEMES.length);
     setBotIntro(bot.instructions);
     setGroupMembers((bot.memberIds ?? []).filter((id) => id !== bot.id));
@@ -547,6 +585,7 @@ export default function App() {
     setBotSaved(false);
     setBotError(null);
     setSkillQuery("");
+    setEmojiOpen(false);
   }
 
   async function createBot() {
@@ -1491,7 +1530,12 @@ export default function App() {
                   <div key={message.id} className="msg-assistant">
                     <BotLogo size={26} scheme={msgScheme} className="msg-bot-logo" />
                     <div className="msg-body">
-                      {msgBot && <div className="msg-author">{msgBot.name}</div>}
+                      {msgBot && (
+                        <div className="msg-author">
+                          <span className="msg-author-emoji">{cleanEmoji(msgBot.emoji, false)}</span>
+                          {msgBot.name}
+                        </div>
+                      )}
                       <Markdown text={parsed.body} />
                       {parsed.options.length > 0 && (
                         <div className="quick-replies">
@@ -1519,7 +1563,12 @@ export default function App() {
                 <div className="msg-assistant">
                   <BotLogo size={26} scheme={streamScheme} className="msg-bot-logo" />
                   <div className="msg-body">
-                    {streamBot && <div className="msg-author">{streamBot.name}</div>}
+                    {streamBot && (
+                      <div className="msg-author">
+                        <span className="msg-author-emoji">{cleanEmoji(streamBot.emoji, false)}</span>
+                        {streamBot.name}
+                      </div>
+                    )}
                     {stream && stream.text ? (
                       <span className="reveal">{stream.text.split("```options")[0]}</span>
                     ) : (
@@ -2167,13 +2216,40 @@ export default function App() {
                   onChange={(event) => setBotName(event.target.value)}
                   autoFocus
                 />
-                <input
-                  className="bot-emoji-input"
-                  value={botEmoji}
-                  onChange={(event) => setBotEmoji(event.target.value)}
-                  maxLength={4}
-                  aria-label="Emoji"
-                />
+                <div className="emoji-picker">
+                  <button
+                    type="button"
+                    className={`emoji-trigger ${emojiOpen ? "open" : ""}`}
+                    onClick={() => setEmojiOpen((value) => !value)}
+                    title="Choose an emoji"
+                    aria-label="Choose an emoji"
+                    aria-expanded={emojiOpen}
+                  >
+                    {cleanEmoji(botEmoji, createBotMode === "group")}
+                  </button>
+                  {emojiOpen && (
+                    <>
+                      <div className="emoji-backdrop" onClick={() => setEmojiOpen(false)} />
+                      <div className="emoji-pop" role="listbox">
+                        {EMOJI_CHOICES.map((emoji) => (
+                          <button
+                            key={emoji}
+                            type="button"
+                            className={`emoji-choice ${emoji === botEmoji ? "active" : ""}`}
+                            role="option"
+                            aria-selected={emoji === botEmoji}
+                            onClick={() => {
+                              setBotEmoji(emoji);
+                              setEmojiOpen(false);
+                            }}
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
 
               <div className="scheme-row">
