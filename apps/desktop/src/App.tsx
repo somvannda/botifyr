@@ -17,13 +17,13 @@ const tauriBridge: BotBridge = {
     await win.unminimize();
     await win.setFocus();
   },
-  notify: (title: string, body: string) => {
-    // Best-effort OS notification from the webview. For a first-class desktop
-    // notification, add @tauri-apps/plugin-notification and wire it here.
+  notify: async (title: string, body: string) => {
     try {
-      if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-        new Notification(title, { body });
-      }
+      const { isPermissionGranted, requestPermission, sendNotification } =
+        await import("@tauri-apps/plugin-notification");
+      let granted = await isPermissionGranted();
+      if (!granted) granted = (await requestPermission()) === "granted";
+      if (granted) sendNotification({ title, body });
     } catch {
       // Notifications are best-effort; never block the app.
     }

@@ -65,3 +65,6 @@ P2P signaling, groups (parallel, autonomous, handoff), self-learning skills,
 connections (Google/GitHub/Slack/Notion/Telegram), billing (trial/pro), admin
 moderation + audit, friends + presence + 1:1 DMs (desktop + portal), Google
 sign-in + open signup, Noto Sans Khmer, button design system, cost controls.
+Library media categories (All/Videos/Audio/Images/Files) + in-player prev/next
+browsing; chat-list unread badge (right-aligned) + hover delete (two-step
+confirm); date-grouped Downloads with Save / Send to friend / Delete.

@@ -77,6 +77,7 @@ pub fn run() {
     builder = builder
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
         .manage(NodeProcess(Mutex::new(None)))
         .invoke_handler(tauri::generate_handler![start_local_node, stop_local_node])
         .setup(|app| {
