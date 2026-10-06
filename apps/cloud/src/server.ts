@@ -324,7 +324,11 @@ export async function buildServer(options: ServerOptions) {
                   ? `Context from your OWN separate one-to-one chat with the user (use it — e.g. links they shared with you earlier):\n${ownRecent}`
                   : "",
                 autonomous
-                  ? "Autonomous mode: every member sees this message and decides for themselves. If it isn't for you and you have nothing useful to add, reply with exactly [SKIP] and nothing else."
+                  ? "Autonomous mode: " +
+                    (mentioned.length > 0
+                      ? `the user addressed ${mentioned.map((m) => m.name).join(", ")}. `
+                      : "the user addressed no one in particular. ") +
+                    "Only reply if you are addressed or can genuinely add something new. If the message is aimed at another member and you have nothing to add, reply with exactly [SKIP] and nothing else."
                   : "",
                 "If the user refers to links/items from earlier, list what you found and confirm which ones they want before acting (end with an options block).",
                 member.instructions,
