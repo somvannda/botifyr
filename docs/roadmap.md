@@ -16,12 +16,13 @@ they land. Keep entries short; link code paths instead of explaining them.
 - [x] **Profile editing UI** — set @handle / display name / avatar
       (`PATCH /v1/profile`; UI in the People panel).
 - [x] **Unread badges** — per conversation; opening a chat clears it.
-- [x] **Notifications** — in-app toasts + web OS notifications when the tab is
-      hidden; desktop OS notifications still pending (needs the Tauri plugin).
+- [x] **Notifications** — in-app toasts + OS notifications on web (hidden tab)
+      and desktop (via `tauri-plugin-notification`).
 - [x] **P2P hardening** — TURN/ICE servers configurable via `/v1/config`
       (`BOTIFYR_TURN_*` / `BOTIFYR_ICE_SERVERS`); still to verify across 2 devices.
 - [ ] **Mobile PWA offline** (manifest exists; no service worker).
-- [ ] **Real Stripe** — keys, invoices, billing portal.
+- [ ] **Real Stripe** — checkout + webhook signature verification done; invoices
+      and the billing portal are still open.
 - [ ] **Deploy** — TLS, reverse proxy, subdomains (`app.` / `admin.` / `api.`).
 - [x] **Retire static `/admin.html`** — `/admin` now 302-redirects to the console.
 
