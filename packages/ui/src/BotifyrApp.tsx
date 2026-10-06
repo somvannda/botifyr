@@ -1049,18 +1049,9 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     }
   }
 
-  async function decide(decision: "allow" | "deny") {
-    const task = liveTask;
-    if (!task?.approval) return;
-    try {
-      await client.resolveApproval(task.id, task.approval.id, decision);
-    } catch (err: unknown) {
-      setError(messageOf(err));
-    }
-  }
-
   /** Allow now and remember: turn on "Always allow" so it won't ask again. */
-  async function allowAlways(): Promise<void> {
+  async function allowAlways(task?: Task): Promise<void> {
+    const target = task ?? liveTask;
     try {
       if (activeBot) {
         const targets =
@@ -1072,9 +1063,19 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
         );
         setBots((prev) => prev.map((bot) => updatedList.find((u) => u.id === bot.id) ?? bot));
       }
-      await decide("allow");
+      if (target?.approval) {
+        await client.resolveApproval(target.id, target.approval.id, "allow");
+      }
     } catch (err: unknown) {
       setError(messageOf(err));
+    }
+  }
+
+  /** Approve every pending approval at once. */
+  async function approveAll(): Promise<void> {
+    const pending = Object.values(tasks).filter((task) => task.approval?.status === "pending");
+    for (const task of pending) {
+      if (task.approval) await client.resolveApproval(task.id, task.approval.id, "allow").catch(() => {});
     }
   }
 
@@ -1209,6 +1210,10 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       .filter((t) => t.status === "running" || t.status === "awaiting_approval" || t.status === "queued")
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null;
   const latestTask = sessionTasks.sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null;
+  // Every pending approval across tasks, oldest first — shown one at a time.
+  const pendingApprovals = Object.values(tasks)
+    .filter((task) => task.approval?.status === "pending")
+    .sort((a, b) => (a.approval?.createdAt ?? "").localeCompare(b.approval?.createdAt ?? ""));
   const busy = Boolean(liveTask);
   const downloadUrl = (name: string, download = false): string =>
     `${CLOUD_URL}/v1/tasks/${latestTask?.id}/downloads/${encodeURIComponent(name)}?token=${encodeURIComponent(
@@ -2101,25 +2106,6 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                       );
                     })}
                   </ol>
-
-                  {liveTask.approval && liveTask.approval.status === "pending" && (
-                    <div className={`approval risk-${liveTask.approval.risk}`}>
-                      <span className="approval-tag">Approval needed · {liveTask.approval.risk} risk</span>
-                      <h3>{liveTask.approval.title}</h3>
-                      <p>{liveTask.approval.description}</p>
-                      <div className="approval-actions">
-                        <button className="btn deny" type="button" onClick={() => decide("deny")}>
-                          Deny
-                        </button>
-                        <button className="btn allow" type="button" onClick={() => decide("allow")}>
-                          Allow once
-                        </button>
-                        <button className="ghost small" type="button" onClick={() => void allowAlways()}>
-                          Always allow
-                        </button>
-                      </div>
-                    </div>
-                  )}
                 </div>
               )}
 
@@ -2224,21 +2210,53 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
           )}
         </section>
 
-        {liveTask?.approval && liveTask.approval.status === "pending" && (
-          <div className="approval-bar">
-            <span className="approval-bar-text">
-              <strong>{liveTask.approval.title}</strong>
-              <span className="approval-bar-sub">{liveTask.approval.description}</span>
-            </span>
-            <button className="btn primary" type="button" onClick={() => void decide("allow")}>
-              Allow once
-            </button>
-            <button className="ghost small" type="button" onClick={() => void allowAlways()}>
-              Always allow
-            </button>
-            <button className="ghost small" type="button" onClick={() => void decide("deny")}>
-              Deny
-            </button>
+        {pendingApprovals.length > 0 && (
+          <div className="approval-panel">
+            <div className="approval-panel-head">
+              <span className="approval-tag">
+                Approval needed
+                {pendingApprovals.length > 1 ? ` · ${pendingApprovals.length} pending` : ""}
+              </span>
+              {pendingApprovals.length > 1 && (
+                <button className="ghost small" type="button" onClick={() => void approveAll()}>
+                  Approve all ({pendingApprovals.length})
+                </button>
+              )}
+            </div>
+            {(() => {
+              const task = pendingApprovals[0];
+              const approval = task.approval;
+              if (!approval) return null;
+              return (
+                <div className="approval-card">
+                  <div className="approval-card-title">{approval.title}</div>
+                  <div className="approval-card-desc">{approval.description}</div>
+                  <div className="approval-card-actions">
+                    <button
+                      className="btn deny"
+                      type="button"
+                      onClick={() =>
+                        void client.resolveApproval(task.id, approval.id, "deny").catch(() => {})
+                      }
+                    >
+                      Deny
+                    </button>
+                    <button
+                      className="btn allow"
+                      type="button"
+                      onClick={() =>
+                        void client.resolveApproval(task.id, approval.id, "allow").catch(() => {})
+                      }
+                    >
+                      Allow once
+                    </button>
+                    <button className="ghost small" type="button" onClick={() => void allowAlways(task)}>
+                      Always allow
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         )}
 
