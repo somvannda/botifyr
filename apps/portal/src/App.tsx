@@ -132,6 +132,7 @@ export function Portal() {
         .filter((task) => task.sessionId === activeSessionId)
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
     : undefined;
+  const downloadStep = liveTask?.steps.find((step) => step.title === "Downloads");
 
   const standalone = bots.filter((bot) => !isGroup(bot));
   const groups = bots.filter(isGroup);
@@ -706,6 +707,14 @@ export function Portal() {
                 <div className="msg-assistant">
                   <div className="msg-body">
                     <div className="msg-author">{workingNames.join(", ")} are replying…</div>
+                  </div>
+                </div>
+              )}
+
+              {downloadStep && (
+                <div className="msg-assistant">
+                  <div className="msg-body">
+                    <div className="msg-author">Downloading · {downloadStep.detail}</div>
                   </div>
                 </div>
               )}
