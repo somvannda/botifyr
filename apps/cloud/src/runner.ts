@@ -248,7 +248,10 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
         learned
           .slice(0, 25)
           .map((skill) => `- ${skill.name}: ${skill.description}`)
-          .join("\n")
+          .join("\n") +
+        (learned.length > 25
+          ? `\n(Showing 25 of ${learned.length}. Use skills.list with a query to search the rest.)`
+          : "")
       : "";
   const instructions =
     [deps.instructions, skillIndex, localInstruction].filter(Boolean).join("\n\n") || undefined;

@@ -4,7 +4,7 @@
 # Support link (https://botifyr.xyz/help) works once this is deployed.
 FROM nginx:1.27-alpine
 
-COPY index.html help.html admin.html styles.css favicon.svg /usr/share/nginx/html/
+COPY index.html help.html admin.html skills.html styles.css favicon.svg /usr/share/nginx/html/
 
 RUN printf '%s\n' \
   'server {' \

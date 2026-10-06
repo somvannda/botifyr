@@ -175,12 +175,16 @@ export function createConnectionTools(store: Store, vaultKey: Buffer, userId: st
         const items =
           (
             result.data as {
-              items?: Array<{ summary?: string; start?: { dateTime?: string; date?: string } }>;
+              items?: Array<{
+                id?: string;
+                summary?: string;
+                start?: { dateTime?: string; date?: string };
+              }>;
             }
           ).items ?? [];
         const rows = items.map(
           (event) =>
-            `- ${event.start?.dateTime ?? event.start?.date ?? "?"}  ${event.summary ?? "(no title)"}`,
+            `- [${event.id ?? "?"}] ${event.start?.dateTime ?? event.start?.date ?? "?"}  ${event.summary ?? "(no title)"}`,
         );
         return { ok: true, output: rows.length ? rows.join("\n") : "No upcoming events." };
       },
@@ -288,6 +292,66 @@ export function createConnectionTools(store: Store, vaultKey: Buffer, userId: st
           };
         const link = (result.data as { htmlLink?: string }).htmlLink ?? "created";
         return { ok: true, output: `Event created: ${link}` };
+      },
+    },
+    {
+      name: "calendar.update_event",
+      description: "Update a Google Calendar event by id (only the fields you pass change).",
+      parameters: {
+        type: "object",
+        properties: {
+          eventId: { type: "string", description: "Event id from calendar.list" },
+          summary: { type: "string" },
+          start: { type: "string", description: "ISO datetime." },
+          end: { type: "string", description: "ISO datetime." },
+        },
+        required: ["eventId"],
+      },
+      requiresApproval: true,
+      run: async (args) => {
+        const token = await accessTokenFor(store, vaultKey, userId, "calendar");
+        if (!token) return notConnected("Google Calendar");
+        const patch: Record<string, unknown> = {};
+        if (args.summary !== undefined) patch.summary = String(args.summary);
+        if (args.start !== undefined) patch.start = { dateTime: String(args.start) };
+        if (args.end !== undefined) patch.end = { dateTime: String(args.end) };
+        const result = await googleJson(
+          `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(String(args.eventId ?? ""))}`,
+          token,
+          { method: "PATCH", body: JSON.stringify(patch) },
+        );
+        if (!result.ok)
+          return {
+            ok: false,
+            output: `Calendar error ${result.status}: ${JSON.stringify(result.data).slice(0, 300)}`,
+          };
+        const link = (result.data as { htmlLink?: string }).htmlLink ?? "updated";
+        return { ok: true, output: `Event updated: ${link}` };
+      },
+    },
+    {
+      name: "calendar.delete_event",
+      description: "Delete a Google Calendar event by id.",
+      parameters: {
+        type: "object",
+        properties: { eventId: { type: "string", description: "Event id from calendar.list" } },
+        required: ["eventId"],
+      },
+      requiresApproval: true,
+      run: async (args) => {
+        const token = await accessTokenFor(store, vaultKey, userId, "calendar");
+        if (!token) return notConnected("Google Calendar");
+        const result = await googleJson(
+          `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(String(args.eventId ?? ""))}`,
+          token,
+          { method: "DELETE" },
+        );
+        if (!result.ok)
+          return {
+            ok: false,
+            output: `Calendar error ${result.status}: ${JSON.stringify(result.data).slice(0, 300)}`,
+          };
+        return { ok: true, output: "Event deleted." };
       },
     },
   ];

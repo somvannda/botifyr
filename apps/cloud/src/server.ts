@@ -588,6 +588,33 @@ export async function buildServer(options: ServerOptions) {
     SKILLS.map((skill) => ({ id: skill.id, name: skill.name, description: skill.description })),
   );
 
+  /**
+   * Public, unauthenticated view of the approved learned-skill library, for the
+   * website's "Browse all skills" page. Never exposes the full guide content.
+   */
+  app.get("/public/skills", async (request) => {
+    const query = String((request.query as { q?: string } | undefined)?.q ?? "")
+      .trim()
+      .toLowerCase();
+    const all = (await store.listLearnedSkills()).filter((skill) => skill.status === "approved");
+    const matched = query
+      ? all.filter(
+          (skill) =>
+            skill.name.toLowerCase().includes(query) || skill.description.toLowerCase().includes(query),
+        )
+      : all;
+    return {
+      total: all.length,
+      count: matched.length,
+      skills: matched.slice(0, 100).map((skill) => ({
+        id: skill.id,
+        name: skill.name,
+        description: skill.description,
+        updatedAt: skill.updatedAt,
+      })),
+    };
+  });
+
   /** Skills the bot team has learned (approved ones are global). */
   app.get("/v1/learned-skills", { preHandler: requireAuth }, async (request) => {
     const userId = request.userId as string;

@@ -132,5 +132,65 @@ export function createGithubTools(store: Store, vaultKey: Buffer, userId: string
         return { ok: true, output: `Comment posted: ${link}` };
       },
     },
+    {
+      name: "github.list_prs",
+      description: "List open pull requests for a repository (owner/name).",
+      parameters: {
+        type: "object",
+        properties: { repo: { type: "string", description: "owner/name" } },
+        required: ["repo"],
+      },
+      run: async (args) => {
+        const token = await connectionToken(store, vaultKey, userId, "github");
+        if (!token) return { ok: false, output: "GitHub isn't connected. Connect it in the Marketplace." };
+        const repo = String(args.repo ?? "");
+        const result = await gh(token, `https://api.github.com/repos/${repo}/pulls?state=open&per_page=10`);
+        if (!result.ok)
+          return {
+            ok: false,
+            output: `GitHub error ${result.status}: ${JSON.stringify(result.data).slice(0, 300)}`,
+          };
+        const prs = (result.data as Array<{ number: number; title: string; head?: { ref?: string } }>).map(
+          (pr) => `- #${pr.number} ${pr.title} (${pr.head?.ref ?? "?"})`,
+        );
+        return { ok: true, output: prs.length ? prs.join("\n") : "No open pull requests." };
+      },
+    },
+    {
+      name: "github.create_pr",
+      description: "Open a pull request from a head branch into a base branch (owner/name).",
+      parameters: {
+        type: "object",
+        properties: {
+          repo: { type: "string", description: "owner/name" },
+          title: { type: "string" },
+          head: { type: "string", description: "source branch" },
+          base: { type: "string", description: "target branch (e.g. main)" },
+          body: { type: "string" },
+        },
+        required: ["repo", "title", "head", "base"],
+      },
+      requiresApproval: true,
+      run: async (args) => {
+        const token = await connectionToken(store, vaultKey, userId, "github");
+        if (!token) return { ok: false, output: "GitHub isn't connected. Connect it in the Marketplace." };
+        const result = await gh(token, `https://api.github.com/repos/${String(args.repo ?? "")}/pulls`, {
+          method: "POST",
+          body: JSON.stringify({
+            title: String(args.title ?? ""),
+            head: String(args.head ?? ""),
+            base: String(args.base ?? ""),
+            body: String(args.body ?? ""),
+          }),
+        });
+        if (!result.ok)
+          return {
+            ok: false,
+            output: `GitHub error ${result.status}: ${JSON.stringify(result.data).slice(0, 300)}`,
+          };
+        const link = (result.data as { html_url?: string }).html_url ?? "created";
+        return { ok: true, output: `Pull request opened: ${link}` };
+      },
+    },
   ];
 }

@@ -46,6 +46,7 @@ import "./styles.css";
 
 const CLOUD_URL = (import.meta.env.VITE_CLOUD_URL as string | undefined) ?? "http://localhost:8787";
 const ADMIN_URL = (import.meta.env.VITE_ADMIN_URL as string | undefined) ?? "http://localhost:4322/admin";
+const SKILLS_URL = (import.meta.env.VITE_SKILLS_URL as string | undefined) ?? "http://localhost:4322/skills";
 const TOKEN_KEY = "botifyr.token";
 
 type ConnectionState = "connecting" | "online" | "offline";
@@ -149,6 +150,10 @@ export default function App() {
   const [downloads, setDownloads] = useState<Array<{ name: string; size: number }>>([]);
   const [ytCookies, setYtCookies] = useState("");
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
+  const [skillQuery, setSkillQuery] = useState("");
+  const [savingBot, setSavingBot] = useState(false);
+  const [botSaved, setBotSaved] = useState(false);
+  const [botError, setBotError] = useState<string | null>(null);
   const [secrets, setSecrets] = useState<SecretSummary[]>([]);
   const [showSettings, setShowSettings] = useState(false);
   const [showAccountMenu, setShowAccountMenu] = useState(false);
@@ -538,10 +543,17 @@ export default function App() {
   function closeBotModal() {
     setCreateBotMode(null);
     setEditingBotId(null);
+    setSavingBot(false);
+    setBotSaved(false);
+    setBotError(null);
+    setSkillQuery("");
   }
 
   async function createBot() {
     const name = botName.trim() || (createBotMode === "group" ? "New group" : "New Bot");
+    setSavingBot(true);
+    setBotError(null);
+    setBotSaved(false);
 
     if (createBotMode === "edit" && editingBotId) {
       try {
@@ -563,9 +575,10 @@ export default function App() {
             session.id === updated.sessionId ? { ...session, title: updated.name } : session,
           ),
         );
-        closeBotModal();
+        finishBotSave();
       } catch (err: unknown) {
-        setError(messageOf(err));
+        setBotError(messageOf(err));
+        setSavingBot(false);
       }
       return;
     }
@@ -575,7 +588,8 @@ export default function App() {
     if (createBotMode === "group") {
       const members = bots.filter((bot) => groupMembers.includes(bot.id));
       if (members.length === 0) {
-        setError("Pick at least one bot for the group.");
+        setBotError("Pick at least one bot for the group.");
+        setSavingBot(false);
         return;
       }
       memberIds = members.map((bot) => bot.id);
@@ -606,11 +620,18 @@ export default function App() {
       setSessions((prev) => [session, ...prev]);
       setActiveBotId(bot.id);
       setActiveSessionId(bot.sessionId);
-      closeBotModal();
       setShowAudit(false);
+      finishBotSave();
     } catch (err: unknown) {
-      setError(messageOf(err));
+      setBotError(messageOf(err));
+      setSavingBot(false);
     }
+  }
+
+  /** Flash a "Saved" confirmation, then close the editor. */
+  function finishBotSave() {
+    setBotSaved(true);
+    window.setTimeout(() => closeBotModal(), 750);
   }
 
   async function removeBot(bot: Bot) {
@@ -2216,7 +2237,7 @@ export default function App() {
                 </label>
               )}
 
-              <div className="settings-section-title">Skills</div>
+              <div className="settings-section-title">Capability packs</div>
               <ul className="skill-list">
                 {skills.length === 0 && <li className="muted">No skills available.</li>}
                 {skills.map((skill) => (
@@ -2237,6 +2258,70 @@ export default function App() {
                   </li>
                 ))}
               </ul>
+
+              {/*
+                Learned skills are a shared, auto-applied library that can grow to
+                thousands. We never render them all: show a searchable preview and
+                send "Browse all" to the full library on the web.
+              */}
+              <div className="settings-section-title skill-learned-head">
+                <span>Learned skills</span>
+                <span className="skill-count">{learnedSkills.length}</span>
+              </div>
+              {learnedSkills.length > 0 && (
+                <input
+                  className="skill-search"
+                  type="search"
+                  placeholder="Search learned skills…"
+                  value={skillQuery}
+                  onChange={(event) => setSkillQuery(event.target.value)}
+                />
+              )}
+              {(() => {
+                const query = skillQuery.trim().toLowerCase();
+                const matches = query
+                  ? learnedSkills.filter(
+                      (skill) =>
+                        skill.name.toLowerCase().includes(query) ||
+                        skill.description.toLowerCase().includes(query),
+                    )
+                  : learnedSkills;
+                const visible = matches.slice(0, 6);
+                if (learnedSkills.length === 0) {
+                  return (
+                    <p className="muted skill-empty">
+                      No learned skills yet — your bots add them as they work.
+                    </p>
+                  );
+                }
+                if (matches.length === 0) {
+                  return <p className="muted skill-empty">No skills match “{skillQuery}”.</p>;
+                }
+                return (
+                  <>
+                    <ul className="skill-list skill-list-readonly">
+                      {visible.map((skill) => (
+                        <li key={skill.id}>
+                          <div className="member-item">
+                            <span className="skill-name">{skill.name}</span>
+                            <span className="skill-desc">{skill.description}</span>
+                            {skill.status !== "approved" && (
+                              <span className={`skill-pill ${skill.status}`}>{skill.status}</span>
+                            )}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="skill-more">
+                      Showing {visible.length} of {matches.length}
+                      {query ? "" : " learned skills"} ·{" "}
+                      <button className="link" type="button" onClick={() => void openExternal(SKILLS_URL)}>
+                        Browse all skills →
+                      </button>
+                    </p>
+                  </>
+                );
+              })()}
 
               <textarea
                 className="bot-instructions"
@@ -2294,15 +2379,29 @@ export default function App() {
                   Delete bot
                 </button>
               )}
-              <button className="ghost small" type="button" onClick={closeBotModal}>
+              {botError && (
+                <span className="bot-editor-error" role="alert">
+                  {botError}
+                </span>
+              )}
+              <button className="ghost small" type="button" onClick={closeBotModal} disabled={savingBot}>
                 Cancel
               </button>
-              <button className="btn primary" type="button" onClick={() => void createBot()}>
-                {createBotMode === "edit"
-                  ? "Save changes"
-                  : createBotMode === "group"
-                    ? "Create group"
-                    : "Create bot"}
+              <button
+                className={`btn primary ${botSaved ? "saved" : ""}`}
+                type="button"
+                disabled={savingBot}
+                onClick={() => void createBot()}
+              >
+                {botSaved
+                  ? "✓ Saved"
+                  : savingBot
+                    ? "Saving…"
+                    : createBotMode === "edit"
+                      ? "Save changes"
+                      : createBotMode === "group"
+                        ? "Create group"
+                        : "Create bot"}
               </button>
             </div>
           </div>
