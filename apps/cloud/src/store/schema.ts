@@ -119,4 +119,19 @@ CREATE TABLE IF NOT EXISTS api_keys (
   last_used_at TIMESTAMPTZ
 );
 CREATE INDEX IF NOT EXISTS api_keys_user_idx ON api_keys (user_id, created_at);
+
+CREATE TABLE IF NOT EXISTS media (
+  id         TEXT PRIMARY KEY,
+  user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  task_id    TEXT NOT NULL,
+  name       TEXT NOT NULL,
+  size       BIGINT NOT NULL DEFAULT 0,
+  mime       TEXT NOT NULL DEFAULT 'application/octet-stream',
+  location   TEXT NOT NULL DEFAULT 'server',
+  device     TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (task_id, name)
+);
+CREATE INDEX IF NOT EXISTS media_user_idx ON media (user_id, created_at);
 `;

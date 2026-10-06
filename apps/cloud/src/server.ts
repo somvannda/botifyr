@@ -4,7 +4,7 @@ import cors from "@fastify/cors";
 import websocket from "@fastify/websocket";
 import { randomBytes, randomUUID } from "node:crypto";
 import { createReadStream, readFileSync } from "node:fs";
-import { readdir, stat } from "node:fs/promises";
+import { readdir, rm, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 import type {
   AuditEvent,
@@ -1783,18 +1783,102 @@ export async function buildServer(options: ServerOptions) {
     async (request, reply) => {
       const task = await ownedTask(request, request.params.id);
       if (!task) return reply.code(404).send({ error: "task not found" });
+      const userId = request.userId as string;
       try {
         const dir = join(downloadsRoot, task.id);
         const entries = await readdir(dir);
         const files: Array<{ name: string; size: number }> = [];
         for (const name of entries) {
           const info = await stat(join(dir, name));
-          if (info.isFile()) files.push({ name, size: info.size });
+          if (!info.isFile()) continue;
+          files.push({ name, size: info.size });
+          // Track it in the media manifest (idempotent) so devices can sync.
+          const mime = name.endsWith(".mp3")
+            ? "audio/mpeg"
+            : name.endsWith(".mp4")
+              ? "video/mp4"
+              : "application/octet-stream";
+          const stamp = new Date().toISOString();
+          await store
+            .upsertMedia({
+              id: `${task.id}:${name}`,
+              userId,
+              taskId: task.id,
+              name,
+              size: info.size,
+              mime,
+              location: "server",
+              createdAt: stamp,
+              updatedAt: stamp,
+            })
+            .catch(() => {});
         }
         return files;
       } catch {
         return [];
       }
+    },
+  );
+
+  /* Media manifest: what the user has downloaded and where each item lives. */
+  app.get("/v1/media", { preHandler: requireAuth }, async (request) => {
+    const items = await store.listMedia(request.userId as string);
+    return items.map((item) => ({
+      id: item.id,
+      taskId: item.taskId,
+      name: item.name,
+      size: item.size,
+      mime: item.mime,
+      location: item.location,
+      device: item.device,
+      createdAt: item.createdAt,
+    }));
+  });
+
+  app.patch<{ Params: { id: string }; Body: { location?: string; device?: string } }>(
+    "/v1/media/:id",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const record = await store.getMedia(userId, request.params.id);
+      if (!record) return reply.code(404).send({ error: "media not found" });
+      if (request.body?.location === "device" || request.body?.location === "server") {
+        record.location = request.body.location;
+      }
+      if (typeof request.body?.device === "string") {
+        record.device = request.body.device.trim().slice(0, 80) || undefined;
+      }
+      record.updatedAt = new Date().toISOString();
+      await store.updateMedia(record);
+      return { ok: true };
+    },
+  );
+
+  app.delete<{ Params: { id: string }; Querystring: { purge?: string } }>(
+    "/v1/media/:id",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const record = await store.getMedia(userId, request.params.id);
+      if (!record) return reply.code(404).send({ error: "media not found" });
+      if (request.query.purge === "1") {
+        await rm(join(downloadsRoot, record.taskId, basename(record.name)), { force: true }).catch(() => {});
+      }
+      await store.deleteMedia(userId, record.id);
+      return reply.code(204).send();
+    },
+  );
+
+  app.delete<{ Params: { id: string; name: string } }>(
+    "/v1/tasks/:id/downloads/:name",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const task = await ownedTask(request, request.params.id);
+      if (!task) return reply.code(404).send({ error: "task not found" });
+      const safeName = basename(request.params.name);
+      await rm(join(downloadsRoot, task.id, safeName), { force: true }).catch(() => {});
+      await store.deleteMedia(request.userId as string, `${task.id}:${safeName}`).catch(() => {});
+      return reply.code(204).send();
     },
   );
 

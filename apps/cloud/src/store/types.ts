@@ -120,6 +120,25 @@ export interface ApiKeyRecord {
   lastUsedAt?: string;
 }
 
+/** Where a downloaded media item currently lives. */
+export type MediaLocation = "server" | "device";
+
+/** A downloadable file (video/audio/document), tracked so devices can sync. */
+export interface MediaRecord {
+  id: string;
+  userId: string;
+  taskId: string;
+  name: string;
+  size: number;
+  mime: string;
+  /** "server" = in the downloads volume; "device" = copied onto a device. */
+  location: MediaLocation;
+  /** Which device holds it (a stored device name / id). */
+  device?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Store {
   init(): Promise<void>;
   close(): Promise<void>;
@@ -187,4 +206,10 @@ export interface Store {
   getApiKeyByHash(keyHash: string): Promise<ApiKeyRecord | null>;
   touchApiKey(id: string): Promise<void>;
   revokeApiKey(userId: string, id: string): Promise<boolean>;
+
+  upsertMedia(record: MediaRecord): Promise<void>;
+  listMedia(userId: string): Promise<MediaRecord[]>;
+  getMedia(userId: string, id: string): Promise<MediaRecord | null>;
+  updateMedia(record: MediaRecord): Promise<void>;
+  deleteMedia(userId: string, id: string): Promise<boolean>;
 }

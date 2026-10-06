@@ -6,6 +6,7 @@ import type {
   ConnectionRecord,
   FileRecord,
   LearnedSkillRecord,
+  MediaRecord,
   Plan,
   SecretRecord,
   SessionRecord,
@@ -30,6 +31,7 @@ export class MemoryStore implements Store {
   private files = new Map<string, FileRecord>();
   private learnedSkills = new Map<string, LearnedSkillRecord>();
   private apiKeys = new Map<string, ApiKeyRecord>();
+  private media = new Map<string, MediaRecord>();
 
   async init(): Promise<void> {}
   async close(): Promise<void> {}
@@ -298,6 +300,39 @@ export class MemoryStore implements Store {
     const record = this.apiKeys.get(id);
     if (!record || record.userId !== userId) return false;
     this.apiKeys.delete(id);
+    return true;
+  }
+
+  async upsertMedia(record: MediaRecord): Promise<void> {
+    for (const [key, existing] of this.media) {
+      if (existing.taskId === record.taskId && existing.name === record.name && existing.id !== record.id) {
+        this.media.delete(key);
+      }
+    }
+    this.media.set(record.id, { ...record });
+  }
+
+  async listMedia(userId: string): Promise<MediaRecord[]> {
+    return [...this.media.values()]
+      .filter((record) => record.userId === userId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map((record) => ({ ...record }));
+  }
+
+  async getMedia(userId: string, id: string): Promise<MediaRecord | null> {
+    const record = this.media.get(id);
+    return record && record.userId === userId ? { ...record } : null;
+  }
+
+  async updateMedia(record: MediaRecord): Promise<void> {
+    const existing = this.media.get(record.id);
+    if (existing && existing.userId === record.userId) this.media.set(record.id, { ...record });
+  }
+
+  async deleteMedia(userId: string, id: string): Promise<boolean> {
+    const record = this.media.get(id);
+    if (!record || record.userId !== userId) return false;
+    this.media.delete(id);
     return true;
   }
 }

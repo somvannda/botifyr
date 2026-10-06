@@ -42,6 +42,18 @@ export interface ApiKeyCreated extends ApiKeySummary {
   key: string;
 }
 
+/** A downloadable media item tracked across the user's devices. */
+export interface MediaItem {
+  id: string;
+  taskId: string;
+  name: string;
+  size: number;
+  mime: string;
+  location: "server" | "device";
+  device?: string;
+  createdAt: string;
+}
+
 /** A platform user as seen by the admin console. */
 export interface AdminUser {
   id: string;
@@ -234,6 +246,23 @@ export class BotifyrClient {
 
   adminAudit(): Promise<AdminAuditEvent[]> {
     return this.request("/admin/audit");
+  }
+
+  /* Media manifest — files the user has downloaded, and where they live. */
+  listMedia(): Promise<MediaItem[]> {
+    return this.request("/v1/media");
+  }
+
+  markMediaOnDevice(id: string, device: string): Promise<{ ok: boolean }> {
+    return this.request(`/v1/media/${id}`, {
+      method: "PATCH",
+      json: true,
+      body: JSON.stringify({ location: "device", device }),
+    });
+  }
+
+  deleteMedia(id: string, purge = false): Promise<void> {
+    return this.request(`/v1/media/${id}${purge ? "?purge=1" : ""}`, { method: "DELETE" });
   }
 
   createBot(input: {

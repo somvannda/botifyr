@@ -7,6 +7,7 @@ import type {
   ConnectionRecord,
   FileRecord,
   LearnedSkillRecord,
+  MediaRecord,
   Plan,
   SecretRecord,
   SessionRecord,
@@ -457,6 +458,72 @@ export class PostgresStore implements Store {
     const result = await this.pool.query("DELETE FROM api_keys WHERE id = $1 AND user_id = $2", [id, userId]);
     return (result.rowCount ?? 0) > 0;
   }
+
+  async upsertMedia(record: MediaRecord): Promise<void> {
+    await this.pool.query(
+      "INSERT INTO media (id, user_id, task_id, name, size, mime, location, device, created_at, updated_at) " +
+        "VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) " +
+        "ON CONFLICT (task_id, name) DO UPDATE SET size = EXCLUDED.size, mime = EXCLUDED.mime, " +
+        "location = CASE WHEN media.location = 'device' THEN media.location ELSE EXCLUDED.location END, " +
+        "device = CASE WHEN media.location = 'device' THEN media.device ELSE EXCLUDED.device END, " +
+        "updated_at = EXCLUDED.updated_at",
+      [
+        record.id,
+        record.userId,
+        record.taskId,
+        record.name,
+        record.size,
+        record.mime,
+        record.location,
+        record.device ?? null,
+        record.createdAt,
+        record.updatedAt,
+      ],
+    );
+  }
+
+  async listMedia(userId: string): Promise<MediaRecord[]> {
+    const { rows } = await this.pool.query(
+      "SELECT * FROM media WHERE user_id = $1 ORDER BY created_at DESC",
+      [userId],
+    );
+    return rows.map(toMedia);
+  }
+
+  async getMedia(userId: string, id: string): Promise<MediaRecord | null> {
+    const { rows } = await this.pool.query("SELECT * FROM media WHERE id = $1 AND user_id = $2", [
+      id,
+      userId,
+    ]);
+    return rows[0] ? toMedia(rows[0]) : null;
+  }
+
+  async updateMedia(record: MediaRecord): Promise<void> {
+    await this.pool.query(
+      "UPDATE media SET location = $1, device = $2, updated_at = $3 WHERE id = $4 AND user_id = $5",
+      [record.location, record.device ?? null, record.updatedAt, record.id, record.userId],
+    );
+  }
+
+  async deleteMedia(userId: string, id: string): Promise<boolean> {
+    const result = await this.pool.query("DELETE FROM media WHERE id = $1 AND user_id = $2", [id, userId]);
+    return (result.rowCount ?? 0) > 0;
+  }
+}
+
+function toMedia(row: any): MediaRecord {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    taskId: row.task_id,
+    name: row.name,
+    size: Number(row.size ?? 0),
+    mime: row.mime ?? "application/octet-stream",
+    location: row.location === "device" ? "device" : "server",
+    device: row.device ?? undefined,
+    createdAt: row.created_at.toISOString(),
+    updatedAt: row.updated_at.toISOString(),
+  };
 }
 
 function toAudit(row: any): AuditRecord {
