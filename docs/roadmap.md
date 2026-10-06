@@ -44,7 +44,7 @@ they land. Keep entries short; link code paths instead of explaining them.
       DMs are still server-readable (no E2E); P2P without TURN.
 - [x] **Cost** — opt-in hard daily cap + per-task token cap; usage visible in
       Settings → Usage.
-- [ ] **Testing** — API integration + a jsdom UI smoke test added; a full UI E2E (Playwright) is still open.
+- [x] **Testing** — API integration + jsdom UI smoke test + Playwright portal E2E.
 - [ ] **Multi-device** — presence via socket only; offline DMs are not queued.
 - [ ] **Design system** — `.icon-btn`/`.round`/`.btn`/`.ghost` rule added; older
       controls may still be inconsistent.
@@ -61,7 +61,7 @@ they land. Keep entries short; link code paths instead of explaining them.
 - [x] **Cost enforcement** — opt-in hard daily cap (`BOTIFYR_ENFORCE_BUDGET`) and
       a per-task token cap (`BOTIFYR_MAX_TASK_TOKENS`).
 - [x] **Deploy pipeline** — `Caddyfile.example` + subdomains (see `docs/deploy.md`).
-- [x] **Test coverage** — API integration (CORS, auth, files, bots, billing, admin) + a jsdom UI smoke test; Playwright E2E still open.
+- [x] **Test coverage** — API integration + jsdom UI smoke + Playwright portal E2E.
 
 ## Done (for reference)
 Platforms (cloud / desktop / web+portal / admin / API keys+docs), agent loop,
