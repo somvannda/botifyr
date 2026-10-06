@@ -24,6 +24,8 @@ OpenRouter, DeepSeek, Groq, or a local model via environment variables.
 | [docs/competitive-analysis.md](docs/competitive-analysis.md) | What Grok Bot, OpenClaw, and Muse actually are, a feature matrix, and a SWOT for each. |
 | [docs/botifyr-blueprint.md](docs/botifyr-blueprint.md) | The proposed architecture, capability map, tech stack, roadmap, and MVP definition for Botifyr. |
 | [docs/development.md](docs/development.md) | How to install, run, and test what's built; what is real vs. stubbed. |
+| [docs/cost-controls.md](docs/cost-controls.md) | Product runtime cost limits (rate limit, token caps, daily budget). |
+| [AGENTS.md](AGENTS.md) | Guidance for AI coding agents to minimise development cost/context. |
 
 ## Quick start
 

@@ -1,0 +1,38 @@
+# Cost controls (product runtime)
+
+These limit how many model tokens **Botifyr itself** spends when it runs agent
+tasks. They are part of the **shipped product**, not the development process
+(see [`../AGENTS.md`](../AGENTS.md) for the development-cost guidance).
+
+## Where it is enforced
+| File | Responsibility |
+| --- | --- |
+| `packages/agent-core/src/providers/openai.ts` | Sends `max_tokens`; reports token usage (non-stream and streamed via `include_usage`). |
+| `packages/agent-core/src/agent.ts` | Aggregates usage across all model calls in a run. |
+| `apps/cloud/src/runner.ts` | Caps output tokens; records usage per task. |
+| `apps/cloud/src/server.ts` | Per-user rate limit; daily-budget **warning**; history trimming; exposes `limits` + `usage` on `/v1/config`. |
+| `apps/cloud/src/store/{types,memory,postgres}.ts` + `schema.ts` | `usage_events` table and `usageSince()` totals. |
+
+## Environment variables
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `BOTIFYR_MAX_OUTPUT_TOKENS` | `1024` | Hard cap on output tokens **per model call**. |
+| `BOTIFYR_MAX_HISTORY_TURNS` | `12` | Max past turns sent as context. |
+| `BOTIFYR_MAX_MESSAGE_CHARS` | `4000` | Max characters per user message and per history turn. |
+| `BOTIFYR_RATE_LIMIT_PER_HOUR` | `60` | Per-user sliding window. `0` disables. Exceeded → **HTTP 429**. |
+| `BOTIFYR_DAILY_TOKEN_BUDGET` | `200000` | Per-user daily budget. Exceeded → **warning only** (requests still work). `0` disables. |
+
+## Behaviour
+- **Rate limit** → `429 Too Many Requests`.
+- **Daily budget** → non-blocking: the API returns a `warning` field and the app
+  shows an amber notice. Requests are never rejected for budget.
+- **Usage** is visible in the app: **Settings → Usage today** (tokens / requests / budget).
+- **Provider timeouts**: streaming reads are chunked; a slow provider yields a clean error.
+
+## Notes / possible future work
+- The rate limiter is **in-process** (`Map`) — correct for a single cloud instance.
+  Running multiple instances would need a **shared** store (Redis/Postgres) so the
+  limit is global. This is a scaling concern, not needed now.
+- There is **no response cache** yet. Adding one (hash prompt+messages → cached
+  reply with a TTL) would remove whole duplicate model calls and is the single
+  biggest additional saving.
