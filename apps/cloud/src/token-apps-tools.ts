@@ -74,6 +74,34 @@ export function createTelegramTools(store: Store, vaultKey: Buffer, userId: stri
       },
     },
     {
+      name: "telegram.list_chats",
+      description: "List chats the bot has recently seen, with their chat ids.",
+      parameters: { type: "object", properties: {} },
+      run: async () => {
+        const token = await connectionToken(store, vaultKey, userId, "telegram");
+        if (!token) return { ok: false, output: "Telegram isn't connected. Connect it in the Marketplace." };
+        const response = await fetch(`https://api.telegram.org/bot${token}/getUpdates?limit=50`);
+        const data = (await response.json()) as {
+          ok: boolean;
+          description?: string;
+          result?: Array<{
+            message?: { chat?: { id: number; title?: string; username?: string; first_name?: string } };
+          }>;
+        };
+        if (!data.ok) return { ok: false, output: `Telegram error: ${data.description ?? response.status}` };
+        const chats = new Map<number, string>();
+        for (const update of data.result ?? []) {
+          const chat = update.message?.chat;
+          if (chat) chats.set(chat.id, chat.title ?? chat.username ?? chat.first_name ?? "chat");
+        }
+        const rows = [...chats.entries()].map(([id, name]) => `- ${name} (${id})`);
+        return {
+          ok: true,
+          output: rows.length ? rows.join("\n") : "No recent chats. Ask the user to message the bot first.",
+        };
+      },
+    },
+    {
       name: "telegram.send_message",
       description: "Send a Telegram message to a chat id or @channel.",
       parameters: {

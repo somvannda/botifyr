@@ -70,8 +70,16 @@ async function accessTokenFor(
 async function googleJson(
   url: string,
   token: string,
+  init?: { method?: string; body?: string },
 ): Promise<{ ok: boolean; status: number; data: unknown }> {
-  const response = await fetch(url, { headers: { authorization: `Bearer ${token}` } });
+  const response = await fetch(url, {
+    method: init?.method ?? "GET",
+    headers: {
+      authorization: `Bearer ${token}`,
+      ...(init?.body ? { "content-type": "application/json" } : {}),
+    },
+    body: init?.body,
+  });
   const text = await response.text();
   let data: unknown = text;
   try {
@@ -205,6 +213,81 @@ export function createConnectionTools(store: Store, vaultKey: Buffer, userId: st
           (result.data as { files?: Array<{ name: string; mimeType: string; id: string }> }).files ?? [];
         const rows = files.map((file) => `- ${file.name} (${file.mimeType.split(".").pop()}, id ${file.id})`);
         return { ok: true, output: rows.length ? rows.join("\n") : "No matching files." };
+      },
+    },
+    {
+      name: "gmail.send",
+      description: "Send an email from the user's Gmail.",
+      parameters: {
+        type: "object",
+        properties: {
+          to: { type: "string" },
+          subject: { type: "string" },
+          body: { type: "string" },
+        },
+        required: ["to", "subject", "body"],
+      },
+      requiresApproval: true,
+      run: async (args) => {
+        const token = await accessTokenFor(store, vaultKey, userId, "gmail");
+        if (!token) return notConnected("Gmail");
+        const mime =
+          `To: ${String(args.to ?? "")}\r\n` +
+          `Subject: ${String(args.subject ?? "")}\r\n` +
+          `Content-Type: text/plain; charset="UTF-8"\r\n\r\n` +
+          `${String(args.body ?? "")}`;
+        const raw = Buffer.from(mime, "utf8").toString("base64url");
+        const result = await googleJson(
+          "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
+          token,
+          {
+            method: "POST",
+            body: JSON.stringify({ raw }),
+          },
+        );
+        return result.ok
+          ? { ok: true, output: "Email sent." }
+          : {
+              ok: false,
+              output: `Gmail error ${result.status}: ${JSON.stringify(result.data).slice(0, 300)}`,
+            };
+      },
+    },
+    {
+      name: "calendar.create_event",
+      description: "Create a Google Calendar event (ISO datetimes).",
+      parameters: {
+        type: "object",
+        properties: {
+          summary: { type: "string" },
+          start: { type: "string", description: "ISO datetime, e.g. 2026-10-07T09:00:00Z" },
+          end: { type: "string", description: "ISO datetime." },
+        },
+        required: ["summary", "start", "end"],
+      },
+      requiresApproval: true,
+      run: async (args) => {
+        const token = await accessTokenFor(store, vaultKey, userId, "calendar");
+        if (!token) return notConnected("Google Calendar");
+        const result = await googleJson(
+          "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+          token,
+          {
+            method: "POST",
+            body: JSON.stringify({
+              summary: String(args.summary ?? ""),
+              start: { dateTime: String(args.start ?? "") },
+              end: { dateTime: String(args.end ?? "") },
+            }),
+          },
+        );
+        if (!result.ok)
+          return {
+            ok: false,
+            output: `Calendar error ${result.status}: ${JSON.stringify(result.data).slice(0, 300)}`,
+          };
+        const link = (result.data as { htmlLink?: string }).htmlLink ?? "created";
+        return { ok: true, output: `Event created: ${link}` };
       },
     },
   ];

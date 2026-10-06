@@ -274,7 +274,14 @@ export async function buildServer(options: ServerOptions) {
       );
       const responders = mentioned.length > 0 ? mentioned : members;
       void (async () => {
-        for (const member of responders) {
+        const queue = [...responders];
+        const spoken = new Set<string>();
+        let guard = 0;
+        while (queue.length > 0 && guard < 8) {
+          const member = queue.shift();
+          if (!member || spoken.has(member.id)) continue;
+          spoken.add(member.id);
+          guard += 1;
           const latest = (await store.getSession(session.id)) ?? session;
           const memberHistory = latest.messages.slice(-windowSize).map((message) => ({
             role: message.role,
@@ -286,13 +293,30 @@ export async function buildServer(options: ServerOptions) {
               userId,
               history: memberHistory,
               local,
-              instructions: `In this group chat you are "${member.name}". ${member.instructions}`.trim(),
+              instructions:
+                `In this group chat you are "${member.name}". ` +
+                `You may @mention another member by name to hand work off to them. ` +
+                `${member.instructions}`.trim(),
               summary: latest.summary,
               vaultKey,
               author: { id: member.id },
             },
             task,
           ).catch((error) => app.log.error({ err: error, taskId: task.id }, "group member run failed"));
+
+          // Handoff: if this reply @mentions a member who hasn't spoken, they respond too.
+          const after = (await store.getSession(session.id)) ?? latest;
+          const reply = after.messages[after.messages.length - 1];
+          if (reply?.role === "assistant") {
+            for (const other of members) {
+              if (
+                !spoken.has(other.id) &&
+                new RegExp(`@${escapeRegex(other.name)}(?![\\w-])`, "i").test(reply.content)
+              ) {
+                queue.push(other);
+              }
+            }
+          }
         }
       })();
     } else {
@@ -624,7 +648,7 @@ export async function buildServer(options: ServerOptions) {
     process.env.GOOGLE_CONNECT_REDIRECT_URI ??
     `http://localhost:${process.env.PORT ?? 8787}/auth/google/connect/callback`;
   const CONNECT_SCOPES: Record<string, string[]> = {
-    gmail: ["https://www.googleapis.com/auth/gmail.readonly"],
+    gmail: ["https://www.googleapis.com/auth/gmail.readonly", "https://www.googleapis.com/auth/gmail.send"],
     calendar: ["https://www.googleapis.com/auth/calendar"],
     drive: ["https://www.googleapis.com/auth/drive.readonly"],
   };

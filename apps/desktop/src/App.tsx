@@ -26,6 +26,7 @@ import {
   HelpIcon,
   LockIcon,
   LogoutIcon,
+  MicIcon,
   MobileIcon,
   MonitorIcon,
   MoreIcon,
@@ -103,6 +104,8 @@ export default function App() {
   const [tokenInputFor, setTokenInputFor] = useState<string | null>(null);
   const [tokenValue, setTokenValue] = useState("");
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [listening, setListening] = useState(false);
+  const recognitionRef = useRef<{ start: () => void; stop: () => void } | null>(null);
   const [bots, setBots] = useState<Bot[]>([]);
   const [activeBotId, setActiveBotId] = useState<string | null>(null);
   const [stream, setStream] = useState<{
@@ -607,6 +610,48 @@ export default function App() {
     setMentionQuery(null);
   }
 
+  function toggleMic() {
+    type SpeechCtor = new () => {
+      lang: string;
+      interimResults: boolean;
+      continuous: boolean;
+      onresult: (event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void;
+      onend: () => void;
+      onerror: () => void;
+      start: () => void;
+      stop: () => void;
+    };
+    const globalWindow = window as unknown as {
+      SpeechRecognition?: SpeechCtor;
+      webkitSpeechRecognition?: SpeechCtor;
+    };
+    const Recognition = globalWindow.SpeechRecognition ?? globalWindow.webkitSpeechRecognition;
+    if (!Recognition) {
+      setError("Speech input isn't available in this build.");
+      return;
+    }
+    if (listening) {
+      recognitionRef.current?.stop();
+      setListening(false);
+      return;
+    }
+    const recognition = new Recognition();
+    recognition.lang = navigator.language || "en-US";
+    recognition.interimResults = false;
+    recognition.continuous = false;
+    recognition.onresult = (event) => {
+      const transcript = Array.from(event.results)
+        .map((result) => result[0]?.transcript ?? "")
+        .join(" ");
+      setText((prev) => (prev ? `${prev} ${transcript}` : transcript));
+    };
+    recognition.onend = () => setListening(false);
+    recognition.onerror = () => setListening(false);
+    recognitionRef.current = recognition;
+    setListening(true);
+    recognition.start();
+  }
+
   async function refreshFiles() {
     if (!activeBotId) return;
     setBotFiles(await client.listFiles(activeBotId));
@@ -816,6 +861,11 @@ export default function App() {
       ? Math.min(100, Math.round(((config.usage?.tokensToday ?? 0) / config.limits.dailyTokenBudget) * 100))
       : 0;
   const trialDaysLeft = Math.max(0, 7 - Math.floor((Date.now() - trialStart) / 86_400_000));
+  const marketMatches = marketQuery.trim()
+    ? MARKETPLACE.filter((app) =>
+        `${app.name} ${app.category} ${app.desc}`.toLowerCase().includes(marketQuery.trim().toLowerCase()),
+      )
+    : [];
 
   if (!authChecked) return <div className="center">Loading…</div>;
 
@@ -1314,6 +1364,14 @@ export default function App() {
               }}
             />
             <button
+              className={`round mic${listening ? " on" : ""}`}
+              type="button"
+              title="Voice input"
+              onClick={toggleMic}
+            >
+              <MicIcon size={16} />
+            </button>
+            <button
               className="send round"
               type="submit"
               disabled={!text.trim() || !activeSessionId || sending || busy}
@@ -1527,6 +1585,26 @@ export default function App() {
                 <button className="market-clear" type="button" onClick={() => setMarketQuery("")}>
                   Clear
                 </button>
+              )}
+              {marketQuery.trim() !== "" && (
+                <div className="market-dropdown">
+                  {marketMatches.length === 0 ? (
+                    <div className="market-dropdown-empty">No plugins found</div>
+                  ) : (
+                    marketMatches.slice(0, 8).map((app) => (
+                      <button
+                        key={app.id}
+                        type="button"
+                        className="market-dropdown-row"
+                        onClick={() => setMarketQuery(app.name)}
+                      >
+                        <span className="market-ico">{app.icon}</span>
+                        <span className="market-dropdown-name">{app.name}</span>
+                        <span className="account-chev">›</span>
+                      </button>
+                    ))
+                  )}
+                </div>
               )}
             </div>
 
@@ -2147,7 +2225,15 @@ interface MarketApp {
   icon: ReactNode;
 }
 
-const MARKET_SECTIONS = ["For you", "Featured", "Developer", "Design", "Files", "Social"];
+const MARKET_SECTIONS = [
+  "For you",
+  "Featured",
+  "Login and Credential Management",
+  "Developer",
+  "Design",
+  "Files",
+  "Social",
+];
 
 const MARKETPLACE: MarketApp[] = [
   {
@@ -2156,7 +2242,7 @@ const MARKETPLACE: MarketApp[] = [
     tokenApp: true,
     name: "GitHub",
     category: "Developer",
-    section: "For you",
+    section: "Login and Credential Management",
     desc: "Read repositories and issues",
     icon: <GithubBrand size={24} />,
   },
@@ -2166,7 +2252,7 @@ const MARKETPLACE: MarketApp[] = [
     tokenApp: true,
     name: "Slack",
     category: "Communication",
-    section: "For you",
+    section: "Login and Credential Management",
     desc: "Send and read team messages",
     icon: <SlackBrand size={24} />,
   },
@@ -2176,7 +2262,7 @@ const MARKETPLACE: MarketApp[] = [
     tokenApp: true,
     name: "Telegram",
     category: "Communication",
-    section: "For you",
+    section: "Login and Credential Management",
     desc: "Send messages from your Telegram bot",
     icon: <TelegramBrand size={24} />,
   },
@@ -2185,7 +2271,7 @@ const MARKETPLACE: MarketApp[] = [
     provider: "gmail",
     name: "Gmail",
     category: "Communication",
-    section: "Featured",
+    section: "For you",
     desc: "Read, search, and draft email",
     icon: <GmailIcon size={26} />,
   },
@@ -2194,7 +2280,7 @@ const MARKETPLACE: MarketApp[] = [
     provider: "calendar",
     name: "Google Calendar",
     category: "Productivity",
-    section: "Featured",
+    section: "For you",
     desc: "See your schedule and create events",
     icon: <CalendarIcon size={26} />,
   },
