@@ -268,4 +268,29 @@ describe("runAgent", () => {
     });
     expect(resets).toBe(1);
   });
+
+  it("stops before the next call once the per-task token budget is reached", async () => {
+    const provider = scriptedProvider([
+      {
+        toolCalls: [{ id: "1", name: "demo_echo", arguments: { value: "hi" } }],
+        usage: { promptTokens: 10, completionTokens: 5 },
+      },
+      { text: "should not run", toolCalls: [] },
+    ]);
+    let ran = 0;
+    const result = await runAgent({
+      goal: "echo hi",
+      provider,
+      tools: [echoTool(() => (ran += 1))],
+      workspaceDir: ".",
+      maxTotalTokens: 10,
+      requestApproval: async () => true,
+      onStep: () => {},
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.summary).toContain("per-task token budget");
+    expect(result.usage?.promptTokens).toBe(10);
+    expect(ran).toBe(1);
+  });
 });

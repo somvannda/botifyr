@@ -40,6 +40,12 @@ export interface RunAgentOptions {
   workspaceDir: string;
   maxSteps?: number;
   /**
+   * Hard cap on total tokens (prompt + completion) for the whole run. When the
+   * accumulated usage reaches it, the loop stops before the next model call.
+   * `0` or omitted means unlimited.
+   */
+  maxTotalTokens?: number;
+  /**
    * A short assistant "prefill" appended after the user's message. It steers the
    * model to start already committed to the task, which strongly suppresses
    * reflexive refusals. Removed after the first model call.
@@ -168,6 +174,19 @@ export async function runAgent(options: RunAgentOptions): Promise<AgentResult> {
   const usage: TokenUsage = { promptTokens: 0, completionTokens: 0 };
 
   for (let iteration = 0; iteration < maxSteps; iteration += 1) {
+    if (
+      options.maxTotalTokens &&
+      options.maxTotalTokens > 0 &&
+      usage.promptTokens + usage.completionTokens >= options.maxTotalTokens
+    ) {
+      return {
+        ok: false,
+        summary: `Reached the per-task token budget (${options.maxTotalTokens.toLocaleString()} tokens) without finishing.`,
+        steps: stepCount,
+        provider: provider.name,
+        usage,
+      };
+    }
     if (options.isCancelled?.()) {
       return { ok: false, summary: "Stopped by you.", steps: stepCount, provider: provider.name, usage };
     }

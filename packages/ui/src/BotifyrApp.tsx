@@ -294,8 +294,6 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const nodeStartedRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const cancelSigninRef = useRef(false);
-  const executionModeRef = useRef(executionMode);
-  executionModeRef.current = executionMode;
 
   // Persist token rotations (login + silent refresh) so a restart stays signed in.
   useEffect(() => {
@@ -304,6 +302,14 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       if (auth.refreshToken) localStorage.setItem(REFRESH_KEY, auth.refreshToken);
     };
   }, [client]);
+
+  // The account's per-bot autoApprove is authoritative, so mirror it here when
+  // every bot agrees — otherwise the setting would disagree across hosts.
+  useEffect(() => {
+    if (bots.length === 0) return;
+    if (bots.every((bot) => bot.autoApprove === true)) setExecutionMode("always_allow");
+    else if (bots.every((bot) => bot.autoApprove !== true)) setExecutionMode("ask");
+  }, [bots]);
 
   // Restore a stored token on launch; resume a pending sign-in if any.
   useEffect(() => {
@@ -509,18 +515,16 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       case "task.failed": {
         setTasks((prev) => {
           const existing = prev[event.task.id];
-          // A later update can arrive without the approval; keep the pending one
-          // so the prompt can't flicker away before the user answers.
+          // Only keep a pending approval when the update carries none at all (a
+          // transient snapshot). A *resolved* approval from the server must
+          // clear the prompt — otherwise the buttons keep acting on a task that
+          // already moved on and appear dead.
           const next =
-            existing?.approval?.status === "pending" && event.task.approval?.status !== "pending"
+            existing?.approval?.status === "pending" && !event.task.approval
               ? { ...event.task, approval: existing.approval, status: "awaiting_approval" as const }
               : event.task;
           return { ...prev, [event.task.id]: next };
         });
-        const pending = event.task.approval;
-        if (executionModeRef.current === "always_allow" && pending && pending.status === "pending") {
-          void client.resolveApproval(event.task.id, pending.id, "allow").catch(() => {});
-        }
         break;
       }
       case "approval.requested":
@@ -530,11 +534,12 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
             ? { ...prev, [event.taskId]: { ...task, approval: event.approval, status: "awaiting_approval" } }
             : prev;
         });
-        if (executionModeRef.current === "always_allow") {
-          void client.resolveApproval(event.taskId, event.approval.id, "allow").catch(() => {});
-        }
         break;
       case "approval.resolved":
+        setTasks((prev) => {
+          const task = prev[event.taskId];
+          return task ? { ...prev, [event.taskId]: { ...task, approval: event.approval } } : prev;
+        });
         break;
     }
   }
@@ -1139,6 +1144,43 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     const pending = Object.values(tasks).filter((task) => task.approval?.status === "pending");
     for (const task of pending) {
       if (task.approval) await client.resolveApproval(task.id, task.approval.id, "allow").catch(() => {});
+    }
+  }
+
+  /**
+   * Resolve one approval. If the server has already moved past this task (e.g.
+   * another device answered), clear the local prompt so it can't be a dead
+   * button, and surface the reason.
+   */
+  async function resolveApprovalFor(
+    taskId: string,
+    approvalId: string,
+    decision: "allow" | "deny",
+  ): Promise<void> {
+    try {
+      await client.resolveApproval(taskId, approvalId, decision);
+    } catch (err: unknown) {
+      setTasks((prev) => {
+        const task = prev[taskId];
+        if (!task?.approval || task.approval.id !== approvalId) return prev;
+        const next = { ...task };
+        delete next.approval;
+        return { ...prev, [taskId]: next };
+      });
+      setError(messageOf(err));
+    }
+  }
+
+  /** Set the execution mode and remember it on the account (every bot) so all hosts agree. */
+  async function applyExecutionMode(value: "ask" | "always_allow"): Promise<void> {
+    setExecutionMode(value);
+    localStorage.setItem("botifyr.execution", value);
+    try {
+      const autoApprove = value === "always_allow";
+      const updated = await Promise.all(bots.map((bot) => client.updateBot(bot.id, { autoApprove })));
+      setBots((prev) => prev.map((bot) => updated.find((entry) => entry.id === bot.id) ?? bot));
+    } catch (err: unknown) {
+      setError(messageOf(err));
     }
   }
 
@@ -2404,18 +2446,14 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                     <button
                       className="btn deny"
                       type="button"
-                      onClick={() =>
-                        void client.resolveApproval(task.id, approval.id, "deny").catch(() => {})
-                      }
+                      onClick={() => void resolveApprovalFor(task.id, approval.id, "deny")}
                     >
                       Deny
                     </button>
                     <button
                       className="btn allow"
                       type="button"
-                      onClick={() =>
-                        void client.resolveApproval(task.id, approval.id, "allow").catch(() => {})
-                      }
+                      onClick={() => void resolveApprovalFor(task.id, approval.id, "allow")}
                     >
                       Allow once
                     </button>
@@ -3669,9 +3707,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                     <select
                       value={executionMode}
                       onChange={(event) => {
-                        const value = event.target.value as "ask" | "always_allow";
-                        setExecutionMode(value);
-                        localStorage.setItem("botifyr.execution", value);
+                        void applyExecutionMode(event.target.value as "ask" | "always_allow");
                       }}
                     >
                       <option value="ask">Ask first</option>
@@ -4119,6 +4155,7 @@ const STEP_LABELS: Record<string, string> = {
   "youtube.download": "Downloading videos",
   "youtube.search": "Searching YouTube",
   "youtube.info": "Inspecting a video",
+  "shell.exec": "Running a command",
 };
 function stepLabel(title: string): string {
   return STEP_LABELS[title] ?? title;
@@ -4126,6 +4163,8 @@ function stepLabel(title: string): string {
 function stepDetail(title: string, detail: string | undefined): string | null {
   if (!detail) return null;
   if (title.startsWith("youtube.")) return null;
+  // Raw tool arguments (JSON objects/arrays) are noise in the activity card.
+  if (/^\s*[{[][\s\S]*[}\]]\s*$/.test(detail)) return null;
   return truncate(detail, 220);
 }
 

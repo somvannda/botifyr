@@ -17,6 +17,7 @@ tasks. They are part of the **shipped product**, not the development process
 | Variable | Default | Effect |
 | --- | --- | --- |
 | `BOTIFYR_MAX_OUTPUT_TOKENS` | `1024` | Hard cap on output tokens **per model call**. |
+| `BOTIFYR_MAX_TASK_TOKENS` | `0` | Hard cap on **total** tokens (prompt + completion) per task run. The loop stops early once reached. `0` disables. |
 | `BOTIFYR_MAX_HISTORY_TURNS` | `12` | Max past turns sent as context. |
 | `BOTIFYR_MAX_MESSAGE_CHARS` | `4000` | Max characters per user message and per history turn. |
 | `BOTIFYR_RATE_LIMIT_PER_HOUR` | `60` | Per-user sliding window. `0` disables. Exceeded → **HTTP 429**. |

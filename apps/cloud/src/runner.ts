@@ -329,6 +329,7 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
       workspaceDir: process.cwd(),
       maxSteps: Number(process.env.BOTIFYR_MAX_STEPS ?? 16),
       maxTokens: Number(process.env.BOTIFYR_MAX_OUTPUT_TOKENS ?? 1024),
+      maxTotalTokens: Number(process.env.BOTIFYR_MAX_TASK_TOKENS ?? 0),
       prefill: (() => {
         const setting = process.env.BOTIFYR_PREFILL ?? "1";
         if (setting === "0") return undefined;
