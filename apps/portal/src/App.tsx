@@ -8,6 +8,7 @@ import type {
   RuntimeConfig,
   ServerEvent,
   Session,
+  Skill,
   Task,
   User,
 } from "@botifyr/shared";
@@ -33,6 +34,25 @@ import {
 
 const CLOUD_URL = (import.meta.env.VITE_CLOUD_URL as string | undefined) ?? "http://localhost:8787";
 const TOKEN_KEY = "botifyr.portal.token";
+
+const EMOJI_CHOICES = [
+  "🤖",
+  "👥",
+  "🧠",
+  "🦾",
+  "✨",
+  "🎬",
+  "🎵",
+  "📊",
+  "🔍",
+  "✍️",
+  "🧑‍💻",
+  "🛠️",
+  "📚",
+  "🧭",
+  "⚡",
+  "🌐",
+];
 
 function initials(email: string): string {
   const name = email.split("@")[0] ?? "?";
@@ -84,6 +104,21 @@ export function Portal() {
   const [createdKey, setCreatedKey] = useState<string | null>(null);
   const [connections, setConnections] = useState<ConnectionInfo[]>([]);
   const [learnedSkills, setLearnedSkills] = useState<LearnedSkill[]>([]);
+  const [skills, setSkills] = useState<Skill[]>([]);
+
+  const [editor, setEditor] = useState<null | "bot" | "group" | "edit">(null);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [fName, setFName] = useState("");
+  const [fEmoji, setFEmoji] = useState("🤖");
+  const [fScheme, setFScheme] = useState(0);
+  const [fInstructions, setFInstructions] = useState("");
+  const [fMembers, setFMembers] = useState<string[]>([]);
+  const [fAutonomous, setFAutonomous] = useState(false);
+  const [fSkills, setFSkills] = useState<string[]>([]);
+  const [emojiOpen, setEmojiOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [savedOk, setSavedOk] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -101,7 +136,7 @@ export function Portal() {
   const groups = bots.filter(isGroup);
 
   const bootstrap = useCallback(async () => {
-    const [me, botList, sessionList, cfg, keys, conns, learned] = await Promise.all([
+    const [me, botList, sessionList, cfg, keys, conns, learned, skillList] = await Promise.all([
       client.me(),
       client.listBots(),
       client.listSessions(),
@@ -109,6 +144,7 @@ export function Portal() {
       client.listApiKeys(),
       client.listConnections(),
       client.listLearnedSkills(),
+      client.listSkills(),
     ]);
     setUser(me);
     setBots(botList);
@@ -117,6 +153,7 @@ export function Portal() {
     setApiKeys(keys);
     setConnections(conns);
     setLearnedSkills(learned);
+    setSkills(skillList);
     void client
       .billing()
       .then((b) => setPlan(b.plan))
@@ -321,6 +358,120 @@ export function Portal() {
     }
   }
 
+  function openBot(mode: "bot" | "group") {
+    setEditor(mode);
+    setEditId(null);
+    setFName("");
+    setFEmoji(mode === "group" ? "👥" : "🤖");
+    setFScheme(bots.length % BOT_SCHEMES.length);
+    setFInstructions("");
+    setFMembers([]);
+    setFAutonomous(false);
+    setFSkills([]);
+    setFormError(null);
+    setSavedOk(false);
+    setEmojiOpen(false);
+  }
+
+  function openEdit(bot: Bot) {
+    setEditor("edit");
+    setEditId(bot.id);
+    setFName(bot.name);
+    setFEmoji(authorEmoji(bot));
+    setFScheme(bot.scheme);
+    setFInstructions(bot.instructions ?? "");
+    setFMembers(bot.memberIds ?? []);
+    setFAutonomous(bot.autonomous === true);
+    setFSkills(bot.skills ?? []);
+    setFormError(null);
+    setSavedOk(false);
+    setEmojiOpen(false);
+  }
+
+  async function saveBot() {
+    const name = fName.trim() || (editor === "group" ? "New group" : "New Bot");
+    setSaving(true);
+    setFormError(null);
+    setSavedOk(false);
+    try {
+      if (editor === "edit" && editId) {
+        const updated = await client.updateBot(editId, {
+          name,
+          emoji: fEmoji,
+          scheme: fScheme,
+          instructions: fInstructions.trim(),
+          memberIds: fMembers,
+          autonomous: fAutonomous,
+          skills: fSkills,
+        });
+        setBots((prev) => prev.map((bot) => (bot.id === updated.id ? updated : bot)));
+        setSessions((prev) =>
+          prev.map((session) =>
+            session.id === updated.sessionId ? { ...session, title: updated.name } : session,
+          ),
+        );
+      } else {
+        const isGroup = editor === "group";
+        const roster = bots
+          .filter((bot) => fMembers.includes(bot.id))
+          .map((bot) => bot.name)
+          .join(", ");
+        const instructions = isGroup
+          ? `This is a group chat. Members reply: ${roster}.` +
+            (fInstructions.trim() ? ` Group goal: ${fInstructions.trim()}` : "")
+          : fInstructions.trim();
+        const bot = await client.createBot({
+          name,
+          emoji: fEmoji,
+          scheme: fScheme,
+          instructions,
+          memberIds: isGroup ? fMembers : undefined,
+          autonomous: fAutonomous,
+          skills: fSkills,
+        });
+        setBots((prev) => [...prev, bot]);
+        setSessions((prev) => [
+          {
+            id: bot.sessionId,
+            userId: bot.userId,
+            title: bot.name,
+            messages: [],
+            createdAt: bot.createdAt,
+            botId: bot.id,
+          },
+          ...prev,
+        ]);
+        selectBot(bot);
+      }
+      setSavedOk(true);
+      window.setTimeout(() => {
+        setEditor(null);
+        setSaving(false);
+        setSavedOk(false);
+      }, 750);
+    } catch (err: unknown) {
+      setFormError(messageOf(err));
+      setSaving(false);
+    }
+  }
+
+  async function deleteBot(bot: Bot) {
+    setFormError(null);
+    try {
+      await client.deleteBot(bot.id);
+      setBots((prev) => prev.filter((entry) => entry.id !== bot.id));
+      setSessions((prev) => prev.filter((session) => session.id !== bot.sessionId));
+      if (activeBotId === bot.id) {
+        const next = bots.find((entry) => entry.id !== bot.id);
+        setActiveBotId(next?.id ?? null);
+        setActiveSessionId(next?.sessionId ?? null);
+      }
+      setEditor(null);
+    } catch (err: unknown) {
+      setFormError(messageOf(err));
+    }
+  }
+
   if (!authChecked) {
     return (
       <div className="portal-signin">
@@ -377,6 +528,12 @@ export function Portal() {
         <div className="sidebar-actions">
           <button className="new-task" type="button" onClick={() => setShowAccount(true)}>
             <GearIcon size={16} /> Account
+          </button>
+          <button className="new-task" type="button" onClick={() => openBot("bot")}>
+            <PlusIcon size={16} /> New bot
+          </button>
+          <button className="new-task" type="button" onClick={() => openBot("group")}>
+            <UsersIcon size={16} /> New group
           </button>
         </div>
 
@@ -440,6 +597,16 @@ export function Portal() {
             <BotLogo size={18} scheme={BOT_SCHEMES[(activeBot?.scheme ?? 0) % BOT_SCHEMES.length]} />
             <span className="thread-pill-name">{activeBot?.name ?? "Botifyr"}</span>
           </span>
+          {activeBot && (
+            <button
+              className="bot-menu-btn"
+              type="button"
+              title="Edit bot"
+              onClick={() => openEdit(activeBot)}
+            >
+              <GearIcon size={16} />
+            </button>
+          )}
           <div className="portal-spacer" />
           {config?.nodeOnline && (
             <button
@@ -595,6 +762,198 @@ export function Portal() {
           </div>
         </form>
       </main>
+
+      {editor && (
+        <div className="apps-overlay" onClick={() => setEditor(null)}>
+          <div className="apps-panel bot-editor" onClick={(event) => event.stopPropagation()}>
+            <div className="apps-head">
+              <span className="apps-title">
+                {editor === "group" ? "Create group chat" : editor === "edit" ? "Edit bot" : "Create new Bot"}
+              </span>
+              <button className="round small" type="button" onClick={() => setEditor(null)}>
+                <CloseIcon size={13} />
+              </button>
+            </div>
+
+            <div className="bot-editor-body">
+              <div className="bot-preview">
+                <BotLogo size={64} scheme={BOT_SCHEMES[fScheme % BOT_SCHEMES.length]} />
+                <input
+                  className="bot-name-input"
+                  placeholder={editor === "group" ? "Group name" : "Bot name"}
+                  value={fName}
+                  onChange={(event) => setFName(event.target.value)}
+                  autoFocus
+                />
+                <div className="emoji-picker">
+                  <button
+                    type="button"
+                    className={`emoji-trigger ${emojiOpen ? "open" : ""}`}
+                    onClick={() => setEmojiOpen((value) => !value)}
+                    aria-label="Choose an emoji"
+                  >
+                    {fEmoji}
+                  </button>
+                  {emojiOpen && (
+                    <>
+                      <div className="emoji-backdrop" onClick={() => setEmojiOpen(false)} />
+                      <div className="emoji-pop">
+                        {EMOJI_CHOICES.map((emoji) => (
+                          <button
+                            key={emoji}
+                            type="button"
+                            className={`emoji-choice ${emoji === fEmoji ? "active" : ""}`}
+                            onClick={() => {
+                              setFEmoji(emoji);
+                              setEmojiOpen(false);
+                            }}
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              <div className="scheme-row">
+                {BOT_SCHEMES.map((scheme, index) => (
+                  <button
+                    key={index}
+                    type="button"
+                    className={`scheme-dot ${index === fScheme ? "active" : ""}`}
+                    style={{ background: scheme.accent }}
+                    onClick={() => setFScheme(index)}
+                  />
+                ))}
+              </div>
+
+              {(editor === "group" || editor === "edit") && (
+                <>
+                  <div className="member-actions">
+                    <span className="member-actions-title">Members</span>
+                    <button
+                      className="link"
+                      type="button"
+                      onClick={() =>
+                        setFMembers(
+                          bots.filter((bot) => bot.id !== editId && !isGroup(bot)).map((bot) => bot.id),
+                        )
+                      }
+                    >
+                      Add all
+                    </button>
+                    <button className="link" type="button" onClick={() => setFMembers([])}>
+                      None
+                    </button>
+                  </div>
+                  <ul className="member-list">
+                    {bots
+                      .filter((bot) => bot.id !== editId && !isGroup(bot))
+                      .map((bot) => (
+                        <li key={bot.id}>
+                          <label className="member-item">
+                            <input
+                              type="checkbox"
+                              checked={fMembers.includes(bot.id)}
+                              onChange={(event) =>
+                                setFMembers((prev) =>
+                                  event.target.checked
+                                    ? [...prev, bot.id]
+                                    : prev.filter((id) => id !== bot.id),
+                                )
+                              }
+                            />
+                            <BotLogo size={22} scheme={BOT_SCHEMES[bot.scheme % BOT_SCHEMES.length]} />
+                            <span>{bot.name}</span>
+                          </label>
+                        </li>
+                      ))}
+                  </ul>
+                  <label className="settings-line">
+                    <span>Autonomous — every member decides whether to reply</span>
+                    <input
+                      type="checkbox"
+                      checked={fAutonomous}
+                      onChange={(event) => setFAutonomous(event.target.checked)}
+                    />
+                  </label>
+                </>
+              )}
+
+              <div className="settings-section-title">Capability packs</div>
+              <ul className="skill-list">
+                {skills.length === 0 && <li className="muted">No skills available.</li>}
+                {skills.map((skill) => (
+                  <li key={skill.id}>
+                    <label className="member-item">
+                      <input
+                        type="checkbox"
+                        checked={fSkills.includes(skill.id)}
+                        onChange={(event) =>
+                          setFSkills((prev) =>
+                            event.target.checked ? [...prev, skill.id] : prev.filter((id) => id !== skill.id),
+                          )
+                        }
+                      />
+                      <span className="skill-name">{skill.name}</span>
+                      <span className="skill-desc">{skill.description}</span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+
+              <textarea
+                className="bot-instructions"
+                placeholder={
+                  editor === "group"
+                    ? "What should this group work on? (optional)"
+                    : "Instructions — how should this bot behave? (optional)"
+                }
+                value={fInstructions}
+                onChange={(event) => setFInstructions(event.target.value)}
+                rows={3}
+              />
+            </div>
+
+            <div className="apps-actions">
+              {editor === "edit" && editId && (
+                <button
+                  className="ghost small danger"
+                  type="button"
+                  onClick={() => {
+                    const bot = bots.find((entry) => entry.id === editId);
+                    if (bot) void deleteBot(bot);
+                  }}
+                >
+                  Delete bot
+                </button>
+              )}
+              {formError && <span className="bot-editor-error">{formError}</span>}
+              <button className="ghost small" type="button" onClick={() => setEditor(null)} disabled={saving}>
+                Cancel
+              </button>
+              <button
+                className={`btn primary ${savedOk ? "saved" : ""}`}
+                type="button"
+                disabled={saving}
+                onClick={() => void saveBot()}
+              >
+                {savedOk
+                  ? "✓ Saved"
+                  : saving
+                    ? "Saving…"
+                    : editor === "edit"
+                      ? "Save changes"
+                      : editor === "group"
+                        ? "Create group"
+                        : "Create bot"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showAccount && (
         <div className="apps-overlay" onClick={() => setShowAccount(false)}>

@@ -4,7 +4,10 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Botifyr — Developer API</title>
-    <meta name="description" content="The Botifyr API: authenticate with an API key and drive bots, sessions and messages." />
+    <meta
+      name="description"
+      content="The Botifyr API: authenticate with an API key and drive bots, sessions and messages."
+    />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="stylesheet" href="/styles.css" />
     <style>
@@ -62,11 +65,32 @@
       <header class="site">
         <a class="brand" href="/">
           <svg width="26" height="26" viewBox="0 0 100 100" aria-hidden="true">
-            <rect x="27" y="14" width="46" height="30" rx="9" fill="#e9eaee" stroke="#141416" stroke-width="3.4" />
+            <rect
+              x="27"
+              y="14"
+              width="46"
+              height="30"
+              rx="9"
+              fill="#e9eaee"
+              stroke="#141416"
+              stroke-width="3.4"
+            />
             <rect x="40.5" y="23" width="5.5" height="9.5" rx="2.6" fill="#141416" />
             <rect x="54" y="23" width="5.5" height="9.5" rx="2.6" fill="#141416" />
-            <path d="M13 46h74L61 87.5Q50 95 39 87.5Z" fill="#19b7c9" stroke="#141416" stroke-width="3.4" stroke-linejoin="round" />
-            <path d="M29 50h42L56 71.5Q50 77 44 71.5Z" fill="#f5a623" stroke="#141416" stroke-width="3.4" stroke-linejoin="round" />
+            <path
+              d="M13 46h74L61 87.5Q50 95 39 87.5Z"
+              fill="#19b7c9"
+              stroke="#141416"
+              stroke-width="3.4"
+              stroke-linejoin="round"
+            />
+            <path
+              d="M29 50h42L56 71.5Q50 77 44 71.5Z"
+              fill="#f5a623"
+              stroke="#141416"
+              stroke-width="3.4"
+              stroke-linejoin="round"
+            />
           </svg>
           Botifyr
         </a>
@@ -88,8 +112,8 @@
 
       <h2 style="font-size: 22px; margin-top: 8px">1 · Create a key</h2>
       <p class="section-sub" style="margin-left: 0; text-align: left; max-width: none">
-        Open the <a href="/portal/">portal</a> → <strong>Account → API keys → Create</strong>. The secret is shown
-        once. Send it as <span class="api-key">x-api-key: bk_…</span> or
+        Open the <a href="/portal/">portal</a> → <strong>Account → API keys → Create</strong>. The secret is
+        shown once. Send it as <span class="api-key">x-api-key: bk_…</span> or
         <span class="api-key">Authorization: Bearer bk_…</span>.
       </p>
 
@@ -108,23 +132,83 @@ wscat -c "{{CLOUDWS}}/v1/stream?token=bk_your_key"</code></pre>
       <h2 style="font-size: 22px; margin-top: 28px">3 · Endpoints</h2>
       <table class="api-table">
         <thead>
-          <tr><th>Method</th><th>Path</th><th>Description</th></tr>
+          <tr>
+            <th>Method</th>
+            <th>Path</th>
+            <th>Description</th>
+          </tr>
         </thead>
         <tbody>
-          <tr><td><span class="method get">GET</span></td><td>/auth/config</td><td>Whether Google sign-in is configured (public).</td></tr>
-          <tr><td><span class="method get">GET</span></td><td>/auth/me</td><td>The authenticated user (plan, role).</td></tr>
-          <tr><td><span class="method get">GET</span></td><td>/v1/config</td><td>Capabilities, sandbox, node-online, usage.</td></tr>
-          <tr><td><span class="method get">GET</span></td><td>/v1/bots</td><td>List bots and groups.</td></tr>
-          <tr><td><span class="method post">POST</span></td><td>/v1/bots</td><td>Create a bot.</td></tr>
-          <tr><td><span class="method get">GET</span></td><td>/v1/sessions</td><td>List conversations with transcripts.</td></tr>
-          <tr><td><span class="method post">POST</span></td><td>/v1/sessions/:id/messages</td><td>Send a message; returns the updated session and task.</td></tr>
-          <tr><td><span class="method get">GET</span></td><td>/v1/stream</td><td>Websocket of realtime events (deltas, tasks, approvals).</td></tr>
-          <tr><td><span class="method get">GET</span></td><td>/v1/skills</td><td>Built-in capability packs.</td></tr>
-          <tr><td><span class="method get">GET</span></td><td>/v1/learned-skills</td><td>The shared learned-skill library.</td></tr>
-          <tr><td><span class="method get">GET</span></td><td>/v1/api-keys</td><td>List your API keys (prefix only).</td></tr>
-          <tr><td><span class="method post">POST</span></td><td>/v1/api-keys</td><td>Create a key (secret returned once).</td></tr>
-          <tr><td><span class="method del">DELETE</span></td><td>/v1/api-keys/:id</td><td>Revoke a key.</td></tr>
-          <tr><td><span class="method get">GET</span></td><td>/v1/billing</td><td>Current plan and whether Stripe is configured.</td></tr>
+          <tr>
+            <td><span class="method get">GET</span></td>
+            <td>/auth/config</td>
+            <td>Whether Google sign-in is configured (public).</td>
+          </tr>
+          <tr>
+            <td><span class="method get">GET</span></td>
+            <td>/auth/me</td>
+            <td>The authenticated user (plan, role).</td>
+          </tr>
+          <tr>
+            <td><span class="method get">GET</span></td>
+            <td>/v1/config</td>
+            <td>Capabilities, sandbox, node-online, usage.</td>
+          </tr>
+          <tr>
+            <td><span class="method get">GET</span></td>
+            <td>/v1/bots</td>
+            <td>List bots and groups.</td>
+          </tr>
+          <tr>
+            <td><span class="method post">POST</span></td>
+            <td>/v1/bots</td>
+            <td>Create a bot.</td>
+          </tr>
+          <tr>
+            <td><span class="method get">GET</span></td>
+            <td>/v1/sessions</td>
+            <td>List conversations with transcripts.</td>
+          </tr>
+          <tr>
+            <td><span class="method post">POST</span></td>
+            <td>/v1/sessions/:id/messages</td>
+            <td>Send a message; returns the updated session and task.</td>
+          </tr>
+          <tr>
+            <td><span class="method get">GET</span></td>
+            <td>/v1/stream</td>
+            <td>Websocket of realtime events (deltas, tasks, approvals).</td>
+          </tr>
+          <tr>
+            <td><span class="method get">GET</span></td>
+            <td>/v1/skills</td>
+            <td>Built-in capability packs.</td>
+          </tr>
+          <tr>
+            <td><span class="method get">GET</span></td>
+            <td>/v1/learned-skills</td>
+            <td>The shared learned-skill library.</td>
+          </tr>
+          <tr>
+            <td><span class="method get">GET</span></td>
+            <td>/v1/api-keys</td>
+            <td>List your API keys (prefix only).</td>
+          </tr>
+          <tr>
+            <td><span class="method post">POST</span></td>
+            <td>/v1/api-keys</td>
+            <td>Create a key (secret returned once).</td>
+          </tr>
+          <tr>
+            <td><span class="method del">DELETE</span></td>
+            <td>/v1/api-keys/:id</td>
+            <td>Revoke a key.</td>
+          </tr>
+          <tr>
+            <td><span class="method get">GET</span></td>
+            <td>/v1/billing</td>
+            <td>Current plan and whether Stripe is configured.</td>
+          </tr>
         </tbody>
       </table>
 

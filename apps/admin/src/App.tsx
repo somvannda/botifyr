@@ -60,7 +60,9 @@ export function Admin() {
   function signInWithGoogle() {
     setBusy(true);
     setError(null);
-    const state = crypto.randomUUID();
+    // The "admin:" prefix tells the cloud to only issue a session to an
+    // allowlisted platform admin.
+    const state = `admin:${crypto.randomUUID()}`;
     window.open(
       `${CLOUD_URL}/auth/google?state=${encodeURIComponent(state)}`,
       "botifyr-admin-signin",

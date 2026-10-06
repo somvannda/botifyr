@@ -1041,6 +1041,17 @@ export async function buildServer(options: ServerOptions) {
         const info = (await infoResponse.json()) as { email?: string };
         if (!info.email) throw new Error("no email from Google");
 
+        // The admin console prefixes its state with "admin:". Refuse to issue a
+        // session at all unless the account is on the admin allowlist
+        // (BOTIFYR_ADMIN_EMAILS) — the client can't be trusted to enforce this.
+        if (state.startsWith("admin:") && roleFor(info.email) !== "admin") {
+          app.log.warn({ email: info.email }, "admin sign-in denied");
+          return reply
+            .type("text/html")
+            .header("cache-control", "no-store")
+            .send(messagePage("This account isn't authorized for the admin console."));
+        }
+
         let record = await store.getUserByEmail(info.email);
         if (!record) {
           record = {

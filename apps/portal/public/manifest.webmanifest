@@ -1,0 +1,18 @@
+{
+  "name": "Botifyr",
+  "short_name": "Botifyr",
+  "description": "Your team of always-on agents — chat, manage bots, and run tasks on your computer.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0b0d12",
+  "theme_color": "#0b0d12",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
