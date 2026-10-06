@@ -104,6 +104,23 @@
   border: 1px solid var(--border);
   border-radius: 999px;
   padding: 2px 9px;
+  background: transparent;
+}
+
+button.portal-chip {
+  cursor: pointer;
+  font-family: inherit;
+}
+
+button.portal-chip:hover {
+  color: var(--text);
+  border-color: var(--muted);
+}
+
+.portal-chip.active {
+  color: #3fd18b;
+  border-color: #3fd18b;
+  background: rgba(63, 209, 139, 0.12);
 }
 
 @media (max-width: 820px) {

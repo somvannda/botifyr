@@ -73,6 +73,9 @@ export function Portal() {
 
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
+  const [useComputer, setUseComputer] = useState(
+    () => localStorage.getItem("botifyr.portal.useComputer") === "1",
+  );
   const [showAccount, setShowAccount] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -270,7 +273,7 @@ export function Portal() {
     setBusy(true);
     setError(null);
     try {
-      const { session } = await client.sendMessage(sessionId, trimmed);
+      const { session } = await client.sendMessage(sessionId, trimmed, useComputer);
       setSessions((prev) => prev.map((entry) => (entry.id === sessionId ? session : entry)));
     } catch (err: unknown) {
       setError(messageOf(err));
@@ -438,10 +441,24 @@ export function Portal() {
             <span className="thread-pill-name">{activeBot?.name ?? "Botifyr"}</span>
           </span>
           <div className="portal-spacer" />
+          {config?.nodeOnline && (
+            <button
+              className={`portal-chip ${useComputer ? "active" : ""}`}
+              type="button"
+              title="Run this task on your own computer (desktop app)"
+              onClick={() => {
+                const next = !useComputer;
+                setUseComputer(next);
+                localStorage.setItem("botifyr.portal.useComputer", next ? "1" : "0");
+              }}
+            >
+              {useComputer ? "● On your computer" : "Use your computer"}
+            </button>
+          )}
           {config && (
             <span className="portal-chip">
               {config.capabilities.join(", ") || "none"}
-              {config.nodeOnline ? " · your computer online" : ""}
+              {config.nodeOnline ? " · desktop online" : " · desktop offline"}
             </span>
           )}
         </header>
