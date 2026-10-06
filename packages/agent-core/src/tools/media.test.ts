@@ -77,6 +77,40 @@ describe("youtube.download", () => {
     expect(command).toContain("--flat-playlist");
   });
 
+  it("expands a channel URL into individual videos", async () => {
+    const commands: string[] = [];
+    const ok = { ok: true, output: "ok" };
+    const backend: ShellBackend = {
+      async exec(command) {
+        commands.push(command);
+        if (command.includes("--flat-playlist")) {
+          return {
+            ok: true,
+            output: "https://www.youtube.com/watch?v=aaa\nhttps://www.youtube.com/watch?v=bbb\n",
+          };
+        }
+        return ok;
+      },
+      async readFile() {
+        return ok;
+      },
+      async writeFile() {
+        return ok;
+      },
+      async listFiles() {
+        return ok;
+      },
+      async close() {},
+    };
+    const tool = createMediaTools(backend, "/d").tools.find((entry) => entry.name === "youtube.download");
+    if (!tool) throw new Error("youtube.download not found");
+    await tool.run({ url: "https://www.youtube.com/channel/UCabc" }, ctx);
+
+    expect(commands.some((command) => command.includes("--flat-playlist"))).toBe(true);
+    expect(commands.some((command) => command.includes("watch?v=aaa"))).toBe(true);
+    expect(commands.some((command) => command.includes("watch?v=bbb"))).toBe(true);
+  });
+
   it("rejects when no valid url is given", async () => {
     const { backend, commands } = fakeBackend();
     const result = await downloadTool(backend).run({ url: "not-a-url" }, ctx);

@@ -60,6 +60,11 @@ export function createMediaTools(
         },
         audio_only: { type: "boolean", description: "Extract audio as mp3 instead of video." },
         quality: { type: "number", description: "Max video height, e.g. 720 or 1080." },
+        limit: {
+          type: "number",
+          description:
+            "For a channel/playlist URL, how many videos to download (default 20; 0 = all, max 500).",
+        },
       },
     },
     requiresApproval: true,
@@ -70,24 +75,44 @@ export function createMediaTools(
       const list = urls.slice(0, 50);
       const audio = args.audio_only === true || (args.audio_only === undefined && defaultAudio);
       const height = Math.min(2160, Math.max(144, Number(args.quality) || defaultQuality));
+      const limit = args.limit === undefined ? 20 : Math.max(0, Math.min(500, Number(args.limit) || 0));
       const cookies = await cookieArg();
       // Titles keep each file distinct, so a batch doesn't overwrite itself.
       const template = `'${outDir}/%(title)s [%(id)s].%(ext)s'`;
-      const common = `${cookies}--ignore-errors --no-overwrites --no-warnings --no-progress`;
+      const common = `${cookies}--no-playlist --ignore-errors --no-overwrites --no-warnings --no-progress`;
       await backend.exec(`mkdir -p '${outDir}'`);
+
+      // Expand channel/playlist URLs into individual videos so we can show
+      // per-file progress and avoid one giant unbounded download.
+      const expanded: string[] = [];
+      for (const url of list) {
+        const isCollection = /\/(channel|c|user)\/|\/playlist|[@?&]list=/.test(url);
+        if (!isCollection) {
+          expanded.push(url);
+          continue;
+        }
+        const cap = limit > 0 ? limit : 500;
+        const enumerated = await backend.exec(
+          `yt-dlp ${cookies}--flat-playlist --no-warnings --print "%(webpage_url)s" '${url}' | head -n ${cap}`,
+        );
+        for (const line of enumerated.output.split("\n")) {
+          const candidate = line.trim();
+          if (/^https?:\/\//.test(candidate)) expanded.push(candidate);
+        }
+      }
+      const finalList = (limit > 0 ? expanded.slice(0, limit) : expanded).slice(0, 500);
+      if (finalList.length === 0) {
+        return { ok: false, output: "No downloadable videos were found at that URL." };
+      }
 
       const outputs: string[] = [];
       let ok = true;
-      for (let index = 0; index < list.length; index += 1) {
-        const url = list[index];
-        // A channel / playlist URL should download every item; a single video
-        // must NOT pull in its enclosing playlist.
-        const isCollection = /\/(channel|c|user)\/|\/playlist|[@?&]list=/.test(url);
-        const playlistFlag = list.length === 1 && isCollection ? "--yes-playlist" : "--no-playlist";
-        context.log(`download ${index + 1}/${list.length} ${url}`);
+      for (let index = 0; index < finalList.length; index += 1) {
+        const url = finalList[index];
+        context.log(`download ${index + 1}/${finalList.length} ${url}`);
         const command = audio
-          ? `yt-dlp ${common} ${playlistFlag} -x --audio-format mp3 -o ${template} '${url}'`
-          : `yt-dlp ${common} ${playlistFlag} -f 'bv*[height<=${height}]+ba/b[height<=${height}]' ` +
+          ? `yt-dlp ${common} -x --audio-format mp3 -o ${template} '${url}'`
+          : `yt-dlp ${common} -f 'bv*[height<=${height}]+ba/b[height<=${height}]' ` +
             `--merge-output-format mp4 -o ${template} '${url}'`;
         const result = await backend.exec(command);
         outputs.push(result.output);

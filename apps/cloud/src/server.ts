@@ -380,8 +380,16 @@ export async function buildServer(options: ServerOptions) {
     const search = targets ? null : searchIntent(capped);
     // "highest/best/4k" → ask yt-dlp for 2160p; otherwise the 720p default.
     const quality = /\b(highest|best|max(?:imum)?|4k|2160)\b/i.test(capped) ? 2160 : undefined;
+    const wantsAll = /\b(all|every|entire|whole|full)\b/i.test(capped);
     const initialToolCall = targets
-      ? { name: "youtube.download", arguments: { urls: targets, ...(quality ? { quality } : {}) } }
+      ? {
+          name: "youtube.download",
+          arguments: {
+            urls: targets,
+            ...(quality ? { quality } : {}),
+            ...(wantsAll ? { limit: 0 } : {}),
+          },
+        }
       : search
         ? { name: "youtube.search", arguments: { query: search.query, count: search.count } }
         : undefined;
@@ -509,7 +517,9 @@ export async function buildServer(options: ServerOptions) {
           await Promise.all(fresh.map((member) => runMember(member)));
         };
 
-        await runWave(responders);
+        await runWave(
+          initialToolCall ? responders.filter((member) => member.id === directMemberId) : responders,
+        );
 
         // Handoff waves: a reply may @mention a member who hasn't spoken yet.
         for (let round = 0; round < 2; round += 1) {
