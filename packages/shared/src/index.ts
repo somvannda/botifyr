@@ -236,6 +236,7 @@ export type ServerEvent =
   | { type: "approval.resolved"; taskId: string; approval: Approval }
   | { type: "presence"; userId: string; online: boolean; toUserId: string }
   | { type: "friend.request"; requestId: string; fromUserId: string; toUserId: string }
+  | { type: "p2p.signal"; toUserId: string; to: string; from: string; data: unknown }
   | { type: "task.completed"; task: Task }
   | { type: "task.failed"; task: Task };
 

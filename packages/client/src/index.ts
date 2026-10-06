@@ -265,6 +265,19 @@ export class BotifyrClient {
     return this.request(`/v1/media/${id}${purge ? "?purge=1" : ""}`, { method: "DELETE" });
   }
 
+  /* P2P: online devices of this user + a signaling relay for WebRTC. */
+  listDevices(): Promise<Array<{ id: string; name: string; online: boolean }>> {
+    return this.request("/v1/devices");
+  }
+
+  sendSignal(to: string, from: string, data: unknown): Promise<{ ok: boolean }> {
+    return this.request("/v1/signal", {
+      method: "POST",
+      json: true,
+      body: JSON.stringify({ to, from, data }),
+    });
+  }
+
   createBot(input: {
     name: string;
     emoji: string;
@@ -419,15 +432,18 @@ export class BotifyrClient {
     return body.token ?? null;
   }
 
-  connect(handlers: ConnectHandlers): () => void {
+  connect(handlers: ConnectHandlers, opts?: { device?: string; deviceName?: string }): () => void {
     let closed = false;
     let socket: WebSocket | null = null;
 
     const open = () => {
       if (closed) return;
+      const deviceQuery = opts?.device
+        ? `&device=${encodeURIComponent(opts.device)}&deviceName=${encodeURIComponent(opts.deviceName ?? "")}`
+        : "";
       const wsUrl = `${this.url("/v1/stream").replace(/^http/, "ws")}?token=${encodeURIComponent(
         this.token ?? "",
-      )}`;
+      )}${deviceQuery}`;
       socket = new WebSocket(wsUrl);
       socket.onopen = () => handlers.onOpen?.();
       socket.onerror = () => {};

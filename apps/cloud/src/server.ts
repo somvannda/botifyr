@@ -212,25 +212,41 @@ export async function buildServer(options: ServerOptions) {
       .catch(() => {});
   };
 
-  /* Presence: how many live websocket streams a user has (0 = offline). */
+  /* Presence + device registry: live websocket streams per user/device. */
   const streamCounts = new Map<string, number>();
+  const devices = new Map<string, Map<string, { name: string; count: number }>>();
   const isOnline = (userId: string): boolean => (streamCounts.get(userId) ?? 0) > 0;
   const broadcastPresence = async (userId: string, online: boolean): Promise<void> => {
     const friends = await store.listFriends(userId).catch(() => []);
     for (const friend of friends) emit({ type: "presence", userId, online, toUserId: friend });
   };
-  const noteOnline = (userId: string): void => {
+  const noteOnline = (userId: string, deviceId: string, deviceName: string): void => {
     const next = (streamCounts.get(userId) ?? 0) + 1;
     streamCounts.set(userId, next);
+    const perDevice = devices.get(userId) ?? new Map<string, { name: string; count: number }>();
+    const entry = perDevice.get(deviceId) ?? { name: deviceName, count: 0 };
+    if (deviceName) entry.name = deviceName;
+    entry.count += 1;
+    perDevice.set(deviceId, entry);
+    devices.set(userId, perDevice);
     if (next === 1) void broadcastPresence(userId, true);
   };
-  const noteOffline = (userId: string): void => {
+  const noteOffline = (userId: string, deviceId: string): void => {
     const next = Math.max(0, (streamCounts.get(userId) ?? 1) - 1);
     if (next === 0) {
       streamCounts.delete(userId);
       void broadcastPresence(userId, false);
     } else {
       streamCounts.set(userId, next);
+    }
+    const perDevice = devices.get(userId);
+    if (perDevice) {
+      const entry = perDevice.get(deviceId);
+      if (entry) {
+        entry.count -= 1;
+        if (entry.count <= 0) perDevice.delete(deviceId);
+      }
+      if (perDevice.size === 0) devices.delete(userId);
     }
   };
 
@@ -373,6 +389,8 @@ export async function buildServer(options: ServerOptions) {
         return ownerOfEventTask(event.taskId) === userId;
       case "presence":
       case "friend.request":
+        return event.toUserId === userId;
+      case "p2p.signal":
         return event.toUserId === userId;
       default:
         return false;
@@ -2312,12 +2330,49 @@ export async function buildServer(options: ServerOptions) {
         // socket closed
       }
     });
-    noteOnline(userId);
+    noteOnline(
+      userId,
+      String((request.query as { device?: string } | undefined)?.device ?? "default").slice(0, 60),
+      String((request.query as { deviceName?: string } | undefined)?.deviceName ?? "").slice(0, 60),
+    );
     ws.addEventListener?.("close", () => {
       unsubscribe();
-      noteOffline(userId);
+      noteOffline(
+        userId,
+        String((request.query as { device?: string } | undefined)?.device ?? "default").slice(0, 60),
+      );
     });
   });
+
+  /* Devices of the signed-in user that are online (for P2P transfers). */
+  app.get("/v1/devices", { preHandler: requireAuth }, async (request) => {
+    const perDevice =
+      devices.get(request.userId as string) ?? new Map<string, { name: string; count: number }>();
+    return [...perDevice.entries()].map(([id, entry]) => ({
+      id,
+      name: entry.name || id,
+      online: true,
+    }));
+  });
+
+  /* WebRTC signaling relay: delivered to the user's own devices. */
+  app.post<{ Body: { to?: string; from?: string; data?: unknown } }>(
+    "/v1/signal",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const to = String(request.body?.to ?? "").slice(0, 60);
+      if (!to) return reply.code(400).send({ error: "missing target device" });
+      emit({
+        type: "p2p.signal",
+        toUserId: userId,
+        to,
+        from: String(request.body?.from ?? "unknown").slice(0, 60),
+        data: request.body?.data ?? null,
+      });
+      return { ok: true };
+    },
+  );
 
   // Local node: a process on the user's own machine that exposes a local browser.
   app.get("/v1/node", { websocket: true }, async (socket, request) => {

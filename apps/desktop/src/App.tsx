@@ -17,6 +17,7 @@ import type {
 } from "@botifyr/shared";
 import { invoke } from "@tauri-apps/api/core";
 import { AuthError, BotifyrClient, type MediaItem } from "@botifyr/client";
+import { P2P, deviceId, saveBlob } from "./p2p";
 import { CalendarIcon, DriveIcon, GmailIcon } from "@botifyr/ui";
 import { GithubBrand, NotionBrand, SlackBrand, TelegramBrand } from "@botifyr/ui";
 import { BOT_SCHEMES, BotLogo } from "@botifyr/ui";
@@ -119,7 +120,6 @@ async function focusWindow(): Promise<void> {
 
 export default function App() {
   const client = useMemo(() => new BotifyrClient(CLOUD_URL), []);
-
   const [user, setUser] = useState<User | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -190,6 +190,18 @@ export default function App() {
   const [downloads, setDownloads] = useState<Array<{ name: string; size: number }>>([]);
   const [playerFile, setPlayerFile] = useState<{ name: string; url: string } | null>(null);
   const [media, setMedia] = useState<MediaItem[]>([]);
+  const [devices, setDevices] = useState<Array<{ id: string; name: string; online: boolean }>>([]);
+  const myDeviceId = useMemo(() => deviceId(), []);
+  const p2p = useMemo(
+    () =>
+      new P2P({
+        signal: (to, data) => {
+          void client.sendSignal(to, myDeviceId, data).catch(() => {});
+        },
+        onFile: (name, blob) => saveBlob(name, blob),
+      }),
+    [client, myDeviceId],
+  );
   const [ytCookies, setYtCookies] = useState("");
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
   const [skillQuery, setSkillQuery] = useState("");
@@ -347,17 +359,20 @@ export default function App() {
       void startLocalNode();
     }
 
-    const disconnect = client.connect({
-      onOpen: () => mounted && setConnection("online"),
-      onClose: () => {
-        if (!mounted) return;
-        setConnection("offline");
-        client.me().catch((err: unknown) => {
-          if (err instanceof AuthError) void logout();
-        });
+    const disconnect = client.connect(
+      {
+        onOpen: () => mounted && setConnection("online"),
+        onClose: () => {
+          if (!mounted) return;
+          setConnection("offline");
+          client.me().catch((err: unknown) => {
+            if (err instanceof AuthError) void logout();
+          });
+        },
+        onEvent: (event) => mounted && applyEvent(event),
       },
-      onEvent: (event) => mounted && applyEvent(event),
-    });
+      { device: myDeviceId, deviceName: computerName },
+    );
 
     client
       .listSecrets()
@@ -439,6 +454,9 @@ export default function App() {
         break;
       case "assistant.reset":
         setStream((prev) => (prev && prev.taskId === event.taskId ? null : prev));
+        break;
+      case "p2p.signal":
+        if (event.to === myDeviceId) void p2p.handleSignal(event.from, event.data);
         break;
       case "group.working":
         setGroupWorking({ sessionId: event.sessionId, names: event.names });
@@ -1162,6 +1180,26 @@ export default function App() {
       setError(messageOf(err));
     }
   }
+
+  /** P2P-send a media file to another of the user's online devices. */
+  async function sendToDevice(item: MediaItem): Promise<void> {
+    setError(null);
+    try {
+      const list = await client.listDevices();
+      setDevices(list);
+      const target = list.find((device) => device.id !== myDeviceId);
+      if (!target) {
+        setError("No other device is online — open Botifyr on another device first.");
+        return;
+      }
+      const response = await fetch(mediaUrl(item));
+      const blob = await response.blob();
+      await p2p.sendFile(target.id, item.name, blob);
+      setCheckNote(`Sending ${prettyFileName(item.name)} to ${target.name}…`);
+    } catch (err: unknown) {
+      setError(messageOf(err));
+    }
+  }
   const activeBot = bots.find((bot) => bot.id === activeBotId) ?? null;
   const activeScheme = BOT_SCHEMES[(activeBot?.scheme ?? 0) % BOT_SCHEMES.length];
   // A group is a container of bots, not a bot itself — keep them separate.
@@ -1257,6 +1295,12 @@ export default function App() {
       .listMedia()
       .then((items) => {
         if (active) setMedia(items);
+      })
+      .catch(() => {});
+    client
+      .listDevices()
+      .then((list) => {
+        if (active) setDevices(list);
       })
       .catch(() => {});
     return () => {
@@ -3046,6 +3090,13 @@ export default function App() {
                     Files your bots downloaded. They live on the server until you move them to a computer; the
                     list stays in sync across your devices.
                   </p>
+                  <p className="settings-note">
+                    Other devices online:{" "}
+                    {devices
+                      .filter((device) => device.id !== myDeviceId)
+                      .map((device) => device.name)
+                      .join(", ") || "none"}
+                  </p>
                   <ul className="downloads-list">
                     {media.length === 0 && <li className="muted">Nothing downloaded yet.</li>}
                     {media.map((item) => (
@@ -3069,6 +3120,9 @@ export default function App() {
                             Play
                           </button>
                         )}
+                        <button className="ghost small" type="button" onClick={() => void sendToDevice(item)}>
+                          Send
+                        </button>
                         <button
                           className="ghost small"
                           type="button"
