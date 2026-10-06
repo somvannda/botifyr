@@ -284,9 +284,13 @@ export async function buildServer(options: ServerOptions) {
           spoken.add(member.id);
           guard += 1;
           const latest = (await store.getSession(session.id)) ?? session;
+          const nameById = new Map(members.map((m) => [m.id, m.name]));
           const memberHistory = latest.messages.slice(-windowSize).map((message) => ({
             role: message.role,
-            content: message.content.slice(0, maxMessageChars),
+            content:
+              message.role === "assistant"
+                ? `${nameById.get(message.botId ?? "") ?? "Bot"}: ${message.content.slice(0, maxMessageChars)}`
+                : message.content.slice(0, maxMessageChars),
           }));
           await runTask(
             {
@@ -295,7 +299,9 @@ export async function buildServer(options: ServerOptions) {
               history: memberHistory,
               local,
               instructions: [
-                `In this group chat you are "${member.name}". You may @mention another member by name to hand work off to them.`,
+                `In this group chat you are "${member.name}".`,
+                "The transcript includes the user and other bots; each bot message is prefixed with the speaker's name.",
+                "To hand work off, @mention another member by name.",
                 member.instructions,
                 skillInstructions(member.skills),
               ]

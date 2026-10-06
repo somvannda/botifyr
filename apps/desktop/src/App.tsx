@@ -852,10 +852,16 @@ export default function App() {
   const streamBot = stream?.botId ? (bots.find((bot) => bot.id === stream.botId) ?? null) : null;
   const streamScheme = BOT_SCHEMES[(streamBot?.scheme ?? activeBot?.scheme ?? 0) % BOT_SCHEMES.length];
   const streamActive = Boolean(stream && stream.sessionId === activeSessionId);
-  // Sidebar lists bots; each bot owns exactly one conversation thread.
+  // Sidebar lists bots, most recently active first.
+  const lastActivity = (bot: Bot): string => {
+    const session = sessions.find((entry) => entry.id === bot.sessionId);
+    const last = session?.messages[session.messages.length - 1];
+    return last?.createdAt ?? bot.createdAt;
+  };
+  const orderedBots = [...bots].sort((a, b) => lastActivity(b).localeCompare(lastActivity(a)));
   const filteredBots = query.trim()
-    ? bots.filter((bot) => bot.name.toLowerCase().includes(query.trim().toLowerCase()))
-    : bots;
+    ? orderedBots.filter((bot) => bot.name.toLowerCase().includes(query.trim().toLowerCase()))
+    : orderedBots;
   const thinking =
     (sending || busy) &&
     (activeSession ? activeSession.messages[activeSession.messages.length - 1]?.role === "user" : false);
