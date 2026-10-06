@@ -1743,16 +1743,16 @@ body {
 
 /* Sidebar extras --------------------------------------------------------- */
 .sidebar-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .sidebar-actions .new-task {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 6px;
+  justify-content: flex-start;
+  gap: 10px;
   white-space: nowrap;
 }
 
@@ -2183,8 +2183,15 @@ body {
 }
 
 .msg-body {
-  flex: 1;
+  /* A bubble so the other side's messages read like the user's. */
+  flex: 0 1 auto;
   min-width: 0;
+  max-width: min(760px, 86%);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  border-bottom-left-radius: 6px;
+  padding: 10px 14px;
 }
 
 .msg-author {
