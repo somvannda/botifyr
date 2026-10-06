@@ -135,6 +135,7 @@ export class BotifyrClient {
       scheme?: number;
       instructions?: string;
       memberIds?: string[];
+      skills?: string[];
       schedule?: { prompt: string; everyMinutes: number; enabled: boolean };
     },
   ): Promise<Bot> {
