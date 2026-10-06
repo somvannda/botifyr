@@ -388,6 +388,14 @@ export class BotifyrClient {
     return this.request(`/v1/dm/${userId}`, { method: "POST", json: true, body: "{}" });
   }
 
+  createFriendGroup(participantIds: string[], title: string): Promise<Session> {
+    return this.request("/v1/conversations", {
+      method: "POST",
+      json: true,
+      body: JSON.stringify({ participantIds, title }),
+    });
+  }
+
   sendDm(sessionId: string, text: string): Promise<{ session: Session }> {
     return this.request(`/v1/dm/${sessionId}/messages`, {
       method: "POST",

@@ -1854,6 +1854,35 @@ export async function buildServer(options: ServerOptions) {
     },
   );
 
+  app.post<{ Body: { participantIds?: string[]; title?: string } }>(
+    "/v1/conversations",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const ids = Array.isArray(request.body?.participantIds) ? request.body.participantIds : [];
+      const unique = [...new Set(ids.filter((id): id is string => typeof id === "string" && id !== userId))];
+      if (unique.length < 2) return reply.code(400).send({ error: "pick at least two friends" });
+      for (const id of unique) {
+        if (!(await store.areFriends(userId, id))) {
+          return reply.code(403).send({ error: "you can only add friends" });
+        }
+      }
+      const title = (request.body?.title ?? "").trim().slice(0, 60) || "New group";
+      const session = {
+        id: randomUUID(),
+        userId,
+        title,
+        messages: [],
+        createdAt: new Date().toISOString(),
+        kind: "group" as const,
+        participants: [userId, ...unique],
+      };
+      await store.createSession(session);
+      emit({ type: "session.created", session });
+      return session;
+    },
+  );
+
   app.post<{ Params: { id: string }; Body: { text?: string } }>(
     "/v1/dm/:id/messages",
     { preHandler: requireAuth },
