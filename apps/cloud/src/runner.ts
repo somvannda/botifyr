@@ -16,7 +16,13 @@ import {
   type ToolDefinition,
 } from "@botifyr/agent-core";
 import { emit } from "./events.js";
-import { clearComputerSandbox, setComputerSandbox, setScreenshot, waitForApproval } from "./runtime.js";
+import {
+  clearComputerSandbox,
+  setComputerSandbox,
+  setScreenshot,
+  waitForApproval,
+  withSessionLock,
+} from "./runtime.js";
 import { createConnectionTools } from "./connections-tools.js";
 import { createFileTools } from "./files-tools.js";
 import { createGithubTools } from "./github-tools.js";
@@ -374,21 +380,24 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
     }
   }
 
-  // Append the assistant's reply to the conversation transcript.
+  // Append the assistant's reply to the conversation transcript. A per-session
+  // lock keeps concurrent group members from clobbering each other's writes.
   try {
-    const session = await store.getSession(task.sessionId);
-    if (session && !deps.suppressIf?.(reply)) {
-      session.messages.push({
-        id: randomUUID(),
-        role: "assistant",
-        content: ok ? reply : `Something went wrong: ${reply}`,
-        createdAt: new Date().toISOString(),
-        taskId: task.id,
-        botId: deps.author?.id,
-      });
-      await store.updateSession(session);
-      emit({ type: "session.updated", session });
-    }
+    await withSessionLock(task.sessionId, async () => {
+      const session = await store.getSession(task.sessionId);
+      if (session && !deps.suppressIf?.(reply)) {
+        session.messages.push({
+          id: randomUUID(),
+          role: "assistant",
+          content: ok ? reply : `Something went wrong: ${reply}`,
+          createdAt: new Date().toISOString(),
+          taskId: task.id,
+          botId: deps.author?.id,
+        });
+        await store.updateSession(session);
+        emit({ type: "session.updated", session });
+      }
+    });
   } catch {
     // transcript update is best-effort
   }

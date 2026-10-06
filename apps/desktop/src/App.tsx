@@ -2122,7 +2122,7 @@ export default function App() {
 
       {createBotMode && (
         <div className="apps-overlay" onClick={closeBotModal}>
-          <div className="apps-panel" onClick={(event) => event.stopPropagation()}>
+          <div className="apps-panel bot-editor" onClick={(event) => event.stopPropagation()}>
             <div className="apps-head">
               <span className="apps-title">
                 {createBotMode === "group"
@@ -2136,148 +2136,150 @@ export default function App() {
               </button>
             </div>
 
-            <div className="bot-preview">
-              <BotLogo size={64} scheme={BOT_SCHEMES[botScheme % BOT_SCHEMES.length]} />
-              <input
-                className="bot-name-input"
-                placeholder={createBotMode === "group" ? "Group name" : "Bot name"}
-                value={botName}
-                onChange={(event) => setBotName(event.target.value)}
-                autoFocus
-              />
-              <input
-                className="bot-emoji-input"
-                value={botEmoji}
-                onChange={(event) => setBotEmoji(event.target.value)}
-                maxLength={4}
-                aria-label="Emoji"
-              />
-            </div>
-
-            <div className="scheme-row">
-              {BOT_SCHEMES.map((scheme, index) => (
-                <button
-                  key={index}
-                  type="button"
-                  className={`scheme-dot ${index === botScheme ? "active" : ""}`}
-                  style={{ background: scheme.accent }}
-                  onClick={() => setBotScheme(index)}
-                  title={`Colour ${index + 1}`}
-                />
-              ))}
-            </div>
-
-            {(createBotMode === "group" || createBotMode === "edit") && (
-              <>
-                <div className="member-actions">
-                  <span className="member-actions-title">Members</span>
-                  <button
-                    className="link"
-                    type="button"
-                    onClick={() => setGroupMembers(bots.map((bot) => bot.id))}
-                  >
-                    Add all
-                  </button>
-                  <button className="link" type="button" onClick={() => setGroupMembers([])}>
-                    None
-                  </button>
-                </div>
-                <ul className="member-list">
-                  {bots.map((bot) => (
-                    <li key={bot.id}>
-                      <label className="member-item">
-                        <input
-                          type="checkbox"
-                          checked={groupMembers.includes(bot.id)}
-                          onChange={(event) =>
-                            setGroupMembers((prev) =>
-                              event.target.checked ? [...prev, bot.id] : prev.filter((id) => id !== bot.id),
-                            )
-                          }
-                        />
-                        <BotLogo size={22} scheme={BOT_SCHEMES[bot.scheme % BOT_SCHEMES.length]} />
-                        <span>{bot.name}</span>
-                      </label>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            )}
-
-            {(createBotMode === "group" || createBotMode === "edit") && (
-              <label className="settings-line">
-                <span>Autonomous — every member decides whether to reply</span>
+            <div className="bot-editor-body">
+              <div className="bot-preview">
+                <BotLogo size={64} scheme={BOT_SCHEMES[botScheme % BOT_SCHEMES.length]} />
                 <input
-                  type="checkbox"
-                  checked={autonomous}
-                  onChange={(event) => setAutonomous(event.target.checked)}
+                  className="bot-name-input"
+                  placeholder={createBotMode === "group" ? "Group name" : "Bot name"}
+                  value={botName}
+                  onChange={(event) => setBotName(event.target.value)}
+                  autoFocus
                 />
-              </label>
-            )}
+                <input
+                  className="bot-emoji-input"
+                  value={botEmoji}
+                  onChange={(event) => setBotEmoji(event.target.value)}
+                  maxLength={4}
+                  aria-label="Emoji"
+                />
+              </div>
 
-            <div className="settings-section-title">Skills</div>
-            <ul className="skill-list">
-              {skills.length === 0 && <li className="muted">No skills available.</li>}
-              {skills.map((skill) => (
-                <li key={skill.id}>
-                  <label className="member-item">
-                    <input
-                      type="checkbox"
-                      checked={selectedSkills.includes(skill.id)}
-                      onChange={(event) =>
-                        setSelectedSkills((prev) =>
-                          event.target.checked ? [...prev, skill.id] : prev.filter((id) => id !== skill.id),
-                        )
-                      }
-                    />
-                    <span className="skill-name">{skill.name}</span>
-                    <span className="skill-desc">{skill.description}</span>
-                  </label>
-                </li>
-              ))}
-            </ul>
+              <div className="scheme-row">
+                {BOT_SCHEMES.map((scheme, index) => (
+                  <button
+                    key={index}
+                    type="button"
+                    className={`scheme-dot ${index === botScheme ? "active" : ""}`}
+                    style={{ background: scheme.accent }}
+                    onClick={() => setBotScheme(index)}
+                    title={`Colour ${index + 1}`}
+                  />
+                ))}
+              </div>
 
-            <textarea
-              className="bot-instructions"
-              placeholder={
-                createBotMode === "group"
-                  ? "What should this group work on? (optional)"
-                  : "Instructions — how should this bot behave? (optional)"
-              }
-              value={botIntro}
-              onChange={(event) => setBotIntro(event.target.value)}
-              rows={3}
-            />
+              {(createBotMode === "group" || createBotMode === "edit") && (
+                <>
+                  <div className="member-actions">
+                    <span className="member-actions-title">Members</span>
+                    <button
+                      className="link"
+                      type="button"
+                      onClick={() => setGroupMembers(bots.map((bot) => bot.id))}
+                    >
+                      Add all
+                    </button>
+                    <button className="link" type="button" onClick={() => setGroupMembers([])}>
+                      None
+                    </button>
+                  </div>
+                  <ul className="member-list">
+                    {bots.map((bot) => (
+                      <li key={bot.id}>
+                        <label className="member-item">
+                          <input
+                            type="checkbox"
+                            checked={groupMembers.includes(bot.id)}
+                            onChange={(event) =>
+                              setGroupMembers((prev) =>
+                                event.target.checked ? [...prev, bot.id] : prev.filter((id) => id !== bot.id),
+                              )
+                            }
+                          />
+                          <BotLogo size={22} scheme={BOT_SCHEMES[bot.scheme % BOT_SCHEMES.length]} />
+                          <span>{bot.name}</span>
+                        </label>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
 
-            {createBotMode === "edit" && (
-              <div className="schedule-box">
-                <label className="schedule-toggle">
+              {(createBotMode === "group" || createBotMode === "edit") && (
+                <label className="settings-line">
+                  <span>Autonomous — every member decides whether to reply</span>
                   <input
                     type="checkbox"
-                    checked={scheduleEnabled}
-                    onChange={(event) => setScheduleEnabled(event.target.checked)}
+                    checked={autonomous}
+                    onChange={(event) => setAutonomous(event.target.checked)}
                   />
-                  <span>Always-on schedule</span>
                 </label>
-                <textarea
-                  className="bot-instructions"
-                  placeholder="What should this bot do on each run? (empty disables the schedule)"
-                  value={schedulePrompt}
-                  onChange={(event) => setSchedulePrompt(event.target.value)}
-                  rows={2}
-                />
-                <label className="schedule-every">
-                  every
-                  <input
-                    type="number"
-                    min={1}
-                    value={scheduleEvery}
-                    onChange={(event) => setScheduleEvery(Math.max(1, Number(event.target.value) || 1))}
+              )}
+
+              <div className="settings-section-title">Skills</div>
+              <ul className="skill-list">
+                {skills.length === 0 && <li className="muted">No skills available.</li>}
+                {skills.map((skill) => (
+                  <li key={skill.id}>
+                    <label className="member-item">
+                      <input
+                        type="checkbox"
+                        checked={selectedSkills.includes(skill.id)}
+                        onChange={(event) =>
+                          setSelectedSkills((prev) =>
+                            event.target.checked ? [...prev, skill.id] : prev.filter((id) => id !== skill.id),
+                          )
+                        }
+                      />
+                      <span className="skill-name">{skill.name}</span>
+                      <span className="skill-desc">{skill.description}</span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+
+              <textarea
+                className="bot-instructions"
+                placeholder={
+                  createBotMode === "group"
+                    ? "What should this group work on? (optional)"
+                    : "Instructions — how should this bot behave? (optional)"
+                }
+                value={botIntro}
+                onChange={(event) => setBotIntro(event.target.value)}
+                rows={3}
+              />
+
+              {createBotMode === "edit" && (
+                <div className="schedule-box">
+                  <label className="schedule-toggle">
+                    <input
+                      type="checkbox"
+                      checked={scheduleEnabled}
+                      onChange={(event) => setScheduleEnabled(event.target.checked)}
+                    />
+                    <span>Always-on schedule</span>
+                  </label>
+                  <textarea
+                    className="bot-instructions"
+                    placeholder="What should this bot do on each run? (empty disables the schedule)"
+                    value={schedulePrompt}
+                    onChange={(event) => setSchedulePrompt(event.target.value)}
+                    rows={2}
                   />
-                  minutes
-                </label>
-              </div>
-            )}
+                  <label className="schedule-every">
+                    every
+                    <input
+                      type="number"
+                      min={1}
+                      value={scheduleEvery}
+                      onChange={(event) => setScheduleEvery(Math.max(1, Number(event.target.value) || 1))}
+                    />
+                    minutes
+                  </label>
+                </div>
+              )}
+            </div>
 
             <div className="apps-actions">
               {createBotMode === "edit" && editingBotId && (

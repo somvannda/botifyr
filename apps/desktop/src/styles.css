@@ -1141,6 +1141,27 @@ body {
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
 }
 
+/* Tall editors (create/edit bot) keep the header and actions pinned and
+   scroll the middle, so Save is always reachable. */
+.apps-panel.bot-editor {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 90px);
+}
+
+.apps-panel.bot-editor .apps-head,
+.apps-panel.bot-editor .apps-actions {
+  flex-shrink: 0;
+}
+
+.bot-editor-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 4px -6px 0;
+  padding: 0 6px;
+}
+
 .apps-head {
   display: flex;
   align-items: center;

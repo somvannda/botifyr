@@ -314,21 +314,11 @@ export async function buildServer(options: ServerOptions) {
       const autonomous = bot?.autonomous === true;
       const responders = autonomous ? members : mentioned.length > 0 ? mentioned : members;
       void (async () => {
-        emit({
-          type: "group.working",
-          sessionId: session.id,
-          names: responders.map((member) => member.name),
-        });
-        const queue = [...responders];
+        const nameById = new Map(members.map((m) => [m.id, m.name]));
         const spoken = new Set<string>();
-        let guard = 0;
-        while (queue.length > 0 && guard < 8) {
-          const member = queue.shift();
-          if (!member || spoken.has(member.id)) continue;
-          spoken.add(member.id);
-          guard += 1;
+
+        const runMember = async (member: (typeof members)[number]) => {
           const latest = (await store.getSession(session.id)) ?? session;
-          const nameById = new Map(members.map((m) => [m.id, m.name]));
           const memberHistory = latest.messages.slice(-windowSize).map((message) => {
             const content = message.content.slice(0, maxMessageChars);
             if (message.role === "user") return { role: "user" as const, content };
@@ -350,7 +340,6 @@ export async function buildServer(options: ServerOptions) {
                 )
                 .join("\n")
             : "";
-          const beforeCount = latest.messages.length;
           await runTask(
             {
               store,
@@ -384,21 +373,40 @@ export async function buildServer(options: ServerOptions) {
             },
             task,
           ).catch((error) => app.log.error({ err: error, taskId: task.id }, "group member run failed"));
+        };
 
-          // Handoff: if this reply @mentions a member who hasn't spoken, they respond too.
-          const after = (await store.getSession(session.id)) ?? latest;
-          const reply = after.messages[after.messages.length - 1];
-          if (after.messages.length > beforeCount && reply?.role === "assistant") {
-            for (const other of members) {
-              if (
-                !spoken.has(other.id) &&
-                new RegExp(`@${escapeRegex(other.name)}(?![\\w-])`, "i").test(reply.content)
-              ) {
-                queue.push(other);
-              }
-            }
-          }
+        // A wave runs its members at the same time. Each reads the transcript as
+        // it was when the user sent the message, so they answer in parallel.
+        const runWave = async (list: typeof members) => {
+          const fresh = list.filter((member) => !spoken.has(member.id));
+          if (fresh.length === 0) return;
+          for (const member of fresh) spoken.add(member.id);
+          emit({
+            type: "group.working",
+            sessionId: session.id,
+            names: fresh.map((member) => member.name),
+          });
+          await Promise.all(fresh.map((member) => runMember(member)));
+        };
+
+        await runWave(responders);
+
+        // Handoff waves: a reply may @mention a member who hasn't spoken yet.
+        for (let round = 0; round < 2; round += 1) {
+          const latest = (await store.getSession(session.id)) ?? session;
+          const pending = members.filter(
+            (member) =>
+              !spoken.has(member.id) &&
+              latest.messages.some(
+                (message) =>
+                  message.role === "assistant" &&
+                  new RegExp(`@${escapeRegex(member.name)}(?![\\w-])`, "i").test(message.content),
+              ),
+          );
+          if (pending.length === 0) break;
+          await runWave(pending);
         }
+
         emit({ type: "group.working", sessionId: session.id, names: [] });
       })();
     } else {

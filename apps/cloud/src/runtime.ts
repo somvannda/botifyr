@@ -68,3 +68,19 @@ export function ownerOfEventTask(taskId: string): string | undefined {
 export function ownerOfSession(sessionId: string): string | undefined {
   return sessionOwners.get(sessionId);
 }
+
+/* Per-session lock so concurrent group members don't lose each other's writes. */
+const sessionLocks = new Map<string, Promise<unknown>>();
+
+export function withSessionLock<T>(sessionId: string, fn: () => Promise<T>): Promise<T> {
+  const previous = sessionLocks.get(sessionId) ?? Promise.resolve();
+  const run = previous.then(fn, fn);
+  sessionLocks.set(
+    sessionId,
+    run.then(
+      () => undefined,
+      () => undefined,
+    ),
+  );
+  return run;
+}
