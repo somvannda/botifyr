@@ -230,10 +230,19 @@ export default function App() {
         setSessions(sessionList);
         setConnections(connectionList);
         setSkills(skillList);
-        const first = botList[0];
-        if (first) {
-          setActiveBotId(first.id);
-          setActiveSessionId(first.sessionId);
+        // Open the last-used chat, else the most recently active one.
+        const lastAt = (bot: Bot): string => {
+          const session = sessionList.find((entry) => entry.id === bot.sessionId);
+          const message = session?.messages[session.messages.length - 1];
+          return message?.createdAt ?? session?.createdAt ?? bot.createdAt;
+        };
+        const savedId = localStorage.getItem("botifyr.activeBotId");
+        const chosen =
+          botList.find((bot) => bot.id === savedId) ??
+          [...botList].sort((a, b) => lastAt(b).localeCompare(lastAt(a)))[0];
+        if (chosen) {
+          setActiveBotId(chosen.id);
+          setActiveSessionId(chosen.sessionId);
         }
       })
       .catch((err: unknown) => {
@@ -302,6 +311,10 @@ export default function App() {
   useEffect(() => {
     setHistoryIndex(null);
   }, [activeSessionId]);
+
+  useEffect(() => {
+    if (activeBotId) localStorage.setItem("botifyr.activeBotId", activeBotId);
+  }, [activeBotId]);
 
   useEffect(() => {
     localStorage.setItem("botifyr.botPanel", showBotPanel ? "1" : "0");

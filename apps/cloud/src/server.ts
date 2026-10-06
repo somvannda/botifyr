@@ -285,13 +285,15 @@ export async function buildServer(options: ServerOptions) {
           guard += 1;
           const latest = (await store.getSession(session.id)) ?? session;
           const nameById = new Map(members.map((m) => [m.id, m.name]));
-          const memberHistory = latest.messages.slice(-windowSize).map((message) => ({
-            role: message.role,
-            content:
-              message.role === "assistant"
-                ? `${nameById.get(message.botId ?? "") ?? "Bot"}: ${message.content.slice(0, maxMessageChars)}`
-                : message.content.slice(0, maxMessageChars),
-          }));
+          const memberHistory = latest.messages.slice(-windowSize).map((message) => {
+            const content = message.content.slice(0, maxMessageChars);
+            if (message.role === "user") return { role: "user" as const, content };
+            // Its own past replies stay assistant turns; other bots' replies are
+            // other participants, so surface them as user turns labelled by name.
+            if (message.botId === member.id) return { role: "assistant" as const, content };
+            const speaker = nameById.get(message.botId ?? "") ?? "another bot";
+            return { role: "user" as const, content: `[${speaker}]: ${content}` };
+          });
           await runTask(
             {
               store,
@@ -300,7 +302,7 @@ export async function buildServer(options: ServerOptions) {
               local,
               instructions: [
                 `In this group chat you are "${member.name}".`,
-                "The transcript includes the user and other bots; each bot message is prefixed with the speaker's name.",
+                "Messages from other bots are shown as coming from them (prefixed with [their name]); your own earlier replies are your turns.",
                 "To hand work off, @mention another member by name.",
                 member.instructions,
                 skillInstructions(member.skills),
