@@ -18,8 +18,13 @@ import {
 import { emit } from "./events.js";
 import {
   clearComputerSandbox,
+  clearTaskCancel,
+  clearTaskRunning,
+  isTaskCancelled,
+  markTaskRunning,
   setComputerSandbox,
   setScreenshot,
+  setTaskAbort,
   waitForApproval,
   withSessionLock,
 } from "./runtime.js";
@@ -227,8 +232,19 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
   task.updatedAt = new Date().toISOString();
   await store.updateTask(task);
   emit({ type: "task.updated", task });
+  markTaskRunning(task.id, task.sessionId);
 
   const { tools, closers, hasComputer } = buildTools(store, task, userId, Boolean(deps.local), deps.vaultKey);
+  // Abort the run's sandboxes when the task is cancelled.
+  let sandboxesClosed = false;
+  const closeSandboxes = async (): Promise<void> => {
+    if (sandboxesClosed) return;
+    sandboxesClosed = true;
+    await Promise.all(closers.map((close) => close().catch(() => {})));
+  };
+  setTaskAbort(task.id, () => {
+    void closeSandboxes();
+  });
   // Connected-app tools (Gmail / Calendar / Drive) when the user has linked any.
   if (deps.vaultKey) {
     const connections = await store.listConnections(userId).catch(() => []);
@@ -321,6 +337,7 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
       autoApprove: deps.autoApprove === true,
       initialToolCall: deps.initialToolCall,
       initialToolOnly: deps.initialToolOnly === true,
+      isCancelled: () => isTaskCancelled(task.id),
       requestApproval: async (title, description, risk) => {
         const approval = {
           id: randomUUID(),
@@ -407,7 +424,9 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
     emit(ok ? { type: "task.completed", task } : { type: "task.failed", task });
     audit("task", null, ok ? "completed" : `failed: ${reply}`);
   } finally {
-    await Promise.all(closers.map((close) => close()));
+    await closeSandboxes();
+    clearTaskCancel(task.id);
+    clearTaskRunning(task.id);
     if (hasComputer) {
       clearComputerSandbox(task.id);
       task.liveStream = false;

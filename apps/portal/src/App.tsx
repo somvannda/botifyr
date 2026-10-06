@@ -23,6 +23,7 @@ import {
   Markdown,
   PlusIcon,
   SendIcon,
+  StopIcon,
   UsersIcon,
 } from "@botifyr/ui";
 
@@ -113,7 +114,7 @@ export function Portal() {
   const [groupWorking, setGroupWorking] = useState<Record<string, string[]>>({});
 
   const [text, setText] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [, setBusy] = useState(false);
   const [useComputer, setUseComputer] = useState(
     () => localStorage.getItem("botifyr.portal.useComputer") === "1",
   );
@@ -348,7 +349,7 @@ export function Portal() {
 
   async function send(raw?: string) {
     const trimmed = (raw ?? text).trim();
-    if (!trimmed || !activeSessionId || busy) return;
+    if (!trimmed || !activeSessionId) return;
     const sessionId = activeSessionId;
     setSessions((prev) =>
       prev.map((session) =>
@@ -881,7 +882,7 @@ export function Portal() {
               onChange={(event) => setText(event.target.value)}
               placeholder={`Message ${activeBot?.name ?? "Botifyr"}`}
               rows={1}
-              disabled={busy || !activeSessionId}
+              disabled={!activeSessionId}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && !event.shiftKey) {
                   event.preventDefault();
@@ -889,9 +890,22 @@ export function Portal() {
                 }
               }}
             />
-            <button className="round send" type="submit" title="Send" disabled={busy || !text.trim()}>
-              <SendIcon size={18} />
-            </button>
+            {liveTask && (liveTask.status === "running" || liveTask.status === "awaiting_approval") ? (
+              <button
+                className="round stop"
+                type="button"
+                title="Stop"
+                onClick={() =>
+                  void client.cancelTask(liveTask.id).catch((err: unknown) => setError(messageOf(err)))
+                }
+              >
+                <StopIcon size={18} />
+              </button>
+            ) : (
+              <button className="round send" type="submit" title="Send" disabled={!text.trim()}>
+                <SendIcon size={18} />
+              </button>
+            )}
           </div>
         </form>
       </main>

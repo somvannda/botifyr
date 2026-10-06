@@ -77,6 +77,43 @@ describe("youtube.download", () => {
     expect(command).toContain("--flat-playlist");
   });
 
+  it("searches and downloads in one step", async () => {
+    const commands: string[] = [];
+    const ok = { ok: true, output: "ok" };
+    const backend: ShellBackend = {
+      async exec(command) {
+        commands.push(command);
+        if (command.includes("ytsearch")) {
+          return {
+            ok: true,
+            output: "https://www.youtube.com/watch?v=aaa\nhttps://www.youtube.com/watch?v=bbb\n",
+          };
+        }
+        return ok;
+      },
+      async readFile() {
+        return ok;
+      },
+      async writeFile() {
+        return ok;
+      },
+      async listFiles() {
+        return ok;
+      },
+      async close() {},
+    };
+    const tool = createMediaTools(backend, "/d").tools.find(
+      (entry) => entry.name === "youtube.download_search",
+    );
+    if (!tool) throw new Error("youtube.download_search not found");
+    const result = await tool.run({ query: "heng pitu", count: 2 }, ctx);
+
+    expect(result.ok).toBe(true);
+    expect(commands.some((command) => command.includes("ytsearch2:heng pitu"))).toBe(true);
+    expect(commands.some((command) => command.includes("watch?v=aaa"))).toBe(true);
+    expect(commands.some((command) => command.includes("watch?v=bbb"))).toBe(true);
+  });
+
   it("expands a channel URL into individual videos", async () => {
     const commands: string[] = [];
     const ok = { ok: true, output: "ok" };

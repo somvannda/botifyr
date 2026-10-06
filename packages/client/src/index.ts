@@ -352,6 +352,10 @@ export class BotifyrClient {
     });
   }
 
+  cancelTask(taskId: string): Promise<void> {
+    return this.request(`/v1/tasks/${taskId}/cancel`, { method: "POST", json: true, body: "{}" });
+  }
+
   listSecrets(): Promise<SecretSummary[]> {
     return this.request("/v1/secrets");
   }

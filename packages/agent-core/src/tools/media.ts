@@ -1,9 +1,9 @@
-import type { ToolDefinition } from "../types.js";
+import type { ToolDefinition, ToolResult, ToolContext } from "../types.js";
 import type { ShellBackend } from "./shell.js";
 
 /**
  * Media tools backed by yt-dlp (installed in the code sandbox). Downloads land
- * in the sandbox workspace, so the agent can then process them with shell/code.
+ * in the shared downloads folder, which the cloud serves back to the user.
  */
 
 /** Only allow http(s) URLs and strip characters that could break out of the
@@ -12,6 +12,14 @@ function safeUrl(value: unknown): string | null {
   const url = String(value ?? "").trim();
   if (!/^https?:\/\/[^\s]+$/i.test(url)) return null;
   return url.replace(/['"`\\\n\r]/g, "");
+}
+
+function safeQuery(value: unknown): string {
+  return String(value ?? "")
+    .replace(/['\n\r]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 200);
 }
 
 export interface MediaTools {
@@ -33,6 +41,7 @@ export function createMediaTools(
 ): MediaTools {
   const defaultQuality = Math.min(2160, Math.max(144, Number(options.quality) || 720));
   const defaultAudio = options.audioOnly === true;
+
   const cookieArg = async (): Promise<string> => {
     if (!getCookies) return "";
     try {
@@ -45,10 +54,71 @@ export function createMediaTools(
     }
   };
 
+  /** Download a concrete list of video URLs, logging progress per file. */
+  const runDownloads = async (
+    urls: string[],
+    audio: boolean,
+    height: number,
+    context: Pick<ToolContext, "log">,
+  ): Promise<ToolResult> => {
+    const cookies = await cookieArg();
+    const template = `'${outDir}/%(title)s [%(id)s].%(ext)s'`;
+    const common = `${cookies}--no-playlist --ignore-errors --no-overwrites --no-warnings --no-progress`;
+    await backend.exec(`mkdir -p '${outDir}'`);
+
+    let ok = true;
+    for (let index = 0; index < urls.length; index += 1) {
+      const url = urls[index];
+      context.log(`download ${index + 1}/${urls.length} ${url}`);
+      const command = audio
+        ? `yt-dlp ${common} -x --audio-format mp3 -o ${template} '${url}'`
+        : `yt-dlp ${common} -f 'bv*[height<=${height}]+ba/b[height<=${height}]' ` +
+          `--merge-output-format mp4 -o ${template} '${url}'`;
+      const result = await backend.exec(command);
+      if (!result.ok) ok = false;
+    }
+
+    const listing = await backend.exec(`ls -lh '${outDir}'`);
+    const files = listing.output
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+    const header = ok
+      ? `Downloaded ${urls.length} item(s) into the downloads folder.`
+      : `Downloaded with some errors (${urls.length} requested).`;
+    return { ok, output: `${header}\n${files.join("\n")}`.slice(0, 4000) };
+  };
+
+  /** Enumerate a channel/playlist URL into individual video URLs. */
+  const expandCollections = async (urls: string[], limit: number): Promise<string[]> => {
+    const cookies = await cookieArg();
+    const expanded: string[] = [];
+    for (const url of urls) {
+      const isCollection = /\/(channel|c|user)\/|\/playlist|[@?&]list=/.test(url);
+      if (!isCollection) {
+        expanded.push(url);
+        continue;
+      }
+      const cap = limit > 0 ? limit : 500;
+      const enumerated = await backend.exec(
+        `yt-dlp ${cookies}--flat-playlist --no-warnings --print "%(webpage_url)s" '${url}' | head -n ${cap}`,
+      );
+      for (const line of enumerated.output.split("\n")) {
+        const candidate = line.trim();
+        if (/^https?:\/\//.test(candidate)) expanded.push(candidate);
+      }
+    }
+    return (limit > 0 ? expanded.slice(0, limit) : expanded).slice(0, 500);
+  };
+
+  const resolveQuality = (value: unknown): number =>
+    Math.min(2160, Math.max(144, Number(value) || defaultQuality));
+  const resolveAudio = (value: unknown): boolean => value === true || (value === undefined && defaultAudio);
+
   const download: ToolDefinition = {
     name: "youtube.download",
     description:
-      "Download one or many YouTube (or other yt-dlp supported) URLs with yt-dlp. For a list, pass `urls` (up to 50) instead of `url` — a single call downloads them all. Files are saved with their titles so the user can retrieve them.",
+      "Download one or many YouTube (or other yt-dlp supported) URLs with yt-dlp. For a list, pass `urls` (up to 50) instead of `url` — a single call downloads them all. A channel/playlist URL downloads its videos (use `limit`).",
     parameters: {
       type: "object",
       properties: {
@@ -72,67 +142,53 @@ export function createMediaTools(
       const raw = Array.isArray(args.urls) ? args.urls : args.url !== undefined ? [args.url] : [];
       const urls = raw.map(safeUrl).filter((value): value is string => Boolean(value));
       if (urls.length === 0) return { ok: false, output: "At least one valid http(s) URL is required." };
-      const list = urls.slice(0, 50);
-      const audio = args.audio_only === true || (args.audio_only === undefined && defaultAudio);
-      const height = Math.min(2160, Math.max(144, Number(args.quality) || defaultQuality));
       const limit = args.limit === undefined ? 20 : Math.max(0, Math.min(500, Number(args.limit) || 0));
-      const cookies = await cookieArg();
-      // Titles keep each file distinct, so a batch doesn't overwrite itself.
-      const template = `'${outDir}/%(title)s [%(id)s].%(ext)s'`;
-      const common = `${cookies}--no-playlist --ignore-errors --no-overwrites --no-warnings --no-progress`;
-      await backend.exec(`mkdir -p '${outDir}'`);
-
-      // Expand channel/playlist URLs into individual videos so we can show
-      // per-file progress and avoid one giant unbounded download.
-      const expanded: string[] = [];
-      for (const url of list) {
-        const isCollection = /\/(channel|c|user)\/|\/playlist|[@?&]list=/.test(url);
-        if (!isCollection) {
-          expanded.push(url);
-          continue;
-        }
-        const cap = limit > 0 ? limit : 500;
-        const enumerated = await backend.exec(
-          `yt-dlp ${cookies}--flat-playlist --no-warnings --print "%(webpage_url)s" '${url}' | head -n ${cap}`,
-        );
-        for (const line of enumerated.output.split("\n")) {
-          const candidate = line.trim();
-          if (/^https?:\/\//.test(candidate)) expanded.push(candidate);
-        }
-      }
-      const finalList = (limit > 0 ? expanded.slice(0, limit) : expanded).slice(0, 500);
+      const finalList = await expandCollections(urls.slice(0, 50), limit);
       if (finalList.length === 0) {
         return { ok: false, output: "No downloadable videos were found at that URL." };
       }
+      return runDownloads(finalList, resolveAudio(args.audio_only), resolveQuality(args.quality), context);
+    },
+  };
 
-      let ok = true;
-      for (let index = 0; index < finalList.length; index += 1) {
-        const url = finalList[index];
-        context.log(`download ${index + 1}/${finalList.length} ${url}`);
-        const command = audio
-          ? `yt-dlp ${common} -x --audio-format mp3 -o ${template} '${url}'`
-          : `yt-dlp ${common} -f 'bv*[height<=${height}]+ba/b[height<=${height}]' ` +
-            `--merge-output-format mp4 -o ${template} '${url}'`;
-        const result = await backend.exec(command);
-        if (!result.ok) ok = false;
-      }
-
-      const listing = await backend.exec(`ls -lh '${outDir}'`);
-      const files = listing.output
+  const downloadSearch: ToolDefinition = {
+    name: "youtube.download_search",
+    description:
+      "Search YouTube and download the top N matching videos in one step (no links needed). Use when the user names an artist/song/topic and asks to download, e.g. 'search X and download 10 videos'.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Search terms, e.g. an artist or song." },
+        count: { type: "number", description: "How many videos to download (default 10, max 50)." },
+        audio_only: { type: "boolean", description: "Extract audio as mp3 instead of video." },
+        quality: { type: "number", description: "Max video height, e.g. 720 or 1080." },
+      },
+      required: ["query"],
+    },
+    requiresApproval: true,
+    run: async (args, context) => {
+      const query = safeQuery(args.query);
+      if (!query) return { ok: false, output: "A search query is required." };
+      const count = Math.min(50, Math.max(1, Number(args.count) || 10));
+      const cookies = await cookieArg();
+      const found = await backend.exec(
+        `yt-dlp ${cookies}'ytsearch${count}:${query}' --flat-playlist --no-warnings ` +
+          `--print "%(webpage_url)s" 2>&1 | head -n ${count}`,
+      );
+      const urls = found.output
         .split("\n")
         .map((line) => line.trim())
-        .filter(Boolean);
-      const header = ok
-        ? `Downloaded ${finalList.length} item(s) into the downloads folder.`
-        : `Downloaded with some errors (${finalList.length} requested).`;
-      return { ok, output: `${header}\n${files.join("\n")}`.slice(0, 4000) };
+        .filter((line) => /^https?:\/\//.test(line))
+        .slice(0, count);
+      if (urls.length === 0) return { ok: false, output: "No videos were found for that search." };
+      return runDownloads(urls, resolveAudio(args.audio_only), resolveQuality(args.quality), context);
     },
   };
 
   const search: ToolDefinition = {
     name: "youtube.search",
     description:
-      "Search YouTube and return matching video links (title + URL). Use this to find links when the user names an artist, song or topic instead of pasting URLs.",
+      "Search YouTube and return matching video links (title + URL) without downloading. Use to find links when the user names an artist, song or topic.",
     parameters: {
       type: "object",
       properties: {
@@ -142,18 +198,14 @@ export function createMediaTools(
       required: ["query"],
     },
     run: async (args) => {
-      const query = String(args.query ?? "")
-        .replace(/['\n\r]/g, " ")
-        .replace(/\s+/g, " ")
-        .trim()
-        .slice(0, 200);
+      const query = safeQuery(args.query);
       if (!query) return { ok: false, output: "A search query is required." };
       const count = Math.min(50, Math.max(1, Number(args.count) || 10));
       const cookies = await cookieArg();
-      const command =
+      return backend.exec(
         `yt-dlp ${cookies}'ytsearch${count}:${query}' --flat-playlist --no-warnings ` +
-        `--print "%(webpage_url)s :: %(title)s" 2>&1 | head -n ${count}`;
-      return backend.exec(command);
+          `--print "%(webpage_url)s :: %(title)s" 2>&1 | head -n ${count}`,
+      );
     },
   };
 
@@ -172,5 +224,5 @@ export function createMediaTools(
     },
   };
 
-  return { tools: [download, search, info] };
+  return { tools: [download, downloadSearch, search, info] };
 }

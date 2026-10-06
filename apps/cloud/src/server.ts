@@ -27,6 +27,8 @@ import {
   ownerOfSession,
   rememberSession,
   rememberTask,
+  cancelTask,
+  runningTasksForSession,
   withSessionLock,
 } from "./runtime.js";
 import { resolveTaskApproval } from "./approvals.js";
@@ -455,18 +457,30 @@ export async function buildServer(options: ServerOptions) {
     // "highest/best/4k" → ask yt-dlp for 2160p; otherwise the 720p default.
     const quality = /\b(highest|best|max(?:imum)?|4k|2160)\b/i.test(capped) ? 2160 : undefined;
     const wantsAll = /\b(all|every|entire|whole|full)\b/i.test(capped);
+    const wantsDownload = /\b(download|grab|save|fetch|rip)\b/i.test(capped);
+    const wantsAudio = /\b(mp3|audio|music)\b/i.test(capped) && !/\bvideo\b/i.test(capped);
+    const mediaArgs = {
+      ...(quality ? { quality } : {}),
+      ...(wantsAudio ? { audio_only: true } : {}),
+    };
     const initialToolCall = targets
       ? {
           name: "youtube.download",
-          arguments: {
-            urls: targets,
-            ...(quality ? { quality } : {}),
-            ...(wantsAll ? { limit: 0 } : {}),
-          },
+          arguments: { urls: targets, ...mediaArgs, ...(wantsAll ? { limit: 0 } : {}) },
         }
       : search
-        ? { name: "youtube.search", arguments: { query: search.query, count: search.count } }
+        ? wantsDownload
+          ? {
+              name: "youtube.download_search",
+              arguments: { query: search.query, count: search.count, ...mediaArgs },
+            }
+          : { name: "youtube.search", arguments: { query: search.query, count: search.count } }
         : undefined;
+    // Media steps run in the cloud sandbox (they need yt-dlp), never on the
+    // user's machine; a deterministic one finishes without consulting the model.
+    const mediaTask = Boolean(initialToolCall?.name.startsWith("youtube."));
+    const initialToolOnly =
+      initialToolCall?.name === "youtube.download" || initialToolCall?.name === "youtube.download_search";
 
     const bot = session.botId ? await store.getBot(session.botId) : null;
     // Group chats: every member bot replies in turn.
@@ -578,7 +592,7 @@ export async function buildServer(options: ServerOptions) {
               author: { id: member.id },
               autoApprove: member.autoApprove === true,
               initialToolCall: member.id === directMemberId ? initialToolCall : undefined,
-              initialToolOnly: initialToolCall?.name === "youtube.download",
+              initialToolOnly,
               suppressIf: autonomous ? (reply) => reply.trim().startsWith("[SKIP]") : undefined,
             },
             task,
@@ -627,7 +641,7 @@ export async function buildServer(options: ServerOptions) {
           store,
           userId,
           history,
-          local,
+          local: mediaTask ? false : local,
           instructions:
             [bot?.instructions, skillInstructions(bot?.skills)].filter(Boolean).join("\n\n") || undefined,
           summary: session.summary,
@@ -635,7 +649,7 @@ export async function buildServer(options: ServerOptions) {
           author: bot ? { id: bot.id } : undefined,
           autoApprove: bot?.autoApprove === true,
           initialToolCall,
-          initialToolOnly: initialToolCall?.name === "youtube.download",
+          initialToolOnly,
         },
         task,
       ).catch((error) => {
@@ -1755,6 +1769,36 @@ export async function buildServer(options: ServerOptions) {
       }
       const warning = await budgetWarning(userId);
 
+      // Natural-language stop: "stop", "cancel", "stop this download".
+      if (text.length <= 80 && /\b(stop|cancel|abort|halt)\b/i.test(text)) {
+        const running = runningTasksForSession(session.id);
+        const now = new Date().toISOString();
+        let replyText = "Nothing is running right now.";
+        if (running.length > 0) {
+          for (const taskId of running) {
+            cancelTask(taskId);
+            const active = await store.getTask(taskId);
+            if (active && active.status !== "completed" && active.status !== "failed") {
+              active.status = "cancelled";
+              active.error = "Stopped by you.";
+              active.updatedAt = new Date().toISOString();
+              await store.updateTask(active);
+              emit({ type: "task.updated", task: active });
+            }
+          }
+          replyText = "Stopped.";
+        }
+        await withSessionLock(session.id, async () => {
+          const fresh = (await store.getSession(session.id)) ?? session;
+          fresh.messages.push({ id: randomUUID(), role: "user", content: text, createdAt: now });
+          fresh.messages.push({ id: randomUUID(), role: "assistant", content: replyText, createdAt: now });
+          await store.updateSession(fresh);
+          session.messages = fresh.messages;
+        });
+        emit({ type: "session.updated", session });
+        return { session, warning: warning ?? undefined };
+      }
+
       const task = await startTask(session, text, userId, request.body?.local === true);
       return { session, task, warning: warning ?? undefined };
     },
@@ -2234,6 +2278,29 @@ export async function buildServer(options: ServerOptions) {
       if (!approval) return reply.code(404).send({ error: "pending approval not found" });
 
       return { task, approval };
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    "/v1/tasks/:id/cancel",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const task = await ownedTask(request, request.params.id);
+      if (!task) return reply.code(404).send({ error: "task not found" });
+      cancelTask(task.id);
+      // Release a pending approval so the runner isn't stuck waiting on it.
+      if (task.approval && task.approval.status === "pending") {
+        await resolveTaskApproval(store, task, task.approval.id, "deny").catch(() => {});
+      }
+      if (task.status !== "completed" && task.status !== "failed") {
+        task.status = "cancelled";
+        task.error = "Stopped by you.";
+        task.updatedAt = new Date().toISOString();
+        await store.updateTask(task);
+        emit({ type: "task.updated", task });
+        emit({ type: "task.failed", task });
+      }
+      return reply.code(204).send();
     },
   );
 

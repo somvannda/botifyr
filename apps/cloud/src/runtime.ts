@@ -36,6 +36,43 @@ export function clearComputerSandbox(taskId: string): void {
   computerSandboxes.delete(taskId);
 }
 
+/* Task cancellation: mark a task stopped and abort its sandbox. */
+const cancelledTasks = new Set<string>();
+const taskAborts = new Map<string, () => void>();
+
+export function setTaskAbort(taskId: string, abort: () => void): void {
+  taskAborts.set(taskId, abort);
+}
+
+export function isTaskCancelled(taskId: string): boolean {
+  return cancelledTasks.has(taskId);
+}
+
+export function cancelTask(taskId: string): void {
+  cancelledTasks.add(taskId);
+  taskAborts.get(taskId)?.();
+}
+
+export function clearTaskCancel(taskId: string): void {
+  cancelledTasks.delete(taskId);
+  taskAborts.delete(taskId);
+}
+
+/* Tasks currently running, so a message like "stop" can end them. */
+const runningTasks = new Map<string, string>();
+
+export function markTaskRunning(taskId: string, sessionId: string): void {
+  runningTasks.set(taskId, sessionId);
+}
+
+export function clearTaskRunning(taskId: string): void {
+  runningTasks.delete(taskId);
+}
+
+export function runningTasksForSession(sessionId: string): string[] {
+  return [...runningTasks.entries()].filter(([, sid]) => sid === sessionId).map(([id]) => id);
+}
+
 /* Latest screenshot per task (runtime only; not durable). */
 const screenshots = new Map<string, Buffer>();
 

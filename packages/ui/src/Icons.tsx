@@ -208,3 +208,19 @@ export function SparkIcon({ size = 18, className }: IconProps) {
     </svg>
   );
 }
+
+export function StopIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden className={className}>
+      <rect x="6.5" y="6.5" width="11" height="11" rx="2.6" fill="currentColor" />
+    </svg>
+  );
+}
+
+export function ChevronIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden className={className} {...stroke}>
+      <path d="M6 9l6 6 6-6" />
+    </svg>
+  );
+}

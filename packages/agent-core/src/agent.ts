@@ -59,6 +59,8 @@ export interface RunAgentOptions {
    * refuse nor duplicate them.
    */
   initialToolOnly?: boolean;
+  /** Polled between steps; when true the run stops with a "Stopped" summary. */
+  isCancelled?: () => boolean;
   requestApproval: (title: string, description: string, risk: RiskLevel) => Promise<boolean>;
   onStep: (step: StepUpdate) => void;
   /** Live assistant text as the model streams it (optional). */
@@ -166,6 +168,9 @@ export async function runAgent(options: RunAgentOptions): Promise<AgentResult> {
   const usage: TokenUsage = { promptTokens: 0, completionTokens: 0 };
 
   for (let iteration = 0; iteration < maxSteps; iteration += 1) {
+    if (options.isCancelled?.()) {
+      return { ok: false, summary: "Stopped by you.", steps: stepCount, provider: provider.name, usage };
+    }
     let response: ModelResponse;
     if (pendingToolCall) {
       response = { toolCalls: pendingToolCall };
@@ -317,6 +322,9 @@ export async function runAgent(options: RunAgentOptions): Promise<AgentResult> {
     // A mechanical job (e.g. a batch download) is done — return the result
     // directly instead of letting the model re-run or refuse it.
     if (initialToolOnly) {
+      if (options.isCancelled?.()) {
+        return { ok: false, summary: "Stopped by you.", steps: stepCount, provider: provider.name, usage };
+      }
       return {
         ok: true,
         summary: lastToolOutput.trim() || "Done.",

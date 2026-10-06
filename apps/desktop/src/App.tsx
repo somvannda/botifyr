@@ -20,7 +20,7 @@ import { AuthError, BotifyrClient, type MediaItem } from "@botifyr/client";
 import { P2P, deviceId, saveBlob } from "./p2p";
 import { CalendarIcon, DriveIcon, GmailIcon } from "@botifyr/ui";
 import { GithubBrand, NotionBrand, SlackBrand, TelegramBrand } from "@botifyr/ui";
-import { BOT_SCHEMES, BotLogo } from "@botifyr/ui";
+import { BOT_SCHEMES, BotLogo, ChevronIcon, StopIcon } from "@botifyr/ui";
 import {
   ChartIcon,
   CheckIcon,
@@ -190,6 +190,7 @@ export default function App() {
   const [downloads, setDownloads] = useState<Array<{ name: string; size: number }>>([]);
   const [playerFile, setPlayerFile] = useState<{ name: string; url: string } | null>(null);
   const [media, setMedia] = useState<MediaItem[]>([]);
+  const [activityCollapsed, setActivityCollapsed] = useState(false);
   const [devices, setDevices] = useState<Array<{ id: string; name: string; online: boolean }>>([]);
   const myDeviceId = useMemo(() => deviceId(), []);
   const p2p = useMemo(
@@ -1782,7 +1783,25 @@ export default function App() {
                 )}
 
               {liveTask && (
-                <div className="activity">
+                <div className={`activity ${activityCollapsed ? "collapsed" : ""}`}>
+                  <div className="activity-head">
+                    <span className="activity-title">
+                      {liveTask.status === "awaiting_approval"
+                        ? "Waiting for your approval"
+                        : liveTask.status === "running"
+                          ? "Working…"
+                          : liveTask.status}
+                    </span>
+                    <button
+                      className="activity-toggle"
+                      type="button"
+                      onClick={() => setActivityCollapsed((value) => !value)}
+                      title={activityCollapsed ? "Expand" : "Collapse"}
+                      aria-label={activityCollapsed ? "Expand activity" : "Collapse activity"}
+                    >
+                      <ChevronIcon size={16} className={activityCollapsed ? "chev-collapsed" : ""} />
+                    </button>
+                  </div>
                   {liveTask.liveStream &&
                   (liveTask.status === "running" || liveTask.status === "awaiting_approval") ? (
                     <img
@@ -1983,7 +2002,6 @@ export default function App() {
               onChange={(event) => onComposerChange(event.target.value)}
               placeholder={`Message ${activeBotName}`}
               rows={1}
-              disabled={busy}
               onKeyDown={(event) => {
                 if (mentionQuery !== null && mentionMatches.length > 0) {
                   if (event.key === "ArrowDown") {
@@ -2041,13 +2059,26 @@ export default function App() {
             >
               <MicIcon size={16} />
             </button>
-            <button
-              className="send round"
-              type="submit"
-              disabled={!text.trim() || !activeSessionId || sending || busy}
-            >
-              {busy ? "…" : <SendIcon size={16} />}
-            </button>
+            {busy && liveTask ? (
+              <button
+                className="round stop"
+                type="button"
+                title="Stop"
+                onClick={() =>
+                  void client.cancelTask(liveTask.id).catch((err: unknown) => setError(messageOf(err)))
+                }
+              >
+                <StopIcon size={16} />
+              </button>
+            ) : (
+              <button
+                className="send round"
+                type="submit"
+                disabled={!text.trim() || !activeSessionId || sending}
+              >
+                <SendIcon size={16} />
+              </button>
+            )}
           </div>
         </form>
       </main>
