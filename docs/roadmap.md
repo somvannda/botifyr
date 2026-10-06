@@ -16,7 +16,8 @@ they land. Keep entries short; link code paths instead of explaining them.
       would leak the sender's token), so: signed, recipient-scoped links.
 - [x] **Profile editing UI** — set @handle / display name / avatar
       (`PATCH /v1/profile`; UI in the People panel).
-- [ ] **Unread badges / notifications** for DMs.
+- [x] **Unread badges** — per conversation; opening a chat clears it.
+- [ ] **Notifications** (toasts / OS) for DMs and finished tasks.
 - [ ] **P2P hardening** — TURN relay for strict NAT; verify across 2 devices.
 - [ ] **Mobile PWA offline** (manifest exists; no service worker).
 - [ ] **Real Stripe** — keys, invoices, billing portal.
