@@ -54,6 +54,17 @@ services:
     networks:
       - botifyr
 
+  # Marketing + help site. Deploy this image at botifyr.xyz in production.
+  web:
+    build:
+      context: apps/web
+    container_name: botifyr-web
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-4322}:80"
+    networks:
+      - botifyr
+
 networks:
   botifyr:
     name: botifyr-net
