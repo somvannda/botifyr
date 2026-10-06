@@ -36,9 +36,16 @@ import { handleNodeMessage, nodeInfo, registerNode } from "./nodes.js";
 import { createToken, hashPassword, hashToken, verifyPassword } from "./auth.js";
 import { encryptSecret } from "./vault.js";
 import { runTask, runtimeInfo, summarizeConversation } from "./runner.js";
+import {
+  chmabaConfigFromEnv,
+  createPayment,
+  runBillingTick,
+  settleInvoice,
+  verifyChmabaSignature,
+} from "./billing.js";
 import { SKILLS, skillInstructions } from "./skills.js";
 import type { Store } from "./store/index.js";
-import type { FileRecord } from "./store/types.js";
+import type { FileRecord, InvoiceRecord, ModelPricingRecord, PlatformSettings, Plan } from "./store/types.js";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -236,6 +243,14 @@ export async function buildServer(options: ServerOptions) {
 
   function startOfToday(): string {
     const date = new Date();
+    date.setHours(0, 0, 0, 0);
+    return date.toISOString();
+  }
+
+  /** Midnight on the 1st of the current month (for the free plan allowance). */
+  function startOfMonth(): string {
+    const date = new Date();
+    date.setDate(1);
     date.setHours(0, 0, 0, 0);
     return date.toISOString();
   }
@@ -1113,102 +1128,175 @@ export async function buildServer(options: ServerOptions) {
     },
   );
 
+  /* Billing policy + model pricing (admin). */
+  app.get("/admin/settings", { preHandler: requireAdmin }, async () => store.getPlatformSettings());
+
+  app.put<{ Body: Partial<PlatformSettings> }>(
+    "/admin/settings",
+    { preHandler: requireAdmin },
+    async (request) => {
+      const next: PlatformSettings = { ...(await store.getPlatformSettings()), ...(request.body ?? {}) };
+      await store.savePlatformSettings(next);
+      auditAdmin(request, "settings.update", "platform settings");
+      return next;
+    },
+  );
+
+  app.get("/admin/model-pricing", { preHandler: requireAdmin }, async () => store.listModelPricing());
+
+  app.put<{ Params: { model: string }; Body: Partial<ModelPricingRecord> }>(
+    "/admin/model-pricing/:model",
+    { preHandler: requireAdmin },
+    async (request) => {
+      const body = request.body ?? {};
+      const record: ModelPricingRecord = {
+        model: request.params.model,
+        provider: body.provider,
+        inputCentsPerM: Number(body.inputCentsPerM ?? 0),
+        outputCentsPerM: Number(body.outputCentsPerM ?? 0),
+        markupPercent: body.markupPercent,
+        enabled: body.enabled !== false,
+        updatedAt: new Date().toISOString(),
+      };
+      await store.saveModelPricing(record);
+      auditAdmin(request, "modelPricing.update", record.model);
+      return record;
+    },
+  );
+
+  app.delete<{ Params: { model: string } }>(
+    "/admin/model-pricing/:model",
+    { preHandler: requireAdmin },
+    async (request, reply) => {
+      const removed = await store.deleteModelPricing(request.params.model);
+      if (!removed) return reply.code(404).send({ error: "model not found" });
+      auditAdmin(request, "modelPricing.delete", request.params.model);
+      return reply.code(204).send();
+    },
+  );
+
   app.get("/admin/audit", { preHandler: requireAdmin }, async () => store.listAuditRecent(100));
 
   /* Billing / plans. Stripe is optional: without keys the endpoint explains
      that billing isn't configured rather than pretending to charge. */
-  const stripeSecret = process.env.STRIPE_SECRET_KEY;
-  const stripePrice = process.env.STRIPE_PRICE_ID;
-  const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-  const stripeConfigured = Boolean(stripeSecret && stripePrice);
-
-  /** Verify Stripe's `Stripe-Signature: t=…,v1=…` HMAC over the raw body. */
-  const verifyStripeSignature = (raw: Buffer | undefined, header: string): boolean => {
-    if (!raw || !stripeWebhookSecret) return false;
-    const parts: Record<string, string> = {};
-    for (const piece of header.split(",")) {
-      const [key, value] = piece.split("=");
-      if (key && value) parts[key.trim()] = value.trim();
-    }
-    const timestamp = parts.t;
-    const signature = parts.v1;
-    if (!timestamp || !signature) return false;
-    // Reject stale/replayed events (older than 5 minutes).
-    if (Math.abs(Date.now() / 1000 - Number(timestamp)) > 300) return false;
-    const expected = createHmac("sha256", stripeWebhookSecret)
-      .update(`${timestamp}.${raw.toString("utf8")}`)
-      .digest("hex");
-    const given = Buffer.from(signature);
-    const want = Buffer.from(expected);
-    return given.length === want.length && timingSafeEqual(given, want);
-  };
+  const chmabaConfig = chmabaConfigFromEnv();
+  const billingConfigured = Boolean(chmabaConfig);
 
   app.get("/v1/billing", { preHandler: requireAuth }, async (request) => {
-    const record = await store.getUserById(request.userId as string);
+    const userId = request.userId as string;
+    const record = await store.getUserById(userId);
+    const settings = await store.getPlatformSettings();
+    const wallet = await store.getWallet(userId);
+    const usage = await store.usageSince(userId, startOfMonth());
+    const plan: Plan = record?.plan ?? "free";
     return {
-      plan: record?.plan === "pro" ? "pro" : "free",
-      stripeConfigured,
+      plan,
+      billingMode: record?.billingMode ?? "free",
+      subStatus: record?.subStatus ?? "free",
+      periodEnd: record?.periodEnd,
+      graceUntil: record?.graceUntil,
+      walletCents: wallet.balanceCents,
+      tokensThisMonth: usage.tokens,
+      freeMonthlyTokens: settings.freeMonthlyTokens,
+      includedTokens: settings.plans.includedTokens,
+      prices: {
+        proCents: settings.plans.proPriceCents,
+        businessCents: settings.plans.businessPriceCents,
+        periodDays: settings.plans.proPeriodDays,
+        currency: settings.plans.currency,
+      },
+      onDemand: settings.onDemand,
+      billingConfigured,
     };
   });
 
-  app.post<{ Body: { returnUrl?: string } }>(
+  /** Create a ChmabaPay invoice for a plan renewal or a wallet top-up. */
+  app.post<{ Body: { kind?: "plan" | "topup"; plan?: "pro" | "business"; amountCents?: number } }>(
     "/v1/billing/checkout",
     { preHandler: requireAuth },
     async (request, reply) => {
-      if (!stripeConfigured) {
-        return reply.code(400).send({
-          error:
-            "Billing isn't configured on this server. Set STRIPE_SECRET_KEY and STRIPE_PRICE_ID, or self-host for unlimited use.",
+      if (!chmabaConfig) {
+        return reply.code(400).send({ error: "Billing isn't configured on this server." });
+      }
+      const userId = request.userId as string;
+      const settings = await store.getPlatformSettings();
+      const kind = request.body?.kind === "topup" ? "topup" : "plan";
+      let amountCents: number;
+      let plan: Plan | undefined;
+      if (kind === "topup") {
+        amountCents = Math.round(Number(request.body?.amountCents ?? 0));
+        if (amountCents < settings.onDemand.minTopUpCents) {
+          return reply
+            .code(400)
+            .send({ error: `Minimum top-up is ${(settings.onDemand.minTopUpCents / 100).toFixed(2)}.` });
+        }
+      } else {
+        plan = request.body?.plan === "business" ? "business" : "pro";
+        amountCents = plan === "business" ? settings.plans.businessPriceCents : settings.plans.proPriceCents;
+      }
+      const id = `inv_${randomUUID()}`;
+      const now = new Date().toISOString();
+      const invoice: InvoiceRecord = {
+        id,
+        userId,
+        kind,
+        plan,
+        amountCents,
+        currency: settings.plans.currency,
+        referenceId: id,
+        providerStatus: "pending",
+        status: "open",
+        reminders: {},
+        createdAt: now,
+        updatedAt: now,
+      };
+      try {
+        const payment = await createPayment(chmabaConfig, {
+          amountCents,
+          referenceId: id,
+          metadata: { userId, kind, plan },
         });
+        invoice.providerPaymentId = payment.id;
+        invoice.checkoutUrl = payment.checkoutUrl;
+        invoice.qrString = payment.qrString;
+        invoice.expiresAt = payment.expiresAt;
+      } catch (error) {
+        return reply
+          .code(502)
+          .send({ error: error instanceof Error ? error.message : "ChmabaPay checkout failed." });
       }
-      const record = await store.getUserById(request.userId as string);
-      const origin = (request.body?.returnUrl ?? "https://botifyr.xyz").replace(/\/$/, "");
-      const params = new URLSearchParams({
-        mode: "subscription",
-        "line_items[0][price]": stripePrice as string,
-        "line_items[0][quantity]": "1",
-        success_url: `${origin}/?billing=success`,
-        cancel_url: `${origin}/#pricing`,
-        client_reference_id: request.userId as string,
-      });
-      if (record?.email) params.set("customer_email", record.email);
-      const response = await fetch("https://api.stripe.com/v1/checkout/sessions", {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${stripeSecret}`,
-          "content-type": "application/x-www-form-urlencoded",
-        },
-        body: params.toString(),
-      });
-      const data = (await response.json()) as { url?: string; error?: { message?: string } };
-      if (!response.ok || !data.url) {
-        return reply.code(502).send({ error: data.error?.message ?? "Stripe checkout failed." });
-      }
-      return { url: data.url };
+      await store.createInvoice(invoice);
+      return { invoiceId: id, url: invoice.checkoutUrl, qr: invoice.qrString };
     },
   );
 
-  /**
-   * Minimal Stripe webhook. Guarded by a shared secret so it can never be used
-   * to grant a plan without Stripe. For production, verify the real signature
-   * with stripe.webhooks.constructEvent and the webhook signing secret.
-   */
-  app.post("/v1/billing/webhook", async (request, reply) => {
-    if (!stripeWebhookSecret) return reply.code(404).send();
+  /** ChmabaPay webhook: verify the HMAC, then settle (idempotent). */
+  app.post("/v1/billing/chmaba/webhook", async (request, reply) => {
+    if (!chmabaConfig?.webhookSecret) return reply.code(404).send();
     const raw = (request as FastifyRequest & { rawBody?: Buffer }).rawBody;
-    const signatureHeader = String(request.headers["stripe-signature"] ?? "");
-    if (!verifyStripeSignature(raw, signatureHeader)) {
+    const header = String(request.headers["x-chambapay-signature"] ?? "");
+    if (!verifyChmabaSignature(raw, header, chmabaConfig.webhookSecret)) {
       return reply.code(400).send({ error: "invalid signature" });
     }
     const event = request.body as {
       type?: string;
-      data?: { object?: { client_reference_id?: string } };
+      data?: { payment?: { id?: string; status?: string } };
     };
-    const userId = event?.data?.object?.client_reference_id;
-    if (userId && event.type === "checkout.session.completed") {
-      await store.setUserPlan(userId, "pro");
-    } else if (userId && event.type === "customer.subscription.deleted") {
-      await store.setUserPlan(userId, "free");
+    const paymentId = event?.data?.payment?.id;
+    if (!paymentId) return reply.code(204).send();
+    const invoice = await store.getInvoiceByProviderPayment(paymentId);
+    if (!invoice) return reply.code(204).send();
+    const status = event?.data?.payment?.status;
+    if (status === "paid" || status === "completed" || event.type === "payment.completed") {
+      await settleInvoice(store, invoice, new Date().toISOString());
+    } else if (status === "expired" || event.type === "payment.expired") {
+      invoice.providerStatus = "expired";
+      invoice.updatedAt = new Date().toISOString();
+      await store.updateInvoice(invoice);
+    } else if (status === "reversed" || event.type === "payment.reversed") {
+      invoice.providerStatus = "reversed";
+      invoice.updatedAt = new Date().toISOString();
+      await store.updateInvoice(invoice);
     }
     return reply.code(204).send();
   });
@@ -2997,9 +3085,27 @@ export async function buildServer(options: ServerOptions) {
       }
     })();
   }, 30_000);
+
+  // Billing: hourly tick — reminders (7/3/1 days), grace, downgrade, reconciliation.
+  const billingTimer = setInterval(
+    () => {
+      void runBillingTick(store, chmabaConfig, (plan, settings) =>
+        plan === "business" ? settings.plans.businessPriceCents : settings.plans.proPriceCents,
+      )
+        .then((summary) => {
+          if (summary.reminded || summary.downgraded || summary.settled) {
+            app.log.info(summary, "billing tick");
+          }
+        })
+        .catch((error) => app.log.error({ err: error }, "billing tick failed"));
+    },
+    60 * 60 * 1000,
+  );
+
   app.addHook("onClose", async () => {
     clearInterval(scheduler);
     clearInterval(cleanupTimer);
+    clearInterval(billingTimer);
   });
 
   return app;
