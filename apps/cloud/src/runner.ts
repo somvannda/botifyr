@@ -445,7 +445,7 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
         session.messages.push({
           id: randomUUID(),
           role: "assistant",
-          content: ok ? reply : `Something went wrong: ${reply}`,
+          content: ok || reply === "Stopped by you." ? reply : `Something went wrong: ${reply}`,
           createdAt: new Date().toISOString(),
           taskId: task.id,
           botId: deps.author?.id,
