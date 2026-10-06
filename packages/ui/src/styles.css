@@ -1438,6 +1438,7 @@ body {
 }
 
 .msg-user {
+  position: relative;
   align-self: flex-end;
   display: flex;
   gap: 10px;
@@ -2195,7 +2196,7 @@ body {
   position: relative;
   flex: 0 1 auto;
   min-width: 0;
-  max-width: min(760px, 86%);
+  max-width: min(720px, 78%);
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 16px;
@@ -2537,14 +2538,61 @@ body {
 
 .reaction {
   position: absolute;
-  left: -4px;
-  bottom: -10px;
+  left: 10px;
+  bottom: -11px;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 999px;
-  padding: 1px 6px;
+  padding: 1px 7px;
   font-size: 12px;
   line-height: 1.4;
+  z-index: 4;
+}
+
+.msg-user-bubble .reaction {
+  left: auto;
+  right: 10px;
+}
+
+/* "…" menu for secondary message actions (Grok-style). */
+.msg-more {
+  position: absolute;
+  top: 30px;
+  left: 0;
+  z-index: 30;
+  min-width: 156px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 4px;
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5);
+}
+
+.msg-more button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 9px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  border-radius: 7px;
+  font-size: 12.5px;
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.msg-more button:hover {
+  background: var(--hover);
+}
+
+.msg-user .msg-more {
+  left: auto;
+  right: 0;
 }
 
 .react-picker {

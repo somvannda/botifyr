@@ -148,6 +148,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [groupWorking, setGroupWorking] = useState<{ sessionId: string; names: string[] } | null>(null);
   const [replyTo, setReplyTo] = useState<{ id: string; author: string; content: string } | null>(null);
   const [reactFor, setReactFor] = useState<string | null>(null);
+  const [moreFor, setMoreFor] = useState<string | null>(null);
   const [reactions, setReactions] = useState<Record<string, string>>(() => {
     try {
       return JSON.parse(localStorage.getItem("botifyr.reactions") ?? "{}") as Record<string, string>;
@@ -861,32 +862,45 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
         <button
           className="msg-action"
           type="button"
-          title="Forward"
-          aria-label="Forward"
-          onClick={() => setForwardMessage({ content: message.content })}
+          title="More"
+          aria-label="More actions"
+          onClick={() => setMoreFor((value) => (value === message.id ? null : message.id))}
         >
-          <ForwardIcon size={15} />
+          <MoreIcon size={15} />
         </button>
-        <button
-          className="msg-action"
-          type="button"
-          title="Copy"
-          aria-label="Copy"
-          onClick={() => void navigator.clipboard?.writeText(message.content)}
-        >
-          <CopyIcon size={15} />
-        </button>
-        {showRetry && (
-          <button
-            className="msg-action"
-            type="button"
-            title="Regenerate reply"
-            aria-label="Regenerate reply"
-            disabled={busy}
-            onClick={() => void retry()}
-          >
-            <RefreshIcon size={15} />
-          </button>
+        {moreFor === message.id && (
+          <div className="msg-more">
+            <button
+              type="button"
+              onClick={() => {
+                setForwardMessage({ content: message.content });
+                setMoreFor(null);
+              }}
+            >
+              <ForwardIcon size={14} /> Forward
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                void navigator.clipboard?.writeText(message.content);
+                setMoreFor(null);
+              }}
+            >
+              <CopyIcon size={14} /> Copy
+            </button>
+            {showRetry && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  void retry();
+                  setMoreFor(null);
+                }}
+              >
+                <RefreshIcon size={14} /> Regenerate
+              </button>
+            )}
+          </div>
         )}
         {reactFor === message.id && (
           <span className="react-picker">
