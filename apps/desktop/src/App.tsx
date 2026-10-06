@@ -15,6 +15,7 @@ import type {
 import { invoke } from "@tauri-apps/api/core";
 import { AuthError, BotifyrClient } from "./api";
 import { CalendarIcon, DriveIcon, GmailIcon } from "./AppIcons";
+import { GithubBrand, NotionBrand, SlackBrand, TelegramBrand } from "./BrandIcons";
 import { BOT_SCHEMES, BotLogo } from "./BotLogo";
 import {
   ChartIcon,
@@ -97,6 +98,7 @@ export default function App() {
   const [connectingApp, setConnectingApp] = useState<string | null>(null);
   const [marketQuery, setMarketQuery] = useState("");
   const [marketFilter, setMarketFilter] = useState<"all" | "installed">("all");
+  const [marketViewAll, setMarketViewAll] = useState(false);
   const [tokenInputFor, setTokenInputFor] = useState<string | null>(null);
   const [tokenValue, setTokenValue] = useState("");
   const [bots, setBots] = useState<Bot[]>([]);
@@ -1482,8 +1484,10 @@ export default function App() {
               />
             </div>
 
-            {MARKET_SECTIONS.map((section) => {
-              const apps = MARKETPLACE.filter((app) => app.section === section).filter((app) => {
+            {(marketViewAll ? ["All plugins"] : MARKET_SECTIONS).map((section) => {
+              const apps = (
+                section === "All plugins" ? MARKETPLACE : MARKETPLACE.filter((app) => app.section === section)
+              ).filter((app) => {
                 const installed = app.provider
                   ? connections.some((entry) => entry.provider === app.provider)
                   : false;
@@ -1498,7 +1502,19 @@ export default function App() {
                 <section key={section} className="market-section">
                   <div className="market-section-head">
                     <h3>{section}</h3>
-                    {section === "Featured" && <span className="market-viewall">View all</span>}
+                    {section === "All plugins" ? (
+                      <button
+                        className="market-viewall"
+                        type="button"
+                        onClick={() => setMarketViewAll(false)}
+                      >
+                        Back
+                      </button>
+                    ) : section === "Featured" ? (
+                      <button className="market-viewall" type="button" onClick={() => setMarketViewAll(true)}>
+                        View all
+                      </button>
+                    ) : null}
                   </div>
                   <div className="market-rows">
                     {apps.map((app) => {
@@ -2067,7 +2083,7 @@ const MARKETPLACE: MarketApp[] = [
     category: "Developer",
     section: "For you",
     desc: "Read repositories and issues",
-    icon: <span className="market-emoji">🐙</span>,
+    icon: <GithubBrand size={24} />,
   },
   {
     id: "slack",
@@ -2077,7 +2093,7 @@ const MARKETPLACE: MarketApp[] = [
     category: "Communication",
     section: "For you",
     desc: "Send and read team messages",
-    icon: <span className="market-emoji">💬</span>,
+    icon: <SlackBrand size={24} />,
   },
   {
     id: "telegram",
@@ -2087,7 +2103,7 @@ const MARKETPLACE: MarketApp[] = [
     category: "Communication",
     section: "For you",
     desc: "Send messages from your Telegram bot",
-    icon: <span className="market-emoji">✈️</span>,
+    icon: <TelegramBrand size={24} />,
   },
   {
     id: "gmail",
@@ -2124,7 +2140,7 @@ const MARKETPLACE: MarketApp[] = [
     category: "Productivity",
     section: "Featured",
     desc: "Search and update your pages",
-    icon: <span className="market-emoji">📝</span>,
+    icon: <NotionBrand size={24} />,
   },
   {
     id: "linear",
