@@ -23,6 +23,16 @@ const TOKEN_KEY = "botifyr.token";
 
 type ConnectionState = "connecting" | "online" | "offline";
 
+const SETTINGS_TABS = [
+  { id: "general", label: "General", icon: "⚙" },
+  { id: "computer", label: "Computer", icon: "▢" },
+  { id: "usage", label: "Usage & Billing", icon: "▤" },
+  { id: "updates", label: "Updates", icon: "⤓" },
+  { id: "vault", label: "Vault", icon: "🔒" },
+] as const;
+
+type SettingsTab = (typeof SETTINGS_TABS)[number]["id"];
+
 function token(): string {
   return localStorage.getItem(TOKEN_KEY) ?? "";
 }
@@ -86,6 +96,30 @@ export default function App() {
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
   const [secrets, setSecrets] = useState<SecretSummary[]>([]);
   const [showSettings, setShowSettings] = useState(false);
+  const [showAccountMenu, setShowAccountMenu] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>("general");
+  const [computerName, setComputerName] = useState(
+    () => localStorage.getItem("botifyr.computerName") ?? "My computer",
+  );
+  const [executionMode, setExecutionMode] = useState<"ask" | "always_allow">(() =>
+    localStorage.getItem("botifyr.execution") === "always_allow" ? "always_allow" : "ask",
+  );
+  const [theme, setTheme] = useState(() => localStorage.getItem("botifyr.theme") ?? "dark");
+  const [language, setLanguage] = useState(() => localStorage.getItem("botifyr.language") ?? "system");
+  const [spelling, setSpelling] = useState(() => localStorage.getItem("botifyr.spelling") !== "0");
+  const [hardware, setHardware] = useState(() => localStorage.getItem("botifyr.hardware") !== "0");
+  const [updateTrack, setUpdateTrack] = useState(
+    () => localStorage.getItem("botifyr.updateTrack") ?? "stable",
+  );
+  const [autoUpdate, setAutoUpdate] = useState(() => localStorage.getItem("botifyr.autoUpdate") !== "0");
+  const [checkNote, setCheckNote] = useState<string | null>(null);
+  const [trialStart] = useState(() => {
+    const existing = Number(localStorage.getItem("botifyr.trialStart"));
+    if (existing) return existing;
+    const now = Date.now();
+    localStorage.setItem("botifyr.trialStart", String(now));
+    return now;
+  });
   const [secretName, setSecretName] = useState("");
   const [secretValue, setSecretValue] = useState("");
 
@@ -97,6 +131,8 @@ export default function App() {
   const nodeStartedRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const cancelSigninRef = useRef(false);
+  const executionModeRef = useRef(executionMode);
+  executionModeRef.current = executionMode;
 
   // Restore a stored token on launch; resume a pending sign-in if any.
   useEffect(() => {
@@ -208,6 +244,10 @@ export default function App() {
     localStorage.setItem("botifyr.useComputer", useComputer ? "1" : "0");
   }, [useComputer]);
 
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+  }, [theme]);
+
   function applyEvent(event: ServerEvent) {
     switch (event.type) {
       case "session.created":
@@ -241,10 +281,19 @@ export default function App() {
       case "task.created":
       case "task.updated":
       case "task.completed":
-      case "task.failed":
+      case "task.failed": {
         setTasks((prev) => ({ ...prev, [event.task.id]: event.task }));
+        const pending = event.task.approval;
+        if (executionModeRef.current === "always_allow" && pending && pending.status === "pending") {
+          void client.resolveApproval(event.task.id, pending.id, "allow").catch(() => {});
+        }
         break;
+      }
       case "approval.requested":
+        if (executionModeRef.current === "always_allow") {
+          void client.resolveApproval(event.taskId, event.approval.id, "allow").catch(() => {});
+        }
+        break;
       case "approval.resolved":
         break;
     }
@@ -331,6 +380,11 @@ export default function App() {
     setUser(null);
     setConnections([]);
     setConnection("connecting");
+  }
+
+  async function addAccount() {
+    await logout();
+    void oauthSignIn();
   }
 
   function selectBot(bot: Bot) {
@@ -613,6 +667,11 @@ export default function App() {
   const lastAssistantId = activeSession
     ? [...activeSession.messages].reverse().find((message) => message.role === "assistant")?.id
     : undefined;
+  const trialPercent =
+    config?.limits && config.limits.dailyTokenBudget > 0
+      ? Math.min(100, Math.round(((config.usage?.tokensToday ?? 0) / config.limits.dailyTokenBudget) * 100))
+      : 0;
+  const trialDaysLeft = Math.max(0, 7 - Math.floor((Date.now() - trialStart) / 86_400_000));
 
   if (!authChecked) return <div className="center">Loading…</div>;
 
@@ -722,95 +781,12 @@ export default function App() {
           })}
         </div>
 
-        {showSettings && (
-          <div className="settings">
-            <div className="settings-title">Run on this computer</div>
-            <div className="settings-body">
-              <button
-                className={`ghost small ${useComputer ? "on" : ""}`}
-                type="button"
-                disabled={!config?.nodeOnline}
-                onClick={() => setUseComputer((v) => !v)}
-              >
-                {useComputer ? "● On — tasks run here" : "○ Off — tasks run in the cloud"}
-              </button>
-              <p className="muted">
-                When on, your messages use your own browser and shell (with approvals). Requires the computer
-                to be connected below.
-              </p>
-            </div>
-
-            <div className="settings-title">My computer</div>
-            <div className="settings-body">
-              <button
-                className="ghost small"
-                type="button"
-                onClick={() => (config?.nodeOnline ? void stopLocalNode() : void startLocalNode())}
-              >
-                {config?.nodeOnline ? "Connected — disconnect" : "Connect this computer"}
-              </button>
-              <p className="muted">
-                Lets Botifyr use your browser and shell when you switch on <b>● My PC</b> in the composer.
-              </p>
-            </div>
-
-            <div className="settings-title">Vault ({secrets.length})</div>
-            <div className="settings-body">
-              <form className="vault-form" onSubmit={addSecret}>
-                <input
-                  placeholder="NAME"
-                  value={secretName}
-                  onChange={(e) => setSecretName(e.target.value)}
-                />
-                <input
-                  type="password"
-                  placeholder="secret value"
-                  value={secretValue}
-                  onChange={(e) => setSecretValue(e.target.value)}
-                />
-                <button className="ghost small" type="submit">
-                  Save secret
-                </button>
-              </form>
-              <ul className="vault-list">
-                {secrets.length === 0 && <li className="muted">No secrets stored.</li>}
-                {secrets.map((secret) => (
-                  <li key={secret.id}>
-                    <span className="mono">{secret.name}</span>
-                    <button className="link" type="button" onClick={() => removeSecret(secret.id)}>
-                      remove
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <div className="settings-title">Usage today</div>
-            <div className="settings-body">
-              <p className="muted">
-                {config?.usage
-                  ? `${config.usage.tokensToday.toLocaleString()} tokens · ${config.usage.requestsToday} requests`
-                  : "—"}
-                {config?.limits ? ` · budget ${config.limits.dailyTokenBudget.toLocaleString()}` : ""}
-              </p>
-            </div>
-
-            <div className="settings-title">Account</div>
-            <div className="settings-body">
-              <button className="ghost small" type="button" onClick={logout}>
-                Sign out
-              </button>
-              <p className="muted mono">{CLOUD_URL}</p>
-            </div>
-          </div>
-        )}
-
         <footer className="sidebar-footer">
           <button
             className="user-avatar"
             type="button"
             title={`${user.email} · ${connection === "online" ? "Connected" : connection === "connecting" ? "Connecting…" : "Offline"}`}
-            onClick={() => setShowSettings((v) => !v)}
+            onClick={() => setShowAccountMenu((value) => !value)}
           >
             {initials(user.email)}
           </button>
@@ -823,6 +799,76 @@ export default function App() {
             </span>
           </button>
         </footer>
+
+        {showAccountMenu && (
+          <div className="account-menu">
+            <button
+              className="account-item"
+              type="button"
+              onClick={() => {
+                setSettingsTab("usage");
+                setShowSettings(true);
+                setShowAccountMenu(false);
+              }}
+            >
+              <span className="account-ico">◔</span>
+              <span className="account-label">Trial usage</span>
+              <span className="account-value">{trialPercent}%</span>
+              <span className="account-chev">›</span>
+            </button>
+            <button className="account-item" type="button" disabled>
+              <span className="account-ico">▢</span>
+              <span className="account-label">Get Botifyr for mobile</span>
+            </button>
+            <button
+              className="account-item"
+              type="button"
+              onClick={() => {
+                void openExternal("https://docs.x.ai/grok-bot/overview");
+                setShowAccountMenu(false);
+              }}
+            >
+              <span className="account-ico">?</span>
+              <span className="account-label">Support</span>
+              <span className="account-chev">›</span>
+            </button>
+            <button
+              className="account-item"
+              type="button"
+              onClick={() => {
+                setSettingsTab("general");
+                setShowSettings(true);
+                setShowAccountMenu(false);
+              }}
+            >
+              <span className="account-ico">⚙</span>
+              <span className="account-label">Settings</span>
+            </button>
+            <div className="account-sep" />
+            <button
+              className="account-item"
+              type="button"
+              onClick={() => {
+                setShowAccountMenu(false);
+                void addAccount();
+              }}
+            >
+              <span className="account-ico">＋</span>
+              <span className="account-label">Add account</span>
+            </button>
+            <button
+              className="account-item"
+              type="button"
+              onClick={() => {
+                setShowAccountMenu(false);
+                void logout();
+              }}
+            >
+              <span className="account-ico">⏻</span>
+              <span className="account-label">Log out</span>
+            </button>
+          </div>
+        )}
       </aside>
 
       <main className="main">
@@ -1280,6 +1326,328 @@ export default function App() {
                     ? "Create group"
                     : "Create bot"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showSettings && (
+        <div className="settings-overlay" onClick={() => setShowSettings(false)}>
+          <div className="settings-modal" onClick={(event) => event.stopPropagation()}>
+            <nav className="settings-nav">
+              {SETTINGS_TABS.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  className={`settings-tab ${settingsTab === tab.id ? "active" : ""}`}
+                  onClick={() => setSettingsTab(tab.id)}
+                >
+                  <span className="settings-tab-ico">{tab.icon}</span>
+                  {tab.label}
+                </button>
+              ))}
+            </nav>
+
+            <div className="settings-pane">
+              <div className="settings-pane-head">
+                <h2>{SETTINGS_TABS.find((tab) => tab.id === settingsTab)?.label}</h2>
+                <button className="round small" type="button" onClick={() => setShowSettings(false)}>
+                  ✕
+                </button>
+              </div>
+
+              {settingsTab === "general" && (
+                <div className="settings-sections">
+                  <div className="settings-section-title">Account</div>
+                  <div className="settings-row">
+                    <span className="user-avatar">{initials(user.email)}</span>
+                    <span className="settings-row-main">
+                      <span className="settings-row-name">{user.email.split("@")[0]}</span>
+                      <span className="settings-row-sub">{user.email}</span>
+                    </span>
+                    <button
+                      className="ghost small"
+                      type="button"
+                      onClick={() => void navigator.clipboard?.writeText(user.email)}
+                    >
+                      Copy
+                    </button>
+                    <button className="ghost small" type="button" onClick={() => void addAccount()}>
+                      Add account
+                    </button>
+                    <button className="ghost small" type="button" onClick={() => void logout()}>
+                      Sign Out
+                    </button>
+                  </div>
+
+                  <div className="settings-section-title">Appearance</div>
+                  <div className="settings-list">
+                    <label className="settings-line">
+                      <span>Theme</span>
+                      <select
+                        value={theme}
+                        onChange={(event) => {
+                          setTheme(event.target.value);
+                          localStorage.setItem("botifyr.theme", event.target.value);
+                        }}
+                      >
+                        <option value="system">Follow System</option>
+                        <option value="light">Light</option>
+                        <option value="dark">Dark</option>
+                      </select>
+                    </label>
+                    <label className="settings-line">
+                      <span>Language</span>
+                      <select
+                        value={language}
+                        onChange={(event) => {
+                          setLanguage(event.target.value);
+                          localStorage.setItem("botifyr.language", event.target.value);
+                        }}
+                      >
+                        <option value="system">Follow System</option>
+                        <option value="en">English</option>
+                      </select>
+                    </label>
+                    <label className="settings-line">
+                      <span>Check Spelling While Typing</span>
+                      <input
+                        type="checkbox"
+                        checked={spelling}
+                        onChange={(event) => {
+                          setSpelling(event.target.checked);
+                          localStorage.setItem("botifyr.spelling", event.target.checked ? "1" : "0");
+                        }}
+                      />
+                    </label>
+                  </div>
+
+                  <div className="settings-section-title">System</div>
+                  <div className="settings-list">
+                    <label className="settings-line">
+                      <span>Microphone</span>
+                      <select defaultValue="default">
+                        <option value="default">System Default</option>
+                      </select>
+                    </label>
+                    <label className="settings-line">
+                      <span>Use hardware acceleration</span>
+                      <input
+                        type="checkbox"
+                        checked={hardware}
+                        onChange={(event) => {
+                          setHardware(event.target.checked);
+                          localStorage.setItem("botifyr.hardware", event.target.checked ? "1" : "0");
+                        }}
+                      />
+                    </label>
+                  </div>
+
+                  <div className="settings-section-title">Bot</div>
+                  <div className="settings-list">
+                    <label className="settings-line">
+                      <span>Timezone</span>
+                      <span className="settings-static">
+                        {Intl.DateTimeFormat().resolvedOptions().timeZone}
+                      </span>
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              {settingsTab === "computer" && (
+                <div className="settings-sections">
+                  <div className="settings-section-title">Computers</div>
+                  <div className="settings-row">
+                    <span className="settings-row-main">
+                      <span className="settings-row-name">{computerName}</span>
+                      <span className="settings-row-sub">This is the computer you are using now</span>
+                    </span>
+                    <input
+                      className="settings-input"
+                      value={computerName}
+                      onChange={(event) => {
+                        setComputerName(event.target.value);
+                        localStorage.setItem("botifyr.computerName", event.target.value);
+                      }}
+                    />
+                    <button
+                      className="ghost small"
+                      type="button"
+                      onClick={() => setCheckNote("Computer name saved")}
+                    >
+                      Save
+                    </button>
+                  </div>
+
+                  <div className="settings-section-title">Execution on this computer</div>
+                  <label className="settings-line">
+                    <span>Approvals</span>
+                    <select
+                      value={executionMode}
+                      onChange={(event) => {
+                        const value = event.target.value as "ask" | "always_allow";
+                        setExecutionMode(value);
+                        localStorage.setItem("botifyr.execution", value);
+                      }}
+                    >
+                      <option value="ask">Ask first</option>
+                      <option value="always_allow">Always allow</option>
+                    </select>
+                  </label>
+
+                  <div className="settings-section-title">My computer</div>
+                  <label className="settings-line">
+                    <span>Connection</span>
+                    <button
+                      className="ghost small"
+                      type="button"
+                      onClick={() => (config?.nodeOnline ? void stopLocalNode() : void startLocalNode())}
+                    >
+                      {config?.nodeOnline ? "Connected — disconnect" : "Connect this computer"}
+                    </button>
+                  </label>
+                  <label className="settings-line">
+                    <span>Route tasks through this computer</span>
+                    <input
+                      type="checkbox"
+                      checked={useComputer}
+                      disabled={!config?.nodeOnline}
+                      onChange={(event) => setUseComputer(event.target.checked)}
+                    />
+                  </label>
+                  <p className="settings-note">
+                    When on, your messages use your own browser and shell (with approvals) instead of the
+                    cloud.
+                  </p>
+                  {checkNote && <p className="settings-note">{checkNote}</p>}
+                </div>
+              )}
+
+              {settingsTab === "usage" && (
+                <div className="settings-sections">
+                  <div className="trial-card">
+                    <div className="trial-head">
+                      <span>Trial usage</span>
+                      <span>{trialPercent}%</span>
+                    </div>
+                    <div className="trial-bar">
+                      <span style={{ width: `${trialPercent}%` }} />
+                    </div>
+                    <div className="trial-foot">Ends in {trialDaysLeft} days</div>
+                  </div>
+
+                  <div className="settings-section-title">Manage Plan</div>
+                  <div className="settings-row">
+                    <span className="settings-row-main">
+                      <span className="settings-row-name">Current plan: Trial</span>
+                      <span className="settings-row-sub">
+                        {config?.usage
+                          ? `${config.usage.tokensToday.toLocaleString()} tokens · ${config.usage.requestsToday} requests today`
+                          : "No usage yet"}
+                      </span>
+                    </span>
+                    <button
+                      className="btn primary"
+                      type="button"
+                      onClick={() => setCheckNote("Upgrade is not available yet.")}
+                    >
+                      Upgrade to Pro
+                    </button>
+                  </div>
+                  <div className="settings-row">
+                    <span className="settings-row-main">
+                      <span className="settings-row-name">Cancel Trial</span>
+                      <span className="settings-row-sub">Stop the trial at the end of the period</span>
+                    </span>
+                    <button
+                      className="ghost small"
+                      type="button"
+                      onClick={() => setCheckNote("Your trial will end at the end of the current period.")}
+                    >
+                      Cancel Trial
+                    </button>
+                  </div>
+                  {checkNote && <p className="settings-note">{checkNote}</p>}
+                </div>
+              )}
+
+              {settingsTab === "updates" && (
+                <div className="settings-sections">
+                  <div className="settings-section-title">Botifyr Updates</div>
+                  <label className="settings-line">
+                    <span>Update Track</span>
+                    <select
+                      value={updateTrack}
+                      onChange={(event) => {
+                        setUpdateTrack(event.target.value);
+                        localStorage.setItem("botifyr.updateTrack", event.target.value);
+                      }}
+                    >
+                      <option value="stable">Stable</option>
+                      <option value="beta">Beta</option>
+                    </select>
+                  </label>
+                  <label className="settings-line">
+                    <span>Automatic Updates</span>
+                    <input
+                      type="checkbox"
+                      checked={autoUpdate}
+                      onChange={(event) => {
+                        setAutoUpdate(event.target.checked);
+                        localStorage.setItem("botifyr.autoUpdate", event.target.checked ? "1" : "0");
+                      }}
+                    />
+                  </label>
+                  <div className="settings-row">
+                    <span className="settings-row-main">
+                      <span className="settings-row-name">Version 0.1.0</span>
+                      <span className="settings-row-sub">You're up to date</span>
+                    </span>
+                    <button
+                      className="ghost small"
+                      type="button"
+                      onClick={() => setCheckNote("You're on the latest version.")}
+                    >
+                      Check for Updates
+                    </button>
+                  </div>
+                  {checkNote && <p className="settings-note">{checkNote}</p>}
+                </div>
+              )}
+
+              {settingsTab === "vault" && (
+                <div className="settings-sections">
+                  <div className="settings-section-title">Vault ({secrets.length})</div>
+                  <form className="vault-form" onSubmit={addSecret}>
+                    <input
+                      placeholder="NAME"
+                      value={secretName}
+                      onChange={(event) => setSecretName(event.target.value)}
+                    />
+                    <input
+                      type="password"
+                      placeholder="secret value"
+                      value={secretValue}
+                      onChange={(event) => setSecretValue(event.target.value)}
+                    />
+                    <button className="ghost small" type="submit">
+                      Save secret
+                    </button>
+                  </form>
+                  <ul className="vault-list">
+                    {secrets.length === 0 && <li className="muted">No secrets stored.</li>}
+                    {secrets.map((secret) => (
+                      <li key={secret.id}>
+                        <span className="mono">{secret.name}</span>
+                        <button className="link" type="button" onClick={() => removeSecret(secret.id)}>
+                          remove
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           </div>
         </div>
