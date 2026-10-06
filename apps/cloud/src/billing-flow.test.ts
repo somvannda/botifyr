@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createLocalChannel } from "@botifyr/channels";
-import { runBillingTick, settleInvoice } from "./billing.js";
+import { notify, runBillingTick, settleInvoice, type ChmabaConfig } from "./billing.js";
 import { buildServer } from "./server.js";
 import { MemoryStore } from "./store/memory.js";
 import type { InvoiceRecord, UserRecord } from "./store/types.js";
@@ -126,5 +126,71 @@ describe("hard-stop", () => {
     });
     expect(response.statusCode).toBe(402);
     await app.close();
+  });
+});
+
+describe("reminders", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("sends email + Telegram and marks the outbox sent", async () => {
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", (url: string) => {
+      calls.push(String(url));
+      return Promise.resolve(new Response("{}", { status: 200 }));
+    });
+    const store = new MemoryStore();
+    const settings = await store.getPlatformSettings();
+    const cfg: ChmabaConfig = {
+      baseUrl: "https://pay.chmaba.com",
+      apiKey: "k",
+      store: "s",
+      useMerchant: false,
+      webhookSecret: "w",
+      resendKey: "re",
+      mailFrom: "billing@botifyr.xyz",
+      telegramToken: "tg",
+    };
+    const recipient = user({ email: "u@example.com", telegramChatId: "4242" });
+
+    await notify(store, cfg, recipient, settings, {
+      kind: "billing.d3",
+      subject: "Your plan renews soon",
+      body: "Due in 3 days.",
+      payUrl: "https://pay/x",
+    });
+
+    expect(calls.some((url) => url.includes("api.resend.com"))).toBe(true);
+    expect(calls.some((url) => url.includes("api.telegram.org"))).toBe(true);
+    // Every channel was delivered, so nothing is left pending.
+    expect((await store.listPendingNotifications()).length).toBe(0);
+  });
+
+  it("skips Telegram when the user has not linked a chat", async () => {
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", (url: string) => {
+      calls.push(String(url));
+      return Promise.resolve(new Response("{}", { status: 200 }));
+    });
+    const store = new MemoryStore();
+    const settings = await store.getPlatformSettings();
+    const cfg: ChmabaConfig = {
+      baseUrl: "https://pay.chmaba.com",
+      apiKey: "k",
+      store: "s",
+      useMerchant: false,
+      webhookSecret: "w",
+      resendKey: "re",
+      mailFrom: "billing@botifyr.xyz",
+      telegramToken: "tg",
+    };
+
+    await notify(store, cfg, user({ email: "u@example.com" }), settings, {
+      kind: "billing.d7",
+      subject: "Heads up",
+      body: "Due in 7 days.",
+    });
+
+    expect(calls.some((url) => url.includes("api.telegram.org"))).toBe(false);
+    expect(calls.some((url) => url.includes("api.resend.com"))).toBe(true);
   });
 });
