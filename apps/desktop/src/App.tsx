@@ -199,6 +199,9 @@ export default function App() {
   const [showPeople, setShowPeople] = useState(false);
   const [groupName, setGroupName] = useState("");
   const [groupSelection, setGroupSelection] = useState<string[]>([]);
+  const [profileName, setProfileName] = useState("");
+  const [profileHandle, setProfileHandle] = useState("");
+  const [profileEmoji, setProfileEmoji] = useState("🙂");
   const [activityCollapsed, setActivityCollapsed] = useState(false);
   const [downloadsExpanded, setDownloadsExpanded] = useState(false);
   const [devices, setDevices] = useState<Array<{ id: string; name: string; online: boolean }>>([]);
@@ -1269,6 +1272,20 @@ export default function App() {
     }
   }
 
+  async function saveProfile(): Promise<void> {
+    try {
+      const updated = await client.updateProfile({
+        displayName: profileName.trim(),
+        handle: profileHandle.trim().replace(/^@/, ""),
+        avatarEmoji: profileEmoji.trim() || "🙂",
+      });
+      setUser(updated);
+      setCheckNote("Profile saved.");
+    } catch (err: unknown) {
+      setError(messageOf(err));
+    }
+  }
+
   async function createFriendGroup(): Promise<void> {
     if (groupSelection.length < 2) {
       setError("Pick at least two friends for a group.");
@@ -1439,6 +1456,14 @@ export default function App() {
       .then(setMedia)
       .catch(() => {});
   }, [user, client]);
+
+  // Seed the profile editor from the signed-in user.
+  useEffect(() => {
+    if (!user) return;
+    setProfileName(user.displayName ?? "");
+    setProfileHandle(user.handle ?? "");
+    setProfileEmoji(user.avatarEmoji ?? "🙂");
+  }, [user]);
 
   if (!authChecked) return <div className="center">Loading…</div>;
 
@@ -3041,9 +3066,39 @@ export default function App() {
                 <CloseIcon size={13} />
               </button>
             </div>
+            <div className="settings-section-title">Your profile</div>
+            <div className="portal-row" style={{ gap: 8, marginBottom: 6 }}>
+              <input
+                className="settings-input"
+                style={{ width: 56, textAlign: "center" }}
+                value={profileEmoji}
+                maxLength={4}
+                aria-label="Avatar emoji"
+                onChange={(event) => setProfileEmoji(event.target.value)}
+              />
+              <input
+                className="settings-input"
+                style={{ flex: 1 }}
+                placeholder="Display name"
+                value={profileName}
+                onChange={(event) => setProfileName(event.target.value)}
+              />
+            </div>
+            <div className="portal-row" style={{ gap: 8, marginBottom: 10 }}>
+              <input
+                className="settings-input"
+                style={{ flex: 1 }}
+                placeholder="@handle"
+                value={profileHandle}
+                onChange={(event) => setProfileHandle(event.target.value)}
+              />
+              <button className="ghost small" type="button" onClick={() => void saveProfile()}>
+                Save
+              </button>
+            </div>
             <input
               className="settings-input"
-              style={{ width: "100%", margin: "10px 0", boxSizing: "border-box" }}
+              style={{ width: "100%", margin: "0 0 10px", boxSizing: "border-box" }}
               placeholder="Search people by @handle or email"
               value={peopleQuery}
               onChange={(event) => void searchPeopleNow(event.target.value)}
