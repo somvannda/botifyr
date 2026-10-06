@@ -25,6 +25,8 @@ export interface UserRecord {
   graceUntil?: string;
   /** active | grace | expired | free. */
   subStatus?: "active" | "grace" | "expired" | "free";
+  /** Telegram chat to send billing reminders to (set when the user links it). */
+  telegramChatId?: string;
   createdAt: string;
 }
 

@@ -918,6 +918,7 @@ function toUser(row: any): UserRecord {
     periodEnd: row.period_end ? new Date(row.period_end).toISOString() : undefined,
     graceUntil: row.grace_until ? new Date(row.grace_until).toISOString() : undefined,
     subStatus: row.sub_status ?? undefined,
+    telegramChatId: row.telegram_chat_id ?? undefined,
     createdAt: row.created_at.toISOString(),
   };
 }
