@@ -4127,9 +4127,9 @@ function iconFor(status: Task["steps"][number]["status"]): string {
     case "pending":
       return "○";
     case "running":
-      return "●";
+      return "◐";
     case "done":
-      return "●";
+      return "✓";
     case "failed":
       return "✕";
     case "skipped":
@@ -4149,6 +4149,7 @@ const STEP_LABELS: Record<string, string> = {
   "youtube.search": "Searching YouTube",
   "youtube.info": "Inspecting a video",
   "shell.exec": "Running a command",
+  "local.shell.exec": "Using your computer",
 };
 function stepLabel(title: string): string {
   return STEP_LABELS[title] ?? title;
