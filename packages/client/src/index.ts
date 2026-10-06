@@ -14,10 +14,32 @@ import type {
   User,
 } from "@botifyr/shared";
 
+/**
+ * Shared client for the Botifyr cloud API.
+ *
+ * Used by every front-end (the desktop app and the web portal), so the two
+ * always see the same bots, sessions and events — the cloud is the single
+ * source of truth and this is the one place that talks to it.
+ */
+
 export interface ConnectHandlers {
   onEvent: (event: ServerEvent) => void;
   onOpen?: () => void;
   onClose?: () => void;
+}
+
+/** A developer API key as shown in a list (never the secret). */
+export interface ApiKeySummary {
+  id: string;
+  name: string;
+  prefix: string;
+  createdAt: string;
+  lastUsedAt?: string;
+}
+
+/** An API key right after creation, including the one-time plaintext secret. */
+export interface ApiKeyCreated extends ApiKeySummary {
+  key: string;
 }
 
 /** Thrown when the token is missing, invalid, or expired. */
@@ -29,10 +51,6 @@ interface RequestOptions {
   json?: boolean;
 }
 
-/**
- * Client for the Botifyr cloud API. Holds an optional bearer token, which is
- * attached to REST calls and to the websocket handshake.
- */
 export class BotifyrClient {
   private token: string | null = null;
 
@@ -40,6 +58,10 @@ export class BotifyrClient {
 
   setToken(token: string | null): void {
     this.token = token;
+  }
+
+  getToken(): string | null {
+    return this.token;
   }
 
   private url(path: string): string {
@@ -127,6 +149,18 @@ export class BotifyrClient {
       json: true,
       body: JSON.stringify({ returnUrl }),
     });
+  }
+
+  listApiKeys(): Promise<ApiKeySummary[]> {
+    return this.request("/v1/api-keys");
+  }
+
+  createApiKey(name: string): Promise<ApiKeyCreated> {
+    return this.request("/v1/api-keys", { method: "POST", json: true, body: JSON.stringify({ name }) });
+  }
+
+  revokeApiKey(id: string): Promise<void> {
+    return this.request(`/v1/api-keys/${id}`, { method: "DELETE" });
   }
 
   createBot(input: {
@@ -303,7 +337,7 @@ export class BotifyrClient {
       socket.onclose = () => {
         handlers.onClose?.();
         // Reconnect unless the caller disconnected on purpose.
-        if (!closed) window.setTimeout(open, 2000);
+        if (!closed) setTimeout(open, 2000);
       };
     };
 

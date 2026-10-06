@@ -16,7 +16,7 @@ import type {
   User,
 } from "@botifyr/shared";
 import { invoke } from "@tauri-apps/api/core";
-import { AuthError, BotifyrClient } from "./api";
+import { AuthError, BotifyrClient } from "@botifyr/client";
 import { CalendarIcon, DriveIcon, GmailIcon } from "./AppIcons";
 import { GithubBrand, NotionBrand, SlackBrand, TelegramBrand } from "./BrandIcons";
 import { BOT_SCHEMES, BotLogo } from "./BotLogo";
