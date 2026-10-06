@@ -2277,6 +2277,31 @@ body {
   margin-left: auto;
 }
 
+.skill-status {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-radius: 999px;
+  padding: 2px 9px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.skill-status.skill-approved {
+  color: var(--ok);
+  border-color: rgba(63, 209, 139, 0.4);
+}
+
+.skill-status.skill-pending {
+  color: var(--warn);
+  border-color: rgba(242, 181, 68, 0.4);
+}
+
+.skill-status.skill-rejected {
+  color: var(--danger);
+  border-color: rgba(255, 107, 107, 0.4);
+}
+
 .bot-instructions {
   width: 100%;
   resize: vertical;

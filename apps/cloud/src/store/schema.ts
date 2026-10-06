@@ -5,8 +5,10 @@ CREATE TABLE IF NOT EXISTS users (
   id            TEXT PRIMARY KEY,
   email         TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
+  role          TEXT NOT NULL DEFAULT 'user',
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user';
 
 CREATE TABLE IF NOT EXISTS auth_tokens (
   token_hash TEXT PRIMARY KEY,

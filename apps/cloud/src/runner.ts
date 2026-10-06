@@ -233,7 +233,9 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
       ? "The user has explicitly enabled their own computer for this request. Perform it on their machine using the local.browser.* and local.shell/local.file tools."
       : undefined;
   // Surface the team's learned skills so the agent reuses (and grows) them.
-  const learned = await store.listLearnedSkills().catch(() => []);
+  const learned = (await store.listLearnedSkills().catch(() => [])).filter(
+    (skill) => skill.status === "approved" || skill.createdBy === userId,
+  );
   const skillIndex =
     learned.length > 0
       ? "Skills already learned by the team (call skills.get with the name to read the full guide before unfamiliar work; save new ones with skills.learn):\n" +

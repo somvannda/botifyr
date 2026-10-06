@@ -4,6 +4,7 @@ import type {
   Bot,
   BotFile,
   ConnectionInfo,
+  LearnedSkill,
   RuntimeConfig,
   SecretSummary,
   ServerEvent,
@@ -110,6 +111,10 @@ export class BotifyrClient {
 
   listSkills(): Promise<Skill[]> {
     return this.request("/v1/skills");
+  }
+
+  listLearnedSkills(): Promise<LearnedSkill[]> {
+    return this.request("/v1/learned-skills");
   }
 
   createBot(input: {

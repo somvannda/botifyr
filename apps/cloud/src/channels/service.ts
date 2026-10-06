@@ -63,6 +63,7 @@ export class ChannelService {
       id,
       email,
       passwordHash: hashPassword(randomUUID()),
+      role: "user",
       createdAt: new Date().toISOString(),
     });
     return id;

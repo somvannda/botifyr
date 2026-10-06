@@ -21,6 +21,7 @@ createServer(async (request, response) => {
     let path = decodeURIComponent((request.url ?? "/").split("?")[0]);
     if (path === "/") path = "/index.html";
     if (path === "/help" || path === "/docs") path = "/help.html";
+    if (path === "/admin") path = "/admin.html";
     const file = join(root, normalize(path).replace(/^(\.\.[/\\])+/, ""));
     const body = await readFile(file);
     response.writeHead(200, {

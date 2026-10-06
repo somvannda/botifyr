@@ -5,6 +5,7 @@ import type {
   Bot,
   BotFile,
   ConnectionInfo,
+  LearnedSkill,
   RuntimeConfig,
   SecretSummary,
   ServerEvent,
@@ -33,6 +34,7 @@ import {
   MoreIcon,
   PanelIcon,
   PlusIcon,
+  SparkIcon,
   SearchIcon,
   SendIcon,
   UserPlusIcon,
@@ -50,6 +52,7 @@ const SETTINGS_TABS = [
   { id: "general", label: "General", icon: <GearIcon size={16} /> },
   { id: "computer", label: "Computer", icon: <MonitorIcon size={16} /> },
   { id: "usage", label: "Usage & Billing", icon: <ChartIcon size={16} /> },
+  { id: "skills", label: "Learned skills", icon: <SparkIcon size={16} /> },
   { id: "updates", label: "Updates", icon: <DownloadIcon size={16} /> },
   { id: "vault", label: "Vault", icon: <LockIcon size={16} /> },
 ] as const;
@@ -130,6 +133,7 @@ export default function App() {
   const [scheduleEvery, setScheduleEvery] = useState(60);
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
   const [skills, setSkills] = useState<Skill[]>([]);
+  const [learnedSkills, setLearnedSkills] = useState<LearnedSkill[]>([]);
   const [downloads, setDownloads] = useState<Array<{ name: string; size: number }>>([]);
   const [ytCookies, setYtCookies] = useState("");
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
@@ -227,13 +231,20 @@ export default function App() {
     setAudit([]);
     setShowAudit(false);
 
-    Promise.all([client.listBots(), client.listSessions(), client.listConnections(), client.listSkills()])
-      .then(([botList, sessionList, connectionList, skillList]) => {
+    Promise.all([
+      client.listBots(),
+      client.listSessions(),
+      client.listConnections(),
+      client.listSkills(),
+      client.listLearnedSkills(),
+    ])
+      .then(([botList, sessionList, connectionList, skillList, learnedList]) => {
         if (!mounted) return;
         setBots(botList);
         setSessions(sessionList);
         setConnections(connectionList);
         setSkills(skillList);
+        setLearnedSkills(learnedList);
         // Open the last-used chat, else the most recently active one.
         const lastAt = (bot: Bot): string => {
           const session = sessionList.find((entry) => entry.id === bot.sessionId);
@@ -2423,6 +2434,26 @@ export default function App() {
                     </button>
                   </div>
                   {checkNote && <p className="settings-note">{checkNote}</p>}
+                </div>
+              )}
+
+              {settingsTab === "skills" && (
+                <div className="settings-sections">
+                  <div className="settings-section-title">Learned skills ({learnedSkills.length})</div>
+                  {learnedSkills.length === 0 && (
+                    <p className="settings-note">
+                      Nothing learned yet — bots add skills as they figure things out.
+                    </p>
+                  )}
+                  {learnedSkills.map((skill) => (
+                    <div key={skill.id} className="settings-row">
+                      <span className="settings-row-main">
+                        <span className="settings-row-name">{skill.name}</span>
+                        <span className="settings-row-sub">{skill.description}</span>
+                      </span>
+                      <span className={`skill-status skill-${skill.status}`}>{skill.status}</span>
+                    </div>
+                  ))}
                 </div>
               )}
 

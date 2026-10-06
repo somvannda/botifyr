@@ -45,6 +45,15 @@ export class MemoryStore implements Store {
     return this.users.get(id) ?? null;
   }
 
+  async listUsers(): Promise<UserRecord[]> {
+    return [...this.users.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  }
+
+  async setUserRole(id: string, role: "user" | "admin"): Promise<void> {
+    const record = this.users.get(id);
+    if (record) record.role = role;
+  }
+
   async createToken(tokenHash: string, userId: string, expiresAt: string): Promise<void> {
     this.tokens.set(tokenHash, { userId, expiresAt });
   }

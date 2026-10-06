@@ -15,10 +15,16 @@ export function createLearnedSkillTools(store: Store, userId: string): ToolDefin
       parameters: { type: "object", properties: {} },
       run: async () => {
         const list = await store.listLearnedSkills();
+        const visible = list.filter((skill) => skill.status === "approved" || skill.createdBy === userId);
         return {
           ok: true,
-          output: list.length
-            ? list.map((skill) => `- ${skill.name}: ${skill.description}`).join("\n")
+          output: visible.length
+            ? visible
+                .map(
+                  (skill) =>
+                    `- ${skill.name}: ${skill.description}${skill.status === "pending" ? " (pending)" : ""}`,
+                )
+                .join("\n")
             : "No learned skills yet. Research a task and save one with skills.learn.",
         };
       },
@@ -33,9 +39,10 @@ export function createLearnedSkillTools(store: Store, userId: string): ToolDefin
       },
       run: async (args) => {
         const skill = await store.getLearnedSkillByName(String(args.name ?? ""));
-        return skill
-          ? { ok: true, output: `# ${skill.name}\n${skill.description}\n\n${skill.content}` }
-          : { ok: false, output: `No learned skill named "${args.name}". Use skills.list.` };
+        if (!skill || (skill.status !== "approved" && skill.createdBy !== userId)) {
+          return { ok: false, output: `No learned skill named "${args.name}". Use skills.list.` };
+        }
+        return { ok: true, output: `# ${skill.name}\n${skill.description}\n\n${skill.content}` };
       },
     },
     {
@@ -70,10 +77,14 @@ export function createLearnedSkillTools(store: Store, userId: string): ToolDefin
           content,
           source,
           createdBy: existing?.createdBy ?? userId,
+          status: existing?.status ?? "pending",
           createdAt: existing?.createdAt ?? now,
           updatedAt: now,
         });
-        return { ok: true, output: `Learned skill "${name}" saved and shared with all bots.` };
+        return {
+          ok: true,
+          output: `Learned skill "${name}" saved (pending review before it's shared with everyone).`,
+        };
       },
     },
   ];

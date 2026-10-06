@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Botifyr — Admin</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="stylesheet" href="/styles.css" />
+    <style>
+      .admin-bar {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        align-items: center;
+        padding: 12px 0;
+      }
+      .admin-bar input {
+        background: #0e0e10;
+        border: 1px solid var(--border);
+        border-radius: 9px;
+        padding: 8px 11px;
+        color: var(--text);
+        font-size: 13px;
+        min-width: 220px;
+        flex: 1;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 12px 14px;
+        margin-bottom: 6px;
+      }
+      .row .meta {
+        flex: 1;
+        min-width: 0;
+      }
+      .row .title {
+        font-size: 13.5px;
+        font-weight: 600;
+      }
+      .row .sub {
+        font-size: 11.5px;
+        color: var(--muted);
+      }
+      .pill {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        border-radius: 999px;
+        padding: 2px 9px;
+        border: 1px solid var(--border);
+        color: var(--muted);
+      }
+      .pill.approved {
+        color: #3fd18b;
+        border-color: rgba(63, 209, 139, 0.4);
+      }
+      .pill.pending {
+        color: #f2b544;
+        border-color: rgba(242, 181, 68, 0.4);
+      }
+      .pill.rejected {
+        color: #ff6b6b;
+        border-color: rgba(255, 107, 107, 0.4);
+      }
+      button.act {
+        border: 1px solid var(--border);
+        background: var(--panel-2);
+        color: var(--text);
+        border-radius: 8px;
+        padding: 6px 12px;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      button.act.ok {
+        border-color: rgba(63, 209, 139, 0.5);
+        color: #3fd18b;
+      }
+      button.act.no {
+        border-color: rgba(255, 107, 107, 0.5);
+        color: #ff6b6b;
+      }
+      h1 {
+        font-size: 24px;
+      }
+      h2 {
+        font-size: 15px;
+        margin: 26px 0 8px;
+      }
+      .err {
+        color: #ff9b9b;
+        font-size: 12.5px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="site">
+        <a class="brand" href="/">
+          <svg width="26" height="26" viewBox="0 0 100 100" aria-hidden="true">
+            <g stroke="#141416" stroke-width="3.4" stroke-linecap="round">
+              <line x1="42" y1="17" x2="34.5" y2="7" />
+              <line x1="58" y1="17" x2="65.5" y2="7" />
+            </g>
+            <circle cx="33" cy="6" r="5" fill="#141416" />
+            <circle cx="67" cy="6" r="5" fill="#141416" />
+            <rect
+              x="27"
+              y="14"
+              width="46"
+              height="30"
+              rx="9"
+              fill="#e9eaee"
+              stroke="#141416"
+              stroke-width="3.4"
+            />
+            <path
+              d="M13 46h74L61 87.5Q50 95 39 87.5Z"
+              fill="#19b7c9"
+              stroke="#141416"
+              stroke-width="3.4"
+              stroke-linejoin="round"
+            />
+            <path
+              d="M29 50h42L56 71.5Q50 77 44 71.5Z"
+              fill="#f5a623"
+              stroke="#141416"
+              stroke-width="3.4"
+              stroke-linejoin="round"
+            />
+            <circle cx="50" cy="69" r="10" fill="#141416" />
+            <text
+              x="50"
+              y="74"
+              text-anchor="middle"
+              font-family="Georgia, serif"
+              font-size="14"
+              font-weight="700"
+              fill="#fff"
+            >
+              f
+            </text>
+          </svg>
+          Botifyr Admin
+        </a>
+        <nav class="links"><a href="/">Home</a><a href="/help">Help</a></nav>
+      </header>
+
+      <h1>Platform admin</h1>
+      <p style="color: var(--muted)">Review what the bots have learned, and manage accounts.</p>
+
+      <div class="admin-bar">
+        <input id="base" placeholder="Cloud URL" />
+        <input id="token" type="password" placeholder="Admin token" />
+        <button class="act ok" id="connect">Connect</button>
+      </div>
+      <div class="err" id="err"></div>
+
+      <h2>Learned skills <span id="skillCount" style="color: var(--muted)"></span></h2>
+      <div id="skills"></div>
+
+      <h2>Users</h2>
+      <div id="users"></div>
+
+      <footer class="site" style="margin-top: 40px">
+        <span>© 2026 Botifyr</span>
+        <span>Platform admin</span>
+      </footer>
+    </div>
+
+    <script>
+      const baseEl = document.getElementById("base");
+      const tokenEl = document.getElementById("token");
+      const errEl = document.getElementById("err");
+      baseEl.value = localStorage.getItem("botifyr.admin.base") || "http://localhost:8787";
+      tokenEl.value = localStorage.getItem("botifyr.admin.token") || "";
+
+      async function api(path, options = {}) {
+        const base = baseEl.value.replace(/\/$/, "");
+        const res = await fetch(base + path, {
+          ...options,
+          headers: {
+            authorization: "Bearer " + tokenEl.value,
+            ...(options.body ? { "content-type": "application/json" } : {}),
+          },
+        });
+        if (!res.ok) throw new Error((await res.text()).slice(0, 200) || res.status);
+        return res.status === 204 ? null : res.json();
+      }
+
+      function el(tag, cls, text) {
+        const node = document.createElement(tag);
+        if (cls) node.className = cls;
+        if (text != null) node.textContent = text;
+        return node;
+      }
+
+      async function setStatus(id, status) {
+        await api(`/admin/learned-skills/${id}/status`, { method: "POST", body: JSON.stringify({ status }) });
+        await load();
+      }
+      async function del(id) {
+        await api(`/admin/learned-skills/${id}`, { method: "DELETE" });
+        await load();
+      }
+      async function setRole(id, role) {
+        await api(`/admin/users/${id}/role`, { method: "POST", body: JSON.stringify({ role }) });
+        await load();
+      }
+
+      async function load() {
+        errEl.textContent = "";
+        try {
+          const skills = await api("/admin/learned-skills");
+          const skillsEl = document.getElementById("skills");
+          document.getElementById("skillCount").textContent = `(${skills.length})`;
+          skillsEl.innerHTML = "";
+          if (skills.length === 0) skillsEl.appendChild(el("p", "row sub", "Nothing learned yet."));
+          for (const skill of skills) {
+            const row = el("div", "row");
+            const meta = el("div", "meta");
+            meta.appendChild(el("div", "title", skill.name));
+            meta.appendChild(el("div", "sub", skill.description || skill.content.slice(0, 120)));
+            row.appendChild(meta);
+            row.appendChild(el("span", "pill " + skill.status, skill.status));
+            if (skill.status !== "approved") {
+              const ok = el("button", "act ok", "Approve");
+              ok.onclick = () => setStatus(skill.id, "approved");
+              row.appendChild(ok);
+            }
+            if (skill.status !== "rejected") {
+              const no = el("button", "act no", "Reject");
+              no.onclick = () => setStatus(skill.id, "rejected");
+              row.appendChild(no);
+            }
+            const rm = el("button", "act", "Delete");
+            rm.onclick = () => del(skill.id);
+            row.appendChild(rm);
+            skillsEl.appendChild(row);
+          }
+
+          const users = await api("/admin/users");
+          const usersEl = document.getElementById("users");
+          usersEl.innerHTML = "";
+          for (const user of users) {
+            const row = el("div", "row");
+            const meta = el("div", "meta");
+            meta.appendChild(el("div", "title", user.email));
+            meta.appendChild(el("div", "sub", user.createdAt));
+            row.appendChild(meta);
+            row.appendChild(el("span", "pill " + (user.role === "admin" ? "approved" : ""), user.role));
+            const toggle = el("button", "act", user.role === "admin" ? "Make user" : "Make admin");
+            toggle.onclick = () => setRole(user.id, user.role === "admin" ? "user" : "admin");
+            row.appendChild(toggle);
+            usersEl.appendChild(row);
+          }
+        } catch (error) {
+          errEl.textContent = String(error.message || error);
+        }
+      }
+
+      document.getElementById("connect").onclick = () => {
+        localStorage.setItem("botifyr.admin.base", baseEl.value);
+        localStorage.setItem("botifyr.admin.token", tokenEl.value);
+        load();
+      };
+      if (tokenEl.value) load();
+    </script>
+  </body>
+</html>

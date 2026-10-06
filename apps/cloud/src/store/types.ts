@@ -6,6 +6,7 @@ export interface UserRecord {
   id: string;
   email: string;
   passwordHash: string;
+  role: "user" | "admin";
   createdAt: string;
 }
 
@@ -97,6 +98,7 @@ export interface LearnedSkillRecord {
   content: string;
   source: string;
   createdBy: string | null;
+  status: "pending" | "approved" | "rejected";
   createdAt: string;
   updatedAt: string;
 }
@@ -108,6 +110,8 @@ export interface Store {
   createUser(record: UserRecord): Promise<void>;
   getUserByEmail(email: string): Promise<UserRecord | null>;
   getUserById(id: string): Promise<UserRecord | null>;
+  listUsers(): Promise<UserRecord[]>;
+  setUserRole(id: string, role: "user" | "admin"): Promise<void>;
 
   createToken(tokenHash: string, userId: string, expiresAt: string): Promise<void>;
   getUserIdByTokenHash(tokenHash: string): Promise<string | null>;

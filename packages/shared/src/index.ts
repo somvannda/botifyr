@@ -104,6 +104,7 @@ export interface LearnedSkill {
   id: string;
   name: string;
   description: string;
+  status: "pending" | "approved" | "rejected";
   createdAt: string;
 }
 
@@ -141,6 +142,7 @@ export interface User {
   id: string;
   email: string;
   createdAt: string;
+  role: "user" | "admin";
 }
 
 export interface AuthResponse {

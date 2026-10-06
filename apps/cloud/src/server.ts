@@ -118,6 +118,31 @@ export async function buildServer(options: ServerOptions) {
     return date.toISOString();
   }
 
+  // Emails listed here become platform admins automatically.
+  const adminEmails = new Set(
+    (process.env.BOTIFYR_ADMIN_EMAILS ?? "")
+      .split(",")
+      .map((email) => email.trim().toLowerCase())
+      .filter(Boolean),
+  );
+  const roleFor = (email: string): "user" | "admin" =>
+    adminEmails.has(email.toLowerCase()) ? "admin" : "user";
+
+  const requireAdmin = async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    const token = bearer(request) ?? tokenFromQuery(request);
+    const userId = token ? await store.getUserIdByTokenHash(hashToken(token)) : null;
+    if (!userId) {
+      await reply.code(401).send({ error: "missing bearer token" });
+      return;
+    }
+    const record = await store.getUserById(userId);
+    if (!record || record.role !== "admin") {
+      await reply.code(403).send({ error: "admin only" });
+      return;
+    }
+    request.userId = userId;
+  };
+
   /** Returns a non-blocking warning when the user is over the daily budget. */
   async function budgetWarning(userId: string): Promise<string | null> {
     if (dailyTokenBudget <= 0) return null;
@@ -170,10 +195,11 @@ export async function buildServer(options: ServerOptions) {
     request.userId = userId;
   };
 
-  const toUser = (record: { id: string; email: string; createdAt: string }): User => ({
+  const toUser = (record: { id: string; email: string; createdAt: string; role?: string }): User => ({
     id: record.id,
     email: record.email,
     createdAt: record.createdAt,
+    role: record.role === "admin" ? "admin" : "user",
   });
 
   const canReceive = (userId: string, event: ServerEvent): boolean => {
@@ -554,15 +580,19 @@ export async function buildServer(options: ServerOptions) {
     SKILLS.map((skill) => ({ id: skill.id, name: skill.name, description: skill.description })),
   );
 
-  /** Skills the bot team has learned (global, shared by all users). */
-  app.get("/v1/learned-skills", { preHandler: requireAuth }, async () => {
+  /** Skills the bot team has learned (approved ones are global). */
+  app.get("/v1/learned-skills", { preHandler: requireAuth }, async (request) => {
+    const userId = request.userId as string;
     const list = await store.listLearnedSkills();
-    return list.map((skill) => ({
-      id: skill.id,
-      name: skill.name,
-      description: skill.description,
-      createdAt: skill.createdAt,
-    }));
+    return list
+      .filter((skill) => skill.status === "approved" || skill.createdBy === userId)
+      .map((skill) => ({
+        id: skill.id,
+        name: skill.name,
+        description: skill.description,
+        status: skill.status,
+        createdAt: skill.createdAt,
+      }));
   });
 
   app.post<{ Body: { name?: string; description?: string; content?: string; source?: string } }>(
@@ -581,6 +611,7 @@ export async function buildServer(options: ServerOptions) {
         content: (request.body?.content ?? "").slice(0, 20_000),
         source: (request.body?.source ?? "").slice(0, 1_000),
         createdBy: existing?.createdBy ?? userId,
+        status: existing?.status ?? ("pending" as const),
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
       };
@@ -589,6 +620,7 @@ export async function buildServer(options: ServerOptions) {
         id: record.id,
         name: record.name,
         description: record.description,
+        status: record.status,
         createdAt: record.createdAt,
       });
     },
@@ -601,6 +633,79 @@ export async function buildServer(options: ServerOptions) {
       const removed = await store.deleteLearnedSkill(request.userId as string, request.params.id);
       if (!removed) return reply.code(404).send({ error: "skill not found" });
       return reply.code(204).send();
+    },
+  );
+
+  /* ------------------------------------------------------------------------ */
+  /* Platform admin (moderation + users)                                       */
+  /* ------------------------------------------------------------------------ */
+  app.get("/admin/learned-skills", { preHandler: requireAdmin }, async () => store.listLearnedSkills());
+
+  app.post<{ Params: { id: string }; Body: { status?: string } }>(
+    "/admin/learned-skills/:id/status",
+    { preHandler: requireAdmin },
+    async (request, reply) => {
+      const skill = await store.getLearnedSkill(request.params.id);
+      if (!skill) return reply.code(404).send({ error: "skill not found" });
+      const status = request.body?.status;
+      if (status !== "approved" && status !== "rejected" && status !== "pending") {
+        return reply.code(400).send({ error: "status must be approved, rejected or pending" });
+      }
+      skill.status = status;
+      skill.updatedAt = new Date().toISOString();
+      await store.upsertLearnedSkill(skill);
+      return skill;
+    },
+  );
+
+  app.patch<{ Params: { id: string }; Body: { name?: string; description?: string; content?: string } }>(
+    "/admin/learned-skills/:id",
+    { preHandler: requireAdmin },
+    async (request, reply) => {
+      const skill = await store.getLearnedSkill(request.params.id);
+      if (!skill) return reply.code(404).send({ error: "skill not found" });
+      if (typeof request.body?.name === "string" && request.body.name.trim()) {
+        skill.name = request.body.name.trim().slice(0, 80);
+      }
+      if (typeof request.body?.description === "string")
+        skill.description = request.body.description.slice(0, 240);
+      if (typeof request.body?.content === "string") skill.content = request.body.content.slice(0, 20_000);
+      skill.updatedAt = new Date().toISOString();
+      await store.upsertLearnedSkill(skill);
+      return skill;
+    },
+  );
+
+  app.delete<{ Params: { id: string } }>(
+    "/admin/learned-skills/:id",
+    { preHandler: requireAdmin },
+    async (request, reply) => {
+      const skill = await store.getLearnedSkill(request.params.id);
+      if (!skill) return reply.code(404).send({ error: "skill not found" });
+      const removed = await store.deleteLearnedSkill(skill.createdBy ?? "", skill.id);
+      if (!removed) return reply.code(400).send({ error: "could not delete" });
+      return reply.code(204).send();
+    },
+  );
+
+  app.get("/admin/users", { preHandler: requireAdmin }, async () =>
+    (await store.listUsers()).map((user) => ({
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      createdAt: user.createdAt,
+    })),
+  );
+
+  app.post<{ Params: { id: string }; Body: { role?: string } }>(
+    "/admin/users/:id/role",
+    { preHandler: requireAdmin },
+    async (request, reply) => {
+      const role = request.body?.role;
+      if (role !== "user" && role !== "admin")
+        return reply.code(400).send({ error: "role must be user or admin" });
+      await store.setUserRole(request.params.id, role);
+      return { ok: true };
     },
   );
 
@@ -621,6 +726,7 @@ export async function buildServer(options: ServerOptions) {
       id: randomUUID(),
       email,
       passwordHash: hashPassword(password),
+      role: roleFor(email),
       createdAt: new Date().toISOString(),
     };
     await store.createUser(record);
@@ -638,6 +744,10 @@ export async function buildServer(options: ServerOptions) {
     const record = await store.getUserByEmail(email);
     if (!record || !verifyPassword(password, record.passwordHash)) {
       return reply.code(401).send({ error: "invalid email or password" });
+    }
+    if (roleFor(email) === "admin" && record.role !== "admin") {
+      await store.setUserRole(record.id, "admin");
+      record.role = "admin";
     }
 
     const { token, tokenHash, expiresAt } = createToken();
@@ -730,9 +840,13 @@ export async function buildServer(options: ServerOptions) {
             id: randomUUID(),
             email: info.email,
             passwordHash: "google",
+            role: roleFor(info.email),
             createdAt: new Date().toISOString(),
           };
           await store.createUser(record);
+        } else if (roleFor(info.email) === "admin" && record.role !== "admin") {
+          await store.setUserRole(record.id, "admin");
+          record.role = "admin";
         }
 
         const issued = createToken();
