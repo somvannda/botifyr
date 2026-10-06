@@ -151,6 +151,12 @@ export class MemoryStore implements Store {
     return this.audit.filter((entry) => entry.taskId === taskId);
   }
 
+  async listAuditRecent(limit: number): Promise<AuditRecord[]> {
+    return [...this.audit]
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, Math.max(1, Math.min(500, limit)));
+  }
+
   async createSecret(record: SecretRecord): Promise<void> {
     this.secrets.set(`${record.userId}:${record.name}`, record);
   }

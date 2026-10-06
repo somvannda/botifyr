@@ -128,6 +128,19 @@ export async function buildServer(options: ServerOptions) {
   const roleFor = (email: string): "user" | "admin" =>
     adminEmails.has(email.toLowerCase()) ? "admin" : "user";
 
+  // When set, only these emails may create a NEW account (invite-only signup).
+  // An empty list keeps signups open. Existing accounts are never locked out.
+  const allowedSignupEmails = new Set(
+    (process.env.BOTIFYR_ALLOWED_EMAILS ?? "")
+      .split(",")
+      .map((email) => email.trim().toLowerCase())
+      .filter(Boolean),
+  );
+  const signupAllowed = (email: string): boolean =>
+    allowedSignupEmails.size === 0 ||
+    allowedSignupEmails.has(email.toLowerCase()) ||
+    adminEmails.has(email.toLowerCase());
+
   const requireAdmin = async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
     const token = bearer(request) ?? tokenFromQuery(request);
     const userId = token ? await store.getUserIdByTokenHash(hashToken(token)) : null;
@@ -141,6 +154,21 @@ export async function buildServer(options: ServerOptions) {
       return;
     }
     request.userId = userId;
+  };
+
+  /** Record a platform-admin action for the audit log (best-effort). */
+  const auditAdmin = (request: FastifyRequest, action: string, detail: string): void => {
+    void store
+      .appendAudit({
+        id: randomUUID(),
+        taskId: null,
+        userId: (request.userId as string) ?? null,
+        type: "admin",
+        toolName: action,
+        detail,
+        createdAt: new Date().toISOString(),
+      })
+      .catch(() => {});
   };
 
   /** Returns a non-blocking warning when the user is over the daily budget. */
@@ -723,6 +751,7 @@ export async function buildServer(options: ServerOptions) {
       skill.status = status;
       skill.updatedAt = new Date().toISOString();
       await store.upsertLearnedSkill(skill);
+      auditAdmin(request, "skill.status", `${skill.name} -> ${status}`);
       return skill;
     },
   );
@@ -753,6 +782,7 @@ export async function buildServer(options: ServerOptions) {
       if (!skill) return reply.code(404).send({ error: "skill not found" });
       const removed = await store.deleteLearnedSkill(skill.createdBy ?? "", skill.id);
       if (!removed) return reply.code(400).send({ error: "could not delete" });
+      auditAdmin(request, "skill.delete", skill.name);
       return reply.code(204).send();
     },
   );
@@ -775,6 +805,7 @@ export async function buildServer(options: ServerOptions) {
       if (role !== "user" && role !== "admin")
         return reply.code(400).send({ error: "role must be user or admin" });
       await store.setUserRole(request.params.id, role);
+      auditAdmin(request, "user.role", `${request.params.id} -> ${role}`);
       return { ok: true };
     },
   );
@@ -787,9 +818,12 @@ export async function buildServer(options: ServerOptions) {
       if (plan !== "trial" && plan !== "pro")
         return reply.code(400).send({ error: "plan must be trial or pro" });
       await store.setUserPlan(request.params.id, plan);
+      auditAdmin(request, "user.plan", `${request.params.id} -> ${plan}`);
       return { ok: true };
     },
   );
+
+  app.get("/admin/audit", { preHandler: requireAdmin }, async () => store.listAuditRecent(100));
 
   /* Billing / plans. Stripe is optional: without keys the endpoint explains
      that billing isn't configured rather than pretending to charge. */
@@ -928,6 +962,9 @@ export async function buildServer(options: ServerOptions) {
     if (await store.getUserByEmail(email)) {
       return reply.code(409).send({ error: "an account with that email already exists" });
     }
+    if (!signupAllowed(email)) {
+      return reply.code(403).send({ error: "Signups are invite-only. Ask the operator to add your email." });
+    }
 
     const record = {
       id: randomUUID(),
@@ -1054,6 +1091,13 @@ export async function buildServer(options: ServerOptions) {
 
         let record = await store.getUserByEmail(info.email);
         if (!record) {
+          if (!signupAllowed(info.email)) {
+            app.log.warn({ email: info.email }, "google signup denied (invite-only)");
+            return reply
+              .type("text/html")
+              .header("cache-control", "no-store")
+              .send(messagePage("Botifyr is invite-only right now. Ask the operator to add your email."));
+          }
           record = {
             id: randomUUID(),
             email: info.email,

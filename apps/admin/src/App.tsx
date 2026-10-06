@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AuthError, BotifyrClient } from "@botifyr/client";
-import type { AdminSkill, AdminUser } from "@botifyr/client";
+import type { AdminAuditEvent, AdminSkill, AdminUser } from "@botifyr/client";
 import { BotLogo, LogoutIcon } from "@botifyr/ui";
 
 /**
@@ -24,15 +24,21 @@ export function Admin() {
   const [authorized, setAuthorized] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<"users" | "skills">("users");
+  const [tab, setTab] = useState<"users" | "skills" | "audit">("users");
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [skills, setSkills] = useState<AdminSkill[]>([]);
+  const [audit, setAudit] = useState<AdminAuditEvent[]>([]);
   const [openSkill, setOpenSkill] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const [userList, skillList] = await Promise.all([client.adminUsers(), client.adminSkills()]);
+    const [userList, skillList, auditList] = await Promise.all([
+      client.adminUsers(),
+      client.adminSkills(),
+      client.adminAudit(),
+    ]);
     setUsers(userList);
     setSkills(skillList);
+    setAudit(auditList);
   }, [client]);
 
   useEffect(() => {
@@ -218,6 +224,13 @@ export function Admin() {
           >
             Learned skills{pending > 0 ? ` (${pending})` : ""}
           </button>
+          <button
+            className={`admin-tab ${tab === "audit" ? "active" : ""}`}
+            type="button"
+            onClick={() => setTab("audit")}
+          >
+            Audit log
+          </button>
         </div>
 
         {error && <div className="error">{error}</div>}
@@ -317,6 +330,36 @@ export function Admin() {
               </div>
             ))}
           </div>
+        )}
+
+        {tab === "audit" && (
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>When</th>
+                <th>Action</th>
+                <th>Detail</th>
+              </tr>
+            </thead>
+            <tbody>
+              {audit.length === 0 && (
+                <tr>
+                  <td colSpan={3} className="admin-muted">
+                    No admin activity recorded yet.
+                  </td>
+                </tr>
+              )}
+              {audit.map((event) => (
+                <tr key={event.id}>
+                  <td className="admin-muted">{event.createdAt.replace("T", " ").slice(0, 19)}</td>
+                  <td>
+                    <span className="admin-pill">{event.toolName ?? event.type}</span>
+                  </td>
+                  <td className="admin-muted">{event.detail}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
       </div>
     </div>

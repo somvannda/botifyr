@@ -2202,6 +2202,12 @@ body {
   margin-top: 6px;
   opacity: 0;
   transition: opacity 0.12s ease;
+  /* Invisible actions must not be selectable, or copying a chat drags them in. */
+  user-select: none;
+}
+
+.msg-actions:focus-within {
+  opacity: 1;
 }
 
 .msg-assistant:hover .msg-actions {

@@ -228,15 +228,16 @@ export class PostgresStore implements Store {
         "WHERE task_id = $1 ORDER BY created_at ASC",
       [taskId],
     );
-    return rows.map((row) => ({
-      id: row.id,
-      taskId: row.task_id,
-      userId: row.user_id,
-      type: row.type,
-      toolName: row.tool_name,
-      detail: row.detail,
-      createdAt: row.created_at.toISOString(),
-    }));
+    return rows.map(toAudit);
+  }
+
+  async listAuditRecent(limit: number): Promise<AuditRecord[]> {
+    const { rows } = await this.pool.query(
+      "SELECT id, task_id, user_id, type, tool_name, detail, created_at FROM audit_events " +
+        "ORDER BY created_at DESC LIMIT $1",
+      [Math.max(1, Math.min(500, limit))],
+    );
+    return rows.map(toAudit);
   }
 
   async createSecret(record: SecretRecord): Promise<void> {
@@ -426,6 +427,18 @@ export class PostgresStore implements Store {
     const result = await this.pool.query("DELETE FROM api_keys WHERE id = $1 AND user_id = $2", [id, userId]);
     return (result.rowCount ?? 0) > 0;
   }
+}
+
+function toAudit(row: any): AuditRecord {
+  return {
+    id: row.id,
+    taskId: row.task_id,
+    userId: row.user_id,
+    type: row.type,
+    toolName: row.tool_name,
+    detail: row.detail,
+    createdAt: row.created_at.toISOString(),
+  };
 }
 
 function toApiKey(row: any): ApiKeyRecord {

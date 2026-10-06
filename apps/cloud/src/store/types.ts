@@ -153,6 +153,8 @@ export interface Store {
 
   appendAudit(record: AuditRecord): Promise<void>;
   listAudit(taskId: string): Promise<AuditRecord[]>;
+  /** Most recent audit events across the whole platform (for the admin console). */
+  listAuditRecent(limit: number): Promise<AuditRecord[]>;
 
   createSecret(record: SecretRecord): Promise<void>;
   listSecrets(userId: string): Promise<SecretRecord[]>;

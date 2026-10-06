@@ -51,6 +51,17 @@ export interface AdminUser {
   createdAt: string;
 }
 
+/** An audit entry shown in the admin console. */
+export interface AdminAuditEvent {
+  id: string;
+  taskId: string | null;
+  userId: string | null;
+  type: string;
+  toolName: string | null;
+  detail: string;
+  createdAt: string;
+}
+
 /** A learned skill with its full guide, for moderation. */
 export interface AdminSkill {
   id: string;
@@ -219,6 +230,10 @@ export class BotifyrClient {
 
   adminDeleteSkill(id: string): Promise<void> {
     return this.request(`/admin/learned-skills/${id}`, { method: "DELETE" });
+  }
+
+  adminAudit(): Promise<AdminAuditEvent[]> {
+    return this.request("/admin/audit");
   }
 
   createBot(input: {
