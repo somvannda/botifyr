@@ -24,7 +24,9 @@ import {
   CheckIcon,
   ChevronIcon,
   CloseIcon,
+  CopyIcon,
   DownloadIcon,
+  ForwardIcon,
   GearIcon,
   HelpIcon,
   LockIcon,
@@ -35,9 +37,12 @@ import {
   MoreIcon,
   PanelIcon,
   PlusIcon,
+  RefreshIcon,
+  ReplyIcon,
   SparkIcon,
   SearchIcon,
   SendIcon,
+  SmileyIcon,
   StopIcon,
   UserPlusIcon,
   UsersIcon,
@@ -839,43 +844,48 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
           className="msg-action"
           type="button"
           title="Add emoji"
+          aria-label="Add emoji"
           onClick={() => setReactFor((value) => (value === message.id ? null : message.id))}
         >
-          🙂
+          <SmileyIcon size={15} />
         </button>
         <button
           className="msg-action"
           type="button"
           title="Reply"
+          aria-label="Reply"
           onClick={() => startReply(message.id, author, message.content)}
         >
-          ↩
+          <ReplyIcon size={15} />
         </button>
         <button
           className="msg-action"
           type="button"
           title="Forward"
+          aria-label="Forward"
           onClick={() => setForwardMessage({ content: message.content })}
         >
-          ➦
+          <ForwardIcon size={15} />
         </button>
         <button
           className="msg-action"
           type="button"
           title="Copy"
+          aria-label="Copy"
           onClick={() => void navigator.clipboard?.writeText(message.content)}
         >
-          Copy
+          <CopyIcon size={15} />
         </button>
         {showRetry && (
           <button
             className="msg-action"
             type="button"
             title="Regenerate reply"
+            aria-label="Regenerate reply"
             disabled={busy}
             onClick={() => void retry()}
           >
-            Retry
+            <RefreshIcon size={15} />
           </button>
         )}
         {reactFor === message.id && (

@@ -224,3 +224,52 @@ export function ChevronIcon({ size = 18, className }: IconProps) {
     </svg>
   );
 }
+
+export function SmileyIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden className={className} {...stroke}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M8.5 14.2c1 1.2 2.2 1.8 3.5 1.8s2.5-.6 3.5-1.8" />
+      <line x1="9" y1="9.5" x2="9" y2="10" />
+      <line x1="15" y1="9.5" x2="15" y2="10" />
+    </svg>
+  );
+}
+
+export function ReplyIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden className={className} {...stroke}>
+      <path d="M9 7l-5 5 5 5" />
+      <path d="M4 12h9a6 6 0 016 6v1" />
+    </svg>
+  );
+}
+
+export function ForwardIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden className={className} {...stroke}>
+      <path d="M15 7l5 5-5 5" />
+      <path d="M20 12h-9a6 6 0 00-6 6v1" />
+    </svg>
+  );
+}
+
+export function CopyIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden className={className} {...stroke}>
+      <rect x="9" y="9" width="11" height="11" rx="2" />
+      <path d="M5 15V6a2 2 0 012-2h9" />
+    </svg>
+  );
+}
+
+export function RefreshIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden className={className} {...stroke}>
+      <path d="M4.5 12a7.5 7.5 0 0112.8-5.3L20 9" />
+      <path d="M20 4v5h-5" />
+      <path d="M19.5 12a7.5 7.5 0 01-12.8 5.3L4 15" />
+      <path d="M4 20v-5h5" />
+    </svg>
+  );
+}
