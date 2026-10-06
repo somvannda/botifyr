@@ -3694,7 +3694,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                     </button>
                   </div>
 
-                  <div className="settings-section-title">Execution on this computer</div>
+                  <div className="settings-section-title">Approvals</div>
                   <label className="settings-line">
                     <span>Approvals</span>
                     <select
