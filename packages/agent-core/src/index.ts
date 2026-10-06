@@ -22,6 +22,7 @@ export {
   createDockerComputerBackend,
   createShellTools,
   createDockerShellBackend,
+  createMediaTools,
 } from "./tools/index.js";
 export type {
   BrowserBackend,
@@ -33,6 +34,7 @@ export type {
   DockerComputerOptions,
   DockerShellOptions,
   LocalBrowserOptions,
+  MediaTools,
   ShellBackend,
   ShellTools,
 } from "./tools/index.js";

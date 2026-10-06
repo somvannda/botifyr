@@ -13,11 +13,14 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
+    ffmpeg \
     git \
     jq \
-    ripgrep \
     python3 \
-  && rm -rf /var/lib/apt/lists/*
+    python3-pip \
+    ripgrep \
+  && rm -rf /var/lib/apt/lists/* \
+  && python3 -m pip install --no-cache-dir --break-system-packages yt-dlp
 
 WORKDIR /app
 COPY server.mjs ./

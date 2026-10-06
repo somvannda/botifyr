@@ -17,6 +17,8 @@ export type { DockerComputerOptions } from "./computer-docker.js";
 
 export { createShellTools } from "./shell.js";
 export type { ShellBackend, ShellTools } from "./shell.js";
+export { createMediaTools } from "./media.js";
+export type { MediaTools } from "./media.js";
 export { createDockerShellBackend } from "./shell-docker.js";
 export type { DockerShellOptions } from "./shell-docker.js";
 

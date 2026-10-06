@@ -6,6 +6,7 @@ import {
   createComputerTools,
   createDockerComputerBackend,
   createDockerShellBackend,
+  createMediaTools,
   createProvider,
   createShellTools,
   runAgent,
@@ -165,9 +166,12 @@ function buildTools(
     hasComputer = true;
   }
   if (caps.includes("code")) {
-    const shell = createShellTools(createDockerShellBackend());
+    const shellBackend = createDockerShellBackend();
+    const shell = createShellTools(shellBackend);
     tools.push(...shell.tools);
     closers.push(() => shell.close());
+    // Media (yt-dlp) tools run in the same sandbox.
+    tools.push(...createMediaTools(shellBackend).tools);
   }
   // Local tools operate the user's own machine; only when their node is online.
   if (nodeInfo(userId).online) {
