@@ -1546,16 +1546,21 @@ export default function App() {
               void loadPeople();
             }}
           >
-            <span>
+            <span className="connect-apps-label">
+              <UsersIcon size={16} />
               People
-              {friendRequests.filter((r) => r.direction === "incoming").length > 0
-                ? ` · ${friendRequests.filter((r) => r.direction === "incoming").length} new`
-                : ""}
             </span>
-            <UsersIcon size={16} />
+            {friendRequests.filter((r) => r.direction === "incoming").length > 0 && (
+              <span className="settings-badge">
+                {friendRequests.filter((r) => r.direction === "incoming").length} new
+              </span>
+            )}
           </button>
           <button className="connect-apps" type="button" onClick={() => setShowConnectApps(true)}>
-            <span>Connect apps</span>
+            <span className="connect-apps-label">
+              <PanelIcon size={16} />
+              Connect apps
+            </span>
             <span className="connect-apps-icons">
               <GmailIcon />
               <CalendarIcon />

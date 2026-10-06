@@ -1244,6 +1244,12 @@ body {
   border-color: var(--border);
 }
 
+.connect-apps-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .connect-apps-icons {
   display: inline-flex;
   align-items: center;

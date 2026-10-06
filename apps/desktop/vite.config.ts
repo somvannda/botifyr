@@ -8,6 +8,12 @@ const host = process.env.TAURI_DEV_HOST;
 export default defineConfig(() => ({
   plugins: [react()],
 
+  // Workspace packages are our own source (TS + CSS) — do not pre-bundle them,
+  // so edits to @botifyr/ui styles apply instantly via HMR.
+  optimizeDeps: {
+    exclude: ["@botifyr/ui", "@botifyr/client", "@botifyr/shared"],
+  },
+
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
   // 1. prevent Vite from obscuring rust errors
