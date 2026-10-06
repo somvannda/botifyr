@@ -2206,6 +2206,37 @@ export default function App() {
                       </span>
                     </label>
                   </div>
+
+                  <div className="settings-section-title">Downloads</div>
+                  <div className="settings-list">
+                    <label className="settings-line">
+                      <span>YouTube cookies</span>
+                      <span className="settings-static">
+                        {secrets.some((secret) => secret.name === "YOUTUBE_COOKIES") ? "Saved" : "Not set"}
+                      </span>
+                    </label>
+                  </div>
+                  <textarea
+                    className="bot-instructions"
+                    placeholder="Optional: paste your cookies.txt (Netscape format) so yt-dlp can get past YouTube's bot check. Leave empty to skip."
+                    value={ytCookies}
+                    onChange={(event) => setYtCookies(event.target.value)}
+                    rows={3}
+                  />
+                  <div className="apps-actions">
+                    {secrets.some((secret) => secret.name === "YOUTUBE_COOKIES") && (
+                      <button
+                        className="ghost small danger"
+                        type="button"
+                        onClick={() => void removeYoutubeCookies()}
+                      >
+                        Remove
+                      </button>
+                    )}
+                    <button className="btn primary" type="button" onClick={() => void saveYoutubeCookies()}>
+                      Save cookies
+                    </button>
+                  </div>
                 </div>
               )}
 
