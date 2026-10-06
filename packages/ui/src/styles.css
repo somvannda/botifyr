@@ -169,6 +169,13 @@ body {
   min-height: 0;
 }
 
+/* The conversation list scrolls; the footer stays pinned. */
+.sidebar .task-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
 .brand {
   display: flex;
   align-items: center;
