@@ -226,7 +226,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [boardItems, setBoardItems] = useState<Array<WorkItem>>([]);
   const [boardTitle, setBoardTitle] = useState("");
   const [boardBusy, setBoardBusy] = useState(false);
-  const [hqTab, setHqTab] = useState<"need" | "team" | "board" | "budget" | "standup">("need");
+  const [hqTab, setHqTab] = useState<"need" | "team" | "board" | "budget" | "standup" | "office">("need");
   const [hqNeeds, setHqNeeds] = useState<Array<Task>>([]);
   const [hqBudget, setHqBudget] = useState<WorkspaceBudget | null>(null);
   const [budgetInput, setBudgetInput] = useState("");
@@ -1032,6 +1032,15 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     } finally {
       setBoardBusy(false);
     }
+  }
+
+  /** Open an employee's live screen (their sandbox desktop) from the Office tab. */
+  function openEmployee(bot: Bot) {
+    closeBoard();
+    selectBot(bot);
+    setShowBotPanel(true);
+    setBotPanelTab("computer");
+    void client.startComputer(bot.sessionId).catch(() => {});
   }
 
   async function toggleGrant(subject: string, capability: string, granted: boolean) {
@@ -3987,6 +3996,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                   ["board", "Board"],
                   ["budget", "Budget"],
                   ["standup", "Standup"],
+                  ["office", "Office"],
                 ] as const
               ).map(([tab, label]) => (
                 <button
@@ -4166,6 +4176,25 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                     ))}
                   </ul>
                 </>
+              )}
+
+              {hqTab === "office" && (
+                <ul className="board-list">
+                  {(workspaceByName.get(boardWorkspace.name)?.roles ?? []).map((role) => {
+                    const bot = bots.find((entry) => entry.id === role.botId);
+                    return (
+                      <li key={role.botId} className="board-item">
+                        <span className="board-title">{role.title}</span>
+                        <span className="board-phase">{role.department}</span>
+                        {bot && (
+                          <button className="ghost small" type="button" onClick={() => openEmployee(bot)}>
+                            Open screen
+                          </button>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
               )}
             </div>
             <div className="apps-actions">
