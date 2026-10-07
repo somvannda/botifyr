@@ -6,6 +6,7 @@ import type {
   CompanyDNA,
   ConnectionInfo,
   CreateWorkspaceRequest,
+  Department,
   LearnedSkill,
   MediaRecipe,
   ModelPricingRecord,
@@ -17,6 +18,7 @@ import type {
   Skill,
   Task,
   User,
+  WorkItem,
   WorkspaceWithRoles,
 } from "@botifyr/shared";
 
@@ -580,6 +582,47 @@ export class BotifyrClient {
       json: true,
       body: JSON.stringify({ source }),
     });
+  }
+
+  /* Company board (work items). */
+  listWorkItems(workspaceId: string): Promise<WorkItem[]> {
+    return this.request(`/v1/workspaces/${workspaceId}/work`);
+  }
+
+  createWorkItem(
+    workspaceId: string,
+    input: {
+      title: string;
+      detail?: string;
+      phase?: WorkItem["phase"];
+      status?: WorkItem["status"];
+      assigneeBotId?: string;
+      department?: Department;
+    },
+  ): Promise<WorkItem> {
+    return this.request(`/v1/workspaces/${workspaceId}/work`, {
+      method: "POST",
+      json: true,
+      body: JSON.stringify(input),
+    });
+  }
+
+  updateWorkItem(
+    id: string,
+    input: {
+      title?: string;
+      detail?: string;
+      phase?: WorkItem["phase"];
+      status?: WorkItem["status"];
+      assigneeBotId?: string | null;
+      department?: Department;
+    },
+  ): Promise<WorkItem> {
+    return this.request(`/v1/work/${id}`, { method: "PATCH", json: true, body: JSON.stringify(input) });
+  }
+
+  deleteWorkItem(id: string): Promise<void> {
+    return this.request(`/v1/work/${id}`, { method: "DELETE" });
   }
 
   updateWorkspace(

@@ -111,6 +111,16 @@ CREATE TABLE IF NOT EXISTS workspace_roles (
 );
 CREATE INDEX IF NOT EXISTS workspace_roles_ws_idx ON workspace_roles (workspace_id);
 
+/* Company board: work items (docs/company-os.md §7). */
+CREATE TABLE IF NOT EXISTS work_items (
+  id           TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  data         JSONB NOT NULL,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS work_items_ws_idx ON work_items (workspace_id, updated_at DESC);
+
 CREATE TABLE IF NOT EXISTS connections (
   id         TEXT PRIMARY KEY,
   user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

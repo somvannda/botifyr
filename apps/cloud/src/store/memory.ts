@@ -22,6 +22,7 @@ import type {
   UsageRecord,
   UserRecord,
   WalletRecord,
+  WorkItemRecord,
   WorkspaceRecord,
 } from "./types.js";
 
@@ -36,6 +37,7 @@ export class MemoryStore implements Store {
   private workspaces = new Map<string, WorkspaceRecord>();
   /** Keyed by `${workspaceId}:${botId}`. */
   private botRoles = new Map<string, BotRoleRecord>();
+  private workItems = new Map<string, WorkItemRecord>();
   private tasks = new Map<string, Task>();
   private audit: AuditRecord[] = [];
   private secrets = new Map<string, SecretRecord>();
@@ -291,6 +293,33 @@ export class MemoryStore implements Store {
 
   async deleteBotRole(workspaceId: string, botId: string): Promise<boolean> {
     return this.botRoles.delete(`${workspaceId}:${botId}`);
+  }
+
+  async createWorkItem(record: WorkItemRecord): Promise<void> {
+    this.workItems.set(record.id, structuredClone(record));
+  }
+
+  async getWorkItem(id: string): Promise<WorkItemRecord | null> {
+    const record = this.workItems.get(id);
+    return record ? structuredClone(record) : null;
+  }
+
+  async listWorkItems(workspaceId: string): Promise<WorkItemRecord[]> {
+    return [...this.workItems.values()]
+      .filter((item) => item.workspaceId === workspaceId)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      .map((item) => structuredClone(item));
+  }
+
+  async updateWorkItem(record: WorkItemRecord): Promise<void> {
+    this.workItems.set(record.id, structuredClone(record));
+  }
+
+  async deleteWorkItem(workspaceId: string, id: string): Promise<boolean> {
+    const record = this.workItems.get(id);
+    if (!record || record.workspaceId !== workspaceId) return false;
+    this.workItems.delete(id);
+    return true;
   }
 
   async createTask(task: Task): Promise<void> {

@@ -282,6 +282,27 @@ export interface RoleDefinition {
 /** Employee lifecycle state. */
 export type EmployeeStatus = "hired" | "working" | "paused" | "offboarded";
 
+/** A unit of work on the company board (docs/company-os.md §7). */
+export type WorkStatus = "todo" | "in_progress" | "blocked" | "review" | "done";
+
+export type WorkPhase = "mvp" | "phase2" | "phase3" | "ongoing";
+
+export interface WorkItem {
+  id: string;
+  workspaceId: string;
+  title: string;
+  detail?: string;
+  phase: WorkPhase;
+  status: WorkStatus;
+  /** The employee (bot) it is assigned to, if any. */
+  assigneeBotId?: string;
+  department: Department;
+  /** Who created it: a bot id or a user id. */
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Accounts, secrets, audit                                                    */
 /* -------------------------------------------------------------------------- */

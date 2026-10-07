@@ -7,6 +7,7 @@ import type {
   ModelPricingRecord,
   PlatformSettings,
   Task,
+  WorkItem,
 } from "@botifyr/shared";
 
 export type { MediaRecipe, ModelPricingRecord, PlatformSettings };
@@ -112,6 +113,9 @@ export interface BotRoleRecord {
   isChair?: boolean;
   hiredAt: string;
 }
+
+/** A unit of work on the company board. */
+export type WorkItemRecord = WorkItem;
 
 export interface SecretRecord {
   id: string;
@@ -268,6 +272,13 @@ export interface Store {
   getBotRole(workspaceId: string, botId: string): Promise<BotRoleRecord | null>;
   listBotRoles(workspaceId: string): Promise<BotRoleRecord[]>;
   deleteBotRole(workspaceId: string, botId: string): Promise<boolean>;
+
+  /* Company board (work items) */
+  createWorkItem(record: WorkItemRecord): Promise<void>;
+  getWorkItem(id: string): Promise<WorkItemRecord | null>;
+  listWorkItems(workspaceId: string): Promise<WorkItemRecord[]>;
+  updateWorkItem(record: WorkItemRecord): Promise<void>;
+  deleteWorkItem(workspaceId: string, id: string): Promise<boolean>;
 
   createTask(task: Task): Promise<void>;
   updateTask(task: Task): Promise<void>;

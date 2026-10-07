@@ -23,6 +23,7 @@ import type {
   UsageRecord,
   UserRecord,
   WalletRecord,
+  WorkItemRecord,
   WorkspaceRecord,
 } from "./types.js";
 import { SCHEMA_SQL } from "./schema.js";
@@ -393,6 +394,42 @@ export class PostgresStore implements Store {
     const result = await this.pool.query(
       "DELETE FROM workspace_roles WHERE workspace_id = $1 AND bot_id = $2",
       [workspaceId, botId],
+    );
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async createWorkItem(record: WorkItemRecord): Promise<void> {
+    await this.pool.query(
+      "INSERT INTO work_items (id, workspace_id, data, created_at, updated_at) VALUES ($1, $2, $3, $4, $5)",
+      [record.id, record.workspaceId, record, record.createdAt, record.updatedAt],
+    );
+  }
+
+  async getWorkItem(id: string): Promise<WorkItemRecord | null> {
+    const { rows } = await this.pool.query("SELECT data FROM work_items WHERE id = $1", [id]);
+    return (rows[0]?.data as WorkItemRecord) ?? null;
+  }
+
+  async listWorkItems(workspaceId: string): Promise<WorkItemRecord[]> {
+    const { rows } = await this.pool.query(
+      "SELECT data FROM work_items WHERE workspace_id = $1 ORDER BY created_at ASC",
+      [workspaceId],
+    );
+    return rows.map((row) => row.data as WorkItemRecord);
+  }
+
+  async updateWorkItem(record: WorkItemRecord): Promise<void> {
+    await this.pool.query("UPDATE work_items SET data = $1, updated_at = $2 WHERE id = $3", [
+      record,
+      record.updatedAt,
+      record.id,
+    ]);
+  }
+
+  async deleteWorkItem(workspaceId: string, id: string): Promise<boolean> {
+    const result = await this.pool.query(
+      "DELETE FROM work_items WHERE workspace_id = $1 AND id = $2",
+      [workspaceId, id],
     );
     return (result.rowCount ?? 0) > 0;
   }

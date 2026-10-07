@@ -15,11 +15,13 @@ import type {
   CompanyDNA,
   ConnectionInfo,
   CreateWorkspaceRequest,
+  Department,
   SecretSummary,
   ServerEvent,
   Session,
   Task,
   User,
+  WorkItem,
   Workspace,
   WorkspaceWithRoles,
 } from "@botifyr/shared";
@@ -2263,6 +2265,102 @@ export async function buildServer(options: ServerOptions) {
         }
       }
       await store.deleteWorkspace(userId, workspace.id);
+      return reply.code(204).send();
+    },
+  );
+
+  /* Company board: work items (docs/company-os.md §7). */
+  app.get<{ Params: { id: string } }>(
+    "/v1/workspaces/:id/work",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const workspace = await store.getWorkspace(request.params.id);
+      if (!workspace || workspace.ownerId !== userId) {
+        return reply.code(404).send({ error: "workspace not found" });
+      }
+      return store.listWorkItems(workspace.id);
+    },
+  );
+
+  app.post<{
+    Params: { id: string };
+    Body: {
+      title?: string;
+      detail?: string;
+      phase?: WorkItem["phase"];
+      status?: WorkItem["status"];
+      assigneeBotId?: string;
+      department?: Department;
+    };
+  }>("/v1/workspaces/:id/work", { preHandler: requireAuth }, async (request, reply) => {
+    const userId = request.userId as string;
+    const workspace = await store.getWorkspace(request.params.id);
+    if (!workspace || workspace.ownerId !== userId) {
+      return reply.code(404).send({ error: "workspace not found" });
+    }
+    const title = (request.body?.title ?? "").trim().slice(0, 200);
+    if (!title) return reply.code(400).send({ error: "a title is required" });
+    const now = new Date().toISOString();
+    const item: WorkItem = {
+      id: randomUUID(),
+      workspaceId: workspace.id,
+      title,
+      detail: request.body?.detail?.slice(0, 4000),
+      phase: request.body?.phase ?? "ongoing",
+      status: request.body?.status ?? "todo",
+      assigneeBotId: request.body?.assigneeBotId,
+      department: toDepartment(request.body?.department),
+      createdBy: userId,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await store.createWorkItem(item);
+    return reply.code(201).send(item);
+  });
+
+  app.patch<{
+    Params: { id: string };
+    Body: {
+      title?: string;
+      detail?: string;
+      phase?: WorkItem["phase"];
+      status?: WorkItem["status"];
+      assigneeBotId?: string | null;
+      department?: Department;
+    };
+  }>("/v1/work/:id", { preHandler: requireAuth }, async (request, reply) => {
+    const userId = request.userId as string;
+    const item = await store.getWorkItem(request.params.id);
+    const workspace = item ? await store.getWorkspace(item.workspaceId) : null;
+    if (!item || !workspace || workspace.ownerId !== userId) {
+      return reply.code(404).send({ error: "work item not found" });
+    }
+    if (typeof request.body?.title === "string" && request.body.title.trim()) {
+      item.title = request.body.title.trim().slice(0, 200);
+    }
+    if (typeof request.body?.detail === "string") item.detail = request.body.detail.slice(0, 4000);
+    if (request.body?.phase) item.phase = request.body.phase;
+    if (request.body?.status) item.status = request.body.status;
+    if (request.body?.assigneeBotId === null) item.assigneeBotId = undefined;
+    else if (typeof request.body?.assigneeBotId === "string") item.assigneeBotId = request.body.assigneeBotId;
+    if (request.body?.department) item.department = toDepartment(request.body.department);
+    item.updatedAt = new Date().toISOString();
+    await store.updateWorkItem(item);
+    return item;
+  });
+
+  app.delete<{ Params: { id: string } }>(
+    "/v1/work/:id",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const item = await store.getWorkItem(request.params.id);
+      const workspace = item ? await store.getWorkspace(item.workspaceId) : null;
+      if (!item || !workspace || workspace.ownerId !== userId) {
+        return reply.code(404).send({ error: "work item not found" });
+      }
+      await store.deleteWorkItem(item.workspaceId, item.id);
       return reply.code(204).send();
     },
   );
