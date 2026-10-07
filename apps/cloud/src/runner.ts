@@ -22,6 +22,7 @@ import { createDelegationTools } from "./delegation-tools.js";
 import { createSocialTools, notConnectedSocial } from "./social-tools.js";
 import { createTelegramSocialClient } from "./social-telegram.js";
 import { createDesignTools } from "./design-tools.js";
+import { createEmailTools, resendSender } from "./email-tools.js";
 import { createEscalationTools } from "./escalation-tools.js";
 import { removeDeniedTools } from "./tool-capabilities.js";
 import {
@@ -421,6 +422,12 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
     }
     if (department === "design" || department === "marketing") {
       tools.push(...createDesignTools(store, userId, authorBot.id));
+    }
+    // Email hand: outreach/support (owned channel). Approval-gated.
+    if (department === "marketing" || department === "sales" || department === "support") {
+      const resendKey = process.env.RESEND_API_KEY;
+      const mailFrom = process.env.MAIL_FROM;
+      tools.push(...createEmailTools(resendKey && mailFrom ? resendSender(resendKey, mailFrom) : null));
     }
     // Any employee can pause and ask the owner when blocked (CAPTCHA/2FA/decision).
     tools.push(...createEscalationTools());
