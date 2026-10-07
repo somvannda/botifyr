@@ -9,6 +9,7 @@ const TOOL_CAPABILITIES: Array<[RegExp, string]> = [
   [/^social\.publish$/, "social.publish"],
   [/^social\.reply$/, "social.reply"],
   [/^email\./, "email.send"],
+  [/^ads\.manage$/, "ads.manage"],
   [/^library\.(read|list)$/, "files.read"],
   [/^library\.write$/, "files.write"],
   [/^design\./, "files.write"],
