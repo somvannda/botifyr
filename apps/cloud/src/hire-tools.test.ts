@@ -50,14 +50,12 @@ describe("company.hire", () => {
     expect((await store.getBot(role.botId))?.name).toBe("Alex Rivera");
   });
 
-  it("falls back to a personal name when none is given", async () => {
+  it("requires a name", async () => {
     const store = await seeded();
     const [tool] = createHireTools(store, "u1", "ceo");
-    await tool!.run({ title: "Head of Sales" }, ctx);
-    const role = (await store.listBotRoles("ws1")).find((entry) => entry.title === "Head of Sales")!;
-    const bot = await store.getBot(role.botId);
-    expect(bot?.name).toBeTruthy();
-    expect(bot?.name).not.toBe("Head of Sales");
+    const result = await tool!.run({ title: "Head of Sales" }, ctx);
+    expect(result.ok).toBe(false);
+    expect((await store.listBotRoles("ws1")).some((entry) => entry.title === "Head of Sales")).toBe(false);
   });
 
   it("won't hire a role that already exists", async () => {

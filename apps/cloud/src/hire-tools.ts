@@ -11,34 +11,6 @@ import { toDepartment } from "./company.js";
  * "hire a Head of Growth". Approval-gated (creating an employee is
  * consequential). docs/company-workspace.md §16 (hire_employee) & §17.
  */
-/** Last-resort fallback only — normally the hiring agent supplies a name. */
-const HIRE_NAMES = [
-  "Alex Rivera",
-  "Sam Carter",
-  "Jordan Lee",
-  "Taylor Brooks",
-  "Casey Morgan",
-  "Riley Chen",
-  "Avery Patel",
-  "Morgan Diaz",
-  "Jamie Okafor",
-  "Robin Nguyen",
-  "Noah Kim",
-  "Priya Nair",
-  "Liam O'Connor",
-  "Maya Chen",
-  "Dev Patel",
-];
-
-/** A stable personal name, used only if the model forgets to pass one. */
-function pickName(seed: string): string {
-  let hash = 0;
-  for (let index = 0; index < seed.length; index += 1) {
-    hash = (hash * 31 + seed.charCodeAt(index)) | 0;
-  }
-  return HIRE_NAMES[Math.abs(hash) % HIRE_NAMES.length] as string;
-}
-
 export function createHireTools(store: Store, userId: string, botId: string): ToolDefinition[] {
   return [
     {
@@ -98,10 +70,15 @@ export function createHireTools(store: Store, userId: string, botId: string): To
           .trim()
           .slice(0, 4000);
         // Give the hire a personal name, not their role title.
-        const name =
-          String(args.name ?? "")
-            .trim()
-            .slice(0, 40) || pickName(`${title}${existingRoles.length}`);
+        const name = String(args.name ?? "")
+          .trim()
+          .slice(0, 40);
+        if (!name) {
+          return {
+            ok: false,
+            output: 'A name is required — give the new hire a realistic full name (e.g. "Alex Rivera").',
+          };
+        }
 
         const now = new Date().toISOString();
         const session = {
