@@ -225,4 +225,35 @@ describe("youtube.download", () => {
     expect(commands.some((command) => command.includes("Referer: https://example.com/"))).toBe(true);
     expect(commands.some((command) => command.includes("cdn.example.com/recipe/master.m3u8"))).toBe(true);
   });
+
+  it("downloads the URL a browser sniff returns for an SPA page", async () => {
+    const commands: string[] = [];
+    const backend: ShellBackend = {
+      async exec(command) {
+        commands.push(command);
+        if (command.startsWith("yt-dlp") && command.includes("example.com/spa")) {
+          return { ok: false, output: "ERROR: Unsupported URL" };
+        }
+        return { ok: true, output: "ok" };
+      },
+      async readFile() {
+        return { ok: true, output: "" };
+      },
+      async writeFile() {
+        return { ok: true, output: "" };
+      },
+      async listFiles() {
+        return { ok: true, output: "" };
+      },
+      async close() {},
+    };
+    const tool = createMediaTools(backend, "/d", undefined, {
+      sniffMedia: async () => "https://v3.example.com/hls/video.m3u8?expiredTime=1&tul=abc",
+    }).tools.find((entry) => entry.name === "youtube.download");
+    if (!tool) throw new Error("youtube.download not found");
+    const result = await tool.run({ url: "https://example.com/spa" }, ctx);
+
+    expect(result.ok).toBe(true);
+    expect(commands.some((command) => command.includes("v3.example.com/hls/video.m3u8"))).toBe(true);
+  });
 });

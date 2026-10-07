@@ -45,6 +45,11 @@ export interface MediaToolOptions {
     headers?: Record<string, string>;
     note?: string;
   }) => Promise<void>;
+  /**
+   * Ask a browser to open a page and return the media (m3u8/mp4) URL it loads.
+   * For SPA players whose stream URL isn't in the HTML.
+   */
+  sniffMedia?: (url: string) => Promise<string | null>;
 }
 
 export function createMediaTools(
@@ -112,6 +117,20 @@ export function createMediaTools(
       return retry.ok;
     };
 
+    // Open the page in a browser and capture the media request (SPA players).
+    const trySniff = async (url: string): Promise<boolean> => {
+      if (!options.sniffMedia) return false;
+      const candidate = await options.sniffMedia(url).catch(() => null);
+      if (!candidate) return false;
+      const retry = await backend.exec(
+        audio
+          ? `yt-dlp ${common} -x --audio-format mp3 -o ${template} '${candidate}'`
+          : `yt-dlp ${common} -f 'bv*[height<=${height}]+ba/b[height<=${height}]' ` +
+              `--merge-output-format mp4 -o ${template} '${candidate}'`,
+      );
+      return retry.ok;
+    };
+
     const tryFallback = async (url: string): Promise<boolean> => {
       await backend.exec(
         `curl -sL -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' '${url}' -o /workspace/_page.html`,
@@ -143,7 +162,7 @@ export function createMediaTools(
           `--merge-output-format mp4 -o ${template} '${url}'`;
       const result = await backend.exec(command);
       if (!result.ok) {
-        const recovered = (await tryRecipe(url)) || (await tryFallback(url));
+        const recovered = (await tryRecipe(url)) || (await trySniff(url)) || (await tryFallback(url));
         if (!recovered) ok = false;
       }
     }
