@@ -17,6 +17,7 @@ import {
 } from "@botifyr/agent-core";
 import { emit } from "./events.js";
 import { companyContext } from "./company.js";
+import { createCompanyTools } from "./company-tools.js";
 import {
   clearComputerSandbox,
   clearTaskCancel,
@@ -364,6 +365,14 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
           ? `\n(Showing 25 of ${learned.length}. Use skills.list with a query to search the rest.)`
           : "")
       : "";
+  // Company builder tools: understand a site/idea and propose an org chart.
+  const fetchText = async (url: string): Promise<string> => {
+    const res = await fetch(url, { redirect: "follow" });
+    if (!res.ok) throw new Error(`fetch ${res.status}`);
+    return (await res.text()).slice(0, 40_000);
+  };
+  tools.push(...createCompanyTools(oneShot, fetchText));
+
   // Company context: give every employee the shared business briefing (DNA).
   let companyBrief = "";
   const authorBot = deps.author ? await store.getBot(deps.author.id).catch(() => null) : null;
