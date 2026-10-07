@@ -717,6 +717,21 @@ body {
   overflow: auto;
 }
 
+/* The file preview modal is bigger and resizable (drag its corner). */
+.apps-panel:has(.file-preview) {
+  width: min(780px, 92vw);
+  min-width: 340px;
+  min-height: 260px;
+  max-width: 94vw;
+  max-height: 90vh;
+  resize: both;
+  overflow: auto;
+}
+
+.apps-panel:has(.file-preview) .file-preview {
+  max-height: 74vh;
+}
+
 .md-table {
   width: 100%;
   border-collapse: collapse;
