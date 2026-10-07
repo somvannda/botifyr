@@ -479,6 +479,22 @@ body {
   line-height: 1.5;
 }
 
+.company-rationale {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.company-rationale li::before {
+  content: "• ";
+  color: var(--accent);
+}
+
 .company-plan-list {
   list-style: none;
   margin: 0;

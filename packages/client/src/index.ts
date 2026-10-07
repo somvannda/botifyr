@@ -561,7 +561,7 @@ export class BotifyrClient {
     kind: "url" | "idea";
     value: string;
     name?: string;
-  }): Promise<CreateWorkspaceRequest> {
+  }): Promise<CreateWorkspaceRequest & { template?: string; rationale?: string[] }> {
     return this.request("/v1/workspaces/plan", {
       method: "POST",
       json: true,

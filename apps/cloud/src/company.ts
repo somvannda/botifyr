@@ -26,6 +26,9 @@ export interface PlanInput {
 /** A planned org chart: like a create request, but with members guaranteed. */
 export interface CompanyPlan extends Omit<CreateWorkspaceRequest, "members"> {
   members: NonNullable<CreateWorkspaceRequest["members"]>;
+  /** Planning annotations surfaced to the CEO (not sent on create). */
+  template?: string;
+  rationale?: string[];
 }
 
 /** A one-shot text completion, injected so planning is easy to test. */
@@ -95,6 +98,7 @@ function deriveName(input: PlanInput): string {
 export function defaultCompany(input: PlanInput): CompanyPlan {
   const name = (input.name?.trim() || deriveName(input)).slice(0, 60);
   const mission = `${name} — ${input.value.trim().slice(0, 160) || "a new company"}.`;
+  const rec = recommendTeam({ text: `${name} ${input.value}`, stage: "idea" });
   return {
     name,
     source: { kind: input.kind, value: input.value.slice(0, 500) },
@@ -112,7 +116,9 @@ export function defaultCompany(input: PlanInput): CompanyPlan {
       priorities: ["product"],
     },
     avatarEmoji: input.kind === "url" ? "🌐" : "🚀",
-    members: recommendTeam({ text: `${name} ${input.value}`, stage: "idea" }).roleIds
+    template: rec.template,
+    rationale: rec.rationale,
+    members: rec.roleIds
       .map((id) => ROLE_BY_ID.get(id))
       .filter((role): role is RoleDefinition => Boolean(role))
       .map((role, index) => ({
@@ -183,6 +189,8 @@ export function sanitizePlan(raw: unknown, input: PlanInput): CompanyPlan | null
     source: { kind: input.kind, value: input.value.slice(0, 500) },
     mission,
     avatarEmoji,
+    template: typeof record.template === "string" ? record.template.slice(0, 40) : "model",
+    rationale: ["Model-designed org chart."],
     members: resolved,
   };
 }

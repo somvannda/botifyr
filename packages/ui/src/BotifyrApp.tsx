@@ -212,7 +212,9 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [createBotMode, setCreateBotMode] = useState<"bot" | "group" | "edit" | null>(null);
   const [companySetupOpen, setCompanySetupOpen] = useState(false);
   const [companySource, setCompanySource] = useState("");
-  const [companyPlan, setCompanyPlan] = useState<CreateWorkspaceRequest | null>(null);
+  const [companyPlan, setCompanyPlan] = useState<
+    (CreateWorkspaceRequest & { template?: string; rationale?: string[] }) | null
+  >(null);
   const [companyBusy, setCompanyBusy] = useState(false);
   const [companyError, setCompanyError] = useState<string | null>(null);
   const [companyEdit, setCompanyEdit] = useState<{ id: string; name: string } | null>(null);
@@ -3750,6 +3752,13 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                     />
                   </div>
                   {companyPlan.mission && <p className="company-plan-mission">{companyPlan.mission}</p>}
+                  {companyPlan.rationale && companyPlan.rationale.length > 0 && (
+                    <ul className="company-rationale">
+                      {companyPlan.rationale.map((line, index) => (
+                        <li key={index}>{line}</li>
+                      ))}
+                    </ul>
+                  )}
                   <ul className="company-plan-list">
                     {(companyPlan.members ?? []).map((member, index) => (
                       <li key={index} className="plan-member-row">
