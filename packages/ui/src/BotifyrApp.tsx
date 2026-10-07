@@ -156,13 +156,14 @@ function token(): string {
 
 const PENDING_KEY = "botifyr.pendingState";
 
-/** A HQ footer icon button that flashes accent-coloured when clicked. */
+/** A HQ footer icon button: flashes on click, and stays lit when `pressed`. */
 function HqButton({
   title,
   onClick,
   primary,
   danger,
   disabled,
+  pressed,
   children,
 }: {
   title: string;
@@ -170,21 +171,24 @@ function HqButton({
   primary?: boolean;
   danger?: boolean;
   disabled?: boolean;
+  pressed?: boolean;
   children: ReactNode;
 }) {
   const [flash, setFlash] = useState(false);
+  const on = pressed || flash;
   return (
     <button
       className={`hq-icon-btn${primary ? " primary" : ""}${danger ? " danger" : ""}${
-        flash ? " active" : ""
+        on ? " active" : ""
       }`}
       type="button"
       title={title}
       aria-label={title}
+      aria-pressed={pressed}
       disabled={disabled}
       onClick={() => {
         setFlash(true);
-        window.setTimeout(() => setFlash(false), 450);
+        window.setTimeout(() => setFlash(false), 650);
         onClick();
       }}
     >
@@ -5430,6 +5434,12 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
               {(() => {
                 const autonomy = workspaceByName.get(boardWorkspace.name)?.autonomy ?? "manual";
                 const paused = (workspaceByName.get(boardWorkspace.name)?.status ?? "active") === "paused";
+                const roles = workspaceByName.get(boardWorkspace.name)?.roles ?? [];
+                const allTrusted =
+                  roles.length > 0 &&
+                  roles.every(
+                    (role) => bots.find((bot) => bot.id === role.botId)?.autoApprove === true,
+                  );
                 return (
                   <>
                     <span className="hq-autonomy">{autonomy === "manual" ? "Manual" : autonomy}</span>
@@ -5470,6 +5480,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                     <HqButton
                       title="Trust all — skip approval prompts for every employee"
                       disabled={boardBusy}
+                      pressed={allTrusted}
                       onClick={() => void trustAll()}
                     >
                       <ShieldIcon size={16} />
@@ -5477,6 +5488,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                     <HqButton
                       title={paused ? "Resume — let the team work again" : "Pause — stop autonomous runs"}
                       disabled={boardBusy}
+                      pressed={paused}
                       onClick={() => void setCompanyStatus(paused ? "active" : "paused")}
                     >
                       {paused ? <PlayIcon size={16} /> : <PauseIcon size={16} />}
