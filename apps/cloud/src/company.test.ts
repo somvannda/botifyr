@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   analyzeSource,
+  buildWeeklyReport,
   defaultCompany,
   isBudgetExhausted,
   planCompany,
@@ -164,5 +165,27 @@ describe("withinOperatingHours", () => {
     const hours = { start: 9, end: 18, timezone: "Asia/Phnom_Penh" };
     expect(withinOperatingHours(hours, new Date("2026-01-05T03:00:00Z"))).toBe(true);
     expect(withinOperatingHours(hours, new Date("2026-01-05T16:00:00Z"))).toBe(false);
+  });
+});
+
+describe("buildWeeklyReport", () => {
+  const item = (title: string, status: "todo" | "done" | "blocked") => ({
+    id: title,
+    workspaceId: "w",
+    title,
+    phase: "mvp" as const,
+    status,
+    department: "product" as const,
+    createdAt: "",
+    updatedAt: "",
+  });
+
+  it("summarises done / open / blocked and approvals", () => {
+    const report = buildWeeklyReport([item("A", "done"), item("B", "todo"), item("C", "blocked")], 2);
+    expect(report).toContain("1 done");
+    expect(report).toContain("2 open");
+    expect(report).toContain("1 blocked");
+    expect(report).toContain("2 items need your approval");
+    expect(report).toContain("Done: A");
   });
 });

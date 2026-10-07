@@ -51,6 +51,7 @@ import { oneShot, runTask, runtimeInfo, summarizeConversation } from "./runner.j
 import {
   analyzeSource,
   buildStandup,
+  buildWeeklyReport,
   planCompany,
   shouldRunSchedule,
   toDepartment,
@@ -2510,8 +2511,8 @@ export async function buildServer(options: ServerOptions) {
     return record;
   });
 
-  /** Run a standup: summarise the board + approvals and record it. */
-  app.post<{ Params: { id: string } }>(
+  /** Record a report: standup (default) or a weekly summary. */
+  app.post<{ Params: { id: string }; Body: { kind?: string } }>(
     "/v1/workspaces/:id/standup",
     { preHandler: requireAuth },
     async (request, reply) => {
@@ -2520,6 +2521,11 @@ export async function buildServer(options: ServerOptions) {
       if (!workspace || workspace.ownerId !== userId) {
         return reply.code(404).send({ error: "workspace not found" });
       }
+      const kind: "standup" | "weekly" | "incident" = ["standup", "weekly", "incident"].includes(
+        String(request.body?.kind),
+      )
+        ? (request.body?.kind as "standup" | "weekly" | "incident")
+        : "standup";
       const items = await store.listWorkItems(workspace.id);
       const roles = await store.listBotRoles(workspace.id);
       const sessions = new Set<string>();
@@ -2533,8 +2539,8 @@ export async function buildServer(options: ServerOptions) {
       const report = {
         id: randomUUID(),
         workspaceId: workspace.id,
-        kind: "standup" as const,
-        summary: buildStandup(items, pending),
+        kind,
+        summary: kind === "weekly" ? buildWeeklyReport(items, pending) : buildStandup(items, pending),
         createdAt: new Date().toISOString(),
       };
       await store.createCompanyReport(report);

@@ -102,6 +102,22 @@ export function buildStandup(items: WorkItem[], pendingApprovals: number): strin
   return lines.join("\n").slice(0, 4000);
 }
 
+/** Summarise the board + approvals into a weekly report (docs/company-os.md §5). */
+export function buildWeeklyReport(items: WorkItem[], pendingApprovals: number): string {
+  const done = items.filter((item) => item.status === "done");
+  const open = items.filter((item) => item.status !== "done");
+  const blocked = items.filter((item) => item.status === "blocked");
+  const lines = [
+    `Weekly report — ${done.length} done, ${open.length} open, ${blocked.length} blocked.`,
+    pendingApprovals > 0
+      ? `${pendingApprovals} item${pendingApprovals === 1 ? "" : "s"} need your approval.`
+      : "Nothing needs you.",
+    `Done: ${done.slice(0, 8).map((item) => item.title).join("; ") || "—"}.`,
+    `In flight: ${open.slice(0, 8).map((item) => item.title).join("; ") || "—"}.`,
+  ];
+  return lines.join("\n").slice(0, 4000);
+}
+
 /** The shared business briefing prepended to every employee's instructions. */
 export function companyContext(dna: CompanyDNA): string {
   const lines = [

@@ -667,8 +667,15 @@ export class BotifyrClient {
     return this.request(`/v1/workspaces/${workspaceId}/reports`);
   }
 
-  runStandup(workspaceId: string): Promise<CompanyReport> {
-    return this.request(`/v1/workspaces/${workspaceId}/standup`, { method: "POST", json: true });
+  runStandup(
+    workspaceId: string,
+    kind: "standup" | "weekly" | "incident" = "standup",
+  ): Promise<CompanyReport> {
+    return this.request(`/v1/workspaces/${workspaceId}/standup`, {
+      method: "POST",
+      json: true,
+      body: JSON.stringify({ kind }),
+    });
   }
 
   /** Stop every running task across the company's employees. */

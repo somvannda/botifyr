@@ -1110,12 +1110,12 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     setHqWiki([]);
   }
 
-  async function runStandup() {
+  async function runStandup(kind: "standup" | "weekly" = "standup") {
     const workspace = boardWorkspace;
     if (!workspace) return;
     setBoardBusy(true);
     try {
-      const report = await client.runStandup(workspace.id);
+      const report = await client.runStandup(workspace.id, kind);
       setHqReports((prev) => [report, ...prev]);
     } finally {
       setBoardBusy(false);
@@ -4552,9 +4552,17 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                       className="btn primary small"
                       type="button"
                       disabled={boardBusy}
-                      onClick={() => void runStandup()}
+                      onClick={() => void runStandup("standup")}
                     >
                       {boardBusy ? "Running…" : "Run standup"}
+                    </button>
+                    <button
+                      className="ghost small"
+                      type="button"
+                      disabled={boardBusy}
+                      onClick={() => void runStandup("weekly")}
+                    >
+                      Weekly report
                     </button>
                   </div>
                   {hqReports.length === 0 && <p className="company-hint">No standups yet.</p>}
