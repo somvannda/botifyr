@@ -3051,29 +3051,16 @@ export async function buildServer(options: ServerOptions) {
         return;
       }
       const backend = getComputerSandbox(`session:${session.id}`);
-      const base = backend?.streamUrl ? await backend.streamUrl() : null;
-      if (!base) {
-        reply.code(404).send({ error: "no live desktop" });
+      const bytes = backend?.recording ? await backend.recording() : null;
+      if (!bytes) {
+        reply.code(404).send({ error: "no recording yet — record, then stop, to produce one" });
         return;
       }
-      const upstream = await fetch(`${base}/recording`);
-      if (!upstream.ok || !upstream.body) {
-        reply.code(404).send({ error: "no recording yet" });
-        return;
-      }
-      reply.hijack();
-      reply.raw.writeHead(200, { "content-type": "video/mp4", "cache-control": "no-store" });
-      const reader = upstream.body.getReader();
-      try {
-        for (;;) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          reply.raw.write(Buffer.from(value));
-        }
-      } catch {
-        // client/upstream closed
-      }
-      reply.raw.end();
+      return reply
+        .header("content-type", "video/mp4")
+        .header("cache-control", "no-store")
+        .header("content-length", bytes.length)
+        .send(bytes);
     },
   );
 

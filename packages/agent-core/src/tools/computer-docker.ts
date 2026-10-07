@@ -54,6 +54,16 @@ export function createDockerComputerBackend(options: DockerComputerOptions = {})
     key: (key) => action("key", { key }),
     scroll: (amount) => action("scroll", { amount }),
     record: (start: boolean) => action(start ? "record_start" : "record_stop", {}),
+    recording: async () => {
+      try {
+        const base = await handle.ensureStarted();
+        const response = await fetch(`${base}/recording`);
+        if (!response.ok) return null;
+        return Buffer.from(await response.arrayBuffer());
+      } catch {
+        return null;
+      }
+    },
     streamUrl: async () => {
       try {
         return await handle.ensureStarted();

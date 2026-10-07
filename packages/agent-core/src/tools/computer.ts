@@ -15,6 +15,8 @@ export interface ComputerBackend {
   scroll(amount: number): Promise<ToolResult>;
   /** Start/stop a screen recording (teach-by-demonstration). */
   record?(start: boolean): Promise<ToolResult>;
+  /** The latest recording as MP4 bytes, or null when none is available. */
+  recording?(): Promise<Buffer | null>;
   /** Base URL of the live framebuffer stream, if the backend supports one. */
   streamUrl?(): Promise<string | null>;
   close(): Promise<void>;
