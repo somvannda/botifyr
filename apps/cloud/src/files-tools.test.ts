@@ -74,6 +74,15 @@ describe("library tools (company workspace-aware)", () => {
     expect(wiki.find((file) => file.name === "NOTES.md")?.content).toBe("hello");
   });
 
+  it("derives a filename when none is given", async () => {
+    const store = await seeded();
+    const write = createFileTools(store, "cto", "u1").find((tool) => tool.name === "library.write")!;
+    const result = await write.run({ content: "# Target List\n\n- a\n- b" }, ctx);
+    expect(result.ok).toBe(true);
+    const wiki = await store.listWorkspaceFiles("ws1");
+    expect(wiki.find((file) => file.name === "Target-List.md")?.content).toContain("a");
+  });
+
   it("accepts common file-name aliases (path/filename) on write", async () => {
     const store = await seeded();
     const write = createFileTools(store, "cto", "u1").find((tool) => tool.name === "library.write")!;

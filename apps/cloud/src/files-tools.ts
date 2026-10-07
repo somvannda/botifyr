@@ -80,14 +80,22 @@ export function createFileTools(store: Store, botId: string, userId: string): To
         required: ["name", "content"],
       },
       run: async (args) => {
-        const name = resolveName(args);
+        const content = String(args.content ?? args.text ?? args.body ?? args.markdown ?? "").slice(
+          0,
+          200_000,
+        );
+        let name = resolveName(args);
         if (!name) {
-          return {
-            ok: false,
-            output: 'A file name is required, e.g. {"name":"notes.md","content":"..."}.',
-          };
+          // Be forgiving: derive a filename from the first heading, else a default.
+          const heading = /^\s*#{1,3}\s+(.+)$/m.exec(content)?.[1]?.trim();
+          name = heading
+            ? `${heading
+                .replace(/[^a-z0-9 ._-]/gi, " ")
+                .trim()
+                .replace(/\s+/g, "-")
+                .slice(0, 60) || "notes"}.md`
+            : "notes.md";
         }
-        const content = String(args.content ?? "").slice(0, 200_000);
         const now = new Date().toISOString();
         const workspaceId = await companyWorkspaceId();
         if (workspaceId) {
