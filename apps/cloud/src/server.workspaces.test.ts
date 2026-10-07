@@ -351,10 +351,20 @@ describe("workspaces API", () => {
       method: "POST",
       url: `/v1/workspaces/${ws.id}/activate`,
       headers: auth,
-      payload: { level: "autonomous" },
+      payload: { level: "autonomous", timezone: "Asia/Phnom_Penh" },
     });
     expect(activated.statusCode).toBe(200);
-    expect((activated.json() as { autonomy: string }).autonomy).toBe("autonomous");
+    const activatedBody = activated.json() as {
+      autonomy: string;
+      operatingHours?: { start: number; end: number; timezone?: string };
+    };
+    expect(activatedBody.autonomy).toBe("autonomous");
+    // Defaults to a 9–5 working day in the owner's timezone.
+    expect(activatedBody.operatingHours).toEqual({
+      start: 9,
+      end: 17,
+      timezone: "Asia/Phnom_Penh",
+    });
 
     const bots = (
       await app.inject({ method: "GET", url: "/v1/bots", headers: auth })

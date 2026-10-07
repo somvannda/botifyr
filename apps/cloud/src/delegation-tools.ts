@@ -71,6 +71,14 @@ export function createDelegationTools(store: Store, userId: string, botId: strin
         if (!title) return { ok: false, output: "A task is required." };
         const phase = PHASES.includes(String(args.phase)) ? (args.phase as WorkItem["phase"]) : "ongoing";
         const now = new Date().toISOString();
+        // Dedupe: never stack the same task twice on the board.
+        const existing = await store.listWorkItems(workspace.id);
+        const duplicate = existing.find(
+          (item) => item.status !== "done" && item.title.trim().toLowerCase() === title.toLowerCase(),
+        );
+        if (duplicate) {
+          return { ok: true, output: `Already on the board: "${title}" (${duplicate.status}).` };
+        }
         await store.createWorkItem({
           id: randomUUID(),
           workspaceId: workspace.id,

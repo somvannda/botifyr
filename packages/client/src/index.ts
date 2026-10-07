@@ -687,12 +687,18 @@ export class BotifyrClient {
   activateCompany(
     workspaceId: string,
     level: "manual" | "supervised" | "autonomous",
+    timezone?: string,
   ): Promise<WorkspaceWithRoles> {
     return this.request(`/v1/workspaces/${workspaceId}/activate`, {
       method: "POST",
       json: true,
-      body: JSON.stringify({ level }),
+      body: JSON.stringify({ level, timezone }),
     });
+  }
+
+  /** Run now: fire every employee's scheduled prompt immediately. */
+  runCompany(workspaceId: string): Promise<{ started: number }> {
+    return this.request(`/v1/workspaces/${workspaceId}/run`, { method: "POST", json: true });
   }
 
   /** Deactivate the company (manual, schedules off, auto-approve off). */

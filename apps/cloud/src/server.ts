@@ -381,6 +381,9 @@ export async function buildServer(options: ServerOptions) {
   /** Returns a non-blocking warning when the user is over the daily budget. */
   async function budgetWarning(userId: string): Promise<string | null> {
     if (dailyTokenBudget <= 0) return null;
+    // Admins (e.g. the operator account) are never nagged or capped.
+    const record = await store.getUserById(userId);
+    if (record?.role === "admin") return null;
     const { tokens } = await store.usageSince(userId, startOfToday());
     if (tokens >= dailyTokenBudget) {
       return `Daily token budget reached (${tokens.toLocaleString()} tokens). Messages still work — raise BOTIFYR_DAILY_TOKEN_BUDGET to increase it.`;
@@ -587,6 +590,8 @@ export async function buildServer(options: ServerOptions) {
       case "session.created":
       case "session.updated":
         return event.session.userId === userId || (event.session.participants ?? []).includes(userId);
+      case "bot.deleted":
+        return event.userId === userId;
       case "assistant.delta":
       case "assistant.reset":
         // Route by task owner (set for every run) and fall back to session owner.
@@ -898,6 +903,27 @@ export async function buildServer(options: ServerOptions) {
     return task;
   }
 
+  /** Move a bot's board items between statuses so the board reflects progress. */
+  async function advanceAssignedItems(
+    bot: Bot,
+    from: WorkItem["status"],
+    to: WorkItem["status"],
+  ): Promise<void> {
+    if (!bot.workspace) return;
+    const workspace = (await store.listWorkspaces(bot.userId)).find(
+      (entry) => entry.name === bot.workspace,
+    );
+    if (!workspace) return;
+    const now = new Date().toISOString();
+    for (const item of await store.listWorkItems(workspace.id)) {
+      if (item.assigneeBotId === bot.id && item.status === from) {
+        item.status = to;
+        item.updatedAt = now;
+        await store.updateWorkItem(item);
+      }
+    }
+  }
+
   /** Run a bot's scheduled prompt with no incoming user message. */
   async function runScheduled(session: Session, bot: Bot, prompt: string): Promise<void> {
     const windowSize = maxHistoryTurns * 2;
@@ -919,6 +945,10 @@ export async function buildServer(options: ServerOptions) {
     rememberTask(task.id, session.id, bot.userId);
     emit({ type: "task.created", task });
 
+    // Reflect reality on the board: the employee's next task is now in progress,
+    // and becomes done when the run finishes.
+    await advanceAssignedItems(bot, "todo", "in_progress").catch(() => {});
+
     void runTask(
       {
         store,
@@ -931,7 +961,9 @@ export async function buildServer(options: ServerOptions) {
         author: { id: bot.id },
       },
       task,
-    ).catch((error) => app.log.error({ err: error, taskId: task.id }, "scheduled run failed"));
+    )
+      .then(() => advanceAssignedItems(bot, "in_progress", "done"))
+      .catch((error) => app.log.error({ err: error, taskId: task.id }, "scheduled run failed"));
   }
 
   /** Create a bot together with the conversation thread it owns. */
@@ -1938,17 +1970,28 @@ export async function buildServer(options: ServerOptions) {
         // Remove the bot's own thread too, so it can't linger as an orphan.
         await store.deleteSession(userId, bot.sessionId).catch(() => false);
         await store.deleteBot(userId, bot.id);
+        emit({ type: "bot.deleted", botId: bot.id, sessionId: bot.sessionId, userId });
         return reply.code(204).send();
       }
-      // The bot may already be gone while a thread still references its id —
-      // clean that up so the client can drop the stale entry.
+      // The bot may already be gone (another device deleted it, or the store was
+      // reset) while a thread — or just the client's cached sidebar — still
+      // references its id. Clean up any orphan thread and broadcast the removal
+      // so every device drops the stale entry.
       const sessions = await store.listSessions(userId);
-      const orphan = sessions.find((session) => session.botId === request.params.id);
-      if (orphan) {
-        await store.deleteSession(userId, orphan.id);
-        return reply.code(204).send();
+      const orphans = sessions.filter((session) => session.botId === request.params.id);
+      for (const orphan of orphans) {
+        await store.deleteSession(userId, orphan.id).catch(() => false);
       }
-      return reply.code(404).send({ error: "bot not found" });
+      // Deleting something that is already gone is a success from the caller's
+      // point of view: return 204 so a stale client self-heals instead of
+      // surfacing a "bot not found" error.
+      emit({
+        type: "bot.deleted",
+        botId: request.params.id,
+        sessionId: orphans[0]?.id,
+        userId,
+      });
+      return reply.code(204).send();
     },
   );
 
@@ -2696,7 +2739,7 @@ export async function buildServer(options: ServerOptions) {
   });
 
   /** Activate the company: set the autonomy level, schedules and auto-approve. */
-  app.post<{ Params: { id: string }; Body: { level?: string } }>(
+  app.post<{ Params: { id: string }; Body: { level?: string; timezone?: string } }>(
     "/v1/workspaces/:id/activate",
     { preHandler: requireAuth },
     async (request, reply) => {
@@ -2713,6 +2756,17 @@ export async function buildServer(options: ServerOptions) {
       const now = new Date();
       workspace.autonomy = level;
       workspace.status = level === "manual" ? "paused" : "active";
+      // Default to a 9–5 working day in the owner's timezone, so agents work
+      // their own hours (and start at 9am locally) with no manual setup.
+      const tz =
+        typeof request.body?.timezone === "string" && request.body.timezone.trim()
+          ? request.body.timezone.trim().slice(0, 60)
+          : undefined;
+      if (!workspace.operatingHours) {
+        workspace.operatingHours = { start: 9, end: 17, timezone: tz };
+      } else if (tz) {
+        workspace.operatingHours = { ...workspace.operatingHours, timezone: tz };
+      }
       const roles = await store.listBotRoles(workspace.id);
       for (const role of roles) {
         const bot = await store.getBot(role.botId);
@@ -2763,6 +2817,35 @@ export async function buildServer(options: ServerOptions) {
       workspace.updatedAt = new Date().toISOString();
       await store.updateWorkspace(workspace);
       return workspaceView(workspace);
+    },
+  );
+
+  /** Run now: fire every employee's scheduled prompt immediately (ignores hours). */
+  app.post<{ Params: { id: string } }>(
+    "/v1/workspaces/:id/run",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const workspace = await store.getWorkspace(request.params.id);
+      if (!workspace || workspace.ownerId !== userId) {
+        return reply.code(404).send({ error: "workspace not found" });
+      }
+      const roles = await store.listBotRoles(workspace.id);
+      let started = 0;
+      for (const role of roles) {
+        const bot = await store.getBot(role.botId);
+        if (!bot) continue;
+        const session = await store.getSession(bot.sessionId);
+        if (!session) continue;
+        const prompt =
+          bot.schedule?.prompt ??
+          (role.isChair
+            ? "Run the daily standup: summarise the board and flag blockers."
+            : "Review your board tasks and do the next one.");
+        await runScheduled(session, bot, prompt);
+        started += 1;
+      }
+      return { started };
     },
   );
 

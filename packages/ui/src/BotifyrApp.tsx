@@ -1080,7 +1080,12 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
         }
         const budget = Math.max(0, Math.floor(Number(wizardBudget) || 0));
         if (budget > 0) await client.setWorkspaceBudget(created.id, budget);
-        if (wizardActivate) await client.activateCompany(created.id, "supervised");
+        if (wizardActivate)
+          await client.activateCompany(
+            created.id,
+            "supervised",
+            Intl.DateTimeFormat().resolvedOptions().timeZone,
+          );
       } catch {
         // Settings are best-effort; the company already exists.
       }
@@ -1233,6 +1238,20 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     }
   }
 
+  /** Run now: fire every employee's scheduled pass immediately, then refresh. */
+  async function runNow() {
+    const workspace = boardWorkspace;
+    if (!workspace) return;
+    setBoardBusy(true);
+    try {
+      await client.runCompany(workspace.id).catch(() => null);
+      setBoardItems(await client.listWorkItems(workspace.id).catch(() => boardItems));
+      void refreshNeeds(workspace.id);
+    } finally {
+      setBoardBusy(false);
+    }
+  }
+
   /** Open an employee's live screen (their sandbox desktop) from the Office tab. */
   function openEmployee(bot: Bot) {
     closeBoard();
@@ -1278,7 +1297,9 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       const updated =
         level === "manual"
           ? await client.deactivateCompany(workspace.id).catch(() => null)
-          : await client.activateCompany(workspace.id, level).catch(() => null);
+          : await client
+              .activateCompany(workspace.id, level, Intl.DateTimeFormat().resolvedOptions().timeZone)
+              .catch(() => null);
       if (updated) setWorkspaces(await client.listWorkspaces().catch(() => workspaces));
     } finally {
       setBoardBusy(false);
@@ -4908,6 +4929,14 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                   </>
                 );
               })()}
+              <button
+                className="ghost small"
+                type="button"
+                disabled={boardBusy}
+                onClick={() => void runNow()}
+              >
+                Run now
+              </button>
               <button
                 className="ghost small danger"
                 type="button"

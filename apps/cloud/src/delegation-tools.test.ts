@@ -68,4 +68,13 @@ describe("company.delegate", () => {
     expect(result.ok).toBe(false);
     expect(result.output).toContain("CTO");
   });
+
+  it("does not stack the same task twice on the board", async () => {
+    const store = await seeded();
+    const [tool] = createDelegationTools(store, "u1", "ceo");
+    await tool!.run({ role: "CTO", task: "Build the API" }, ctx);
+    await tool!.run({ role: "CTO", task: "build the api" }, ctx);
+    const items = await store.listWorkItems("ws1");
+    expect(items).toHaveLength(1);
+  });
 });
