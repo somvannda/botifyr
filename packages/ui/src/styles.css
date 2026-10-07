@@ -392,11 +392,24 @@ body {
   background: transparent;
   color: var(--muted);
   cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.task-section:hover .task-section-edit,
+.task-section-edit:focus-visible {
+  opacity: 1;
 }
 
 .task-section-edit:hover {
   color: var(--text);
   background: var(--panel-2);
+}
+
+@media (hover: none) {
+  .task-section-edit {
+    opacity: 1;
+  }
 }
 
 .task-caret {
@@ -1906,6 +1919,7 @@ body {
 .conv-item.active {
   background: var(--panel-2);
   border-color: var(--border);
+  box-shadow: inset 3px 0 0 0 var(--accent);
 }
 
 .conv-avatar {
