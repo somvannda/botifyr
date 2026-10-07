@@ -510,6 +510,7 @@ export class BotifyrClient {
     emoji: string;
     scheme: number;
     instructions: string;
+    workspace?: string;
     memberIds?: string[];
     autonomous?: boolean;
     skills?: string[];
@@ -529,6 +530,7 @@ export class BotifyrClient {
       emoji?: string;
       scheme?: number;
       instructions?: string;
+      workspace?: string;
       memberIds?: string[];
       autonomous?: boolean;
       skills?: string[];

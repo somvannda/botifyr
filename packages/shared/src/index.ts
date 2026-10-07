@@ -127,6 +127,8 @@ export interface Bot {
   scheme: number;
   /** Extra system guidance this bot always runs with. */
   instructions: string;
+  /** Company/workspace this bot belongs to (bots with the same value group). */
+  workspace?: string;
   /** For group chats: the bot ids that take turns replying. */
   memberIds?: string[];
   /** For group chats: every member reads each message and decides whether to reply. */

@@ -210,6 +210,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [botEmoji, setBotEmoji] = useState("🤖");
   const [botScheme, setBotScheme] = useState(0);
   const [botIntro, setBotIntro] = useState("");
+  const [botWorkspace, setBotWorkspace] = useState("");
+  const [collapsedWorkspaces, setCollapsedWorkspaces] = useState<Record<string, boolean>>({});
   const [groupMembers, setGroupMembers] = useState<string[]>([]);
   const [autonomous, setAutonomous] = useState(false);
   const [autoApprove, setAutoApprove] = useState(false);
@@ -819,6 +821,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     setBotEmoji(mode === "group" ? DEFAULT_GROUP_EMOJI : DEFAULT_EMOJI);
     setBotScheme(bots.length % BOT_SCHEMES.length);
     setBotIntro("");
+    setBotWorkspace("");
     setGroupMembers([]);
     setAutonomous(false);
     setAutoApprove(false);
@@ -836,6 +839,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     setBotEmoji(cleanEmoji(bot.emoji, (bot.memberIds?.length ?? 0) > 0));
     setBotScheme(bot.scheme % BOT_SCHEMES.length);
     setBotIntro(bot.instructions);
+    setBotWorkspace(bot.workspace ?? "");
     setGroupMembers((bot.memberIds ?? []).filter((id) => id !== bot.id));
     setAutonomous(bot.autonomous === true);
     setAutoApprove(bot.autoApprove === true);
@@ -868,6 +872,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
           emoji: botEmoji.trim() || "🤖",
           scheme: botScheme,
           instructions: botIntro.trim(),
+          workspace: botWorkspace.trim(),
           memberIds: groupMembers,
           autonomous,
           autoApprove,
@@ -911,6 +916,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
         emoji: botEmoji.trim() || "🤖",
         scheme: botScheme,
         instructions,
+        workspace: botWorkspace.trim(),
         memberIds,
         autonomous,
         autoApprove,
@@ -1728,6 +1734,22 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const filteredBots = query.trim()
     ? orderedBots.filter((bot) => bot.name.toLowerCase().includes(query.trim().toLowerCase()))
     : orderedBots;
+  // Companies: bots that share a `workspace` label are grouped under it; the
+  // rest stay in a flat "Personal" list. See docs/company-workspace.md.
+  const botsByWorkspace = new Map<string, Bot[]>();
+  const ungroupedBots: Bot[] = [];
+  for (const bot of filteredBots) {
+    if (bot.workspace) {
+      const list = botsByWorkspace.get(bot.workspace) ?? [];
+      list.push(bot);
+      botsByWorkspace.set(bot.workspace, list);
+    } else {
+      ungroupedBots.push(bot);
+    }
+  }
+  const workspaceNames = [
+    ...new Set(bots.map((bot) => bot.workspace).filter((name): name is string => Boolean(name))),
+  ];
   // Messages you've sent in this chat, for ↑/↓ recall in the composer.
   const sentHistory = (sessions.find((entry) => entry.id === activeSessionId)?.messages ?? [])
     .filter((message) => message.role === "user")
@@ -1972,6 +1994,53 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     );
   }
 
+  /** One bot row in the sidebar (also used under a company header). */
+  const renderBotRow = (bot: Bot) => {
+    const session = sessions.find((entry) => entry.id === bot.sessionId);
+    const last = session?.messages[session.messages.length - 1];
+    return (
+      <div key={bot.id} className={`conv-item ${bot.id === activeBotId ? "active" : ""}`}>
+        <button className="conv-select" type="button" onClick={() => selectBot(bot)}>
+          <span className="conv-avatar">
+            <BotLogo size={30} scheme={BOT_SCHEMES[bot.scheme % BOT_SCHEMES.length]} />
+          </span>
+          <span className="conv-text">
+            <span className="conv-name">{bot.name}</span>
+            <span className="conv-preview">{last?.content?.slice(0, 42) || "No messages yet"}</span>
+          </span>
+        </button>
+        <span className="conv-aside">
+          {unreadCount(bot.sessionId) > 0 && (
+            <span className="unread-badge">{unreadCount(bot.sessionId)}</span>
+          )}
+          {confirmDeleteId === bot.id ? (
+            <button
+              className="conv-delete confirm"
+              type="button"
+              title="Tap to confirm delete"
+              onClick={() => void removeBot(bot)}
+            >
+              Delete
+            </button>
+          ) : (
+            <button
+              className="conv-delete"
+              type="button"
+              title="Delete bot and chat"
+              aria-label="Delete bot and chat"
+              onClick={() => {
+                setConfirmDeleteId(bot.id);
+                window.setTimeout(() => setConfirmDeleteId((cur) => (cur === bot.id ? null : cur)), 3000);
+              }}
+            >
+              <CloseIcon size={13} />
+            </button>
+          )}
+        </span>
+      </div>
+    );
+  };
+
   return (
     <div className={`app${showBotPanel && activeBot ? " with-panel" : ""}`}>
       {toasts.length > 0 && (
@@ -2031,54 +2100,31 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
 
         <div className="task-list">
           {filteredBots.length === 0 && <p className="empty">No bots yet. Tap ＋ to create one.</p>}
-          {filteredBots.map((bot) => {
-            const session = sessions.find((entry) => entry.id === bot.sessionId);
-            const last = session?.messages[session.messages.length - 1];
+          {[...botsByWorkspace.entries()].map(([name, members]) => {
+            const collapsed = collapsedWorkspaces[name] === true;
             return (
-              <div key={bot.id} className={`conv-item ${bot.id === activeBotId ? "active" : ""}`}>
-                <button className="conv-select" type="button" onClick={() => selectBot(bot)}>
-                  <span className="conv-avatar">
-                    <BotLogo size={30} scheme={BOT_SCHEMES[bot.scheme % BOT_SCHEMES.length]} />
-                  </span>
-                  <span className="conv-text">
-                    <span className="conv-name">{bot.name}</span>
-                    <span className="conv-preview">{last?.content?.slice(0, 42) || "No messages yet"}</span>
-                  </span>
+              <div key={name} className="task-section">
+                <button
+                  className={`task-section-head${collapsed ? " collapsed" : ""}`}
+                  type="button"
+                  onClick={() => setCollapsedWorkspaces((prev) => ({ ...prev, [name]: !prev[name] }))}
+                  aria-expanded={!collapsed}
+                >
+                  <span className="task-caret">{collapsed ? "▸" : "▾"}</span>
+                  <span className="task-section-name">{name}</span>
+                  <span className="task-section-count">{members.length}</span>
                 </button>
-                <span className="conv-aside">
-                  {unreadCount(bot.sessionId) > 0 && (
-                    <span className="unread-badge">{unreadCount(bot.sessionId)}</span>
-                  )}
-                  {confirmDeleteId === bot.id ? (
-                    <button
-                      className="conv-delete confirm"
-                      type="button"
-                      title="Tap to confirm delete"
-                      onClick={() => void removeBot(bot)}
-                    >
-                      Delete
-                    </button>
-                  ) : (
-                    <button
-                      className="conv-delete"
-                      type="button"
-                      title="Delete bot and chat"
-                      aria-label="Delete bot and chat"
-                      onClick={() => {
-                        setConfirmDeleteId(bot.id);
-                        window.setTimeout(
-                          () => setConfirmDeleteId((cur) => (cur === bot.id ? null : cur)),
-                          3000,
-                        );
-                      }}
-                    >
-                      <CloseIcon size={13} />
-                    </button>
-                  )}
-                </span>
+                {!collapsed && <div className="task-section-list">{members.map(renderBotRow)}</div>}
               </div>
             );
           })}
+          {botsByWorkspace.size > 0 && ungroupedBots.length > 0 && (
+            <div className="task-section-head static" aria-hidden="true">
+              <span className="task-section-name">Personal</span>
+              <span className="task-section-count">{ungroupedBots.length}</span>
+            </div>
+          )}
+          {ungroupedBots.map(renderBotRow)}
         </div>
 
         <footer className="sidebar-footer">

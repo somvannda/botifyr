@@ -73,6 +73,8 @@ export interface BotRecord {
   emoji: string;
   scheme: number;
   instructions: string;
+  /** Company/workspace this bot belongs to (bots with the same value group). */
+  workspace?: string;
   memberIds?: string[];
   autonomous?: boolean;
   skills?: string[];

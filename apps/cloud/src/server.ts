@@ -916,6 +916,7 @@ export async function buildServer(options: ServerOptions) {
       emoji: string;
       scheme: number;
       instructions: string;
+      workspace?: string;
       memberIds?: string[];
       autonomous?: boolean;
       skills?: string[];
@@ -937,6 +938,7 @@ export async function buildServer(options: ServerOptions) {
       emoji: input.emoji,
       scheme: input.scheme,
       instructions: input.instructions,
+      workspace: input.workspace,
       memberIds: input.memberIds && input.memberIds.length > 0 ? input.memberIds : undefined,
       autonomous: input.autonomous === true ? true : undefined,
       autoApprove: input.autoApprove === true ? true : undefined,
@@ -1857,6 +1859,7 @@ export async function buildServer(options: ServerOptions) {
       emoji?: string;
       scheme?: number;
       instructions?: string;
+      workspace?: string;
       memberIds?: string[];
       autonomous?: boolean;
       skills?: string[];
@@ -1870,6 +1873,7 @@ export async function buildServer(options: ServerOptions) {
     const emoji = (request.body?.emoji ?? "🤖").trim().slice(0, 8) || "🤖";
     const scheme = Number.isInteger(request.body?.scheme) ? Number(request.body?.scheme) : 0;
     const instructions = (request.body?.instructions ?? "").slice(0, 4000);
+    const workspace = (request.body?.workspace ?? "").trim().slice(0, 60) || undefined;
     // Group: keep only member ids that belong to this user (individual bots,
     // never another group).
     let memberIds: string[] | undefined;
@@ -1887,6 +1891,7 @@ export async function buildServer(options: ServerOptions) {
       emoji,
       scheme,
       instructions,
+      workspace,
       memberIds,
       autonomous: request.body?.autonomous === true,
       autoApprove: request.body?.autoApprove === true,
@@ -1916,6 +1921,7 @@ export async function buildServer(options: ServerOptions) {
       emoji?: string;
       scheme?: number;
       instructions?: string;
+      workspace?: string;
       memberIds?: string[];
       autonomous?: boolean;
       skills?: string[];
@@ -1943,6 +1949,8 @@ export async function buildServer(options: ServerOptions) {
     if (Number.isInteger(request.body?.scheme)) bot.scheme = Number(request.body?.scheme);
     if (typeof request.body?.instructions === "string")
       bot.instructions = request.body.instructions.slice(0, 4000);
+    if (typeof request.body?.workspace === "string")
+      bot.workspace = request.body.workspace.trim().slice(0, 60) || undefined;
 
     // Group membership: keep only ids the user owns (excluding the bot itself
     // and other groups — groups hold individual bots, never nested groups).

@@ -51,6 +51,10 @@ they land. Keep entries short; link code paths instead of explaining them.
       controls may still be inconsistent.
 
 ## Improvements (highest value first)
+- [x] **Botifyr's computer + teach-by-demonstration** — session desktop sandbox,
+      remote-desktop modal (real mouse/keyboard), screen recording + download,
+      input trace → learned task → replay, idle auto-stop. See
+      [`docs/computer.md`](computer.md).
 - [x] **Background downloads** — `--continue` resume + interrupted-task
       reconciliation on restart; a persisted per-file job queue is still open.
 - [x] **Media retention & quota** — age-based + quota sweep (`BOTIFYR_MEDIA_*`).
