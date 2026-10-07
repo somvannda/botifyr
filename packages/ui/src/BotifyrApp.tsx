@@ -3763,6 +3763,9 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
               <button className="ghost small" type="button" onClick={() => void saveTask()}>
                 Save as task
               </button>
+              <button className="ghost small" type="button" onClick={() => stopScreen()}>
+                Stop computer
+              </button>
               <span className="computer-hint">
                 Click and type directly — the sandbox receives your mouse and keyboard.
               </span>
