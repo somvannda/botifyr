@@ -20,10 +20,13 @@ export async function uniqueWorkspaceName(
   store: Store,
   ownerId: string,
   name: string,
+  excludeId?: string,
 ): Promise<string> {
   const base = name.trim().slice(0, 60) || "Company";
   const taken = new Set(
-    (await store.listWorkspaces(ownerId)).map((entry) => entry.name.trim().toLowerCase()),
+    (await store.listWorkspaces(ownerId))
+      .filter((entry) => entry.id !== excludeId)
+      .map((entry) => entry.name.trim().toLowerCase()),
   );
   if (!taken.has(base.toLowerCase())) return base;
   for (let n = 2; n < 1000; n += 1) {

@@ -491,4 +491,32 @@ describe("workspaces API", () => {
     expect(otherFirst.name).toBe("Chmaba");
     await app.close();
   });
+
+  it("keeps the name unique when renaming a company", async () => {
+    const { app, signup } = await boot();
+    const auth = await signup("ws-rename@example.com");
+    await app.inject({ method: "POST", url: "/v1/workspaces", headers: auth, payload: { name: "One" } });
+    const two = (
+      await app.inject({ method: "POST", url: "/v1/workspaces", headers: auth, payload: { name: "Two" } })
+    ).json() as { id: string };
+
+    const renamed = await app.inject({
+      method: "PATCH",
+      url: `/v1/workspaces/${two.id}`,
+      headers: auth,
+      payload: { name: "One" },
+    });
+    expect(renamed.statusCode).toBe(200);
+    expect((renamed.json() as { name: string }).name).toBe("One 2");
+
+    // Renaming a company to its own current name is a no-op (not suffixed).
+    const same = await app.inject({
+      method: "PATCH",
+      url: `/v1/workspaces/${two.id}`,
+      headers: auth,
+      payload: { name: "One 2" },
+    });
+    expect((same.json() as { name: string }).name).toBe("One 2");
+    await app.close();
+  });
 });
