@@ -47,10 +47,8 @@ describe("company onboarding planner", () => {
   });
 
   it("uses valid model JSON and falls back to a default org on failure", async () => {
-    const good = await planCompany(
-      { kind: "idea", value: "coffee subscription" },
-      async () =>
-        JSON.stringify({ name: "Bean Co", members: [{ name: "Ro", title: "CEO", isChair: true }] }),
+    const good = await planCompany({ kind: "idea", value: "coffee subscription" }, async () =>
+      JSON.stringify({ name: "Bean Co", members: [{ name: "Ro", title: "CEO", isChair: true }] }),
     );
     expect(good.name).toBe("Bean Co");
 

@@ -14,6 +14,7 @@ import type {
   ChatMessage,
   ConnectionInfo,
   CreateWorkspaceRequest,
+  Department,
   LearnedSkill,
   RuntimeConfig,
   SecretSummary,
@@ -105,6 +106,18 @@ function cleanEmoji(value: string | undefined, isGroup: boolean): string {
 }
 const TOKEN_KEY = "botifyr.token";
 const REFRESH_KEY = "botifyr.refresh";
+
+/** Departments an employee bot can be hired into. */
+const DEPARTMENT_OPTIONS: Department[] = [
+  "exec",
+  "product",
+  "engineering",
+  "growth",
+  "ops",
+  "finance",
+  "support",
+  "design",
+];
 
 type ConnectionState = "connecting" | "online" | "offline";
 
@@ -900,6 +913,36 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       setCompanyError(messageOf(err));
       setCompanyBusy(false);
     }
+  }
+
+  function updatePlanMember(
+    index: number,
+    patch: Partial<NonNullable<CreateWorkspaceRequest["members"]>[number]>,
+  ) {
+    setCompanyPlan((prev) => {
+      if (!prev?.members) return prev;
+      return { ...prev, members: prev.members.map((m, i) => (i === index ? { ...m, ...patch } : m)) };
+    });
+  }
+
+  function removePlanMember(index: number) {
+    setCompanyPlan((prev) => {
+      if (!prev?.members) return prev;
+      return { ...prev, members: prev.members.filter((_, i) => i !== index) };
+    });
+  }
+
+  function addPlanMember() {
+    setCompanyPlan((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        members: [
+          ...(prev.members ?? []),
+          { name: "New hire", emoji: "🤖", title: "Member", department: "ops", isChair: false },
+        ],
+      };
+    });
   }
 
   async function renameCompany() {
@@ -3708,24 +3751,73 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                 <>
                   <div className="company-plan-name">
                     <span className="company-plan-emoji">{companyPlan.avatarEmoji ?? "🏢"}</span>
-                    {companyPlan.name}
+                    <input
+                      className="workspace-input"
+                      value={companyPlan.name}
+                      onChange={(event) =>
+                        setCompanyPlan((prev) => (prev ? { ...prev, name: event.target.value } : prev))
+                      }
+                      aria-label="Company name"
+                    />
                   </div>
                   {companyPlan.mission && <p className="company-plan-mission">{companyPlan.mission}</p>}
                   <ul className="company-plan-list">
                     {(companyPlan.members ?? []).map((member, index) => (
-                      <li key={index}>
+                      <li key={index} className="plan-member-row">
                         <span className="company-plan-emoji">{member.emoji ?? "🤖"}</span>
-                        <span className="company-plan-title">{member.name}</span>
-                        <span className="conv-role">{member.title}</span>
+                        <input
+                          className="plan-member-input"
+                          value={member.name}
+                          onChange={(event) => updatePlanMember(index, { name: event.target.value })}
+                          placeholder="Name"
+                          aria-label="Employee name"
+                        />
+                        <input
+                          className="plan-member-input plan-member-title"
+                          value={member.title}
+                          onChange={(event) => updatePlanMember(index, { title: event.target.value })}
+                          placeholder="Role"
+                          aria-label="Employee role"
+                        />
+                        <select
+                          className="plan-member-dept"
+                          value={member.department ?? "ops"}
+                          onChange={(event) =>
+                            updatePlanMember(index, { department: event.target.value as Department })
+                          }
+                          aria-label="Department"
+                        >
+                          {DEPARTMENT_OPTIONS.map((dept) => (
+                            <option key={dept} value={dept}>
+                              {dept}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          className="plan-member-remove"
+                          type="button"
+                          aria-label="Remove employee"
+                          onClick={() => removePlanMember(index)}
+                        >
+                          <CloseIcon size={12} />
+                        </button>
                       </li>
                     ))}
                   </ul>
+                  <button className="link" type="button" onClick={addPlanMember}>
+                    + Add employee
+                  </button>
                 </>
               )}
             </div>
 
             <div className="apps-actions">
-              <button className="ghost small" type="button" onClick={closeCompanySetup} disabled={companyBusy}>
+              <button
+                className="ghost small"
+                type="button"
+                onClick={closeCompanySetup}
+                disabled={companyBusy}
+              >
                 Cancel
               </button>
               {companyPlan && (

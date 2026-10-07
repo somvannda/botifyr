@@ -508,6 +508,53 @@ body {
   color: var(--text);
 }
 
+.plan-member-row {
+  gap: 6px;
+}
+
+.plan-member-input {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 7px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 12.5px;
+}
+
+.plan-member-input.plan-member-title {
+  flex: 1.2;
+}
+
+.plan-member-dept {
+  flex: none;
+  padding: 5px 6px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.plan-member-remove {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.plan-member-remove:hover {
+  color: var(--text);
+  background: var(--panel-2);
+}
+
 .workspace-field {
   display: flex;
   flex-direction: column;

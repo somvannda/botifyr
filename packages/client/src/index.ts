@@ -557,7 +557,11 @@ export class BotifyrClient {
   }
 
   /** Propose an org chart from a website or an idea (creates nothing). */
-  planCompany(source: { kind: "url" | "idea"; value: string; name?: string }): Promise<CreateWorkspaceRequest> {
+  planCompany(source: {
+    kind: "url" | "idea";
+    value: string;
+    name?: string;
+  }): Promise<CreateWorkspaceRequest> {
     return this.request("/v1/workspaces/plan", {
       method: "POST",
       json: true,
