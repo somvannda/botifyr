@@ -10,8 +10,10 @@ import type {
   AuditEvent,
   Bot,
   BotFile,
+  BotRole,
   ChatMessage,
   ConnectionInfo,
+  CreateWorkspaceRequest,
   LearnedSkill,
   RuntimeConfig,
   SecretSummary,
@@ -20,6 +22,7 @@ import type {
   Skill,
   Task,
   User,
+  WorkspaceWithRoles,
 } from "@botifyr/shared";
 import { AuthError, BotifyrClient, type Conversation, type MediaItem, type Person } from "@botifyr/client";
 import { CalendarIcon, DriveIcon, GmailIcon } from "./AppIcons";
@@ -196,6 +199,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [listening, setListening] = useState(false);
   const recognitionRef = useRef<{ start: () => void; stop: () => void } | null>(null);
   const [bots, setBots] = useState<Bot[]>([]);
+  const [workspaces, setWorkspaces] = useState<WorkspaceWithRoles[]>([]);
   const [activeBotId, setActiveBotId] = useState<string | null>(null);
   const [stream, setStream] = useState<{
     sessionId: string;
@@ -204,6 +208,11 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     text: string;
   } | null>(null);
   const [createBotMode, setCreateBotMode] = useState<"bot" | "group" | "edit" | null>(null);
+  const [companySetupOpen, setCompanySetupOpen] = useState(false);
+  const [companySource, setCompanySource] = useState("");
+  const [companyPlan, setCompanyPlan] = useState<CreateWorkspaceRequest | null>(null);
+  const [companyBusy, setCompanyBusy] = useState(false);
+  const [companyError, setCompanyError] = useState<string | null>(null);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [editingBotId, setEditingBotId] = useState<string | null>(null);
   const [botName, setBotName] = useState("");
@@ -366,6 +375,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     setSessions([]);
     setTasks({});
     setBots([]);
+    setWorkspaces([]);
     setConnections([]);
     setActiveSessionId(null);
     setActiveBotId(null);
@@ -374,15 +384,17 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
 
     Promise.all([
       client.listBots(),
+      client.listWorkspaces(),
       client.listSessions(),
       client.listConnections(),
       client.listSkills(),
       client.listLearnedSkills(),
       client.billing(),
     ])
-      .then(([botList, sessionList, connectionList, skillList, learnedList, billing]) => {
+      .then(([botList, workspaceList, sessionList, connectionList, skillList, learnedList, billing]) => {
         if (!mounted) return;
         setBots(botList);
+        setWorkspaces(workspaceList);
         setSessions(sessionList);
         setConnections(connectionList);
         setSkills(skillList);
@@ -825,6 +837,68 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     setActiveSessionId(bot.sessionId);
     setShowAudit(false);
     setShowNewChat(false);
+  }
+
+  function openCompanySetup() {
+    setCompanySetupOpen(true);
+    setCompanySource("");
+    setCompanyPlan(null);
+    setCompanyError(null);
+    setShowNewChat(false);
+  }
+
+  function closeCompanySetup() {
+    setCompanySetupOpen(false);
+    setCompanyPlan(null);
+    setCompanyError(null);
+    setCompanyBusy(false);
+  }
+
+  /** A pasted value is treated as a URL when it looks like one, else an idea. */
+  function looksLikeUrl(value: string): boolean {
+    return /^https?:\/\//i.test(value) || /^[\w-]+\.[a-z]{2,}(\/|$)/i.test(value);
+  }
+
+  async function runCompanyPlan() {
+    const value = companySource.trim();
+    if (!value || companyBusy) return;
+    setCompanyBusy(true);
+    setCompanyError(null);
+    try {
+      const plan = await client.planCompany({ kind: looksLikeUrl(value) ? "url" : "idea", value });
+      setCompanyPlan(plan);
+    } catch (err: unknown) {
+      setCompanyError(messageOf(err));
+    } finally {
+      setCompanyBusy(false);
+    }
+  }
+
+  async function createCompany() {
+    if (!companyPlan || companyBusy) return;
+    setCompanyBusy(true);
+    setCompanyError(null);
+    try {
+      const created = await client.createWorkspace(companyPlan);
+      const [botList, sessionList, workspaceList] = await Promise.all([
+        client.listBots(),
+        client.listSessions(),
+        client.listWorkspaces(),
+      ]);
+      setBots(botList);
+      setSessions(sessionList);
+      setWorkspaces(workspaceList);
+      const chairId = created.ceoBotId ?? created.roles[0]?.botId;
+      const chair = botList.find((bot) => bot.id === chairId);
+      if (chair) {
+        setActiveBotId(chair.id);
+        setActiveSessionId(chair.sessionId);
+      }
+      closeCompanySetup();
+    } catch (err: unknown) {
+      setCompanyError(messageOf(err));
+      setCompanyBusy(false);
+    }
   }
 
   function openCreateBot(mode: "bot" | "group") {
@@ -1752,6 +1826,12 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const workspaceNames = [
     ...new Set(bots.map((bot) => bot.workspace).filter((name): name is string => Boolean(name))),
   ];
+  // Real workspace data (roles/emoji) when companies exist in the store.
+  const workspaceByName = new Map(workspaces.map((workspace) => [workspace.name, workspace]));
+  const roleByBotId = new Map<string, BotRole>();
+  for (const workspace of workspaces) {
+    for (const role of workspace.roles) roleByBotId.set(role.botId, role);
+  }
   // Guard against a stale filter (e.g. after the last bot leaves a company).
   const activeWorkspaceFilter =
     workspaceFilter === "all" || workspaceFilter === "personal" || workspaceNames.includes(workspaceFilter)
@@ -2029,7 +2109,10 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
             <BotLogo size={30} scheme={BOT_SCHEMES[bot.scheme % BOT_SCHEMES.length]} />
           </span>
           <span className="conv-text">
-            <span className="conv-name">{bot.name}</span>
+            <span className="conv-name">
+              {bot.name}
+              {roleByBotId.get(bot.id) && <span className="conv-role">{roleByBotId.get(bot.id)?.title}</span>}
+            </span>
             <span className="conv-preview">{last?.content?.slice(0, 42) || "No messages yet"}</span>
           </span>
         </button>
@@ -2177,6 +2260,9 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                   aria-expanded={!collapsed}
                 >
                   <span className="task-caret">{collapsed ? "▸" : "▾"}</span>
+                  {workspaceByName.get(name)?.avatarEmoji && (
+                    <span className="task-section-emoji">{workspaceByName.get(name)?.avatarEmoji}</span>
+                  )}
                   <span className="task-section-name">{name}</span>
                   <span className="task-section-count">{members.length}</span>
                 </button>
@@ -2351,6 +2437,13 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                   <UsersIcon size={16} />
                 </span>
                 Create group chat
+              </button>
+
+              <button className="newchat-item" type="button" onClick={openCompanySetup}>
+                <span className="newchat-ico">
+                  <BotLogo size={16} />
+                </span>
+                Start a company
               </button>
 
               {bots.length > 0 && <div className="newchat-sep" />}
@@ -3511,6 +3604,87 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                   </span>
                 </button>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {companySetupOpen && (
+        <div className="apps-overlay" onClick={closeCompanySetup}>
+          <div className="apps-panel company-setup" onClick={(event) => event.stopPropagation()}>
+            <div className="apps-head">
+              <span className="apps-title">Start a company</span>
+              <button className="round small" type="button" onClick={closeCompanySetup}>
+                ✕
+              </button>
+            </div>
+
+            <div className="company-setup-body">
+              <p className="company-hint">
+                Paste a website or describe your idea. Botifyr proposes a team you can hire in one click.
+              </p>
+              <input
+                className="workspace-input"
+                placeholder="https://example.com — or “a subscription box for house plants”"
+                value={companySource}
+                onChange={(event) => setCompanySource(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") void runCompanyPlan();
+                }}
+                autoFocus
+              />
+
+              {companyError && (
+                <p className="bot-editor-error" role="alert">
+                  {companyError}
+                </p>
+              )}
+
+              {!companyPlan && (
+                <button
+                  className="btn primary"
+                  type="button"
+                  disabled={companyBusy || !companySource.trim()}
+                  onClick={() => void runCompanyPlan()}
+                >
+                  {companyBusy ? "Planning…" : "Plan the team"}
+                </button>
+              )}
+
+              {companyPlan && (
+                <>
+                  <div className="company-plan-name">
+                    <span className="company-plan-emoji">{companyPlan.avatarEmoji ?? "🏢"}</span>
+                    {companyPlan.name}
+                  </div>
+                  {companyPlan.mission && <p className="company-plan-mission">{companyPlan.mission}</p>}
+                  <ul className="company-plan-list">
+                    {(companyPlan.members ?? []).map((member, index) => (
+                      <li key={index}>
+                        <span className="company-plan-emoji">{member.emoji ?? "🤖"}</span>
+                        <span className="company-plan-title">{member.name}</span>
+                        <span className="conv-role">{member.title}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </div>
+
+            <div className="apps-actions">
+              <button className="ghost small" type="button" onClick={closeCompanySetup} disabled={companyBusy}>
+                Cancel
+              </button>
+              {companyPlan && (
+                <button
+                  className="btn primary"
+                  type="button"
+                  disabled={companyBusy}
+                  onClick={() => void createCompany()}
+                >
+                  {companyBusy ? "Hiring…" : "Hire the team"}
+                </button>
+              )}
             </div>
           </div>
         </div>
