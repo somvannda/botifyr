@@ -19,6 +19,7 @@ import { emit } from "./events.js";
 import { companyContext, isBudgetExhausted } from "./company.js";
 import { createCompanyTools } from "./company-tools.js";
 import { createDelegationTools } from "./delegation-tools.js";
+import { createSocialTools, notConnectedSocial } from "./social-tools.js";
 import {
   clearComputerSandbox,
   clearTaskCancel,
@@ -396,6 +397,16 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
       await store.updateTask(task);
       emit({ type: "task.failed", task });
       return;
+    }
+  }
+  // Social hands: marketing and sales employees can read insights, publish and
+  // reply on the company's pages (publishing/replying need approval). Until a
+  // provider client is wired, the tools explain how to connect an account.
+  if (company && authorBot) {
+    const roles = await store.listBotRoles(company.id).catch(() => []);
+    const role = roles.find((entry) => entry.botId === authorBot.id);
+    if (role && (role.department === "marketing" || role.department === "sales")) {
+      tools.push(...createSocialTools(notConnectedSocial()));
     }
   }
   const instructions =
