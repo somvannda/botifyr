@@ -1,5 +1,11 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { FormEvent, MouseEvent, ReactNode } from "react";
+import type {
+  FormEvent,
+  KeyboardEvent as ReactKeyboardEvent,
+  MouseEvent as ReactMouseEvent,
+  ReactNode,
+  WheelEvent as ReactWheelEvent,
+} from "react";
 import type {
   AuditEvent,
   Bot,
@@ -274,8 +280,6 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [topUpOpen, setTopUpOpen] = useState(false);
   const [showBotPanel, setShowBotPanel] = useState(() => localStorage.getItem("botifyr.botPanel") !== "0");
   const [screenOn, setScreenOn] = useState(false);
-  const [screenText, setScreenText] = useState("");
-  const [learnName, setLearnName] = useState("");
   const [botPanelTab, setBotPanelTab] = useState<"details" | "library" | "computer">("details");
   const [labels, setLabels] = useState<Record<string, string>>(() => {
     try {
@@ -591,8 +595,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     await bridge.openExternal(url);
   }
 
-  /** Start "Botifyr's screen" (a session desktop sandbox) and show its stream. */
-  async function startScreen(): Promise<void> {
+  /** Start "Botifyr's computer" (a session desktop sandbox) and open its view. */
+  async function startComputerScreen(): Promise<void> {
     if (!activeSessionId) return;
     try {
       await client.startComputer(activeSessionId);
@@ -602,60 +606,67 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     }
   }
 
-  // Drive the session desktop (teach-by-demonstration input capture).
+  // A real remote-desktop view: mouse + keyboard are forwarded to the sandbox.
   const SCREEN_W = 1280;
   const SCREEN_H = 800;
-  async function screenClick(event: MouseEvent<HTMLImageElement>): Promise<void> {
-    if (!activeSessionId) return;
+  const screenRef = useRef<HTMLDivElement | null>(null);
+  const lastMoveRef = useRef(0);
+
+  useEffect(() => {
+    if (screenOn) screenRef.current?.focus();
+  }, [screenOn]);
+
+  function screenCoords(event: ReactMouseEvent<HTMLImageElement>): { x: number; y: number } {
     const rect = event.currentTarget.getBoundingClientRect();
-    const x = Math.round(((event.clientX - rect.left) / rect.width) * SCREEN_W);
-    const y = Math.round(((event.clientY - rect.top) / rect.height) * SCREEN_H);
-    try {
-      await client.computerInput(activeSessionId, "click", { x, y });
-    } catch (err: unknown) {
-      setError(messageOf(err));
-    }
-  }
-  async function screenType(): Promise<void> {
-    if (!activeSessionId || !screenText) return;
-    const text = screenText;
-    setScreenText("");
-    try {
-      await client.computerInput(activeSessionId, "type", { text });
-    } catch (err: unknown) {
-      setError(messageOf(err));
-    }
-  }
-  async function screenKey(key: string): Promise<void> {
-    if (!activeSessionId) return;
-    try {
-      await client.computerInput(activeSessionId, "key", { key });
-    } catch (err: unknown) {
-      setError(messageOf(err));
-    }
+    return {
+      x: Math.round(((event.clientX - rect.left) / rect.width) * SCREEN_W),
+      y: Math.round(((event.clientY - rect.top) / rect.height) * SCREEN_H),
+    };
   }
 
-  /** Save the recorded demonstration as a learned task (pending admin review). */
-  async function learnTask(): Promise<void> {
+  function onScreenMove(event: ReactMouseEvent<HTMLImageElement>): void {
     if (!activeSessionId) return;
-    try {
-      const { name } = await client.learnTask(activeSessionId, learnName.trim() || undefined);
-      setLearnName("");
-      pushToast({ kind: "task", title: "Task learned", body: `"${name}" was saved for review.` });
-    } catch (err: unknown) {
-      setError(messageOf(err));
-    }
+    const now = Date.now();
+    if (now - lastMoveRef.current < 60) return; // throttle pointer moves
+    lastMoveRef.current = now;
+    const { x, y } = screenCoords(event);
+    void client.computerInput(activeSessionId, "move", { x, y }).catch(() => {});
   }
 
-  /** Replay the named learned task on the session's desktop. */
-  async function replayTask(): Promise<void> {
-    if (!activeSessionId || !learnName.trim()) return;
-    try {
-      const { steps } = await client.replayTask(activeSessionId, learnName.trim());
-      pushToast({ kind: "task", title: "Task replayed", body: `${steps} step(s) re-run.` });
-    } catch (err: unknown) {
-      setError(messageOf(err));
+  function onScreenDown(event: ReactMouseEvent<HTMLImageElement>): void {
+    if (!activeSessionId) return;
+    const { x, y } = screenCoords(event);
+    const button = event.button === 2 ? 3 : event.button === 1 ? 2 : 1;
+    void client.computerInput(activeSessionId, "click", { x, y, button }).catch(() => {});
+  }
+
+  function onScreenWheel(event: ReactWheelEvent<HTMLImageElement>): void {
+    if (!activeSessionId) return;
+    void client
+      .computerInput(activeSessionId, "scroll", { amount: event.deltaY > 0 ? 3 : -3 })
+      .catch(() => {});
+  }
+
+  function onScreenKeyDown(event: ReactKeyboardEvent<HTMLDivElement>): void {
+    if (!activeSessionId) return;
+    event.preventDefault();
+    if (event.key.length === 1) {
+      void client.computerInput(activeSessionId, "type", { text: event.key }).catch(() => {});
+      return;
     }
+    const map: Record<string, string> = {
+      Enter: "Return",
+      Backspace: "BackSpace",
+      Tab: "Tab",
+      Escape: "Escape",
+      ArrowUp: "Up",
+      ArrowDown: "Down",
+      ArrowLeft: "Left",
+      ArrowRight: "Right",
+      Delete: "Delete",
+    };
+    const key = map[event.key];
+    if (key) void client.computerInput(activeSessionId, "key", { key }).catch(() => {});
   }
 
   /** Open the media viewer at an item so you can browse prev/next. */
@@ -3125,50 +3136,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
 
             {botPanelTab === "computer" && (
               <div className="bot-panel-screen">
-                {screenOn && activeSessionId ? (
-                  <>
-                    <img
-                      className="bot-panel-screen-img bot-panel-screen-live"
-                      src={`${CLOUD_URL}/v1/sessions/${activeSessionId}/stream?token=${encodeURIComponent(token())}`}
-                      alt="Bot screen"
-                      onClick={(event) => void screenClick(event)}
-                    />
-                    <div className="screen-controls">
-                      <input
-                        className="screen-input"
-                        placeholder="Type on Botifyr's screen…"
-                        value={screenText}
-                        onChange={(event) => setScreenText(event.target.value)}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter") void screenType();
-                        }}
-                      />
-                      <button className="ghost small" type="button" onClick={() => void screenType()}>
-                        Send
-                      </button>
-                      <button className="ghost small" type="button" onClick={() => void screenKey("Return")}>
-                        Return
-                      </button>
-                      <button className="ghost small" type="button" onClick={() => setScreenOn(false)}>
-                        Stop screen
-                      </button>
-                    </div>
-                    <div className="screen-controls">
-                      <input
-                        className="screen-input"
-                        placeholder="Task name (e.g. Download a show)"
-                        value={learnName}
-                        onChange={(event) => setLearnName(event.target.value)}
-                      />
-                      <button className="ghost small" type="button" onClick={() => void learnTask()}>
-                        Learn task
-                      </button>
-                      <button className="ghost small" type="button" onClick={() => void replayTask()}>
-                        Replay
-                      </button>
-                    </div>
-                  </>
-                ) : liveTask && (liveTask.liveStream || liveTask.screenshotAt) ? (
+                {liveTask && (liveTask.liveStream || liveTask.screenshotAt) ? (
                   <img
                     className="bot-panel-screen-img"
                     src={
@@ -3181,9 +3149,9 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                 ) : (
                   <div className="bot-panel-screen-empty">
                     <span className="bot-panel-screen-ico">▢</span>
-                    <span>{activeBotName}&apos;s screen</span>
-                    <button className="btn primary" type="button" onClick={() => void startScreen()}>
-                      Start {activeBotName}&apos;s screen
+                    <span>{activeBotName}&apos;s computer</span>
+                    <button className="btn primary" type="button" onClick={() => void startComputerScreen()}>
+                      Start {activeBotName}&apos;s computer
                     </button>
                   </div>
                 )}
@@ -3715,6 +3683,37 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                         : "Create bot"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {screenOn && activeSessionId && (
+        <div className="computer-overlay" onClick={() => setScreenOn(false)}>
+          <div
+            className="computer-modal"
+            ref={screenRef}
+            tabIndex={0}
+            onKeyDown={(event) => onScreenKeyDown(event)}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="computer-head">
+              <span className="computer-title">{activeBotName}&apos;s computer</span>
+              <button className="round small" type="button" onClick={() => setScreenOn(false)}>
+                ✕
+              </button>
+            </div>
+            <img
+              className="computer-screen"
+              src={`${CLOUD_URL}/v1/sessions/${activeSessionId}/stream?token=${encodeURIComponent(token())}`}
+              alt="Botifyr's computer"
+              onMouseMove={(event) => onScreenMove(event)}
+              onMouseDown={(event) => onScreenDown(event)}
+              onWheel={(event) => onScreenWheel(event)}
+              onContextMenu={(event) => event.preventDefault()}
+            />
+            <p className="computer-hint">
+              Click and type directly — the sandbox receives your mouse and keyboard.
+            </p>
           </div>
         </div>
       )}
