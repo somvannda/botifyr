@@ -3463,10 +3463,25 @@ export async function buildServer(options: ServerOptions) {
     60 * 60 * 1000,
   );
 
+  // Stop session desktops idle for a while (BOTIFYR_COMPUTER_IDLE_MINUTES, default 10).
+  const computerIdleMs = Math.max(60_000, Number(process.env.BOTIFYR_COMPUTER_IDLE_MINUTES ?? 10) * 60_000);
+  const computerTimer = setInterval(() => {
+    const now = Date.now();
+    for (const [sessionId, lastUsed] of computerLastUsed) {
+      if (now - lastUsed < computerIdleMs) continue;
+      const key = `session:${sessionId}`;
+      const backend = getComputerSandbox(key);
+      if (backend) void backend.close().catch(() => {});
+      clearComputerSandbox(key);
+      computerLastUsed.delete(sessionId);
+    }
+  }, 60_000);
+
   app.addHook("onClose", async () => {
     clearInterval(scheduler);
     clearInterval(cleanupTimer);
     clearInterval(billingTimer);
+    clearInterval(computerTimer);
   });
 
   return app;
