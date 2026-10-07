@@ -39,19 +39,27 @@ function relPosix(root: string, full: string): string {
  * sibling sandbox container (docker-outside-of-docker needs host paths, not
  * container paths). Returns null when the checkout isn't sandbox-reachable.
  */
-export function sandboxMount(containerPath: string): { volume: string; workdir: string } | null {
+export function sandboxMount(
+  containerPath: string,
+): { volume: string; workdir: string; writable: boolean } | null {
   const reposDir = process.env.BOTIFYR_REPOS_DIR ?? "/repos";
   const managedDir = process.env.BOTIFYR_MANAGED_DIR ?? "/managed";
   if (containerPath === reposDir || containerPath.startsWith(reposDir + "/")) {
     const host = process.env.BOTIFYR_REPOS_HOST;
     if (!host) return null;
-    return { volume: `${host}:${containerPath}:ro`, workdir: containerPath };
+    return { volume: `${host}:${containerPath}:ro`, workdir: containerPath, writable: false };
   }
   if (containerPath === managedDir || containerPath.startsWith(managedDir + "/")) {
     const sub = containerPath === managedDir ? "" : containerPath.slice(managedDir.length + 1);
-    return { volume: "botifyr-managed:/mnt:ro", workdir: sub ? `/mnt/${sub}` : "/mnt" };
+    return { volume: "botifyr-managed:/mnt", workdir: sub ? `/mnt/${sub}` : "/mnt", writable: true };
   }
   return null;
+}
+
+/** True when the checkout is a managed clone (writable, safe to commit into). */
+function isManaged(containerPath: string): boolean {
+  const managedDir = process.env.BOTIFYR_MANAGED_DIR ?? "/managed";
+  return containerPath === managedDir || containerPath.startsWith(managedDir + path.sep);
 }
 
 /** Resolve `relative` inside `root`, refusing anything that escapes it. */
@@ -319,7 +327,11 @@ export function createCodeTools(repos: CodeRepo[], io: CodeToolIo = {}): ToolDef
       parameters: {
         type: "object",
         properties: {
-          command: { type: "string", description: "Optional command (default: the repo's test script)." },
+          command: { type: "string", description: "Optional test command (default: the repo's test script)." },
+          install: {
+            type: "string",
+            description: "Optional install command to run first (e.g. 'npm ci'); needs a managed clone.",
+          },
           repo: repoProp,
         },
       },
@@ -333,6 +345,29 @@ export function createCodeTools(repos: CodeRepo[], io: CodeToolIo = {}): ToolDef
           return { ok: false, output: "This checkout isn't reachable by the sandbox (no host mapping)." };
         }
         const image = process.env.BOTIFYR_TEST_IMAGE ?? "node:22-bookworm-slim";
+        const install = String(args.install ?? "").trim() || process.env.BOTIFYR_TEST_INSTALL || "";
+        if (install) {
+          if (!mount.writable) {
+            return {
+              ok: false,
+              output: "Installing dependencies needs a writable checkout — clone the repo by URL.",
+            };
+          }
+          try {
+            await execFileAsync(
+              "docker",
+              ["run", "--rm", "-v", mount.volume, "-w", mount.workdir, image, "sh", "-lc", install],
+              { timeout: 300_000, maxBuffer: 4_000_000 },
+            );
+          } catch (error) {
+            const failure = error as { stdout?: string; stderr?: string; message?: string };
+            const text =
+              `${failure.stdout ?? ""}\n${failure.stderr ?? ""}`.trim() ||
+              failure.message ||
+              "install failed";
+            return { ok: false, output: `Install failed:\n${text}`.slice(0, 20_000) };
+          }
+        }
         const command =
           String(args.command ?? "").trim() ||
           process.env.BOTIFYR_TEST_COMMAND ||
@@ -363,6 +398,79 @@ export function createCodeTools(repos: CodeRepo[], io: CodeToolIo = {}): ToolDef
           const failure = error as { stdout?: string; stderr?: string; message?: string };
           const text = `${failure.stdout ?? ""}\n${failure.stderr ?? ""}`.trim() || failure.message || "test run failed";
           return { ok: false, output: text.slice(0, 20_000) };
+        }
+      },
+    },
+    {
+      name: "code.commit",
+      description:
+        "Apply the staged changes to a managed checkout and commit them on a new branch for review. Needs approval.",
+      parameters: {
+        type: "object",
+        properties: {
+          message: { type: "string", description: "Commit message." },
+          repo: repoProp,
+        },
+        required: ["message"],
+      },
+      requiresApproval: true,
+      run: async (args) => {
+        const repo = choose(args.repo);
+        const missing = noRepo(repo);
+        if (missing || !repo) return { ok: false, output: missing ?? "No repository." };
+        if (!isManaged(repo.path)) {
+          return {
+            ok: false,
+            output: "Only managed clones (cloned by URL) can be committed to — the local mount is read-only.",
+          };
+        }
+        if (!io.workDir) return { ok: false, output: "No writable work area is configured." };
+        const overlay = path.join(io.workDir, io.workspaceId ?? "_", repo.name);
+        const root = path.resolve(repo.path);
+        let applied = 0;
+        const applyDir = async (dir: string, prefix: string): Promise<void> => {
+          const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+          for (const entry of entries) {
+            const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+            const target = path.resolve(root, rel);
+            if (target !== root && !target.startsWith(root + path.sep)) continue;
+            if (entry.isDirectory()) {
+              await mkdir(target, { recursive: true });
+              await applyDir(path.join(dir, entry.name), rel);
+            } else {
+              await mkdir(path.dirname(target), { recursive: true });
+              await writeFile(target, await readFile(path.join(dir, entry.name)));
+              applied += 1;
+            }
+          }
+        };
+        await applyDir(overlay, "");
+        if (applied === 0) return { ok: false, output: "Nothing is staged to commit." };
+        const branch = `botifyr/${Date.now().toString(36)}`;
+        try {
+          await execFileAsync("git", ["-C", repo.path, "checkout", "-b", branch], { timeout: 30_000 });
+          await execFileAsync("git", ["-C", repo.path, "add", "-A"], { timeout: 30_000 });
+          await execFileAsync(
+            "git",
+            [
+              "-C",
+              repo.path,
+              "-c",
+              "user.email=agents@botifyr.ai",
+              "-c",
+              "user.name=Botifyr",
+              "commit",
+              "-m",
+              String(args.message ?? "").slice(0, 500),
+            ],
+            { timeout: 30_000 },
+          );
+          return {
+            ok: true,
+            output: `Committed ${applied} file(s) on branch ${branch}. Push + open a PR from the repo connection to share it.`,
+          };
+        } catch (error) {
+          return { ok: false, output: String((error as Error).message).slice(0, 1000) };
         }
       },
     },

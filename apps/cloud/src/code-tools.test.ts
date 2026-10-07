@@ -1,10 +1,13 @@
+import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 import type { CodeRepo } from "@botifyr/shared";
 import { createCodeTools, sandboxMount } from "./code-tools.js";
 
+const execFileAsync = promisify(execFile);
 const ctx = { workspaceDir: ".", log: () => {} };
 
 async function repoFixture(): Promise<CodeRepo> {
@@ -92,13 +95,51 @@ describe("code tools (read-only)", () => {
 describe("sandboxMount", () => {
   it("maps managed checkouts to the named volume", () => {
     expect(sandboxMount("/managed/ws1/demo")).toEqual({
-      volume: "botifyr-managed:/mnt:ro",
+      volume: "botifyr-managed:/mnt",
       workdir: "/mnt/ws1/demo",
+      writable: true,
     });
-    expect(sandboxMount("/managed")).toEqual({ volume: "botifyr-managed:/mnt:ro", workdir: "/mnt" });
+    expect(sandboxMount("/managed")).toEqual({
+      volume: "botifyr-managed:/mnt",
+      workdir: "/mnt",
+      writable: true,
+    });
   });
 
   it("fails safe for paths with no sandbox mapping", () => {
     expect(sandboxMount("/etc/passwd")).toBeNull();
+  });
+});
+
+describe("code.commit", () => {
+  it("applies staged changes and commits on a branch in a managed repo", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "botifyr-managed-"));
+    const repoPath = path.join(root, "app");
+    await mkdir(repoPath, { recursive: true });
+    await execFileAsync("git", ["-C", repoPath, "init"]);
+    await execFileAsync("git", ["-C", repoPath, "config", "user.email", "t@t.test"]);
+    await execFileAsync("git", ["-C", repoPath, "config", "user.name", "t"]);
+    await writeFile(path.join(repoPath, "README.md"), "hi\n");
+    await execFileAsync("git", ["-C", repoPath, "add", "-A"]);
+    await execFileAsync("git", ["-C", repoPath, "commit", "-m", "init"]);
+
+    const workDir = await mkdtemp(path.join(tmpdir(), "botifyr-work-"));
+    await mkdir(path.join(workDir, "ws1", "demo"), { recursive: true });
+    await writeFile(path.join(workDir, "ws1", "demo", "new.txt"), "staged");
+
+    process.env.BOTIFYR_MANAGED_DIR = root;
+    try {
+      const tools = createCodeTools([{ id: "r", name: "demo", path: repoPath, createdAt: "" }], {
+        workDir,
+        workspaceId: "ws1",
+      });
+      const commit = tools.find((tool) => tool.name === "code.commit")!;
+      expect(commit.requiresApproval).toBe(true);
+      const result = await commit.run({ message: "add new file" }, ctx);
+      expect(result.ok, result.output).toBe(true);
+      expect(await readFile(path.join(repoPath, "new.txt"), "utf8")).toBe("staged");
+    } finally {
+      delete process.env.BOTIFYR_MANAGED_DIR;
+    }
   });
 });
