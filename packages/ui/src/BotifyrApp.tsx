@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   FormEvent,
   KeyboardEvent as ReactKeyboardEvent,
@@ -73,7 +73,12 @@ import { P2P, deviceId, saveBlob, setIceServers } from "./p2p";
 import { defaultBridge, type BotBridge } from "./bridge";
 import { mergeTask } from "./taskMerge";
 import { mediaKind, type MediaKind } from "./mediaUtils";
+import type { AgentActivity } from "./office3d/layout";
+import type { OfficeAgent } from "./office3d/OfficeView";
 import "./styles.css";
+
+/** The 3D office pulls in three.js — load it only when the CEO opens it. */
+const LazyOfficeView = lazy(() => import("./office3d/OfficeView"));
 
 const CLOUD_URL = (import.meta.env.VITE_CLOUD_URL as string | undefined) ?? "http://localhost:8787";
 const ADMIN_URL = (import.meta.env.VITE_ADMIN_URL as string | undefined) ?? "http://localhost:4322/admin";
@@ -341,6 +346,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [wizardBudget, setWizardBudget] = useState("");
   const [wizardActivate, setWizardActivate] = useState(false);
   const [boardWorkspace, setBoardWorkspace] = useState<{ id: string; name: string } | null>(null);
+  const [showOffice3d, setShowOffice3d] = useState(false);
   const [repoName, setRepoName] = useState("");
   const [repoPath, setRepoPath] = useState("");
   const [repoUrl, setRepoUrl] = useState("");
@@ -362,6 +368,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     Array<{ id: string; name: string; content: string; department?: string }>
   >([]);
   const [openFile, setOpenFile] = useState<string | null>(null);
+  const [filePreview, setFilePreview] = useState<{ name: string; content: string } | null>(null);
   const [hqChanges, setHqChanges] = useState<
     Array<{ repo: string; path: string; content: string; diff: string; exists: boolean }>
   >([]);
@@ -496,6 +503,39 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const sidebarRefreshRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const boardWorkspaceRef = useRef<{ id: string; name: string } | null>(null);
   boardWorkspaceRef.current = boardWorkspace;
+
+  /**
+   * Employees for the 3D office: the latest task per bot decides live activity.
+   * Derived from state we already hold, so opening the office costs no requests.
+   */
+  const officeAgents = useMemo<OfficeAgent[]>(() => {
+    if (!boardWorkspace) return [];
+    const workspace = workspaces.find((entry) => entry.name === boardWorkspace.name);
+    if (!workspace) return [];
+
+    const latestBySession = new Map<string, Task>();
+    for (const task of Object.values(tasks)) {
+      const current = latestBySession.get(task.sessionId);
+      if (!current || current.updatedAt < task.updatedAt) latestBySession.set(task.sessionId, task);
+    }
+
+    return workspace.roles.flatMap((role) => {
+      const bot = bots.find((entry) => entry.id === role.botId);
+      if (!bot) return [];
+      const task = latestBySession.get(bot.sessionId);
+      const activity: AgentActivity = task && task.status !== "cancelled" ? task.status : "idle";
+      return [
+        {
+          botId: bot.id,
+          name: bot.name,
+          emoji: bot.emoji,
+          title: role.title,
+          department: role.department,
+          activity,
+        },
+      ];
+    });
+  }, [boardWorkspace, workspaces, tasks, bots]);
   const nodeStartedRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const cancelSigninRef = useRef(false);
@@ -1518,6 +1558,35 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     if (!workspace) return;
     await client.updateFile(fileId, { department }).catch(() => null);
     await refreshWiki(workspace.id);
+  }
+
+  /** Open a file referenced in chat: company wiki first, else the bot's Library. */
+  async function openFileRef(name: string) {
+    setFilePreview({ name, content: "Loading…" });
+    const company = activeBot?.workspace
+      ? workspaces.find((entry) => entry.name === activeBot.workspace)
+      : undefined;
+    if (company) {
+      const wiki = await client.listWorkspaceFiles(company.id).catch(() => []);
+      const hit = wiki.find((file) => file.name.toLowerCase() === name.toLowerCase());
+      if (hit) {
+        setFilePreview({ name: hit.name, content: hit.content });
+        return;
+      }
+    }
+    if (activeBotId) {
+      const files = await client.listFiles(activeBotId).catch(() => []);
+      const hit = files.find((file) => file.name.toLowerCase() === name.toLowerCase());
+      if (hit) {
+        const full = await client.getFile(hit.id).catch(() => null);
+        setFilePreview({ name: hit.name, content: full?.content ?? "(no content)" });
+        return;
+      }
+    }
+    setFilePreview({
+      name,
+      content: `"${name}" isn't in the company wiki or this bot's Library yet.`,
+    });
   }
 
   /** Remove every task from the company board. */
@@ -3626,7 +3695,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                           <span className="msg-author-emoji">{person?.avatarEmoji ?? "🙂"}</span>
                           {label}
                         </div>
-                        <Markdown text={message.content} />
+                        <Markdown text={message.content} onFileRef={openFileRef} />
                         {sharedTokenOf(message.content) && (
                           <button
                             className="ghost small"
@@ -3672,7 +3741,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                           {msgBot.name}
                         </div>
                       )}
-                      <Markdown text={parsed.body} />
+                      <Markdown text={parsed.body} onFileRef={openFileRef} />
                       {parsed.options.length > 0 && (
                         <div className="quick-replies">
                           {parsed.options.map((option, index) => (
@@ -5192,6 +5261,18 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
 
               {hqTab === "office" && (
                 <>
+                  <div className="board-add">
+                    <button
+                      className="btn primary small"
+                      type="button"
+                      onClick={() => setShowOffice3d(true)}
+                    >
+                      3D Workspace
+                    </button>
+                    <span className="company-hint">
+                      See the office in 3D — every employee at their desk.
+                    </span>
+                  </div>
                   <ul className="board-list">
                     {(workspaceByName.get(boardWorkspace.name)?.roles ?? []).map((role) => {
                       const bot = bots.find((entry) => entry.id === role.botId);
@@ -5501,12 +5582,35 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                     >
                       <StopIcon size={16} />
                     </HqButton>
+                    <HqButton
+                      title="3D Workspace — see the office live (drag to rotate, scroll to zoom)"
+                      disabled={boardBusy}
+                      onClick={() => setShowOffice3d(true)}
+                    >
+                      <MonitorIcon size={16} />
+                    </HqButton>
                     <HqButton title="Close" onClick={closeBoard}>
                       <CloseIcon size={16} />
                     </HqButton>
                   </>
                 );
               })()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {filePreview && (
+        <div className="apps-overlay" onClick={() => setFilePreview(null)}>
+          <div className="apps-panel board-panel" onClick={(event) => event.stopPropagation()}>
+            <div className="apps-head">
+              <span className="apps-title">{filePreview.name}</span>
+              <button className="round small" type="button" onClick={() => setFilePreview(null)}>
+                ✕
+              </button>
+            </div>
+            <div className="file-preview">
+              <Markdown text={filePreview.content} onFileRef={openFileRef} />
             </div>
           </div>
         </div>
@@ -5941,6 +6045,33 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
             </div>
           </div>
         </div>
+      )}
+
+      {showOffice3d && boardWorkspace && (
+        <Suspense
+          fallback={
+            <div className="office3d-overlay">
+              <div className="office3d-panel office3d-loading">Building the office…</div>
+            </div>
+          }
+        >
+          <LazyOfficeView
+            company={boardWorkspace.name}
+            agents={officeAgents}
+            paused={
+              (workspaces.find((entry) => entry.name === boardWorkspace.name)?.status ?? "active") ===
+              "paused"
+            }
+            onClose={() => setShowOffice3d(false)}
+            onSelect={(botId) => {
+              const bot = bots.find((entry) => entry.id === botId);
+              if (bot) {
+                setShowOffice3d(false);
+                openEmployee(bot);
+              }
+            }}
+          />
+        </Suspense>
       )}
 
       {screenOn && activeSessionId && (
