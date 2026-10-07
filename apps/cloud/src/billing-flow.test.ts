@@ -58,6 +58,23 @@ describe("settleInvoice", () => {
     expect((await store.getWallet("u1")).balanceCents).toBe(500);
     expect((await store.listLedger("u1"))[0]?.kind).toBe("topup");
   });
+
+  it("settles a plan invoice only once (webhook retries are safe)", async () => {
+    const store = new MemoryStore();
+    await store.createUser(user());
+    const inv = invoice();
+    await store.createInvoice(inv);
+    await settleInvoice(store, inv, new Date().toISOString());
+    const first = await store.getUserById("u1");
+
+    // A retried delivery re-reads the (now paid) invoice and must not extend again.
+    const again = await store.getInvoice(inv.id);
+    expect(again?.status).toBe("paid");
+    if (again) await settleInvoice(store, again, new Date(Date.now() + 60_000).toISOString());
+
+    const second = await store.getUserById("u1");
+    expect(second?.periodEnd).toBe(first?.periodEnd);
+  });
 });
 
 describe("runBillingTick", () => {
