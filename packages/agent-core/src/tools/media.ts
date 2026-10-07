@@ -134,9 +134,9 @@ export function createMediaTools(
       if (!candidate) return false;
       const retry = await backend.exec(
         audio
-          ? `yt-dlp ${common} -x --audio-format mp3 -o ${template} '${candidate}'`
+          ? `yt-dlp ${common} -x --audio-format mp3 --referer '${url}' -o ${template} '${candidate}'`
           : `yt-dlp ${common} -f 'bv*[height<=${height}]+ba/b[height<=${height}]' ` +
-              `--merge-output-format mp4 ${subsFlag}-o ${template} '${candidate}'`,
+              `--merge-output-format mp4 --referer '${url}' ${subsFlag}-o ${template} '${candidate}'`,
       );
       return retry.ok;
     };
@@ -156,9 +156,9 @@ export function createMediaTools(
       if (!candidate) return false;
       const retry = await backend.exec(
         audio
-          ? `yt-dlp ${common} -x --audio-format mp3 -o ${template} '${candidate}'`
+          ? `yt-dlp ${common} -x --audio-format mp3 --referer '${url}' -o ${template} '${candidate}'`
           : `yt-dlp ${common} -f 'bv*[height<=${height}]+ba/b[height<=${height}]' ` +
-              `--merge-output-format mp4 ${subsFlag}-o ${template} '${candidate}'`,
+              `--merge-output-format mp4 --referer '${url}' ${subsFlag}-o ${template} '${candidate}'`,
       );
       return retry.ok;
     };

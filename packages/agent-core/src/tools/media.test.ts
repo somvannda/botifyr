@@ -183,7 +183,11 @@ describe("youtube.download", () => {
         if (command.includes("grep -oE")) {
           return { ok: true, output: "https:\\/\\/cdn.example.com\\/hls\\/master.m3u8\n" };
         }
-        if (command.startsWith("yt-dlp") && command.includes("example.com/page")) {
+        if (
+          command.startsWith("yt-dlp") &&
+          command.includes("example.com/page") &&
+          !command.includes("--referer")
+        ) {
           return { ok: false, output: "ERROR: Unsupported URL" };
         }
         return { ok: true, output: "ok" };
@@ -205,6 +209,7 @@ describe("youtube.download", () => {
 
     expect(result.ok).toBe(true);
     expect(commands.some((command) => command.includes("cdn.example.com/hls/master.m3u8"))).toBe(true);
+    expect(commands.some((command) => command.includes("--referer 'https://example.com/page'"))).toBe(true);
   });
 
   it("uses an approved recipe (with its headers) when yt-dlp can't handle the page", async () => {
@@ -215,7 +220,11 @@ describe("youtube.download", () => {
         if (command.includes("grep -oE")) {
           return { ok: true, output: "https:\\/\\/cdn.example.com\\/recipe\\/master.m3u8\n" };
         }
-        if (command.startsWith("yt-dlp") && command.includes("example.com/page")) {
+        if (
+          command.startsWith("yt-dlp") &&
+          command.includes("example.com/page") &&
+          !command.includes("--referer")
+        ) {
           return { ok: false, output: "ERROR: Unsupported URL" };
         }
         return { ok: true, output: "ok" };
@@ -251,7 +260,11 @@ describe("youtube.download", () => {
     const backend: ShellBackend = {
       async exec(command) {
         commands.push(command);
-        if (command.startsWith("yt-dlp") && command.includes("example.com/spa")) {
+        if (
+          command.startsWith("yt-dlp") &&
+          command.includes("example.com/spa") &&
+          !command.includes("--referer")
+        ) {
           return { ok: false, output: "ERROR: Unsupported URL" };
         }
         return { ok: true, output: "ok" };
@@ -275,6 +288,7 @@ describe("youtube.download", () => {
 
     expect(result.ok).toBe(true);
     expect(commands.some((command) => command.includes("v3.example.com/hls/video.m3u8"))).toBe(true);
+    expect(commands.some((command) => command.includes("--referer 'https://example.com/spa'"))).toBe(true);
   });
 
   it("media.sniff returns the media URL a page loads", async () => {
