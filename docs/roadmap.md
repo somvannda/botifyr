@@ -4,6 +4,13 @@ Living checklist. We work top to bottom, one item per change, and tick boxes as
 they land. Keep entries short; link code paths instead of explaining them.
 
 ## Pending (requested, not finished)
+- [ ] **Video translation (dub + subtitles + lip-sync)** — translate a video/movie/
+      series: transcribe, translate, TTS dub (optional voice clone), optional
+      lip-sync, render with correct timing — background pipeline, **no editor**.
+      Role-based model router (brain / translator / ASR / TTS / lip-sync), admin
+      provider registry + pricing, local (desktop GPU) *or* cloud executor.
+      Design: [`docs/video-translation.md`](video-translation.md). **Not started** —
+      requirements captured, open questions in the doc need answers first.
 - [ ] **Company workspaces** — group bots into a company (employees + roles) and
       generate one from a website or idea. Design:
       [`docs/company-workspace.md`](company-workspace.md). **Done**: `Workspace`
@@ -26,8 +33,11 @@ they land. Keep entries short; link code paths instead of explaining them.
       model — in the sandbox and through the cloud API (message → deterministic
       `youtube.download` → approval → sandbox → file in `/v1/tasks/:id/downloads`),
       including a **JS-only HLS page** (cloud sniff captured the master playlist
-      and yt-dlp saved a 170 MB file). One sample URL per site still speeds up the
-      rest.
+      and yt-dlp saved a 170 MB file). Short-drama sites with a web player work
+      this way (validated: GoodShort, DramaBox, ShortMax/ShortTV, ReelShort);
+      app-only/parked services don't. Subtitle tracks (`.srt`) are saved next to
+      the video (validated: YouTube auto-captions). One sample URL per site still
+      speeds up the rest.
 - [x] **Friend group chats** — create a thread with several friends
       (`kind: "group"` model already exists).
 - [x] **Send a file to a friend** — signed, recipient-scoped, 7-day links from
