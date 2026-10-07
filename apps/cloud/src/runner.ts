@@ -29,6 +29,7 @@ import { createDesignTools } from "./design-tools.js";
 import { createEmailTools, resendSender } from "./email-tools.js";
 import { createEscalationTools } from "./escalation-tools.js";
 import { createHireTools } from "./hire-tools.js";
+import { createPlanTools } from "./plan-tools.js";
 import { removeDeniedTools } from "./tool-capabilities.js";
 import {
   clearComputerSandbox,
@@ -479,8 +480,13 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
     }
     // Any employee can pause and ask the owner when blocked (CAPTCHA/2FA/decision).
     tools.push(...createEscalationTools());
-    // The chair (exec) can hire new employees (approval-gated).
-    if (department === "exec") {
+    // Any employee can write down a plan so the whole team shares one strategy.
+    tools.push(...createPlanTools(store, userId, authorBot.id));
+    // The chair (exec) and department leaders can hire their own specialists
+    // (approval-gated), so the company grows on demand instead of being over-hired.
+    const isLeader =
+      department === "exec" || /head|lead|chief|cto|ceo|coo|cfo|director|vp|manager/i.test(role?.title ?? "");
+    if (isLeader) {
       tools.push(...createHireTools(store, userId, authorBot.id));
     }
 

@@ -435,11 +435,14 @@ export async function planCompany(
   dna?: CompanyDNA,
 ): Promise<CompanyPlan> {
   const system =
-    "You design small, effective company org charts. Reply with STRICT JSON only — no prose, no markdown. " +
+    "You design lean company org charts. Reply with STRICT JSON only — no prose, no markdown. " +
     'Shape: {"name":string,"mission":string,"avatarEmoji":string,"members":[{"name":string,"title":string,' +
     '"department":"exec|product|engineering|growth|ops|finance|support|design","emoji":string,' +
-    '"instructions":string,"isChair":boolean}]}. Create 3 to 6 employees, each with a distinct role and short ' +
-    "standing instructions. Exactly one member has isChair true (the one who reports to the human CEO).";
+    '"instructions":string,"isChair":boolean}]}. Create 2 to 4 FOUNDING LEADERS only (department heads such as ' +
+    "CTO, Head of Product, Head of Growth, Head of Sales) — do NOT include individual contributors. Every leader's " +
+    "instructions must say they own their department and will hire their own specialists later using the " +
+    "company.hire tool when the plan needs them. Exactly one member has isChair true (the one who reports to the " +
+    "human CEO).";
   const user = `Company source (${input.kind}): ${input.value.slice(0, 1000)}${
     input.name ? `\nRequested name: ${input.name}` : ""
   }${dna ? `\nBusiness: ${dna.industry} — ${dna.summary}` : ""}`;

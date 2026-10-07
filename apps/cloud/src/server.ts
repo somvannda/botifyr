@@ -2779,8 +2779,8 @@ export async function buildServer(options: ServerOptions) {
           const everyMinutes = role.isChair ? 1440 : 240;
           bot.schedule = {
             prompt: role.isChair
-              ? "Run the daily standup: summarise the board and flag blockers."
-              : "Review your board tasks and do the next one.",
+              ? "Run the daily standup: summarise the board and flag blockers. If a goal is off track, write a concrete plan with company.plan (approach, who, channels, metrics) and delegate the next steps."
+              : "Review your board tasks and do the next one. If you're blocked, escalate; if the plan is unclear, ask the CEO.",
             everyMinutes,
             enabled: true,
             nextRunAt: new Date(now.getTime() + everyMinutes * 60_000).toISOString(),

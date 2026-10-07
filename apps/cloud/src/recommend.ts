@@ -46,7 +46,7 @@ const TEMPLATES: Template[] = [
 ];
 
 const FALLBACK_TEMPLATE = TEMPLATES[TEMPLATES.length - 1]!;
-const MAX_TEAM = 8;
+const MAX_TEAM = 5;
 
 export interface Recommendation {
   template: string;
@@ -63,18 +63,16 @@ export function recommendTeam(input: { text: string; stage?: Stage }): Recommend
     FALLBACK_TEMPLATE;
 
   const early = stage === "idea" || stage === "mvp";
-  const stageRoles = early
-    ? ["engineering.backend", "engineering.frontend", "design.ux", "engineering.qa"]
-    : ["sales.rep", "marketing.social", "support.agent"];
   const rationale = [
     `Matched the "${template.id}" blueprint.`,
     early
-      ? "Early stage → build-heavy: product, engineering, design and QA."
-      : "Existing product → go-to-market heavy: sales, marketing and support.",
+      ? "Early stage → a lean founding team of department leaders (they hire their own specialists later)."
+      : "Existing product → a lean leadership team across product, growth and success.",
   ];
 
-  // CEO first, then the stage-critical roles, then the template core; cap the team.
-  const ordered = ["exec.ceo", ...stageRoles, ...template.core]
+  // Hire only a few founding leaders; each leader grows their own team on demand
+  // via `company.hire` as the plan requires, so we don't over-hire up front.
+  const ordered = ["exec.ceo", ...template.core]
     .filter((id, index, all) => all.indexOf(id) === index)
     .filter((id) => ROLE_BY_ID.has(id))
     .slice(0, MAX_TEAM);

@@ -400,6 +400,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const botsRef = useRef<Bot[]>([]);
   botsRef.current = bots;
   const sidebarRefreshRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const boardWorkspaceRef = useRef<{ id: string; name: string } | null>(null);
+  boardWorkspaceRef.current = boardWorkspace;
   const nodeStartedRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const cancelSigninRef = useRef(false);
@@ -685,6 +687,14 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
           const existing = prev[event.task.id];
           return { ...prev, [event.task.id]: mergeTask(existing, event.task) };
         });
+        // Keep an open Company HQ board live as agents move items.
+        if (event.type === "task.completed" || event.type === "task.failed") {
+          const board = boardWorkspaceRef.current;
+          if (board) {
+            void refreshBoard(board.id);
+            void refreshNeeds(board.id);
+          }
+        }
         break;
       }
       case "approval.requested":
