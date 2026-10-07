@@ -2448,10 +2448,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
             <BotLogo size={30} scheme={BOT_SCHEMES[bot.scheme % BOT_SCHEMES.length]} />
           </span>
           <span className="conv-text">
-            <span className="conv-name">
-              {bot.name}
-              {roleByBotId.get(bot.id) && <span className="conv-role">{roleByBotId.get(bot.id)?.title}</span>}
-            </span>
+            <span className="conv-name">{bot.name}</span>
+            {roleByBotId.get(bot.id) && <span className="conv-role">{roleByBotId.get(bot.id)?.title}</span>}
             <span className="conv-preview">{last?.content?.slice(0, 42) || "No messages yet"}</span>
           </span>
         </button>
@@ -2617,7 +2615,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                         if (ws) setCompanyEdit({ id: ws.id, name });
                       }}
                     >
-                      <GearIcon size={12} />
+                      <GearIcon size={14} />
                     </button>
                   )}
                   {workspaceByName.get(name) && (
@@ -2631,7 +2629,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                         if (ws) void openBoard(ws.id, name);
                       }}
                     >
-                      <ChartIcon size={12} />
+                      <ChartIcon size={14} />
                     </button>
                   )}
                 </div>
@@ -4592,17 +4590,20 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
               </button>
             </div>
             <div className="company-setup-body">
-              <input
-                className="workspace-input"
-                value={companyEdit.name}
-                onChange={(event) =>
-                  setCompanyEdit((prev) => (prev ? { ...prev, name: event.target.value } : prev))
-                }
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") void renameCompany();
-                }}
-                autoFocus
-              />
+              <label className="workspace-field">
+                <span className="workspace-field-label">Company name</span>
+                <input
+                  className="workspace-input"
+                  value={companyEdit.name}
+                  onChange={(event) =>
+                    setCompanyEdit((prev) => (prev ? { ...prev, name: event.target.value } : prev))
+                  }
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") void renameCompany();
+                  }}
+                  autoFocus
+                />
+              </label>
               {companyError && (
                 <p className="bot-editor-error" role="alert">
                   {companyError}

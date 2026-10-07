@@ -360,13 +360,13 @@ body {
   align-items: center;
   gap: 6px;
   min-width: 0;
-  padding: 6px 0 4px 8px;
+  padding: 8px 0 4px 8px;
   background: transparent;
   border: 0;
-  color: var(--muted);
-  font-size: 10.5px;
+  color: var(--text);
+  font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.03em;
   text-transform: uppercase;
   text-align: left;
   cursor: pointer;
@@ -378,17 +378,17 @@ body {
 }
 
 .task-section-head:not(.static):hover {
-  color: var(--text);
+  color: var(--accent);
 }
 
 .task-section-edit {
   flex: none;
   display: inline-grid;
   place-items: center;
-  width: 22px;
-  height: 22px;
+  width: 26px;
+  height: 26px;
   border: 0;
-  border-radius: 6px;
+  border-radius: 7px;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
@@ -401,7 +401,7 @@ body {
 
 .task-caret {
   width: 10px;
-  font-size: 9px;
+  font-size: 10px;
   line-height: 1;
 }
 
@@ -431,7 +431,6 @@ body {
 }
 
 .conv-role {
-  margin-left: 6px;
   padding: 1px 6px;
   border-radius: 999px;
   border: 1px solid var(--border);
@@ -441,7 +440,6 @@ body {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  vertical-align: middle;
 }
 
 /* Company onboarding modal. */
@@ -531,8 +529,11 @@ body {
 
 .hq-tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
-  padding: 0 0 8px;
+  padding: 0 0 10px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 12px;
 }
 
 .hq-tab {
@@ -1916,10 +1917,13 @@ body {
 .conv-text {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
   overflow: hidden;
 }
 
 .conv-name {
+  width: 100%;
   font-size: 13px;
   font-weight: 600;
   overflow: hidden;
@@ -1928,6 +1932,7 @@ body {
 }
 
 .conv-preview {
+  width: 100%;
   font-size: 12.5px;
   color: var(--muted);
   overflow: hidden;
@@ -2049,6 +2054,11 @@ body {
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
 }
 
+/* Settings / wizard panels are naturally narrower than the tall editors. */
+.apps-panel.company-setup:not(.board-panel) {
+  max-width: 460px;
+}
+
 /* Tall editors (create/edit bot) keep the header and actions pinned and
    scroll the middle, so Save is always reachable. */
 .apps-panel.bot-editor {
@@ -2074,6 +2084,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  margin-bottom: 10px;
 }
 
 .apps-title {
@@ -4797,6 +4808,9 @@ body {
   justify-content: flex-end;
   align-items: center;
   gap: 8px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+  margin-top: 14px;
 }
 
 .apps-panel.bot-editor .apps-actions {
