@@ -600,6 +600,12 @@ body {
   color: var(--text);
 }
 
+.wiki-doc-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+}
+
 .board-add {
   display: flex;
   gap: 8px;

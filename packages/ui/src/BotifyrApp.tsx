@@ -226,12 +226,13 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [boardItems, setBoardItems] = useState<Array<WorkItem>>([]);
   const [boardTitle, setBoardTitle] = useState("");
   const [boardBusy, setBoardBusy] = useState(false);
-  const [hqTab, setHqTab] = useState<"need" | "team" | "board" | "budget" | "standup" | "office">("need");
+  const [hqTab, setHqTab] = useState<"need" | "team" | "board" | "budget" | "standup" | "office" | "wiki">("need");
   const [hqNeeds, setHqNeeds] = useState<Array<Task>>([]);
   const [hqBudget, setHqBudget] = useState<WorkspaceBudget | null>(null);
   const [budgetInput, setBudgetInput] = useState("");
   const [hqGrants, setHqGrants] = useState<Array<CapabilityGrant>>([]);
   const [hqReports, setHqReports] = useState<Array<CompanyReport>>([]);
+  const [hqWiki, setHqWiki] = useState<Array<{ name: string; content: string }>>([]);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [editingBotId, setEditingBotId] = useState<string | null>(null);
   const [botName, setBotName] = useState("");
@@ -1016,6 +1017,22 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       setBudgetInput(budget && budget.limitTokens > 0 ? String(budget.limitTokens) : "");
       setHqGrants(grants);
       setHqReports(reports);
+
+      // Company wiki: the chair bot's Library (BRIEF / OKRS / BACKLOG).
+      const chairId = workspaces.find((entry) => entry.id === workspaceId)?.ceoBotId;
+      if (chairId) {
+        const files = await client.listFiles(chairId).catch(() => []);
+        setHqWiki(
+          await Promise.all(
+            files.map(async (file) => ({
+              name: file.name,
+              content: (await client.getFile(file.id).catch(() => null))?.content ?? "",
+            })),
+          ),
+        );
+      } else {
+        setHqWiki([]);
+      }
     } finally {
       setBoardBusy(false);
     }
@@ -1031,6 +1048,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     setBudgetInput("");
     setHqGrants([]);
     setHqReports([]);
+    setHqWiki([]);
   }
 
   async function runStandup() {
@@ -4013,6 +4031,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                   ["budget", "Budget"],
                   ["standup", "Standup"],
                   ["office", "Office"],
+                  ["wiki", "Wiki"],
                 ] as const
               ).map(([tab, label]) => (
                 <button
@@ -4219,6 +4238,20 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                     );
                   })}
                 </ul>
+              )}
+
+              {hqTab === "wiki" && (
+                <>
+                  {hqWiki.length === 0 && <p className="company-hint">The company wiki is empty.</p>}
+                  <ul className="board-list">
+                    {hqWiki.map((file) => (
+                      <li key={file.name} className="team-member">
+                        <div className="wiki-doc-name">{file.name}</div>
+                        <pre className="standup-text">{file.content || "(empty)"}</pre>
+                      </li>
+                    ))}
+                  </ul>
+                </>
               )}
             </div>
             <div className="apps-actions">
