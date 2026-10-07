@@ -44,11 +44,17 @@ services:
       BOTIFYR_SANDBOX: docker
       BOTIFYR_SANDBOX_NETWORK: botifyr-net
       BOTIFYR_DEMO_URL: http://cloud:8787/demo
+      # Where connected code checkouts live (docs/codebase-access.md).
+      BOTIFYR_REPOS_DIR: /repos
     ports:
       - "8787:8787"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - botifyr-downloads:/downloads
+      # Read-only host directory the engineering agents may read through the
+      # code.* tools. Point BOTIFYR_REPOS_HOST at a checkout (see .env.example)
+      # and it appears at /repos inside the container; connect /repos in the HQ.
+      - "${BOTIFYR_REPOS_HOST:-./repos}:/repos:ro"
     depends_on:
       postgres:
         condition: service_healthy
