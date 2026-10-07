@@ -311,6 +311,9 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     localStorage.getItem("botifyr.execution") === "always_allow" ? "always_allow" : "ask",
   );
   const [theme, setTheme] = useState(() => localStorage.getItem("botifyr.theme") ?? "dark");
+  const [density, setDensity] = useState<"cozy" | "compact">(() =>
+    localStorage.getItem("botifyr.density") === "compact" ? "compact" : "cozy",
+  );
   const [language, setLanguage] = useState(() => localStorage.getItem("botifyr.language") ?? "system");
   const [spelling, setSpelling] = useState(() => localStorage.getItem("botifyr.spelling") !== "0");
   const [hardware, setHardware] = useState(() => localStorage.getItem("botifyr.hardware") !== "0");
@@ -2488,7 +2491,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   };
 
   return (
-    <div className={`app${showBotPanel && activeBot ? " with-panel" : ""}`}>
+    <div className={`app${showBotPanel && activeBot ? " with-panel" : ""}${density === "compact" ? " density-compact" : ""}`}>
       {toasts.length > 0 && (
         <div className="toast-stack">
           {toasts.map((toast) => (
@@ -2721,6 +2724,23 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                 <MobileIcon size={16} />
               </span>
               <span className="account-label">Get Botifyr for mobile</span>
+            </button>
+            <button
+              className="account-item"
+              type="button"
+              onClick={() =>
+                setDensity((prev) => {
+                  const next = prev === "compact" ? "cozy" : "compact";
+                  localStorage.setItem("botifyr.density", next);
+                  return next;
+                })
+              }
+            >
+              <span className="account-ico">
+                <PanelIcon size={16} />
+              </span>
+              <span className="account-label">Compact view</span>
+              <span className="account-value">{density === "compact" ? "On" : "Off"}</span>
             </button>
             <button
               className="account-item"
