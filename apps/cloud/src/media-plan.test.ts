@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { planMedia } from "./server.js";
+import { confidentPlan, planMedia } from "./server.js";
 
 /**
  * The deterministic media planner must make retries and first sends behave the
@@ -37,5 +37,24 @@ describe("planMedia", () => {
     expect(plan.initialToolCall?.name).toBe("youtube.download");
     expect(plan.initialToolCall?.arguments.quality).toBe(2160);
     expect(plan.initialToolCall?.arguments.audio_only).toBe(true);
+  });
+
+  it("flags a bulk search with no explicit count as low confidence", () => {
+    const plan = planMedia("grab songs by Heng Pitou");
+    expect(plan.initialToolCall?.name).toBe("youtube.download_search");
+    expect(plan.confidence).toBe("low");
+  });
+
+  it("flags a download mixed with another ask as low confidence", () => {
+    const plan = planMedia("download https://youtu.be/abc then summarize it for me");
+    expect(plan.initialToolCall?.name).toBe("youtube.download");
+    expect(plan.confidence).toBe("low");
+  });
+
+  it("confidentPlan drops a low-confidence guess so the model confirms", () => {
+    expect(confidentPlan("grab songs by Heng Pitou").mediaTask).toBe(false);
+    expect(confidentPlan("grab songs by Heng Pitou").initialToolCall).toBeUndefined();
+    expect(confidentPlan("grab 10 songs by Heng Pitou").mediaTask).toBe(true);
+    expect(confidentPlan("download https://youtu.be/abc").mediaTask).toBe(true);
   });
 });

@@ -168,6 +168,8 @@ interface MediaPlan {
   mediaTask: boolean;
   initialToolCall?: { name: string; arguments: Record<string, unknown> };
   initialToolOnly: boolean;
+  /** "low" means the deterministic route is a guess — let the model confirm. */
+  confidence: "high" | "low";
 }
 
 /**
@@ -202,12 +204,37 @@ export function planMedia(text: string): MediaPlan {
           }
         : { name: "youtube.search", arguments: { query: search.query, count: search.count } }
       : undefined;
+  // Low confidence: a bulk search without an explicit count (we'd silently pick
+  // a default), or a download mixed with another ask (the deterministic tool
+  // would ignore it). Route those to the model so it can confirm first.
+  const otherIntent =
+    /\b(summarize|summary|explain|translate|describe|analy[sz]e|compare|caption|subtitles?|what|why|who|when|where|tell me|write|draft|plan|review)\b/i.test(
+      text,
+    );
+  const confidence: "high" | "low" =
+    (initialToolCall?.name === "youtube.download_search" && !countMatch && !wantsAll) ||
+    (initialToolCall?.name === "youtube.download" && otherIntent)
+      ? "low"
+      : "high";
   return {
     mediaTask: Boolean(initialToolCall?.name.startsWith("youtube.")),
     initialToolCall,
     initialToolOnly:
       initialToolCall?.name === "youtube.download" || initialToolCall?.name === "youtube.download_search",
+    confidence,
   };
+}
+
+/**
+ * `planMedia`, but a low-confidence guess is not auto-run — the caller passes
+ * no tool call and the model confirms with the user instead. Guards against
+ * silently ignoring part of a message or defaulting a bulk count.
+ */
+export function confidentPlan(text: string): MediaPlan {
+  const plan = planMedia(text);
+  return plan.confidence === "high"
+    ? plan
+    : { mediaTask: false, initialToolCall: undefined, initialToolOnly: false, confidence: "low" };
 }
 
 export interface ServerOptions {
@@ -686,7 +713,7 @@ export async function buildServer(options: ServerOptions) {
     // directly (deterministic) instead of hoping the model chooses to. Media
     // steps run in the cloud sandbox (they need yt-dlp), never on the user's
     // machine; a deterministic one finishes without consulting the model.
-    const { mediaTask, initialToolCall, initialToolOnly } = planMedia(capped);
+    const { mediaTask, initialToolCall, initialToolOnly } = confidentPlan(capped);
 
     const bot = session.botId ? await store.getBot(session.botId) : null;
     // Group chats: every member bot replies in turn.
@@ -896,7 +923,7 @@ export async function buildServer(options: ServerOptions) {
     emit({ type: "session.updated", session });
     emit({ type: "task.created", task });
 
-    const { mediaTask, initialToolCall, initialToolOnly } = planMedia(goal);
+    const { mediaTask, initialToolCall, initialToolOnly } = confidentPlan(goal);
     void runTask(
       {
         store,
@@ -925,9 +952,7 @@ export async function buildServer(options: ServerOptions) {
     to: WorkItem["status"],
   ): Promise<void> {
     if (!bot.workspace) return;
-    const workspace = (await store.listWorkspaces(bot.userId)).find(
-      (entry) => entry.name === bot.workspace,
-    );
+    const workspace = (await store.listWorkspaces(bot.userId)).find((entry) => entry.name === bot.workspace);
     if (!workspace) return;
     const now = new Date().toISOString();
     for (const item of await store.listWorkItems(workspace.id)) {
@@ -2380,11 +2405,18 @@ export async function buildServer(options: ServerOptions) {
         .slice(0, 10)
         .map((repo) => ({
           id: typeof repo?.id === "string" && repo.id ? repo.id : randomUUID(),
-          name: String(repo?.name ?? "").trim().slice(0, 60) || "repo",
-          path: String(repo?.path ?? "").trim().slice(0, 400),
+          name:
+            String(repo?.name ?? "")
+              .trim()
+              .slice(0, 60) || "repo",
+          path: String(repo?.path ?? "")
+            .trim()
+            .slice(0, 400),
           url: typeof repo?.url === "string" && repo.url.trim() ? repo.url.trim().slice(0, 400) : undefined,
           branch:
-            typeof repo?.branch === "string" && repo.branch.trim() ? repo.branch.trim().slice(0, 120) : undefined,
+            typeof repo?.branch === "string" && repo.branch.trim()
+              ? repo.branch.trim().slice(0, 120)
+              : undefined,
           createdAt: typeof repo?.createdAt === "string" ? repo.createdAt : new Date().toISOString(),
         }))
         .filter((repo) => repo.path.length > 0);
@@ -3002,9 +3034,7 @@ export async function buildServer(options: ServerOptions) {
             const repo = (workspace.repos ?? []).find((entryRepo) => entryRepo.name === repoName);
             const originalPath = repo ? join(repo.path, rel) : "";
             const exists = Boolean(repo && existsSync(originalPath));
-            const original = exists
-              ? await readFile(originalPath, "utf8").catch(() => "")
-              : "";
+            const original = exists ? await readFile(originalPath, "utf8").catch(() => "") : "";
             proposals.push({
               repo: repoName,
               path: rel,
