@@ -1,19 +1,42 @@
 import { randomUUID } from "node:crypto";
 import type { ToolDefinition } from "@botifyr/agent-core";
+import type { FileRecord } from "./store/types.js";
 import type { Store } from "./store/index.js";
 
 /**
  * Agent tools for the bot's Library: text files the bot keeps between runs
- * (notes, drafts, artifacts). Scoped to the authoring bot.
+ * (notes, drafts, artifacts). For a bot in a company the Library also spans the
+ * company wiki (BRIEF / OKRS / BACKLOG / PLAN / CODEBASE), so teammates can
+ * read each other's plans; writes go to the shared wiki.
  */
 export function createFileTools(store: Store, botId: string, userId: string): ToolDefinition[] {
+  /** The bot's company workspace id, if it belongs to one. */
+  const companyWorkspaceId = async (): Promise<string | undefined> => {
+    const bot = await store.getBot(botId).catch(() => null);
+    if (!bot?.workspace) return undefined;
+    const workspaces = await store.listWorkspaces(userId).catch(() => []);
+    return workspaces.find((entry) => entry.name === bot.workspace)?.id;
+  };
+
+  /** Personal files + the company wiki, merged by name (personal wins). */
+  const allFiles = async (): Promise<FileRecord[]> => {
+    const personal = await store.listFiles(botId);
+    const workspaceId = await companyWorkspaceId();
+    if (!workspaceId) return personal;
+    const wiki = await store.listWorkspaceFiles(workspaceId).catch(() => []);
+    const byName = new Map<string, FileRecord>();
+    for (const file of personal) byName.set(file.name, file);
+    for (const file of wiki) if (!byName.has(file.name)) byName.set(file.name, file);
+    return [...byName.values()];
+  };
+
   return [
     {
       name: "library.list",
-      description: "List the files in this bot's Library.",
+      description: "List the files in this bot's Library (including the company wiki).",
       parameters: { type: "object", properties: {} },
       run: async () => {
-        const files = await store.listFiles(botId);
+        const files = await allFiles();
         return {
           ok: true,
           output: files.length
@@ -24,7 +47,7 @@ export function createFileTools(store: Store, botId: string, userId: string): To
     },
     {
       name: "library.read",
-      description: "Read a file from this bot's Library by name.",
+      description: "Read a file from this bot's Library or the company wiki by name.",
       parameters: {
         type: "object",
         properties: { name: { type: "string", description: "File name." } },
@@ -32,13 +55,13 @@ export function createFileTools(store: Store, botId: string, userId: string): To
       },
       run: async (args) => {
         const name = String(args.name ?? "");
-        const file = (await store.listFiles(botId)).find((entry) => entry.name === name);
+        const file = (await allFiles()).find((entry) => entry.name === name);
         return file ? { ok: true, output: file.content } : { ok: false, output: `No file named "${name}".` };
       },
     },
     {
       name: "library.write",
-      description: "Create or replace a text file in this bot's Library.",
+      description: "Create or replace a text file (company bots write to the shared wiki).",
       parameters: {
         type: "object",
         properties: {
@@ -53,8 +76,23 @@ export function createFileTools(store: Store, botId: string, userId: string): To
           .slice(0, 120);
         if (!name) return { ok: false, output: "A file name is required." };
         const content = String(args.content ?? "").slice(0, 200_000);
-        const existing = (await store.listFiles(botId)).find((entry) => entry.name === name);
         const now = new Date().toISOString();
+        const workspaceId = await companyWorkspaceId();
+        if (workspaceId) {
+          const existing = (await store.listWorkspaceFiles(workspaceId)).find((entry) => entry.name === name);
+          await store.upsertFile({
+            id: existing?.id ?? randomUUID(),
+            botId: existing?.botId ?? botId,
+            userId,
+            workspaceId,
+            name,
+            content,
+            createdAt: existing?.createdAt ?? now,
+            updatedAt: now,
+          });
+          return { ok: true, output: `Saved "${name}" to the company wiki (${content.length} chars).` };
+        }
+        const existing = (await store.listFiles(botId)).find((entry) => entry.name === name);
         await store.upsertFile({
           id: existing?.id ?? randomUUID(),
           botId,

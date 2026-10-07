@@ -1062,11 +1062,18 @@ export async function buildServer(options: ServerOptions) {
         },
       ];
     }
+    // Admins are never capped, so report an unlimited budget (hides the banner).
+    const account = await store.getUserById(request.userId as string).catch(() => null);
     return {
       ...runtimeInfo(),
       store: (process.env.BOTIFYR_STORE ?? "memory").toLowerCase(),
       nodeOnline: nodeInfo(request.userId as string).online,
-      limits: { rateLimitPerHour, maxOutputTokens, maxHistoryTurns, dailyTokenBudget },
+      limits: {
+        rateLimitPerHour,
+        maxOutputTokens,
+        maxHistoryTurns,
+        dailyTokenBudget: account?.role === "admin" ? 0 : dailyTokenBudget,
+      },
       usage: { tokensToday: usage.tokens, requestsToday: usage.requests },
       iceServers,
     };

@@ -190,6 +190,15 @@ export async function runAgent(options: RunAgentOptions): Promise<AgentResult> {
     if (options.isCancelled?.()) {
       return { ok: false, summary: "Stopped by you.", steps: stepCount, provider: provider.name, usage };
     }
+    // Soft budget: nudge the agent to wrap up before it hard-stops, so a run
+    // ends with a summary instead of "reached the step budget".
+    if (iteration === maxSteps - 2) {
+      messages.push({
+        role: "user",
+        content:
+          "You are running low on steps. Stop starting new work, summarize what you did and found, and give your final answer now.",
+      });
+    }
     let response: ModelResponse;
     if (pendingToolCall) {
       response = { toolCalls: pendingToolCall };
