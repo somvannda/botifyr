@@ -21,6 +21,7 @@ import { createCompanyTools } from "./company-tools.js";
 import { createDelegationTools } from "./delegation-tools.js";
 import { createSocialTools, notConnectedSocial } from "./social-tools.js";
 import { createDesignTools } from "./design-tools.js";
+import { removeDeniedTools } from "./tool-capabilities.js";
 import {
   clearComputerSandbox,
   clearTaskCancel,
@@ -410,6 +411,20 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
     }
     if (department === "design" || department === "marketing") {
       tools.push(...createDesignTools(store, userId, authorBot.id));
+    }
+
+    // Authorization: revoked capabilities block their tools (docs/company-os.md §8).
+    const grants = await store.listCapabilityGrants(company.id).catch(() => []);
+    const subjects = new Set([`bot:${authorBot.id}`, ...(role ? [`role:${role.title}`] : [])]);
+    const denied = new Set(
+      grants
+        .filter((grant) => subjects.has(grant.subject) && !grant.granted)
+        .map((grant) => grant.capability),
+    );
+    const kept = removeDeniedTools(tools, denied);
+    if (kept.length !== tools.length) {
+      tools.length = 0;
+      tools.push(...kept);
     }
   }
   const instructions =
