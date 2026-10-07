@@ -35,6 +35,7 @@ import { CalendarIcon, DriveIcon, GmailIcon } from "./AppIcons";
 import { GithubBrand, NotionBrand, SlackBrand, TelegramBrand } from "./BrandIcons";
 import { BOT_SCHEMES, BotLogo } from "./BotLogo";
 import {
+  BellIcon,
   ChartIcon,
   CheckIcon,
   ChevronIcon,
@@ -123,6 +124,15 @@ interface Toast {
   sessionId?: string;
 }
 
+/** A stored notification shown in the header notification centre. */
+interface AppNotification extends Toast {
+  at: string;
+  read: boolean;
+}
+
+const NOTIFICATIONS_KEY = "botifyr.notifications";
+const SEEN_MESSAGES_KEY = "botifyr.seenMessages";
+
 const SETTINGS_TABS = [
   { id: "general", label: "General", icon: <GearIcon size={16} /> },
   { id: "computer", label: "Computer", icon: <MonitorIcon size={16} /> },
@@ -189,9 +199,26 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [approvalNotice, setApprovalNotice] = useState<{ title: string; decision: "allow" | "deny" } | null>(
     null,
   );
-  const seenMessagesRef = useRef<Set<string>>(new Set());
+  const [notifications, setNotifications] = useState<AppNotification[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(NOTIFICATIONS_KEY) ?? "[]") as AppNotification[];
+    } catch {
+      return [];
+    }
+  });
+  const [notifOpen, setNotifOpen] = useState(false);
+  const seenMessagesRef = useRef<Set<string>>(
+    (() => {
+      try {
+        return new Set(JSON.parse(localStorage.getItem(SEEN_MESSAGES_KEY) ?? "[]") as string[]);
+      } catch {
+        return new Set<string>();
+      }
+    })(),
+  );
   const seededSessionsRef = useRef<Set<string>>(new Set());
   const taskStatusRef = useRef<Record<string, string>>({});
+  const bootAtRef = useRef<number>(Date.now());
   const [reactions, setReactions] = useState<Record<string, string>>(() => {
     try {
       return JSON.parse(localStorage.getItem("botifyr.reactions") ?? "{}") as Record<string, string>;
@@ -653,6 +680,16 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     (toast: Omit<Toast, "id">): void => {
       const id = Math.random().toString(36).slice(2);
       setToasts((prev) => [...prev.slice(-2), { ...toast, id }]);
+      // Also store it in the notification centre so it survives the 6s toast.
+      setNotifications((prev) => {
+        const next = [{ ...toast, id, at: new Date().toISOString(), read: false }, ...prev].slice(0, 50);
+        try {
+          localStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(next));
+        } catch {
+          // ignore quota errors
+        }
+        return next;
+      });
       // If the window isn't visible, also raise an OS-level notification.
       if (typeof document !== "undefined" && document.hidden) {
         void bridge.notify?.(toast.title, toast.body);
@@ -664,6 +701,33 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
 
   function dismissToast(id: string): void {
     setToasts((prev) => prev.filter((entry) => entry.id !== id));
+  }
+
+  function toggleNotifications(): void {
+    setNotifOpen((value) => {
+      const next = !value;
+      if (next) {
+        setNotifications((prev) => {
+          const updated = prev.map((entry) => (entry.read ? entry : { ...entry, read: true }));
+          try {
+            localStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(updated));
+          } catch {
+            // ignore
+          }
+          return updated;
+        });
+      }
+      return next;
+    });
+  }
+
+  function clearNotifications(): void {
+    setNotifications([]);
+    try {
+      localStorage.removeItem(NOTIFICATIONS_KEY);
+    } catch {
+      // ignore
+    }
   }
 
   async function openExternal(url: string) {
@@ -1078,20 +1142,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       setHoursTimezone(hours?.timezone ?? "");
 
       // Company wiki: the chair bot's Library (BRIEF / OKRS / BACKLOG).
-      const chairId = workspaces.find((entry) => entry.id === workspaceId)?.ceoBotId;
-      if (chairId) {
-        const files = await client.listFiles(chairId).catch(() => []);
-        setHqWiki(
-          await Promise.all(
-            files.map(async (file) => ({
-              name: file.name,
-              content: (await client.getFile(file.id).catch(() => null))?.content ?? "",
-            })),
-          ),
-        );
-      } else {
-        setHqWiki([]);
-      }
+      const wiki = await client.listWorkspaceFiles(workspaceId).catch(() => []);
+      setHqWiki(wiki.map((file) => ({ name: file.name, content: file.content })));
     } finally {
       setBoardBusy(false);
     }
@@ -2369,6 +2421,10 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
             : message.role === "assistant";
         const body = message.content.replace(/\s+/g, " ").trim();
         if (!incoming || !body) continue;
+        // Never replay history on startup: only notify for messages that
+        // arrived after this session of the app began.
+        const created = message.createdAt ? Date.parse(message.createdAt) : 0;
+        if (created && created < bootAtRef.current - 5_000) continue;
         pushToast({
           kind: "message",
           title: bot?.name ?? (session.kind === "dm" ? "New message" : session.title || "New message"),
@@ -2376,6 +2432,11 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
           sessionId: session.id,
         });
       }
+    }
+    try {
+      localStorage.setItem(SEEN_MESSAGES_KEY, JSON.stringify(Array.from(seen).slice(-800)));
+    } catch {
+      // ignore quota errors
     }
   }, [sessions, activeSessionId, user, bots, pushToast]);
 
@@ -3001,6 +3062,58 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
               </span>
             )}
             <div className="topbar-right">
+              <div className="notif-wrap">
+                <button
+                  className="bot-menu-btn"
+                  type="button"
+                  title="Notifications"
+                  onClick={toggleNotifications}
+                >
+                  <BellIcon size={16} />
+                  {notifications.some((entry) => !entry.read) && (
+                    <span className="notif-dot">{notifications.filter((entry) => !entry.read).length}</span>
+                  )}
+                </button>
+                {notifOpen && (
+                  <div className="notif-panel">
+                    <div className="notif-head">
+                      <span>Notifications</span>
+                      {notifications.length > 0 && (
+                        <button className="link" type="button" onClick={clearNotifications}>
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                    {notifications.length === 0 ? (
+                      <div className="notif-empty">Nothing yet.</div>
+                    ) : (
+                      <ul className="notif-list">
+                        {notifications.map((entry) => (
+                          <li key={entry.id}>
+                            <button
+                              className={`notif-item${entry.read ? "" : " unread"}`}
+                              type="button"
+                              onClick={() => {
+                                if (entry.sessionId) openSessionById(entry.sessionId);
+                                setNotifOpen(false);
+                              }}
+                            >
+                              <span className="notif-title">{entry.title}</span>
+                              <span className="notif-body">{entry.body}</span>
+                              <span className="notif-time">
+                                {new Date(entry.at).toLocaleTimeString([], {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
+              </div>
               {activeSession && (
                 <button
                   className="bot-menu-btn"
