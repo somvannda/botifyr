@@ -552,6 +552,45 @@ body {
   color: #fff;
 }
 
+.team-member {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+}
+
+.team-member-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.grant-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.grant-chip {
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.grant-chip.granted {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
 .board-add {
   display: flex;
   gap: 8px;

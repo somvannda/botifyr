@@ -11,6 +11,7 @@ import type {
   Bot,
   BotFile,
   BotRole,
+  CapabilityGrant,
   ChatMessage,
   ConnectionInfo,
   CreateWorkspaceRequest,
@@ -27,7 +28,7 @@ import type {
   WorkspaceBudget,
   WorkspaceWithRoles,
 } from "@botifyr/shared";
-import { DEPARTMENTS } from "@botifyr/shared";
+import { DEPARTMENTS, ROLE_CATALOG } from "@botifyr/shared";
 import { AuthError, BotifyrClient, type Conversation, type MediaItem, type Person } from "@botifyr/client";
 import { CalendarIcon, DriveIcon, GmailIcon } from "./AppIcons";
 import { GithubBrand, NotionBrand, SlackBrand, TelegramBrand } from "./BrandIcons";
@@ -228,6 +229,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [hqNeeds, setHqNeeds] = useState<Array<Task>>([]);
   const [hqBudget, setHqBudget] = useState<WorkspaceBudget | null>(null);
   const [budgetInput, setBudgetInput] = useState("");
+  const [hqGrants, setHqGrants] = useState<Array<CapabilityGrant>>([]);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [editingBotId, setEditingBotId] = useState<string | null>(null);
   const [botName, setBotName] = useState("");
@@ -988,15 +990,17 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     setBoardBusy(true);
     setHqTab("need");
     try {
-      const [items, needs, budget] = await Promise.all([
+      const [items, needs, budget, grants] = await Promise.all([
         client.listWorkItems(workspaceId).catch(() => []),
         client.listWorkspaceNeeds(workspaceId).catch(() => []),
         client.getWorkspaceBudget(workspaceId).catch(() => null),
+        client.listCapabilityGrants(workspaceId).catch(() => []),
       ]);
       setBoardItems(items);
       setHqNeeds(needs);
       setHqBudget(budget);
       setBudgetInput(budget && budget.limitTokens > 0 ? String(budget.limitTokens) : "");
+      setHqGrants(grants);
     } finally {
       setBoardBusy(false);
     }
@@ -1010,6 +1014,14 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     setHqNeeds([]);
     setHqBudget(null);
     setBudgetInput("");
+    setHqGrants([]);
+  }
+
+  async function toggleGrant(subject: string, capability: string, granted: boolean) {
+    const workspace = boardWorkspace;
+    if (!workspace) return;
+    await client.setCapabilityGrant(workspace.id, { subject, capability, granted }).catch(() => {});
+    setHqGrants(await client.listCapabilityGrants(workspace.id).catch(() => []));
   }
 
   async function saveBudget() {
@@ -3993,12 +4005,41 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
 
               {hqTab === "team" && (
                 <ul className="board-list">
-                  {(workspaceByName.get(boardWorkspace.name)?.roles ?? []).map((role) => (
-                    <li key={role.botId} className="board-item">
-                      <span className="board-title">{role.title}</span>
-                      <span className="board-phase">{role.department}</span>
-                    </li>
-                  ))}
+                  {(workspaceByName.get(boardWorkspace.name)?.roles ?? []).map((role) => {
+                    const caps = ROLE_CATALOG.find((entry) => entry.title === role.title)?.capabilities ?? [];
+                    const subject = `role:${role.title}`;
+                    return (
+                      <li key={role.botId} className="team-member">
+                        <div className="team-member-head">
+                          <span className="board-title">{role.title}</span>
+                          <span className="board-phase">{role.department}</span>
+                        </div>
+                        {caps.length > 0 && (
+                          <div className="grant-chips">
+                            {caps.map((capability) => {
+                              const granted = hqGrants.some(
+                                (grant) =>
+                                  grant.subject === subject &&
+                                  grant.capability === capability &&
+                                  grant.granted,
+                              );
+                              return (
+                                <button
+                                  key={capability}
+                                  className={`grant-chip${granted ? " granted" : ""}`}
+                                  type="button"
+                                  title="Toggle this capability"
+                                  onClick={() => void toggleGrant(subject, capability, !granted)}
+                                >
+                                  {capability}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
 
