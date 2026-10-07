@@ -386,6 +386,19 @@ export class BotifyrClient {
     });
   }
 
+  /** Forward UI input into a session's desktop (click/type/key/scroll). */
+  computerInput(
+    sessionId: string,
+    action: "click" | "move" | "type" | "key" | "scroll",
+    args: Record<string, unknown>,
+  ): Promise<{ ok: boolean }> {
+    return this.request(`/v1/sessions/${encodeURIComponent(sessionId)}/computer/input`, {
+      method: "POST",
+      json: true,
+      body: JSON.stringify({ action, args }),
+    });
+  }
+
   adminSkills(): Promise<AdminSkill[]> {
     return this.request("/admin/learned-skills");
   }

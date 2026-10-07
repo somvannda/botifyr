@@ -2876,6 +2876,42 @@ export async function buildServer(options: ServerOptions) {
     },
   );
 
+  /* Forward UI input (click/type/key/scroll) into the session's desktop — the
+     user drives the screen, which is how teach-by-demonstration is captured. */
+  app.post<{ Params: { id: string }; Body: { action?: string; args?: Record<string, unknown> } }>(
+    "/v1/sessions/:id/computer/input",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const session = await store.getSession(request.params.id);
+      if (!session || session.userId !== request.userId) {
+        return reply.code(404).send({ error: "session not found" });
+      }
+      const backend = getComputerSandbox(`session:${session.id}`);
+      if (!backend) return reply.code(409).send({ error: "start Botifyr's screen first" });
+      const args = request.body?.args ?? {};
+      switch (request.body?.action) {
+        case "click":
+          await backend.click(Number(args.x), Number(args.y), Number(args.button) || 1);
+          break;
+        case "move":
+          await backend.move(Number(args.x), Number(args.y));
+          break;
+        case "type":
+          await backend.type(String(args.text ?? ""));
+          break;
+        case "key":
+          await backend.key(String(args.key ?? ""));
+          break;
+        case "scroll":
+          await backend.scroll(Number(args.amount) || 3);
+          break;
+        default:
+          return reply.code(400).send({ error: "unknown input action" });
+      }
+      return { ok: true };
+    },
+  );
+
   app.get<{ Params: { id: string } }>(
     "/v1/sessions/:id/stream",
     { preHandler: requireAuth },

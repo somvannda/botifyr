@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { FormEvent, ReactNode } from "react";
+import type { FormEvent, MouseEvent, ReactNode } from "react";
 import type {
   AuditEvent,
   Bot,
@@ -274,6 +274,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [topUpOpen, setTopUpOpen] = useState(false);
   const [showBotPanel, setShowBotPanel] = useState(() => localStorage.getItem("botifyr.botPanel") !== "0");
   const [screenOn, setScreenOn] = useState(false);
+  const [screenText, setScreenText] = useState("");
   const [botPanelTab, setBotPanelTab] = useState<"details" | "library" | "computer">("details");
   const [labels, setLabels] = useState<Record<string, string>>(() => {
     try {
@@ -595,6 +596,39 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     try {
       await client.startComputer(activeSessionId);
       setScreenOn(true);
+    } catch (err: unknown) {
+      setError(messageOf(err));
+    }
+  }
+
+  // Drive the session desktop (teach-by-demonstration input capture).
+  const SCREEN_W = 1280;
+  const SCREEN_H = 800;
+  async function screenClick(event: MouseEvent<HTMLImageElement>): Promise<void> {
+    if (!activeSessionId) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = Math.round(((event.clientX - rect.left) / rect.width) * SCREEN_W);
+    const y = Math.round(((event.clientY - rect.top) / rect.height) * SCREEN_H);
+    try {
+      await client.computerInput(activeSessionId, "click", { x, y });
+    } catch (err: unknown) {
+      setError(messageOf(err));
+    }
+  }
+  async function screenType(): Promise<void> {
+    if (!activeSessionId || !screenText) return;
+    const text = screenText;
+    setScreenText("");
+    try {
+      await client.computerInput(activeSessionId, "type", { text });
+    } catch (err: unknown) {
+      setError(messageOf(err));
+    }
+  }
+  async function screenKey(key: string): Promise<void> {
+    if (!activeSessionId) return;
+    try {
+      await client.computerInput(activeSessionId, "key", { key });
     } catch (err: unknown) {
       setError(messageOf(err));
     }
@@ -3070,13 +3104,31 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                 {screenOn && activeSessionId ? (
                   <>
                     <img
-                      className="bot-panel-screen-img"
+                      className="bot-panel-screen-img bot-panel-screen-live"
                       src={`${CLOUD_URL}/v1/sessions/${activeSessionId}/stream?token=${encodeURIComponent(token())}`}
                       alt="Bot screen"
+                      onClick={(event) => void screenClick(event)}
                     />
-                    <button className="ghost small" type="button" onClick={() => setScreenOn(false)}>
-                      Stop screen
-                    </button>
+                    <div className="screen-controls">
+                      <input
+                        className="screen-input"
+                        placeholder="Type on Botifyr's screen…"
+                        value={screenText}
+                        onChange={(event) => setScreenText(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") void screenType();
+                        }}
+                      />
+                      <button className="ghost small" type="button" onClick={() => void screenType()}>
+                        Send
+                      </button>
+                      <button className="ghost small" type="button" onClick={() => void screenKey("Return")}>
+                        Return
+                      </button>
+                      <button className="ghost small" type="button" onClick={() => setScreenOn(false)}>
+                        Stop screen
+                      </button>
+                    </div>
                   </>
                 ) : liveTask && (liveTask.liveStream || liveTask.screenshotAt) ? (
                   <img

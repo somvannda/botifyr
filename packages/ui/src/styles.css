@@ -3746,6 +3746,29 @@ body {
   display: block;
   width: 100%;
   height: auto;
+  border-radius: 8px;
+}
+
+.bot-panel-screen-live {
+  cursor: crosshair;
+}
+
+.screen-controls {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.screen-input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
 }
 
 .bot-panel-screen-empty {
