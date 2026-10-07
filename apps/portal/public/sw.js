@@ -1,8 +1,13 @@
 /*
  * Botifyr portal service worker: offline app shell + safe runtime caching.
  * API/auth/streaming requests are never cached, so data stays live.
+ *
+ * The cache is versioned by the `b` query param the app registers it with
+ * (see src/main.tsx + vite.config.ts), so every deploy installs a fresh SW and
+ * the `activate` step below purges the previous cache automatically.
  */
-const CACHE = "botifyr-portal-v1";
+const BUILD = new URL(self.location.href).searchParams.get("b") || "dev";
+const CACHE = `botifyr-portal-${BUILD}`;
 const SHELL = ["/portal/", "/portal/index.html", "/portal/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {

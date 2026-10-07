@@ -40,6 +40,7 @@ RUN printf '%s\n' \
   "  location = /admin { return 302 ${ADMIN_URL}; }" \
   "  location = /admin.html { return 302 ${ADMIN_URL}; }" \
   '  location /portal {' \
+  '    add_header Cache-Control "no-cache";' \
   '    try_files $uri $uri/ /portal/index.html;' \
   '  }' \
   '  location / {' \

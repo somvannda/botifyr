@@ -13,6 +13,10 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
 // Offline app shell (see public/sw.js). Best-effort: never block the app.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    void navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(() => {});
+    // The build id in the URL makes each deploy a *new* service worker, so the
+    // browser installs it and purges the previous cache with no manual bump.
+    void navigator.serviceWorker
+      .register(`${import.meta.env.BASE_URL}sw.js?b=${__BUILD_ID__}`)
+      .catch(() => {});
   });
 }
