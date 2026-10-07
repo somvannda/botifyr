@@ -574,24 +574,49 @@ export class PostgresStore implements Store {
 
   async createSecret(record: SecretRecord): Promise<void> {
     await this.pool.query(
-      "INSERT INTO secrets (id, user_id, name, ciphertext, iv, tag, created_at) " +
-        "VALUES ($1, $2, $3, $4, $5, $6, $7)",
-      [record.id, record.userId, record.name, record.ciphertext, record.iv, record.tag, record.createdAt],
+      "INSERT INTO secrets (id, user_id, workspace_id, name, ciphertext, iv, tag, created_at) " +
+        "VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+      [
+        record.id,
+        record.userId,
+        record.workspaceId ?? null,
+        record.name,
+        record.ciphertext,
+        record.iv,
+        record.tag,
+        record.createdAt,
+      ],
     );
   }
 
   async listSecrets(userId: string): Promise<SecretRecord[]> {
     const { rows } = await this.pool.query(
-      "SELECT id, user_id, name, ciphertext, iv, tag, created_at FROM secrets WHERE user_id = $1 ORDER BY name",
+      "SELECT id, user_id, workspace_id, name, ciphertext, iv, tag, created_at FROM secrets WHERE user_id = $1 AND workspace_id IS NULL ORDER BY name",
       [userId],
+    );
+    return rows.map(toSecret);
+  }
+
+  async listWorkspaceSecrets(workspaceId: string): Promise<SecretRecord[]> {
+    const { rows } = await this.pool.query(
+      "SELECT id, user_id, workspace_id, name, ciphertext, iv, tag, created_at FROM secrets WHERE workspace_id = $1 ORDER BY name",
+      [workspaceId],
     );
     return rows.map(toSecret);
   }
 
   async getSecret(userId: string, name: string): Promise<SecretRecord | null> {
     const { rows } = await this.pool.query(
-      "SELECT id, user_id, name, ciphertext, iv, tag, created_at FROM secrets WHERE user_id = $1 AND name = $2",
+      "SELECT id, user_id, workspace_id, name, ciphertext, iv, tag, created_at FROM secrets WHERE user_id = $1 AND name = $2 AND workspace_id IS NULL",
       [userId, name],
+    );
+    return rows[0] ? toSecret(rows[0]) : null;
+  }
+
+  async getWorkspaceSecret(workspaceId: string, name: string): Promise<SecretRecord | null> {
+    const { rows } = await this.pool.query(
+      "SELECT id, user_id, workspace_id, name, ciphertext, iv, tag, created_at FROM secrets WHERE workspace_id = $1 AND name = $2",
+      [workspaceId, name],
     );
     return rows[0] ? toSecret(rows[0]) : null;
   }
@@ -1265,6 +1290,7 @@ function toSecret(row: any): SecretRecord {
   return {
     id: row.id,
     userId: row.user_id,
+    workspaceId: row.workspace_id ?? undefined,
     name: row.name,
     ciphertext: row.ciphertext,
     iv: row.iv,

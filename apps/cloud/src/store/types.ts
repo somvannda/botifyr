@@ -136,6 +136,8 @@ export type CompanyReportRecord = CompanyReport;
 export interface SecretRecord {
   id: string;
   userId: string;
+  /** When set, the secret is company-wide (visible to every employee). */
+  workspaceId?: string;
   name: string;
   ciphertext: string;
   iv: string;
@@ -326,7 +328,10 @@ export interface Store {
 
   createSecret(record: SecretRecord): Promise<void>;
   listSecrets(userId: string): Promise<SecretRecord[]>;
+  /** Company secrets (visible to every employee). */
+  listWorkspaceSecrets(workspaceId: string): Promise<SecretRecord[]>;
   getSecret(userId: string, name: string): Promise<SecretRecord | null>;
+  getWorkspaceSecret(workspaceId: string, name: string): Promise<SecretRecord | null>;
   deleteSecret(userId: string, id: string): Promise<boolean>;
 
   upsertConnection(record: ConnectionRecord): Promise<void>;

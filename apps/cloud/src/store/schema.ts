@@ -83,6 +83,9 @@ CREATE TABLE IF NOT EXISTS secrets (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (user_id, name)
 );
+/* Company secrets are shared across a workspace's employees. */
+ALTER TABLE secrets ADD COLUMN IF NOT EXISTS workspace_id TEXT;
+CREATE INDEX IF NOT EXISTS secrets_workspace_idx ON secrets (workspace_id);
 
 CREATE TABLE IF NOT EXISTS bots (
   id         TEXT PRIMARY KEY,

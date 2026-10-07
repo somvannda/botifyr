@@ -370,4 +370,31 @@ describe("workspaces API", () => {
     expect(ada2.autoApprove).toBeFalsy();
     await app.close();
   });
+
+  it("stores company secrets (separate from personal)", async () => {
+    const { app, signup } = await boot();
+    const auth = await signup("ws-secret@example.com");
+    const ws = (
+      await app.inject({ method: "POST", url: "/v1/workspaces", headers: auth, payload: { name: "Secret Co" } })
+    ).json() as { id: string };
+
+    const created = await app.inject({
+      method: "POST",
+      url: `/v1/workspaces/${ws.id}/secrets`,
+      headers: auth,
+      payload: { name: "STRIPE_KEY", value: "sk_test_123" },
+    });
+    expect(created.statusCode).toBe(201);
+
+    const company = (
+      await app.inject({ method: "GET", url: `/v1/workspaces/${ws.id}/secrets`, headers: auth })
+    ).json() as Array<{ name: string }>;
+    expect(company.map((secret) => secret.name)).toContain("STRIPE_KEY");
+
+    const personal = (await app.inject({ method: "GET", url: "/v1/secrets", headers: auth })).json() as Array<{
+      name: string;
+    }>;
+    expect(personal.map((secret) => secret.name)).not.toContain("STRIPE_KEY");
+    await app.close();
+  });
 });

@@ -408,15 +408,23 @@ export class MemoryStore implements Store {
   }
 
   async createSecret(record: SecretRecord): Promise<void> {
-    this.secrets.set(`${record.userId}:${record.name}`, record);
+    this.secrets.set(`${record.workspaceId ?? record.userId}:${record.name}`, record);
   }
 
   async listSecrets(userId: string): Promise<SecretRecord[]> {
-    return [...this.secrets.values()].filter((secret) => secret.userId === userId);
+    return [...this.secrets.values()].filter((secret) => secret.userId === userId && !secret.workspaceId);
+  }
+
+  async listWorkspaceSecrets(workspaceId: string): Promise<SecretRecord[]> {
+    return [...this.secrets.values()].filter((secret) => secret.workspaceId === workspaceId);
   }
 
   async getSecret(userId: string, name: string): Promise<SecretRecord | null> {
     return this.secrets.get(`${userId}:${name}`) ?? null;
+  }
+
+  async getWorkspaceSecret(workspaceId: string, name: string): Promise<SecretRecord | null> {
+    return this.secrets.get(`${workspaceId}:${name}`) ?? null;
   }
 
   async deleteSecret(userId: string, id: string): Promise<boolean> {

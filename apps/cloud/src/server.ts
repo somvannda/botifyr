@@ -3920,6 +3920,55 @@ export async function buildServer(options: ServerOptions) {
     return summaries;
   });
 
+  /** Company secrets (visible to every employee in the workspace). */
+  app.get<{ Params: { id: string } }>(
+    "/v1/workspaces/:id/secrets",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const workspace = await store.getWorkspace(request.params.id);
+      if (!workspace || workspace.ownerId !== userId) {
+        return reply.code(404).send({ error: "workspace not found" });
+      }
+      const records = await store.listWorkspaceSecrets(workspace.id);
+      return records.map((record) => ({ id: record.id, name: record.name, createdAt: record.createdAt }));
+    },
+  );
+
+  app.post<{ Params: { id: string }; Body: { name?: string; value?: string } }>(
+    "/v1/workspaces/:id/secrets",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const workspace = await store.getWorkspace(request.params.id);
+      if (!workspace || workspace.ownerId !== userId) {
+        return reply.code(404).send({ error: "workspace not found" });
+      }
+      const name = (request.body?.name ?? "").trim();
+      const value = request.body?.value ?? "";
+      if (!/^[A-Za-z0-9._-]{1,64}$/.test(name)) {
+        return reply.code(400).send({ error: "name must be 1-64 chars of letters, digits, . _ -" });
+      }
+      if (!value) return reply.code(400).send({ error: "value is required" });
+      if (await store.getWorkspaceSecret(workspace.id, name)) {
+        return reply.code(409).send({ error: "a secret with that name already exists" });
+      }
+      const encrypted = encryptSecret(vaultKey, value);
+      const record = {
+        id: randomUUID(),
+        userId,
+        workspaceId: workspace.id,
+        name,
+        ciphertext: encrypted.ciphertext,
+        iv: encrypted.iv,
+        tag: encrypted.tag,
+        createdAt: new Date().toISOString(),
+      };
+      await store.createSecret(record);
+      return reply.code(201).send({ id: record.id, name: record.name, createdAt: record.createdAt });
+    },
+  );
+
   app.delete<{ Params: { id: string } }>(
     "/v1/secrets/:id",
     { preHandler: requireAuth },

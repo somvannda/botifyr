@@ -887,6 +887,19 @@ export class BotifyrClient {
     });
   }
 
+  /** Company secrets (shared with every employee in the workspace). */
+  listWorkspaceSecrets(workspaceId: string): Promise<SecretSummary[]> {
+    return this.request(`/v1/workspaces/${workspaceId}/secrets`);
+  }
+
+  saveWorkspaceSecret(workspaceId: string, name: string, value: string): Promise<SecretSummary> {
+    return this.request(`/v1/workspaces/${workspaceId}/secrets`, {
+      method: "POST",
+      json: true,
+      body: JSON.stringify({ name, value }),
+    });
+  }
+
   startConnection(provider: string): Promise<{ url: string }> {
     return this.request(`/v1/connections/${provider}/start`, { method: "POST", json: true, body: "{}" });
   }
