@@ -186,4 +186,43 @@ describe("youtube.download", () => {
     expect(result.ok).toBe(true);
     expect(commands.some((command) => command.includes("cdn.example.com/hls/master.m3u8"))).toBe(true);
   });
+
+  it("uses an approved recipe (with its headers) when yt-dlp can't handle the page", async () => {
+    const commands: string[] = [];
+    const backend: ShellBackend = {
+      async exec(command) {
+        commands.push(command);
+        if (command.includes("grep -oE")) {
+          return { ok: true, output: "https:\\/\\/cdn.example.com\\/recipe\\/master.m3u8\n" };
+        }
+        if (command.startsWith("yt-dlp") && command.includes("example.com/page")) {
+          return { ok: false, output: "ERROR: Unsupported URL" };
+        }
+        return { ok: true, output: "ok" };
+      },
+      async readFile() {
+        return { ok: true, output: "" };
+      },
+      async writeFile() {
+        return { ok: true, output: "" };
+      },
+      async listFiles() {
+        return { ok: true, output: "" };
+      },
+      async close() {},
+    };
+    const tool = createMediaTools(backend, "/d", undefined, {
+      getRecipe: async () => ({
+        pattern: 'https?:[^" ]+\\.m3u8',
+        headers: { Referer: "https://example.com/" },
+      }),
+    }).tools.find((entry) => entry.name === "youtube.download");
+    if (!tool) throw new Error("youtube.download not found");
+    const result = await tool.run({ url: "https://example.com/page" }, ctx);
+
+    expect(result.ok).toBe(true);
+    // The recipe's headers were sent, and the matched stream URL was downloaded.
+    expect(commands.some((command) => command.includes("Referer: https://example.com/"))).toBe(true);
+    expect(commands.some((command) => command.includes("cdn.example.com/recipe/master.m3u8"))).toBe(true);
+  });
 });
