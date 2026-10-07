@@ -3,7 +3,8 @@ import type { ReactNode } from "react";
 /**
  * A tiny, dependency-free markdown renderer that builds React elements (no
  * innerHTML), so model output can never inject markup. Supports fenced code,
- * headings, bullet/numbered lists, bold, italic, inline code and links.
+ * headings, bullet/numbered lists, tables, horizontal rules, bold, italic,
+ * inline code and links.
  *
  * File names (e.g. OKRS.md, weekly-scorecard.md) become clickable refs when an
  * `onFileRef` handler is provided, so the reader can open the doc.
@@ -78,6 +79,19 @@ function inline(text: string, prefix: string, onFileRef?: (name: string) => void
   return nodes;
 }
 
+const RULE_RE = /^\s*([-*_])\1{2,}\s*$/;
+const TABLE_ROW_RE = /^\s*\|.*\|\s*$/;
+const TABLE_SEP_RE = /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/;
+
+function cells(row: string): string[] {
+  return row
+    .trim()
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split("|")
+    .map((cell) => cell.trim());
+}
+
 export function Markdown({ text, onFileRef }: { text: string; onFileRef?: (name: string) => void }) {
   const blocks: ReactNode[] = [];
   const segments = text.split("```");
@@ -114,7 +128,53 @@ export function Markdown({ text, onFileRef }: { text: string; onFileRef?: (name:
       listType = null;
     };
 
-    lines.forEach((line, lineIndex) => {
+    for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+      const line = lines[lineIndex] as string;
+
+      // Tables: a header row followed by a separator row.
+      if (TABLE_ROW_RE.test(line) && TABLE_SEP_RE.test(lines[lineIndex + 1] ?? "")) {
+        flushParagraph();
+        flushList();
+        const header = cells(line);
+        const bodyRows: string[][] = [];
+        let row = lineIndex + 2;
+        while (row < lines.length && TABLE_ROW_RE.test(lines[row] as string)) {
+          bodyRows.push(cells(lines[row] as string));
+          row += 1;
+        }
+        const key = `table-${segIndex}-${lineIndex}`;
+        blocks.push(
+          <table key={key} className="md-table">
+            <thead>
+              <tr>
+                {header.map((cell, cellIndex) => (
+                  <th key={cellIndex}>{inline(cell, `${key}-h${cellIndex}`, onFileRef)}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {bodyRows.map((bodyRow, rowIndex) => (
+                <tr key={rowIndex}>
+                  {bodyCells(bodyRow, header.length).map((cell, cellIndex) => (
+                    <td key={cellIndex}>{inline(cell, `${key}-r${rowIndex}c${cellIndex}`, onFileRef)}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>,
+        );
+        lineIndex = row - 1;
+        continue;
+      }
+
+      // Horizontal rule.
+      if (RULE_RE.test(line)) {
+        flushParagraph();
+        flushList();
+        blocks.push(<hr key={`hr-${segIndex}-${lineIndex}`} />);
+        continue;
+      }
+
       const heading = /^(#{1,3})\s+(.*)$/.exec(line);
       const bullet = /^\s*[-*]\s+(.*)$/.exec(line);
       const numbered = /^\s*\d+\.\s+(.*)$/.exec(line);
@@ -134,7 +194,7 @@ export function Markdown({ text, onFileRef }: { text: string; onFileRef?: (name:
             <h5 key={key}>{content}</h5>
           ),
         );
-        return;
+        continue;
       }
       if (bullet) {
         flushParagraph();
@@ -145,7 +205,7 @@ export function Markdown({ text, onFileRef }: { text: string; onFileRef?: (name:
             {inline(bullet[1], `li${segIndex}${lineIndex}`, onFileRef)}
           </li>,
         );
-        return;
+        continue;
       }
       if (numbered) {
         flushParagraph();
@@ -156,15 +216,21 @@ export function Markdown({ text, onFileRef }: { text: string; onFileRef?: (name:
             {inline(numbered[1], `li${segIndex}${lineIndex}`, onFileRef)}
           </li>,
         );
-        return;
+        continue;
       }
       flushList();
       paragraph.push(line);
-    });
+    }
 
     flushList();
     flushParagraph();
   });
 
   return <div className="md">{blocks}</div>;
+}
+
+/** Pad/truncate a body row so it lines up with the header column count. */
+function bodyCells(row: string[], count: number): string[] {
+  if (row.length >= count) return row.slice(0, count);
+  return [...row, ...Array.from({ length: count - row.length }, () => "")];
 }

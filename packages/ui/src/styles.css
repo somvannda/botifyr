@@ -717,6 +717,32 @@ body {
   overflow: auto;
 }
 
+.md-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-size: 0.95em;
+}
+
+.md-table th,
+.md-table td {
+  border: 1px solid var(--border);
+  padding: 4px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.md-table th {
+  background: var(--panel-2);
+  color: var(--muted);
+}
+
+.md hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 12px 0;
+}
+
 .wiki-doc-row {
   display: flex;
   align-items: center;
@@ -5316,6 +5342,42 @@ body {
   align-items: center;
   justify-content: center;
   padding: 24px;
+}
+
+/* Docked mode: the office sits beside the chat as an extra app column. */
+.app.with-office {
+  grid-template-columns: 320px 1fr min(46vw, 720px);
+}
+
+.app.with-panel.with-office {
+  grid-template-columns: 320px 1fr 320px min(38vw, 600px);
+}
+
+.office3d-docked {
+  min-width: 0;
+  display: flex;
+  border-left: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.office3d-dock-root {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+}
+
+.office3d-panel-docked {
+  width: 100%;
+  height: 100%;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.office3d-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .office3d-panel {
