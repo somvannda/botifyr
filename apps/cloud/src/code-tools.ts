@@ -62,6 +62,21 @@ function isManaged(containerPath: string): boolean {
   return containerPath === managedDir || containerPath.startsWith(managedDir + path.sep);
 }
 
+/** Parse owner/repo/host from a git clone URL. */
+export function parseRepo(url: string): { host: string; owner: string; repo: string } | null {
+  try {
+    const parsed = new URL(url);
+    const parts = parsed.pathname
+      .replace(/^\/+/, "")
+      .replace(/\.git$/, "")
+      .split("/");
+    if (parts.length < 2) return null;
+    return { host: parsed.hostname, owner: parts[0] as string, repo: parts[1] as string };
+  } catch {
+    return null;
+  }
+}
+
 /** Resolve `relative` inside `root`, refusing anything that escapes it. */
 function jail(root: string, relative: string): string {
   const base = path.resolve(root);
@@ -79,6 +94,8 @@ export interface CodeToolIo {
   workspaceId?: string;
   /** Persist a wiki file on the workspace (e.g. CODEBASE.md). */
   saveWikiFile?: (name: string, content: string) => Promise<void>;
+  /** Resolve a vault secret to a plaintext token (never logged or returned). */
+  getToken?: (secretName: string) => Promise<string | null>;
 }
 
 export function createCodeTools(repos: CodeRepo[], io: CodeToolIo = {}): ToolDefinition[] {
@@ -472,6 +489,100 @@ export function createCodeTools(repos: CodeRepo[], io: CodeToolIo = {}): ToolDef
         } catch (error) {
           return { ok: false, output: String((error as Error).message).slice(0, 1000) };
         }
+      },
+    },
+    {
+      name: "code.pr",
+      description:
+        "Push the committed branch and open a pull request on the repository's host (GitHub). Needs approval.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: { type: "string", description: "Pull request title." },
+          body: { type: "string", description: "Pull request description." },
+          base: { type: "string", description: "Base branch (default: the repo's branch or main)." },
+          repo: repoProp,
+        },
+        required: ["title"],
+      },
+      requiresApproval: true,
+      run: async (args) => {
+        const repo = choose(args.repo);
+        const missing = noRepo(repo);
+        if (missing || !repo) return { ok: false, output: missing ?? "No repository." };
+        if (!isManaged(repo.path)) {
+          return { ok: false, output: "Only a managed clone can be pushed — clone the repo by URL." };
+        }
+        if (!repo.url) return { ok: false, output: "This repo has no clone URL to push to." };
+        const info = parseRepo(repo.url);
+        if (!info) return { ok: false, output: "Couldn't parse the repository URL." };
+
+        let token: string | null = process.env.BOTIFYR_GIT_TOKEN ?? null;
+        if (repo.tokenSecret && io.getToken) {
+          token = (await io.getToken(repo.tokenSecret).catch(() => null)) ?? token;
+        }
+        if (!token) {
+          return { ok: false, output: "No push token — set a vault secret or BOTIFYR_GIT_TOKEN." };
+        }
+
+        const { stdout } = await execFileAsync(
+          "git",
+          ["-C", repo.path, "rev-parse", "--abbrev-ref", "HEAD"],
+          { timeout: 30_000 },
+        );
+        const branch = stdout.trim();
+        const base = String(args.base ?? "").trim() || repo.branch || "main";
+        if (branch === base || branch === "main" || branch === "master" || branch === "HEAD") {
+          return { ok: false, output: "Commit to a feature branch first (use code.commit)." };
+        }
+
+        const pushUrl = new URL(repo.url);
+        pushUrl.username = "x-access-token";
+        pushUrl.password = token;
+        try {
+          await execFileAsync(
+            "git",
+            ["-C", repo.path, "push", pushUrl.toString(), `${branch}:${branch}`],
+            { timeout: 180_000, maxBuffer: 2_000_000 },
+          );
+        } catch (error) {
+          const detail = String((error as Error).message).split(token).join("***").slice(0, 500);
+          return { ok: false, output: `Push failed: ${detail}` };
+        }
+
+        if (info.host.endsWith("github.com")) {
+          try {
+            const response = await fetch(`https://api.github.com/repos/${info.owner}/${info.repo}/pulls`, {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${token}`,
+                Accept: "application/vnd.github+json",
+                "Content-Type": "application/json",
+                "User-Agent": "botifyr",
+              },
+              body: JSON.stringify({
+                title: String(args.title).slice(0, 200),
+                head: branch,
+                base,
+                body: String(args.body ?? "").slice(0, 10_000),
+              }),
+            });
+            const data = (await response.json()) as { html_url?: string; message?: string };
+            if (!response.ok) {
+              return { ok: false, output: `Pushed ${branch}, but the PR failed: ${data.message ?? response.status}` };
+            }
+            return { ok: true, output: `Pushed ${branch} and opened PR: ${data.html_url}` };
+          } catch (error) {
+            return {
+              ok: false,
+              output: `Pushed ${branch}, but the PR request errored: ${String((error as Error).message).slice(0, 300)}`,
+            };
+          }
+        }
+        return {
+          ok: true,
+          output: `Pushed ${branch}. Open a pull request on ${info.host} (${info.owner}/${info.repo}).`,
+        };
       },
     },
   ];

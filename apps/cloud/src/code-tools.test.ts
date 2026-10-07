@@ -5,7 +5,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 import type { CodeRepo } from "@botifyr/shared";
-import { createCodeTools, sandboxMount } from "./code-tools.js";
+import { createCodeTools, parseRepo, sandboxMount } from "./code-tools.js";
 
 const execFileAsync = promisify(execFile);
 const ctx = { workspaceDir: ".", log: () => {} };
@@ -108,6 +108,33 @@ describe("sandboxMount", () => {
 
   it("fails safe for paths with no sandbox mapping", () => {
     expect(sandboxMount("/etc/passwd")).toBeNull();
+  });
+});
+
+describe("parseRepo", () => {
+  it("parses owner/repo/host from clone URLs", () => {
+    expect(parseRepo("https://github.com/acme/web.git")).toEqual({
+      host: "github.com",
+      owner: "acme",
+      repo: "web",
+    });
+    expect(parseRepo("https://gitlab.com/team/app")).toEqual({
+      host: "gitlab.com",
+      owner: "team",
+      repo: "app",
+    });
+    expect(parseRepo("not a url")).toBeNull();
+  });
+});
+
+describe("code.pr", () => {
+  it("refuses a read-only local mount", async () => {
+    const repo = await repoFixture();
+    const tools = createCodeTools([repo]);
+    const pr = tools.find((tool) => tool.name === "code.pr")!;
+    const result = await pr.run({ title: "x" }, ctx);
+    expect(result.ok).toBe(false);
+    expect(result.output).toContain("managed clone");
   });
 });
 

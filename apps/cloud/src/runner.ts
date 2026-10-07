@@ -489,6 +489,15 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
         ...createCodeTools(company.repos, {
           workDir: process.env.BOTIFYR_WORK_DIR ?? "/work",
           workspaceId: company.id,
+          getToken: async (name) => {
+            const record = await store.getWorkspaceSecret(company.id, name).catch(() => null);
+            if (!record || !deps.vaultKey) return null;
+            try {
+              return decryptSecret(deps.vaultKey, record);
+            } catch {
+              return null;
+            }
+          },
           saveWikiFile: async (name, content) => {
             const existing = (await store.listWorkspaceFiles(company.id)).find(
               (file) => file.name === name,
