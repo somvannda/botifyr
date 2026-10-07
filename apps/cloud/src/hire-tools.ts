@@ -11,16 +11,44 @@ import { toDepartment } from "./company.js";
  * "hire a Head of Growth". Approval-gated (creating an employee is
  * consequential). docs/company-workspace.md §16 (hire_employee) & §17.
  */
+const HIRE_NAMES = [
+  "Alex Rivera",
+  "Sam Carter",
+  "Jordan Lee",
+  "Taylor Brooks",
+  "Casey Morgan",
+  "Riley Chen",
+  "Avery Patel",
+  "Morgan Diaz",
+  "Jamie Okafor",
+  "Robin Nguyen",
+  "Noah Kim",
+  "Priya Nair",
+  "Liam O'Connor",
+  "Maya Chen",
+  "Dev Patel",
+];
+
+/** A stable personal name so a hire isn't named by its role. */
+function pickName(seed: string): string {
+  let hash = 0;
+  for (let index = 0; index < seed.length; index += 1) {
+    hash = (hash * 31 + seed.charCodeAt(index)) | 0;
+  }
+  return HIRE_NAMES[Math.abs(hash) % HIRE_NAMES.length] as string;
+}
+
 export function createHireTools(store: Store, userId: string, botId: string): ToolDefinition[] {
   return [
     {
       name: "company.hire",
       description:
-        "Hire a new employee into the company by role title (e.g. \"Head of Growth\", \"QA Engineer\"), with optional department and instructions. Needs the owner's approval.",
+        "Hire a new employee: give their role title (e.g. \"Head of Growth\") AND a realistic full name (e.g. \"Alex Rivera\"). Needs the owner's approval.",
       parameters: {
         type: "object",
         properties: {
-          title: { type: "string", description: "The role title." },
+          title: { type: "string", description: "The role title, e.g. \"Head of Growth\"." },
+          name: { type: "string", description: "The new hire's full name, e.g. \"Alex Rivera\"." },
           department: { type: "string", description: "Department (e.g. engineering, growth, sales)." },
           instructions: { type: "string", description: "Job description / standing instructions." },
           company: { type: "string", description: "Company name (optional when you have one company)." },
@@ -57,16 +85,28 @@ export function createHireTools(store: Store, userId: string, botId: string): To
           .trim()
           .slice(0, 40);
         if (!title) return { ok: false, output: "A role title is required." };
+        const existingRoles = await store.listBotRoles(workspace.id);
+        if (existingRoles.some((role) => role.title.toLowerCase() === title.toLowerCase())) {
+          return {
+            ok: false,
+            output: `There's already a "${title}" — fire them first, or hire a different role.`,
+          };
+        }
         const department = toDepartment(args.department);
         const instructions = String(args.instructions ?? "")
           .trim()
           .slice(0, 4000);
+        // Give the hire a personal name, not their role title.
+        const name =
+          String(args.name ?? "")
+            .trim()
+            .slice(0, 40) || pickName(`${title}${existingRoles.length}`);
 
         const now = new Date().toISOString();
         const session = {
           id: randomUUID(),
           userId,
-          title,
+          title: name,
           messages: [],
           createdAt: now,
           botId: undefined as string | undefined,
@@ -74,7 +114,7 @@ export function createHireTools(store: Store, userId: string, botId: string): To
         const bot: Bot = {
           id: randomUUID(),
           userId,
-          name: title,
+          name,
           emoji: "🤖",
           scheme: 0,
           instructions,
@@ -94,7 +134,7 @@ export function createHireTools(store: Store, userId: string, botId: string): To
           department,
           hiredAt: now,
         });
-        return { ok: true, output: `Hired ${title} (${department}).` };
+        return { ok: true, output: `Hired ${name} as ${title} (${department}).` };
       },
     },
   ];
