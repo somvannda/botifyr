@@ -21,6 +21,8 @@ export interface PlanInput {
   kind: "url" | "idea";
   value: string;
   name?: string;
+  /** Company stage from the DNA; shapes the recommended team. */
+  stage?: CompanyDNA["stage"];
 }
 
 /** A planned org chart: like a create request, but with members guaranteed. */
@@ -221,7 +223,7 @@ function deriveName(input: PlanInput): string {
 export function defaultCompany(input: PlanInput): CompanyPlan {
   const name = (input.name?.trim() || deriveName(input)).slice(0, 60);
   const mission = `${name} — ${input.value.trim().slice(0, 160) || "a new company"}.`;
-  const rec = recommendTeam({ text: `${name} ${input.value}`, stage: "idea" });
+  const rec = recommendTeam({ text: `${name} ${input.value}`, stage: input.stage ?? "idea" });
   return {
     name,
     source: { kind: input.kind, value: input.value.slice(0, 500) },
@@ -234,7 +236,7 @@ export function defaultCompany(input: PlanInput): CompanyPlan {
       targetMarket: [],
       targetCustomers: [],
       product: { type: input.kind === "url" ? "web" : "product", features: [], gaps: [] },
-      stage: "idea",
+      stage: input.stage ?? "idea",
       goal: `Get ${name} to its first customers`,
       priorities: ["product"],
     },
@@ -319,7 +321,11 @@ export function sanitizePlan(raw: unknown, input: PlanInput): CompanyPlan | null
 }
 
 /** Plan a company from a website or an idea; never throws (falls back to a default org). */
-export async function planCompany(input: PlanInput, complete: CompleteFn): Promise<CompanyPlan> {
+export async function planCompany(
+  input: PlanInput,
+  complete: CompleteFn,
+  dna?: CompanyDNA,
+): Promise<CompanyPlan> {
   const system =
     "You design small, effective company org charts. Reply with STRICT JSON only — no prose, no markdown. " +
     'Shape: {"name":string,"mission":string,"avatarEmoji":string,"members":[{"name":string,"title":string,' +
@@ -328,11 +334,12 @@ export async function planCompany(input: PlanInput, complete: CompleteFn): Promi
     "standing instructions. Exactly one member has isChair true (the one who reports to the human CEO).";
   const user = `Company source (${input.kind}): ${input.value.slice(0, 1000)}${
     input.name ? `\nRequested name: ${input.name}` : ""
-  }`;
+  }${dna ? `\nBusiness: ${dna.industry} — ${dna.summary}` : ""}`;
+  const finish = (plan: CompanyPlan): CompanyPlan => (dna ? { ...plan, dna } : plan);
   try {
     const text = await complete({ system, user, maxTokens: 1200 });
-    return sanitizePlan(extractJson(text), input) ?? defaultCompany(input);
+    return finish(sanitizePlan(extractJson(text), input) ?? defaultCompany(input));
   } catch {
-    return defaultCompany(input);
+    return finish(defaultCompany(input));
   }
 }

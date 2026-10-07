@@ -2020,7 +2020,14 @@ export async function buildServer(options: ServerOptions) {
     return { ...record, roles };
   };
 
-  /** Propose an org chart from a website or an idea (creates nothing). */
+  /** Fetch a page's HTML for analysis; content is treated as untrusted data. */
+  const fetchPageText = async (url: string): Promise<string> => {
+    const res = await fetch(url, { redirect: "follow" });
+    if (!res.ok) throw new Error(`fetch ${res.status}`);
+    return (await res.text()).slice(0, 40_000);
+  };
+
+  /** Understand the source (DNA), then design an org chart (creates nothing). */
   app.post<{ Body: { source?: { kind?: string; value?: string }; name?: string } }>(
     "/v1/workspaces/plan",
     { preHandler: requireAuth },
@@ -2028,7 +2035,12 @@ export async function buildServer(options: ServerOptions) {
       const value = (request.body?.source?.value ?? "").trim().slice(0, 1000);
       if (!value) return reply.code(400).send({ error: "a website URL or an idea is required" });
       const kind = request.body?.source?.kind === "url" ? "url" : "idea";
-      return planCompany({ kind, value, name: request.body?.name?.trim().slice(0, 60) }, oneShot);
+      const { dna } = await analyzeSource({ kind, value }, { complete: oneShot, fetchText: fetchPageText });
+      return planCompany(
+        { kind, value, name: request.body?.name?.trim().slice(0, 60), stage: dna.stage },
+        oneShot,
+        dna,
+      );
     },
   );
 
@@ -2040,12 +2052,7 @@ export async function buildServer(options: ServerOptions) {
       const value = (request.body?.source?.value ?? "").trim().slice(0, 1000);
       if (!value) return reply.code(400).send({ error: "a website URL or an idea is required" });
       const kind = request.body?.source?.kind === "url" ? "url" : "idea";
-      const fetchText = async (url: string): Promise<string> => {
-        const res = await fetch(url, { redirect: "follow" });
-        if (!res.ok) throw new Error(`fetch ${res.status}`);
-        return (await res.text()).slice(0, 40_000);
-      };
-      return analyzeSource({ kind, value }, { complete: oneShot, fetchText });
+      return analyzeSource({ kind, value }, { complete: oneShot, fetchText: fetchPageText });
     },
   );
 
