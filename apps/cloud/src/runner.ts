@@ -24,6 +24,7 @@ import { createTelegramSocialClient } from "./social-telegram.js";
 import { createDesignTools } from "./design-tools.js";
 import { createEmailTools, resendSender } from "./email-tools.js";
 import { createEscalationTools } from "./escalation-tools.js";
+import { createHireTools } from "./hire-tools.js";
 import { removeDeniedTools } from "./tool-capabilities.js";
 import {
   clearComputerSandbox,
@@ -431,6 +432,10 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
     }
     // Any employee can pause and ask the owner when blocked (CAPTCHA/2FA/decision).
     tools.push(...createEscalationTools());
+    // The chair (exec) can hire new employees (approval-gated).
+    if (department === "exec") {
+      tools.push(...createHireTools(store, userId, authorBot.id));
+    }
 
     // Authorization: revoked capabilities block their tools (docs/company-os.md §8).
     const grants = await store.listCapabilityGrants(company.id).catch(() => []);
