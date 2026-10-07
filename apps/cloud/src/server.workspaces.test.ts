@@ -432,4 +432,38 @@ describe("workspaces API", () => {
     expect(bots.find((entry) => entry.id === bot.id)?.workspace).toBe("Add Co");
     await app.close();
   });
+
+  it("promotes a founder bot to CEO when requested", async () => {
+    const { app, signup } = await boot();
+    const auth = await signup("ws-ceo@example.com");
+    const founder = (
+      await app.inject({ method: "POST", url: "/v1/bots", headers: auth, payload: { name: "Founder" } })
+    ).json() as { id: string };
+
+    const ws = (
+      await app.inject({
+        method: "POST",
+        url: "/v1/workspaces",
+        headers: auth,
+        payload: {
+          name: "Founder Co",
+          ceoBotId: founder.id,
+          members: [
+            { name: "Ada", title: "CEO", department: "exec", isChair: true },
+            { name: "Dev", title: "CTO", department: "engineering" },
+          ],
+        },
+      })
+    ).json() as { id: string; ceoBotId?: string; roles: Array<{ botId: string; isChair?: boolean }> };
+
+    expect(ws.ceoBotId).toBe(founder.id);
+    expect(ws.roles.some((role) => role.botId === founder.id && role.isChair === true)).toBe(true);
+
+    const bots = (await app.inject({ method: "GET", url: "/v1/bots", headers: auth })).json() as Array<{
+      id: string;
+      workspace?: string;
+    }>;
+    expect(bots.find((entry) => entry.id === founder.id)?.workspace).toBe("Founder Co");
+    await app.close();
+  });
 });

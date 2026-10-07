@@ -238,6 +238,8 @@ export interface CreateWorkspaceRequest {
   dna?: CompanyDNA;
   avatarEmoji?: string;
   scheme?: number;
+  /** The bot to promote to CEO (the one that set the company up). */
+  ceoBotId?: string;
   /** New employee bots to create inside the workspace. */
   members?: Array<{
     name: string;

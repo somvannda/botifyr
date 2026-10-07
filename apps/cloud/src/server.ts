@@ -2145,8 +2145,17 @@ export async function buildServer(options: ServerOptions) {
       // New employee bots, each created with a role. The bot's `workspace`
       // label matches the company name so the sidebar groups them together.
       let chairBotId: string | undefined;
+      // Optionally promote an existing bot (the Founder) to CEO.
+      const ceoCandidate = request.body?.ceoBotId ? await store.getBot(request.body.ceoBotId) : null;
+      const promoteCeo =
+        ceoCandidate &&
+        ceoCandidate.userId === userId &&
+        !(ceoCandidate.memberIds && ceoCandidate.memberIds.length > 0)
+          ? ceoCandidate
+          : null;
       const members = Array.isArray(request.body?.members) ? request.body.members.slice(0, 20) : [];
       for (const member of members) {
+        if (promoteCeo && member.isChair === true) continue;
         const botName = (member?.name ?? "").trim().slice(0, 40);
         if (!botName) continue;
         const bot = await createBotFor(userId, {
@@ -2192,6 +2201,20 @@ export async function buildServer(options: ServerOptions) {
           });
           if (membership.isChair === true && !chairBotId) chairBotId = membership.botId;
         }
+      }
+
+      if (promoteCeo) {
+        promoteCeo.workspace = name;
+        await store.updateBot(promoteCeo);
+        await store.setBotRole({
+          workspaceId: workspace.id,
+          botId: promoteCeo.id,
+          title: "CEO",
+          department: "exec",
+          isChair: true,
+          hiredAt: now,
+        });
+        chairBotId = promoteCeo.id;
       }
 
       // Seed the company wiki + board.

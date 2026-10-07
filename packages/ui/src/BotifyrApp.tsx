@@ -1011,7 +1011,12 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     setCompanyBusy(true);
     setCompanyError(null);
     try {
-      const created = await client.createWorkspace(companyPlan);
+      // Promote the bot you set the company up with (the Founder) to CEO.
+      const founder =
+        bots.find((bot) => bot.id === activeBotId && !bot.workspace) ??
+        bots.find((bot) => !bot.workspace && bot.name === "Botifyr") ??
+        bots.find((bot) => !bot.workspace);
+      const created = await client.createWorkspace({ ...companyPlan, ceoBotId: founder?.id });
       // Apply the optional settings chosen in the wizard (best-effort).
       try {
         if (wizardUseHours) {
