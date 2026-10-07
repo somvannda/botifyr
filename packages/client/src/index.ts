@@ -874,6 +874,19 @@ export class BotifyrClient {
     return this.request(`/v1/files/${id}`, { method: "DELETE" });
   }
 
+  /** The shared company wiki (workspace-scoped files). */
+  listWorkspaceFiles(workspaceId: string): Promise<Array<{ id: string; name: string; content: string }>> {
+    return this.request(`/v1/workspaces/${workspaceId}/wiki`);
+  }
+
+  saveWorkspaceFile(workspaceId: string, name: string, content: string): Promise<{ ok: boolean }> {
+    return this.request(`/v1/workspaces/${workspaceId}/wiki`, {
+      method: "POST",
+      json: true,
+      body: JSON.stringify({ name, content }),
+    });
+  }
+
   startConnection(provider: string): Promise<{ url: string }> {
     return this.request(`/v1/connections/${provider}/start`, { method: "POST", json: true, body: "{}" });
   }

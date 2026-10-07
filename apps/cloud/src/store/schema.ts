@@ -182,6 +182,10 @@ CREATE TABLE IF NOT EXISTS files (
 );
 CREATE INDEX IF NOT EXISTS files_bot_idx ON files (bot_id);
 
+/* Shared, workspace-scoped files (the company wiki). */
+ALTER TABLE files ADD COLUMN IF NOT EXISTS workspace_id TEXT;
+CREATE INDEX IF NOT EXISTS files_workspace_idx ON files (workspace_id);
+
 CREATE TABLE IF NOT EXISTS learned_skills (
   id          TEXT PRIMARY KEY,
   name        TEXT NOT NULL UNIQUE,

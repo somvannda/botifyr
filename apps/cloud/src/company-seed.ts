@@ -22,11 +22,12 @@ export async function seedCompany(
   const seededAt = new Date().toISOString();
 
   const writeWiki = async (fileName: string, content: string): Promise<void> => {
-    const existing = (await store.listFiles(chairBotId)).find((file) => file.name === fileName);
+    const existing = (await store.listWorkspaceFiles(workspaceId)).find((file) => file.name === fileName);
     await store.upsertFile({
       id: existing?.id ?? randomUUID(),
-      botId: chairBotId,
+      botId: existing?.botId ?? chairBotId,
       userId,
+      workspaceId,
       name: fileName,
       content: content.slice(0, 20_000),
       createdAt: existing?.createdAt ?? seededAt,

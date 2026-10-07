@@ -181,6 +181,8 @@ export interface FileRecord {
   id: string;
   botId: string;
   userId: string;
+  /** When set, the file is company-wide (shared across the workspace). */
+  workspaceId?: string;
   name: string;
   content: string;
   createdAt: string;
@@ -338,6 +340,8 @@ export interface Store {
 
   upsertFile(record: FileRecord): Promise<void>;
   listFiles(botId: string): Promise<FileRecord[]>;
+  /** Files shared across a company (the wiki). */
+  listWorkspaceFiles(workspaceId: string): Promise<FileRecord[]>;
   getFile(userId: string, id: string): Promise<FileRecord | null>;
   deleteFile(userId: string, id: string): Promise<boolean>;
 

@@ -661,12 +661,13 @@ export class PostgresStore implements Store {
 
   async upsertFile(record: FileRecord): Promise<void> {
     await this.pool.query(
-      "INSERT INTO files (id, bot_id, user_id, name, content, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7) " +
-        "ON CONFLICT (bot_id, name) DO UPDATE SET content = EXCLUDED.content, updated_at = EXCLUDED.updated_at",
+      "INSERT INTO files (id, bot_id, user_id, workspace_id, name, content, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) " +
+        "ON CONFLICT (bot_id, name) DO UPDATE SET content = EXCLUDED.content, workspace_id = EXCLUDED.workspace_id, updated_at = EXCLUDED.updated_at",
       [
         record.id,
         record.botId,
         record.userId,
+        record.workspaceId ?? null,
         record.name,
         record.content,
         record.createdAt,
@@ -677,15 +678,23 @@ export class PostgresStore implements Store {
 
   async listFiles(botId: string): Promise<FileRecord[]> {
     const { rows } = await this.pool.query(
-      "SELECT id, bot_id, user_id, name, content, created_at, updated_at FROM files WHERE bot_id = $1 ORDER BY name",
+      "SELECT id, bot_id, user_id, workspace_id, name, content, created_at, updated_at FROM files WHERE bot_id = $1 ORDER BY name",
       [botId],
+    );
+    return rows.map(toFile);
+  }
+
+  async listWorkspaceFiles(workspaceId: string): Promise<FileRecord[]> {
+    const { rows } = await this.pool.query(
+      "SELECT id, bot_id, user_id, workspace_id, name, content, created_at, updated_at FROM files WHERE workspace_id = $1 ORDER BY name",
+      [workspaceId],
     );
     return rows.map(toFile);
   }
 
   async getFile(userId: string, id: string): Promise<FileRecord | null> {
     const { rows } = await this.pool.query(
-      "SELECT id, bot_id, user_id, name, content, created_at, updated_at FROM files WHERE id = $1 AND user_id = $2",
+      "SELECT id, bot_id, user_id, workspace_id, name, content, created_at, updated_at FROM files WHERE id = $1 AND user_id = $2",
       [id, userId],
     );
     return rows[0] ? toFile(rows[0]) : null;
@@ -1281,6 +1290,7 @@ function toFile(row: any): FileRecord {
     id: row.id,
     botId: row.bot_id,
     userId: row.user_id,
+    workspaceId: row.workspace_id ?? undefined,
     name: row.name,
     content: row.content,
     createdAt: row.created_at.toISOString(),

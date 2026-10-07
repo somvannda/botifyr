@@ -81,6 +81,12 @@ describe("workspaces API", () => {
     ).json() as Array<{ title: string; phase: string }>;
     expect(work.length).toBeGreaterThan(0);
     expect(work.some((item) => item.title === "Build the marketing website")).toBe(true);
+
+    // The company wiki is workspace-scoped (readable by any employee).
+    const wiki = (
+      await app.inject({ method: "GET", url: `/v1/workspaces/${ws.id}/wiki`, headers: auth })
+    ).json() as Array<{ name: string }>;
+    expect(wiki.map((file) => file.name)).toContain("BRIEF.md");
     await app.close();
   });
 

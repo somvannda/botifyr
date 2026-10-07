@@ -2593,6 +2593,48 @@ export async function buildServer(options: ServerOptions) {
     },
   );
 
+  /** The shared company wiki (workspace-scoped files any employee can read). */
+  app.get<{ Params: { id: string } }>(
+    "/v1/workspaces/:id/wiki",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const workspace = await store.getWorkspace(request.params.id);
+      if (!workspace || workspace.ownerId !== userId) {
+        return reply.code(404).send({ error: "workspace not found" });
+      }
+      return store.listWorkspaceFiles(workspace.id);
+    },
+  );
+
+  app.post<{ Params: { id: string }; Body: { name?: string; content?: string } }>(
+    "/v1/workspaces/:id/wiki",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const workspace = await store.getWorkspace(request.params.id);
+      if (!workspace || workspace.ownerId !== userId) {
+        return reply.code(404).send({ error: "workspace not found" });
+      }
+      const name = (request.body?.name ?? "").trim().slice(0, 120);
+      if (!name) return reply.code(400).send({ error: "a file name is required" });
+      const content = String(request.body?.content ?? "").slice(0, 200_000);
+      const now = new Date().toISOString();
+      const existing = (await store.listWorkspaceFiles(workspace.id)).find((file) => file.name === name);
+      await store.upsertFile({
+        id: existing?.id ?? randomUUID(),
+        botId: existing?.botId ?? workspace.ceoBotId ?? workspace.id,
+        userId,
+        workspaceId: workspace.id,
+        name,
+        content,
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+      });
+      return { ok: true };
+    },
+  );
+
   /** Activate the company: set the autonomy level, schedules and auto-approve. */
   app.post<{ Params: { id: string }; Body: { level?: string } }>(
     "/v1/workspaces/:id/activate",

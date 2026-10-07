@@ -470,6 +470,12 @@ export class MemoryStore implements Store {
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
+  async listWorkspaceFiles(workspaceId: string): Promise<FileRecord[]> {
+    return [...this.files.values()]
+      .filter((file) => file.workspaceId === workspaceId)
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
   async getFile(userId: string, id: string): Promise<FileRecord | null> {
     for (const file of this.files.values()) {
       if (file.id === id && file.userId === userId) return file;
