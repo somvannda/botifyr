@@ -180,10 +180,14 @@ export function createMediaTools(
         : `yt-dlp ${common} -f 'bv*[height<=${height}]+ba/b[height<=${height}]/b' ` +
           `--merge-output-format mp4 ${subsFlag}-o ${template} '${url}'`;
       const result = await backend.exec(command);
+      let fileOk = result.ok;
       if (!result.ok) {
         const recovered = (await tryRecipe(url)) || (await trySniff(url)) || (await tryFallback(url));
+        fileOk = recovered;
         if (!recovered) ok = false;
       }
+      // Per-file completion, so the runner can track a durable job per file.
+      context.log(`finished ${index + 1}/${urls.length} ${fileOk ? "ok" : "fail"}`);
     }
 
     const created = (await listNames()).filter((name) => !before.has(name));

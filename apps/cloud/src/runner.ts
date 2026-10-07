@@ -500,9 +500,7 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
             }
           },
           saveWikiFile: async (name, content) => {
-            const existing = (await store.listWorkspaceFiles(company.id)).find(
-              (file) => file.name === name,
-            );
+            const existing = (await store.listWorkspaceFiles(company.id)).find((file) => file.name === name);
             const stamp = new Date().toISOString();
             await store.upsertFile({
               id: existing?.id ?? randomUUID(),
@@ -650,13 +648,36 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
         queue({ type: "task.updated", task });
       },
       onLog: (message) => {
-        // Surface batch-download progress as a live task step.
-        if (message.startsWith("download ")) {
+        // Surface each batch-download file as its own durable job step.
+        const start = /^download (\d+)\/(\d+) (.+)$/.exec(message);
+        if (start) {
+          const [, index, total, url] = start;
           upsertStep(task, {
-            id: `downloads-${task.id}`,
-            title: "Downloads",
-            detail: message.replace(/^download /, ""),
+            id: `dl-${task.id}-${index}`,
+            title: `File ${index}/${total}`,
+            detail: url,
             status: "running",
+          });
+          const downloads = task.steps.find((step) => step.id === `downloads-${task.id}`);
+          if (downloads) downloads.detail = `${index}/${total}`;
+          else
+            upsertStep(task, {
+              id: `downloads-${task.id}`,
+              title: "Downloads",
+              detail: `${index}/${total}`,
+              status: "running",
+            });
+          queue({ type: "task.updated", task });
+          return;
+        }
+        const finished = /^finished (\d+)\/(\d+) (ok|fail)$/.exec(message);
+        if (finished) {
+          const [, index, total, result] = finished;
+          upsertStep(task, {
+            id: `dl-${task.id}-${index}`,
+            title: `File ${index}/${total}`,
+            detail: result === "ok" ? "Saved" : "Failed",
+            status: result === "ok" ? "done" : "failed",
           });
           queue({ type: "task.updated", task });
         }

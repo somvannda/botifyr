@@ -87,6 +87,24 @@ describe("youtube.download", () => {
     expect(commands.some((entry) => entry.includes("--write-subs"))).toBe(false);
   });
 
+  it("logs per-file start and completion for durable job steps", async () => {
+    const { backend } = fakeBackend();
+    const logs: string[] = [];
+    const tool = createMediaTools(backend, "/d").tools.find((entry) => entry.name === "youtube.download");
+    if (!tool) throw new Error("youtube.download not found");
+    await tool.run(
+      { urls: ["https://youtu.be/a", "https://youtu.be/b"] },
+      {
+        workspaceDir: "/workspace",
+        log: (message) => logs.push(message),
+      },
+    );
+
+    expect(logs.some((line) => /^download 1\/2 /.test(line))).toBe(true);
+    expect(logs.some((line) => /^finished 1\/2 ok$/.test(line))).toBe(true);
+    expect(logs.some((line) => /^finished 2\/2 ok$/.test(line))).toBe(true);
+  });
+
   it("reports only the files it created", async () => {
     let listing = "old [zzz].mp4\n";
     const backend: ShellBackend = {
