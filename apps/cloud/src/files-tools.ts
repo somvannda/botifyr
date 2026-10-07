@@ -10,6 +10,15 @@ import type { Store } from "./store/index.js";
  * read each other's plans; writes go to the shared wiki.
  */
 export function createFileTools(store: Store, botId: string, userId: string): ToolDefinition[] {
+  /** Tolerate the field names models commonly use for a file name. */
+  const resolveName = (args: Record<string, unknown>): string => {
+    const raw = args.name ?? args.filename ?? args.file ?? args.path ?? args.title;
+    return String(raw ?? "")
+      .trim()
+      .replace(/^.*[\\/]/, "")
+      .slice(0, 120);
+  };
+
   /** The bot's company workspace id, if it belongs to one. */
   const companyWorkspaceId = async (): Promise<string | undefined> => {
     const bot = await store.getBot(botId).catch(() => null);
@@ -54,7 +63,7 @@ export function createFileTools(store: Store, botId: string, userId: string): To
         required: ["name"],
       },
       run: async (args) => {
-        const name = String(args.name ?? "");
+        const name = resolveName(args);
         const file = (await allFiles()).find((entry) => entry.name === name);
         return file ? { ok: true, output: file.content } : { ok: false, output: `No file named "${name}".` };
       },
@@ -71,10 +80,13 @@ export function createFileTools(store: Store, botId: string, userId: string): To
         required: ["name", "content"],
       },
       run: async (args) => {
-        const name = String(args.name ?? "")
-          .trim()
-          .slice(0, 120);
-        if (!name) return { ok: false, output: "A file name is required." };
+        const name = resolveName(args);
+        if (!name) {
+          return {
+            ok: false,
+            output: 'A file name is required, e.g. {"name":"notes.md","content":"..."}.',
+          };
+        }
         const content = String(args.content ?? "").slice(0, 200_000);
         const now = new Date().toISOString();
         const workspaceId = await companyWorkspaceId();
