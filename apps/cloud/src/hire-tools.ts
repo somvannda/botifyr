@@ -11,6 +11,7 @@ import { toDepartment } from "./company.js";
  * "hire a Head of Growth". Approval-gated (creating an employee is
  * consequential). docs/company-workspace.md §16 (hire_employee) & §17.
  */
+/** Last-resort fallback only — normally the hiring agent supplies a name. */
 const HIRE_NAMES = [
   "Alex Rivera",
   "Sam Carter",
@@ -29,7 +30,7 @@ const HIRE_NAMES = [
   "Dev Patel",
 ];
 
-/** A stable personal name so a hire isn't named by its role. */
+/** A stable personal name, used only if the model forgets to pass one. */
 function pickName(seed: string): string {
   let hash = 0;
   for (let index = 0; index < seed.length; index += 1) {
@@ -43,17 +44,17 @@ export function createHireTools(store: Store, userId: string, botId: string): To
     {
       name: "company.hire",
       description:
-        "Hire a new employee: give their role title (e.g. \"Head of Growth\") AND a realistic full name (e.g. \"Alex Rivera\"). Needs the owner's approval.",
+        "Hire a new employee. You must give their role title (e.g. \"Head of Growth\") AND invent a realistic, unique full name for them (e.g. \"Alex Rivera\") — do not reuse a name already on the team. Needs the owner's approval.",
       parameters: {
         type: "object",
         properties: {
           title: { type: "string", description: "The role title, e.g. \"Head of Growth\"." },
-          name: { type: "string", description: "The new hire's full name, e.g. \"Alex Rivera\"." },
+          name: { type: "string", description: "A realistic full name you choose for the new hire." },
           department: { type: "string", description: "Department (e.g. engineering, growth, sales)." },
           instructions: { type: "string", description: "Job description / standing instructions." },
           company: { type: "string", description: "Company name (optional when you have one company)." },
         },
-        required: ["title"],
+        required: ["title", "name"],
       },
       requiresApproval: true,
       run: async (args) => {
