@@ -4,6 +4,7 @@ import {
   type CreateWorkspaceRequest,
   type Department,
   type RoleDefinition,
+  type WorkItem,
   type WorkspaceBudget,
 } from "@botifyr/shared";
 import { recommendTeam, ROLE_BY_ID } from "./recommend.js";
@@ -40,6 +41,24 @@ export type CompleteFn = (input: { system: string; user: string; maxTokens: numb
 /** True when a company's token budget is set and exhausted (docs/company-os.md §15). */
 export function isBudgetExhausted(budget: WorkspaceBudget | null): boolean {
   return Boolean(budget && budget.limitTokens > 0 && budget.usedTokens >= budget.limitTokens);
+}
+
+/** Summarise the board + approvals into a short standup (docs/company-os.md §5). */
+export function buildStandup(items: WorkItem[], pendingApprovals: number): string {
+  const count = (status: WorkItem["status"]): number => items.filter((item) => item.status === status).length;
+  const blocked = items
+    .filter((item) => item.status === "blocked")
+    .slice(0, 5)
+    .map((item) => `• Blocked: ${item.title}`);
+  const lines = [
+    `Standup — ${items.length} task${items.length === 1 ? "" : "s"}: ` +
+      `${count("in_progress")} in progress, ${count("blocked")} blocked, ${count("todo")} to do, ${count("done")} done.`,
+    pendingApprovals > 0
+      ? `${pendingApprovals} item${pendingApprovals === 1 ? "" : "s"} need your approval.`
+      : "Nothing needs you.",
+    ...blocked,
+  ];
+  return lines.join("\n").slice(0, 4000);
 }
 
 /** The shared business briefing prepended to every employee's instructions. */

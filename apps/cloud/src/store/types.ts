@@ -3,6 +3,7 @@ import type {
   CapabilityGrant,
   ChatMessage,
   CompanyDNA,
+  CompanyReport,
   Department,
   MediaRecipe,
   ModelPricingRecord,
@@ -124,6 +125,9 @@ export type WorkspaceBudgetRecord = WorkspaceBudget;
 
 /** A per-subject capability grant. */
 export type CapabilityGrantRecord = CapabilityGrant;
+
+/** A company report (standup / weekly / incident). */
+export type CompanyReportRecord = CompanyReport;
 
 export interface SecretRecord {
   id: string;
@@ -295,6 +299,10 @@ export interface Store {
   /* Capability grants (authorization) */
   listCapabilityGrants(workspaceId: string): Promise<CapabilityGrantRecord[]>;
   setCapabilityGrant(record: CapabilityGrantRecord): Promise<void>;
+
+  /* Company reports (standups) */
+  createCompanyReport(record: CompanyReportRecord): Promise<void>;
+  listCompanyReports(workspaceId: string): Promise<CompanyReportRecord[]>;
 
   createTask(task: Task): Promise<void>;
   updateTask(task: Task): Promise<void>;

@@ -5,6 +5,7 @@ import type {
   BotFile,
   CapabilityGrant,
   CompanyDNA,
+  CompanyReport,
   ConnectionInfo,
   CreateWorkspaceRequest,
   Department,
@@ -659,6 +660,15 @@ export class BotifyrClient {
       json: true,
       body: JSON.stringify(input),
     });
+  }
+
+  /* Company reports (standups). */
+  listCompanyReports(workspaceId: string): Promise<CompanyReport[]> {
+    return this.request(`/v1/workspaces/${workspaceId}/reports`);
+  }
+
+  runStandup(workspaceId: string): Promise<CompanyReport> {
+    return this.request(`/v1/workspaces/${workspaceId}/standup`, { method: "POST", json: true });
   }
 
   updateWorkspace(

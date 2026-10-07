@@ -321,6 +321,17 @@ export interface CapabilityGrant {
   updatedAt: string;
 }
 
+/** A report the company produces — e.g. a standup (docs/company-os.md §5). */
+export type ReportKind = "standup" | "weekly" | "incident";
+
+export interface CompanyReport {
+  id: string;
+  workspaceId: string;
+  kind: ReportKind;
+  summary: string;
+  createdAt: string;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Accounts, secrets, audit                                                    */
 /* -------------------------------------------------------------------------- */

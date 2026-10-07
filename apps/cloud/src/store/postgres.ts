@@ -6,6 +6,7 @@ import type {
   BotRecord,
   BotRoleRecord,
   CapabilityGrantRecord,
+  CompanyReportRecord,
   ConnectionRecord,
   FileRecord,
   FriendRequestRecord,
@@ -479,6 +480,21 @@ export class PostgresStore implements Store {
         "ON CONFLICT (workspace_id, subject, capability) DO UPDATE SET granted = EXCLUDED.granted, updated_at = EXCLUDED.updated_at",
       [record.workspaceId, record.subject, record.capability, record.granted, record.updatedAt],
     );
+  }
+
+  async createCompanyReport(record: CompanyReportRecord): Promise<void> {
+    await this.pool.query(
+      "INSERT INTO company_reports (id, workspace_id, kind, data, created_at) VALUES ($1, $2, $3, $4, $5)",
+      [record.id, record.workspaceId, record.kind, record, record.createdAt],
+    );
+  }
+
+  async listCompanyReports(workspaceId: string): Promise<CompanyReportRecord[]> {
+    const { rows } = await this.pool.query(
+      "SELECT data FROM company_reports WHERE workspace_id = $1 ORDER BY created_at DESC",
+      [workspaceId],
+    );
+    return rows.map((row) => row.data as CompanyReportRecord);
   }
 
   async createTask(task: Task): Promise<void> {

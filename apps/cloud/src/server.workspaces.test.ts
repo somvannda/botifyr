@@ -277,4 +277,26 @@ describe("workspaces API", () => {
     expect(bad.statusCode).toBe(400);
     await app.close();
   });
+
+  it("records a standup report", async () => {
+    const { app, signup } = await boot();
+    const auth = await signup("ws-standup@example.com");
+    const ws = (
+      await app.inject({ method: "POST", url: "/v1/workspaces", headers: auth, payload: { name: "Standup Co" } })
+    ).json() as { id: string };
+
+    const report = await app.inject({
+      method: "POST",
+      url: `/v1/workspaces/${ws.id}/standup`,
+      headers: auth,
+    });
+    expect(report.statusCode).toBe(201);
+    expect((report.json() as { summary: string }).summary).toContain("Standup");
+
+    const list = (
+      await app.inject({ method: "GET", url: `/v1/workspaces/${ws.id}/reports`, headers: auth })
+    ).json() as Array<{ kind: string }>;
+    expect(list.some((entry) => entry.kind === "standup")).toBe(true);
+    await app.close();
+  });
 });

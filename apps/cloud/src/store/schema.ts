@@ -139,6 +139,16 @@ CREATE TABLE IF NOT EXISTS capability_grants (
   PRIMARY KEY (workspace_id, subject, capability)
 );
 
+/* Company reports — standups etc. (docs/company-os.md §5). */
+CREATE TABLE IF NOT EXISTS company_reports (
+  id           TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  kind         TEXT NOT NULL DEFAULT 'standup',
+  data         JSONB NOT NULL,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS company_reports_ws_idx ON company_reports (workspace_id, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS connections (
   id         TEXT PRIMARY KEY,
   user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

@@ -47,7 +47,7 @@ import { handleNodeMessage, nodeInfo, registerNode } from "./nodes.js";
 import { createToken, hashPassword, hashToken, verifyPassword } from "./auth.js";
 import { encryptSecret } from "./vault.js";
 import { oneShot, runTask, runtimeInfo, summarizeConversation } from "./runner.js";
-import { analyzeSource, planCompany, toDepartment } from "./company.js";
+import { analyzeSource, buildStandup, planCompany, toDepartment } from "./company.js";
 import { createDockerComputerBackend } from "@botifyr/agent-core";
 import {
   chmabaConfigFromEnv,
@@ -2499,6 +2499,51 @@ export async function buildServer(options: ServerOptions) {
     await store.setCapabilityGrant(record);
     return record;
   });
+
+  /** Run a standup: summarise the board + approvals and record it. */
+  app.post<{ Params: { id: string } }>(
+    "/v1/workspaces/:id/standup",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const workspace = await store.getWorkspace(request.params.id);
+      if (!workspace || workspace.ownerId !== userId) {
+        return reply.code(404).send({ error: "workspace not found" });
+      }
+      const items = await store.listWorkItems(workspace.id);
+      const roles = await store.listBotRoles(workspace.id);
+      const sessions = new Set<string>();
+      for (const role of roles) {
+        const bot = await store.getBot(role.botId);
+        if (bot) sessions.add(bot.sessionId);
+      }
+      const pending = (await store.listTasksForUser(userId)).filter(
+        (task) => sessions.has(task.sessionId) && task.status === "awaiting_approval",
+      ).length;
+      const report = {
+        id: randomUUID(),
+        workspaceId: workspace.id,
+        kind: "standup" as const,
+        summary: buildStandup(items, pending),
+        createdAt: new Date().toISOString(),
+      };
+      await store.createCompanyReport(report);
+      return reply.code(201).send(report);
+    },
+  );
+
+  app.get<{ Params: { id: string } }>(
+    "/v1/workspaces/:id/reports",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const workspace = await store.getWorkspace(request.params.id);
+      if (!workspace || workspace.ownerId !== userId) {
+        return reply.code(404).send({ error: "workspace not found" });
+      }
+      return store.listCompanyReports(workspace.id);
+    },
+  );
 
   /* Bot Library: text files a bot can keep and the agent can read/write. */
   const toBotFile = (record: FileRecord): BotFile => ({
