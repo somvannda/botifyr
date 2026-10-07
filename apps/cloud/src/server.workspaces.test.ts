@@ -111,6 +111,13 @@ describe("workspaces API", () => {
     const ws = created.json() as { roles: Array<{ botId: string; title: string }> };
     expect(ws.roles.some((role) => role.botId === bot.id && role.title === "Finance")).toBe(true);
 
+    // The attached bot is labelled with the company (so it groups + can delegate).
+    const bots = (await app.inject({ method: "GET", url: "/v1/bots", headers: auth })).json() as Array<{
+      id: string;
+      workspace?: string;
+    }>;
+    expect(bots.find((entry) => entry.id === bot.id)?.workspace).toBe("Acme Labs");
+
     const blank = await app.inject({
       method: "POST",
       url: "/v1/workspaces",

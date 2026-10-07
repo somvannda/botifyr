@@ -2175,6 +2175,12 @@ export async function buildServer(options: ServerOptions) {
         const owned = new Set((await store.listBots(userId)).map((entry) => entry.id));
         for (const membership of memberships) {
           if (!membership?.botId || !owned.has(membership.botId)) continue;
+          // Label the bot with the company name so it groups + can delegate.
+          const attached = await store.getBot(membership.botId);
+          if (attached) {
+            attached.workspace = workspace.name;
+            await store.updateBot(attached);
+          }
           await store.setBotRole({
             workspaceId: workspace.id,
             botId: membership.botId,
