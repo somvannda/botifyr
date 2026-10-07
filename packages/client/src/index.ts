@@ -386,6 +386,15 @@ export class BotifyrClient {
     });
   }
 
+  /** Stop and remove a session's desktop container. */
+  stopComputer(sessionId: string): Promise<{ ok: boolean }> {
+    return this.request(`/v1/sessions/${encodeURIComponent(sessionId)}/computer/stop`, {
+      method: "POST",
+      json: true,
+      body: "{}",
+    });
+  }
+
   /** Forward UI input into a session's desktop (click/type/key/scroll). */
   computerInput(
     sessionId: string,

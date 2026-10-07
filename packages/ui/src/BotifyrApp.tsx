@@ -607,6 +607,13 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     }
   }
 
+  /** Close the modal and stop the desktop container (frees CPU/RAM). */
+  function stopScreen(): void {
+    const sessionId = activeSessionId;
+    setScreenOn(false);
+    if (sessionId) void client.stopComputer(sessionId).catch(() => {});
+  }
+
   // A real remote-desktop view: mouse + keyboard are forwarded to the sandbox.
   const SCREEN_W = 1280;
   const SCREEN_H = 800;
@@ -3712,7 +3719,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       )}
 
       {screenOn && activeSessionId && (
-        <div className="computer-overlay" onClick={() => setScreenOn(false)}>
+        <div className="computer-overlay" onClick={() => stopScreen()}>
           <div
             className="computer-modal"
             ref={screenRef}
@@ -3722,7 +3729,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
           >
             <div className="computer-head">
               <span className="computer-title">{activeBotName}&apos;s computer</span>
-              <button className="round small" type="button" onClick={() => setScreenOn(false)}>
+              <button className="round small" type="button" onClick={() => stopScreen()}>
                 ✕
               </button>
             </div>

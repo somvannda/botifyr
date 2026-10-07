@@ -23,6 +23,7 @@ import { emit, subscribe } from "./events.js";
 import {
   getComputerSandbox,
   setComputerSandbox,
+  clearComputerSandbox,
   getScreenshot,
   ownerOfEventTask,
   ownerOfSession,
@@ -2892,6 +2893,23 @@ export async function buildServer(options: ServerOptions) {
         setComputerSandbox(key, createDockerComputerBackend());
       }
       return { ok: true, streaming: true };
+    },
+  );
+
+  /* Stop and remove a session's desktop container (frees CPU/RAM). */
+  app.post<{ Params: { id: string } }>(
+    "/v1/sessions/:id/computer/stop",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const session = await store.getSession(request.params.id);
+      if (!session || session.userId !== request.userId) {
+        return reply.code(404).send({ error: "session not found" });
+      }
+      const key = `session:${session.id}`;
+      const backend = getComputerSandbox(key);
+      if (backend) await backend.close().catch(() => {});
+      clearComputerSandbox(key);
+      return { ok: true };
     },
   );
 
