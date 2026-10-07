@@ -322,6 +322,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [hqGrants, setHqGrants] = useState<Array<CapabilityGrant>>([]);
   const [hqReports, setHqReports] = useState<Array<CompanyReport>>([]);
   const [hqWiki, setHqWiki] = useState<Array<{ name: string; content: string }>>([]);
+  const [openFile, setOpenFile] = useState<string | null>(null);
   const [hqChanges, setHqChanges] = useState<
     Array<{ repo: string; path: string; content: string; diff: string; exists: boolean }>
   >([]);
@@ -5248,8 +5249,20 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                     <ul className="board-list">
                       {docs.map((file) => (
                         <li key={file.name} className="team-member">
-                          <div className="wiki-doc-name">{file.name}</div>
-                          <pre className="standup-text">{file.content || "(empty)"}</pre>
+                          <div
+                            className="wiki-doc-name"
+                            onClick={() =>
+                              setOpenFile((prev) => (prev === file.name ? null : file.name))
+                            }
+                          >
+                            <span className="task-caret">
+                              {openFile === file.name ? "▾" : "▸"}
+                            </span>
+                            {file.name}
+                          </div>
+                          {openFile === file.name && (
+                            <pre className="standup-text">{file.content || "(empty)"}</pre>
+                          )}
                         </li>
                       ))}
                     </ul>
@@ -5298,8 +5311,20 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                   <ul className="board-list">
                     {hqWiki.map((file) => (
                       <li key={file.name} className="team-member">
-                        <div className="wiki-doc-name">{file.name}</div>
-                        <pre className="standup-text">{file.content || "(empty)"}</pre>
+                        <div
+                          className="wiki-doc-name"
+                          onClick={() =>
+                            setOpenFile((prev) => (prev === file.name ? null : file.name))
+                          }
+                        >
+                          <span className="task-caret">
+                            {openFile === file.name ? "▾" : "▸"}
+                          </span>
+                          {file.name}
+                        </div>
+                        {openFile === file.name && (
+                          <pre className="standup-text">{file.content || "(empty)"}</pre>
+                        )}
                       </li>
                     ))}
                   </ul>

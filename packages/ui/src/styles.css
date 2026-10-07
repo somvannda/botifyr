@@ -684,6 +684,13 @@ body {
   min-width: 0;
 }
 
+.wiki-doc-name {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .hq-icon-btn {
   display: inline-flex;
   align-items: center;

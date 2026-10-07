@@ -45,13 +45,18 @@ export function createPlanTools(store: Store, userId: string, botId: string): To
         if (!workspace) {
           return { ok: false, output: "You don't have a company yet — create one first." };
         }
-        const goal = String(args.goal ?? "")
+        const goal = String(args.goal ?? args.title ?? args.objective ?? args.name ?? "")
           .trim()
           .slice(0, 200);
-        const plan = String(args.plan ?? "")
+        const plan = String(args.plan ?? args.content ?? args.body ?? args.markdown ?? args.details ?? "")
           .trim()
           .slice(0, 20_000);
-        if (!goal || !plan) return { ok: false, output: "A goal and a plan are required." };
+        if (!goal || !plan) {
+          return {
+            ok: false,
+            output: 'A goal and a plan are required — e.g. {"goal":"Grow sales","plan":"<markdown>"}.',
+          };
+        }
 
         const now = new Date().toISOString();
         const existing = (await store.listWorkspaceFiles(workspace.id)).find(
