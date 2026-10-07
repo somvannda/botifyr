@@ -1334,6 +1334,23 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     }
   }
 
+  /** Trust every employee in this company (skip their approval prompts). */
+  async function trustAll() {
+    const workspace = boardWorkspace;
+    if (!workspace) return;
+    const roles = workspaceByName.get(workspace.name)?.roles ?? [];
+    if (roles.length === 0) return;
+    setBoardBusy(true);
+    try {
+      const updated = await Promise.all(
+        roles.map((role) => client.updateBot(role.botId, { autoApprove: true }).catch(() => null)),
+      );
+      setBots((prev) => prev.map((bot) => updated.find((entry) => entry?.id === bot.id) ?? bot));
+    } finally {
+      setBoardBusy(false);
+    }
+  }
+
   /** One-click halt: cancel every running task across the company's employees. */
   async function stopCompany() {
     const workspace = boardWorkspace;
@@ -5148,6 +5165,15 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                 onClick={() => void runNow()}
               >
                 Run now
+              </button>
+              <button
+                className="ghost small"
+                type="button"
+                disabled={boardBusy}
+                title="Skip approval prompts for every employee in this company"
+                onClick={() => void trustAll()}
+              >
+                Trust all
               </button>
               <button
                 className="ghost small danger"
