@@ -256,4 +256,56 @@ describe("youtube.download", () => {
     expect(result.ok).toBe(true);
     expect(commands.some((command) => command.includes("v3.example.com/hls/video.m3u8"))).toBe(true);
   });
+
+  it("media.sniff returns the media URL a page loads", async () => {
+    const backend: ShellBackend = {
+      async exec() {
+        return { ok: true, output: "" };
+      },
+      async readFile() {
+        return { ok: true, output: "" };
+      },
+      async writeFile() {
+        return { ok: true, output: "" };
+      },
+      async listFiles() {
+        return { ok: true, output: "" };
+      },
+      async close() {},
+    };
+    const tool = createMediaTools(backend, "/d", undefined, {
+      sniffMedia: async (url) => (url.includes("spa") ? "https://cdn.example.com/master.m3u8" : null),
+    }).tools.find((entry) => entry.name === "media.sniff");
+    if (!tool) throw new Error("media.sniff not found");
+
+    const found = await tool.run({ url: "https://example.com/spa" }, ctx);
+    expect(found.ok).toBe(true);
+    expect(found.output).toContain("https://cdn.example.com/master.m3u8");
+
+    const missing = await tool.run({ url: "https://example.com/other" }, ctx);
+    expect(missing.ok).toBe(false);
+  });
+
+  it("media.sniff explains when sniffing is unavailable", async () => {
+    const backend: ShellBackend = {
+      async exec() {
+        return { ok: true, output: "" };
+      },
+      async readFile() {
+        return { ok: true, output: "" };
+      },
+      async writeFile() {
+        return { ok: true, output: "" };
+      },
+      async listFiles() {
+        return { ok: true, output: "" };
+      },
+      async close() {},
+    };
+    const tool = createMediaTools(backend, "/d").tools.find((entry) => entry.name === "media.sniff");
+    if (!tool) throw new Error("media.sniff not found");
+    const result = await tool.run({ url: "https://example.com/spa" }, ctx);
+    expect(result.ok).toBe(false);
+    expect(result.output).toContain("isn't available");
+  });
 });

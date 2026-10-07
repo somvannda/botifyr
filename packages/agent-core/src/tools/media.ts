@@ -371,5 +371,30 @@ export function createMediaTools(
     },
   };
 
-  return { tools: [download, downloadSearch, search, info, learnRecipe] };
+  const sniff: ToolDefinition = {
+    name: "media.sniff",
+    description:
+      "Open a page in a browser and return the media (m3u8/mp4) URL it loads. Use it for sites yt-dlp can't handle (e.g. short-drama apps), then download the returned URL with youtube.download.",
+    parameters: {
+      type: "object",
+      properties: { url: { type: "string", description: "The page URL to inspect." } },
+      required: ["url"],
+    },
+    run: async (args) => {
+      const url = safeUrl(args.url);
+      if (!url) return { ok: false, output: "A valid http(s) URL is required." };
+      if (!options.sniffMedia) {
+        return { ok: false, output: "Sniffing isn't available in this environment." };
+      }
+      const found = await options.sniffMedia(url).catch(() => null);
+      return found
+        ? { ok: true, output: `Found media URL: ${found}` }
+        : {
+            ok: false,
+            output: "No media URL captured. Open the page and press play, then try again.",
+          };
+    },
+  };
+
+  return { tools: [download, downloadSearch, search, info, learnRecipe, sniff] };
 }
