@@ -225,6 +225,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const taskStatusRef = useRef<Record<string, string>>({});
   const bootAtRef = useRef<number>(Date.now());
   const hasConnectedRef = useRef(false);
+  const notifWrapRef = useRef<HTMLDivElement | null>(null);
   const [reactions, setReactions] = useState<Record<string, string>>(() => {
     try {
       return JSON.parse(localStorage.getItem("botifyr.reactions") ?? "{}") as Record<string, string>;
@@ -833,6 +834,18 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       // ignore
     }
   }
+
+  // Close the notification panel when clicking anywhere outside it.
+  useEffect(() => {
+    if (!notifOpen) return;
+    const onDown = (event: MouseEvent) => {
+      if (notifWrapRef.current && !notifWrapRef.current.contains(event.target as Node)) {
+        setNotifOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [notifOpen]);
 
   async function openExternal(url: string) {
     await bridge.openExternal(url);
@@ -3321,7 +3334,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
               </span>
             )}
             <div className="topbar-right">
-              <div className="notif-wrap">
+              <div className="notif-wrap" ref={notifWrapRef}>
                 <button
                   className="bot-menu-btn"
                   type="button"
@@ -4799,9 +4812,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                                   title="Rename this employee"
                                   onClick={() => {
                                     setRenameBotId(role.botId);
-                                    setRenameValue(
-                                      bots.find((entry) => entry.id === role.botId)?.name ?? "",
-                                    );
+                                    setRenameValue(bots.find((entry) => entry.id === role.botId)?.name ?? "");
                                   }}
                                 >
                                   Rename
