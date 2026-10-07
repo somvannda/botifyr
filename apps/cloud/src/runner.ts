@@ -21,6 +21,7 @@ import { createCompanyTools } from "./company-tools.js";
 import { createDelegationTools } from "./delegation-tools.js";
 import { createSocialTools, notConnectedSocial } from "./social-tools.js";
 import { createDesignTools } from "./design-tools.js";
+import { createEscalationTools } from "./escalation-tools.js";
 import { removeDeniedTools } from "./tool-capabilities.js";
 import {
   clearComputerSandbox,
@@ -412,6 +413,8 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
     if (department === "design" || department === "marketing") {
       tools.push(...createDesignTools(store, userId, authorBot.id));
     }
+    // Any employee can pause and ask the owner when blocked (CAPTCHA/2FA/decision).
+    tools.push(...createEscalationTools());
 
     // Authorization: revoked capabilities block their tools (docs/company-os.md §8).
     const grants = await store.listCapabilityGrants(company.id).catch(() => []);
