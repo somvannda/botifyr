@@ -5,6 +5,7 @@ import type {
   BotFile,
   ConnectionInfo,
   LearnedSkill,
+  MediaRecipe,
   ModelPricingRecord,
   PlatformSettings,
   RuntimeConfig,
@@ -357,6 +358,23 @@ export class BotifyrClient {
 
   adminDeleteModelPricing(model: string): Promise<void> {
     return this.request(`/admin/model-pricing/${encodeURIComponent(model)}`, { method: "DELETE" });
+  }
+
+  /* Self-learned extraction recipes (admin). */
+  adminMediaRecipes(): Promise<MediaRecipe[]> {
+    return this.request("/admin/media-recipes");
+  }
+
+  adminSaveMediaRecipe(domain: string, body: Partial<MediaRecipe>): Promise<MediaRecipe> {
+    return this.request(`/admin/media-recipes/${encodeURIComponent(domain)}`, {
+      method: "PUT",
+      json: true,
+      body: JSON.stringify(body),
+    });
+  }
+
+  adminDeleteMediaRecipe(domain: string): Promise<void> {
+    return this.request(`/admin/media-recipes/${encodeURIComponent(domain)}`, { method: "DELETE" });
   }
 
   adminSkills(): Promise<AdminSkill[]> {

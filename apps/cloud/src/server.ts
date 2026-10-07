@@ -45,7 +45,14 @@ import {
 } from "./billing.js";
 import { SKILLS, skillInstructions } from "./skills.js";
 import type { Store } from "./store/index.js";
-import type { FileRecord, InvoiceRecord, ModelPricingRecord, PlatformSettings, Plan } from "./store/types.js";
+import type {
+  FileRecord,
+  InvoiceRecord,
+  MediaRecipe,
+  ModelPricingRecord,
+  PlatformSettings,
+  Plan,
+} from "./store/types.js";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -1207,6 +1214,49 @@ export async function buildServer(options: ServerOptions) {
       const removed = await store.deleteModelPricing(request.params.model);
       if (!removed) return reply.code(404).send({ error: "model not found" });
       auditAdmin(request, "modelPricing.delete", request.params.model);
+      return reply.code(204).send();
+    },
+  );
+
+  /* Self-learned extraction recipes (admin moderation). */
+  app.get("/admin/media-recipes", { preHandler: requireAdmin }, async () => store.listMediaRecipes());
+
+  app.put<{ Params: { domain: string }; Body: Partial<MediaRecipe> }>(
+    "/admin/media-recipes/:domain",
+    { preHandler: requireAdmin },
+    async (request, reply) => {
+      const domain = request.params.domain.toLowerCase();
+      const existing = await store.getMediaRecipe(domain);
+      const body = request.body ?? {};
+      const status =
+        body.status === "approved" || body.status === "rejected" || body.status === "pending"
+          ? body.status
+          : (existing?.status ?? "pending");
+      const now = new Date().toISOString();
+      const record: MediaRecipe = {
+        domain,
+        pattern: (body.pattern ?? existing?.pattern ?? "").trim(),
+        headers: body.headers ?? existing?.headers,
+        status,
+        createdBy: existing?.createdBy,
+        note: body.note ?? existing?.note,
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+      };
+      if (!record.pattern) return reply.code(400).send({ error: "a pattern is required" });
+      await store.saveMediaRecipe(record);
+      auditAdmin(request, "mediaRecipe.update", `${domain} -> ${status}`);
+      return record;
+    },
+  );
+
+  app.delete<{ Params: { domain: string } }>(
+    "/admin/media-recipes/:domain",
+    { preHandler: requireAdmin },
+    async (request, reply) => {
+      const removed = await store.deleteMediaRecipe(request.params.domain);
+      if (!removed) return reply.code(404).send({ error: "recipe not found" });
+      auditAdmin(request, "mediaRecipe.delete", request.params.domain);
       return reply.code(204).send();
     },
   );

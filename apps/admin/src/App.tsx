@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AuthError, BotifyrClient } from "@botifyr/client";
 import type { AdminAuditEvent, AdminSkill, AdminUser } from "@botifyr/client";
-import type { ModelPricingRecord, PlatformSettings } from "@botifyr/shared";
+import type { MediaRecipe, ModelPricingRecord, PlatformSettings } from "@botifyr/shared";
 import { BotLogo, LogoutIcon } from "@botifyr/ui";
 
 /**
@@ -26,27 +26,30 @@ export function Admin() {
   const [authorized, setAuthorized] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<"users" | "skills" | "audit" | "billing">("users");
+  const [tab, setTab] = useState<"users" | "skills" | "audit" | "billing" | "recipes">("users");
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [skills, setSkills] = useState<AdminSkill[]>([]);
   const [audit, setAudit] = useState<AdminAuditEvent[]>([]);
   const [settings, setSettings] = useState<PlatformSettings | null>(null);
   const [pricing, setPricing] = useState<ModelPricingRecord[]>([]);
+  const [recipes, setRecipes] = useState<MediaRecipe[]>([]);
   const [openSkill, setOpenSkill] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const [userList, skillList, auditList, settingsData, pricingList] = await Promise.all([
+    const [userList, skillList, auditList, settingsData, pricingList, recipeList] = await Promise.all([
       client.adminUsers(),
       client.adminSkills(),
       client.adminAudit(),
       client.adminSettings(),
       client.adminModelPricing(),
+      client.adminMediaRecipes(),
     ]);
     setUsers(userList);
     setSkills(skillList);
     setAudit(auditList);
     setSettings(settingsData);
     setPricing(pricingList);
+    setRecipes(recipeList);
   }, [client]);
 
   useEffect(() => {
@@ -202,6 +205,26 @@ export function Admin() {
     }
   }
 
+  async function setRecipeStatus(recipe: MediaRecipe, status: "approved" | "rejected" | "pending") {
+    setError(null);
+    try {
+      await client.adminSaveMediaRecipe(recipe.domain, { status });
+      await load();
+    } catch (err: unknown) {
+      setError(messageOf(err));
+    }
+  }
+
+  async function deleteRecipe(domain: string) {
+    setError(null);
+    try {
+      await client.adminDeleteMediaRecipe(domain);
+      await load();
+    } catch (err: unknown) {
+      setError(messageOf(err));
+    }
+  }
+
   if (!ready) {
     return (
       <div className="admin-signin">
@@ -280,6 +303,16 @@ export function Admin() {
             onClick={() => setTab("billing")}
           >
             Billing
+          </button>
+          <button
+            className={`admin-tab ${tab === "recipes" ? "active" : ""}`}
+            type="button"
+            onClick={() => setTab("recipes")}
+          >
+            Recipes
+            {recipes.filter((recipe) => recipe.status === "pending").length > 0
+              ? ` (${recipes.filter((recipe) => recipe.status === "pending").length})`
+              : ""}
           </button>
         </div>
 
@@ -780,6 +813,54 @@ export function Admin() {
                 Add model
               </button>
             </div>
+          </div>
+        )}
+
+        {tab === "recipes" && (
+          <div>
+            <p className="admin-muted">
+              Extraction recipes learned by bots for sites yt-dlp doesn't support. Approve one to apply it
+              automatically to future downloads from that domain.
+            </p>
+            {recipes.length === 0 && <p className="admin-muted">No recipes proposed yet.</p>}
+            {recipes.map((recipe) => (
+              <div key={recipe.domain} className="admin-card">
+                <div className="admin-actions" style={{ alignItems: "center" }}>
+                  <strong style={{ fontSize: 14 }}>{recipe.domain}</strong>
+                  <span className={`admin-pill ${recipe.status}`}>{recipe.status}</span>
+                  <span style={{ flex: 1 }} />
+                  {recipe.status !== "approved" && (
+                    <button
+                      className="ghost small"
+                      type="button"
+                      onClick={() => void setRecipeStatus(recipe, "approved")}
+                    >
+                      Approve
+                    </button>
+                  )}
+                  {recipe.status !== "rejected" && (
+                    <button
+                      className="ghost small"
+                      type="button"
+                      onClick={() => void setRecipeStatus(recipe, "rejected")}
+                    >
+                      Reject
+                    </button>
+                  )}
+                  <button
+                    className="ghost small danger"
+                    type="button"
+                    onClick={() => void deleteRecipe(recipe.domain)}
+                  >
+                    Delete
+                  </button>
+                </div>
+                <p className="admin-muted" style={{ marginTop: 6, wordBreak: "break-all" }}>
+                  <code>{recipe.pattern}</code>
+                  {recipe.note ? ` — ${recipe.note}` : ""}
+                </p>
+              </div>
+            ))}
           </div>
         )}
       </div>
