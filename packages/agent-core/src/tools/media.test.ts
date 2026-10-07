@@ -309,3 +309,26 @@ describe("youtube.download", () => {
     expect(result.output).toContain("isn't available");
   });
 });
+
+describe("youtube.info", () => {
+  it("prints a friendly metadata summary instead of raw JSON", async () => {
+    const { backend, commands } = fakeBackend();
+    const tool = createMediaTools(backend, "/d").tools.find((entry) => entry.name === "youtube.info");
+    if (!tool) throw new Error("youtube.info not found");
+    const result = await tool.run({ url: "https://youtu.be/abc" }, ctx);
+
+    expect(result.ok).toBe(true);
+    expect(commands.some((entry) => entry.includes("--print"))).toBe(true);
+    expect(commands.some((entry) => entry.includes("%(title)s"))).toBe(true);
+    expect(commands.some((entry) => entry.includes("https://youtu.be/abc"))).toBe(true);
+    expect(commands.some((entry) => entry.includes("--dump-single-json"))).toBe(false);
+  });
+
+  it("rejects a non-http url", async () => {
+    const { backend } = fakeBackend();
+    const tool = createMediaTools(backend, "/d").tools.find((entry) => entry.name === "youtube.info");
+    if (!tool) throw new Error("youtube.info not found");
+    const result = await tool.run({ url: "not-a-url" }, ctx);
+    expect(result.ok).toBe(false);
+  });
+});

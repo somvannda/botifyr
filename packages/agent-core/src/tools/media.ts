@@ -309,7 +309,13 @@ export function createMediaTools(
     run: async (args) => {
       const url = safeUrl(args.url);
       if (!url) return { ok: false, output: "A valid http(s) URL is required." };
-      return backend.exec(`yt-dlp --no-playlist --no-warnings --dump-single-json '${url}' | head -c 1200`);
+      // Print selected fields directly (no JSON parsing, so no truncation and
+      // no failure when a field is missing).
+      return backend.exec(
+        `yt-dlp --no-playlist --no-warnings --print ` +
+          `"Title: %(title)s\\nUploader: %(uploader)s\\nDuration: %(duration_string)s\\n` +
+          `Views: %(view_count)s\\nUploaded: %(upload_date)s\\nThumbnail: %(thumbnail)s" '${url}'`,
+      );
     },
   };
 
