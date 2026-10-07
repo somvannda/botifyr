@@ -234,7 +234,9 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [boardItems, setBoardItems] = useState<Array<WorkItem>>([]);
   const [boardTitle, setBoardTitle] = useState("");
   const [boardBusy, setBoardBusy] = useState(false);
-  const [hqTab, setHqTab] = useState<"need" | "team" | "board" | "budget" | "standup" | "office" | "wiki">("need");
+  const [hqTab, setHqTab] = useState<"need" | "team" | "board" | "budget" | "standup" | "office" | "wiki">(
+    "need",
+  );
   const [hqNeeds, setHqNeeds] = useState<Array<Task>>([]);
   const [hqBudget, setHqBudget] = useState<WorkspaceBudget | null>(null);
   const [budgetInput, setBudgetInput] = useState("");
@@ -1979,6 +1981,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const billingNotice = (() => {
     const b = billing;
     if (!b) return null;
+    if (user?.role === "admin") return null;
     if (b.subStatus === "grace") return "Payment due — pay now to avoid dropping to the free plan.";
     if (b.periodEnd) {
       const days = Math.ceil((Date.parse(b.periodEnd) - Date.now()) / 86_400_000);
@@ -2508,10 +2511,10 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
           </span>
           <span className="conv-text">
             <span className="conv-name">{bot.name}</span>
-            {roleByBotId.get(bot.id) && (
-              <span className="conv-role">{roleByBotId.get(bot.id)?.title}</span>
-            )}
-            <span className="conv-preview">{last?.content?.slice(0, 42) || "No messages yet — say hello"}</span>
+            {roleByBotId.get(bot.id) && <span className="conv-role">{roleByBotId.get(bot.id)?.title}</span>}
+            <span className="conv-preview">
+              {last?.content?.slice(0, 42) || "No messages yet — say hello"}
+            </span>
           </span>
         </button>
         <span className="conv-aside">
@@ -2547,7 +2550,9 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   };
 
   return (
-    <div className={`app${showBotPanel && activeBot ? " with-panel" : ""}${density === "compact" ? " density-compact" : ""}`}>
+    <div
+      className={`app${showBotPanel && activeBot ? " with-panel" : ""}${density === "compact" ? " density-compact" : ""}`}
+    >
       {toasts.length > 0 && (
         <div className="toast-stack">
           {toasts.map((toast) => (
@@ -4183,9 +4188,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
 
               {companyStep === "confirm" && (
                 <>
-                  <p className="company-hint">
-                    Optional — you can change these later in the Company HQ.
-                  </p>
+                  <p className="company-hint">Optional — you can change these later in the Company HQ.</p>
                   <label className="board-hours-check">
                     <input
                       type="checkbox"
@@ -4489,9 +4492,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                       Save
                     </button>
                   </div>
-                  <p className="company-hint">
-                    Work hours — scheduled work only happens inside this window.
-                  </p>
+                  <p className="company-hint">Work hours — scheduled work only happens inside this window.</p>
                   <div className="board-add">
                     <input
                       className="workspace-input board-hours"
@@ -5658,51 +5659,72 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
 
               {settingsTab === "usage" && (
                 <div className="settings-sections">
-                  {plan === "free" && (
+                  {user?.role === "admin" ? (
                     <div className="trial-card">
                       <div className="trial-head">
-                        <span>Free plan usage</span>
-                        <span>
-                          {(billing?.tokensThisMonth ?? 0).toLocaleString()} /{" "}
-                          {(billing?.freeMonthlyTokens ?? 0).toLocaleString()}
-                        </span>
+                        <span>Operator account</span>
+                        <span>Unlimited tokens</span>
                       </div>
-                      <div className="trial-bar">
-                        <span
-                          style={{
-                            width: `${
-                              billing?.freeMonthlyTokens
-                                ? Math.min(
-                                    100,
-                                    Math.round((billing.tokensThisMonth / billing.freeMonthlyTokens) * 100),
-                                  )
-                                : 0
-                            }%`,
-                          }}
-                        />
-                      </div>
-                      <div className="trial-foot">Resets at the start of each month</div>
+                      <div className="trial-foot">This account is exempt from plan limits and billing.</div>
                     </div>
+                  ) : (
+                    plan === "free" && (
+                      <div className="trial-card">
+                        <div className="trial-head">
+                          <span>Free plan usage</span>
+                          <span>
+                            {(billing?.tokensThisMonth ?? 0).toLocaleString()} /{" "}
+                            {(billing?.freeMonthlyTokens ?? 0).toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="trial-bar">
+                          <span
+                            style={{
+                              width: `${
+                                billing?.freeMonthlyTokens
+                                  ? Math.min(
+                                      100,
+                                      Math.round((billing.tokensThisMonth / billing.freeMonthlyTokens) * 100),
+                                    )
+                                  : 0
+                              }%`,
+                            }}
+                          />
+                        </div>
+                        <div className="trial-foot">Resets at the start of each month</div>
+                      </div>
+                    )
                   )}
 
                   <div className="settings-section-title">Plan &amp; credits</div>
                   <div className="settings-row">
                     <span className="settings-row-main">
                       <span className="settings-row-name">
-                        Current plan: {plan === "business" ? "Business" : plan === "pro" ? "Pro" : "Free"}
+                        Current plan:{" "}
+                        {user?.role === "admin"
+                          ? "Operator (admin)"
+                          : plan === "business"
+                            ? "Business"
+                            : plan === "pro"
+                              ? "Pro"
+                              : "Free"}
                       </span>
                       <span className="settings-row-sub">
-                        {billing?.periodEnd
-                          ? `Renews ${new Date(billing.periodEnd).toLocaleDateString()}`
-                          : plan === "free"
-                            ? `${(billing?.tokensThisMonth ?? 0).toLocaleString()} / ${(billing?.freeMonthlyTokens ?? 0).toLocaleString()} free tokens this month`
-                            : "No active period"}
+                        {user?.role === "admin"
+                          ? "Unlimited tokens — no billing"
+                          : billing?.periodEnd
+                            ? `Renews ${new Date(billing.periodEnd).toLocaleDateString()}`
+                            : plan === "free"
+                              ? `${(billing?.tokensThisMonth ?? 0).toLocaleString()} / ${(billing?.freeMonthlyTokens ?? 0).toLocaleString()} free tokens this month`
+                              : "No active period"}
                         {(billing?.walletCents ?? 0) > 0
                           ? ` · $${((billing?.walletCents ?? 0) / 100).toFixed(2)} credits`
                           : ""}
                       </span>
                     </span>
-                    {plan === "free" ? (
+                    {user?.role === "admin" ? (
+                      <span className="settings-badge">Operator</span>
+                    ) : plan === "free" ? (
                       <button className="btn primary" type="button" onClick={() => void upgradePlan("pro")}>
                         Upgrade to Pro (${((billing?.prices.proCents ?? 500) / 100).toFixed(2)})
                       </button>
