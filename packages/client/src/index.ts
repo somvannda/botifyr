@@ -193,11 +193,13 @@ export class BotifyrClient {
     const headers: Record<string, string> = {};
     if (this.token) headers.authorization = `Bearer ${this.token}`;
     if (options.json) headers["content-type"] = "application/json";
+    // A JSON request must send a body, or Fastify rejects the empty payload.
+    const body = options.body ?? (options.json ? "{}" : undefined);
 
     const response = await fetch(this.url(path), {
       method: options.method ?? "GET",
       headers,
-      body: options.body,
+      body,
     });
 
     if (!response.ok) {
