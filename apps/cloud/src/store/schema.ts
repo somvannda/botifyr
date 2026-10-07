@@ -93,6 +93,24 @@ CREATE TABLE IF NOT EXISTS bots (
 );
 CREATE INDEX IF NOT EXISTS bots_user_idx ON bots (user_id, created_at);
 
+/* Company workspaces (see docs/company-workspace.md). */
+CREATE TABLE IF NOT EXISTS workspaces (
+  id         TEXT PRIMARY KEY,
+  owner_id   TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  data       JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS workspaces_owner_idx ON workspaces (owner_id, created_at);
+
+CREATE TABLE IF NOT EXISTS workspace_roles (
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  bot_id       TEXT NOT NULL REFERENCES bots(id) ON DELETE CASCADE,
+  data         JSONB NOT NULL,
+  PRIMARY KEY (workspace_id, bot_id)
+);
+CREATE INDEX IF NOT EXISTS workspace_roles_ws_idx ON workspace_roles (workspace_id);
+
 CREATE TABLE IF NOT EXISTS connections (
   id         TEXT PRIMARY KEY,
   user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

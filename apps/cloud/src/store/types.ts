@@ -1,6 +1,7 @@
 import type {
   BotSchedule,
   ChatMessage,
+  Department,
   MediaRecipe,
   ModelPricingRecord,
   PlatformSettings,
@@ -82,6 +83,32 @@ export interface BotRecord {
   schedule?: BotSchedule;
   sessionId: string;
   createdAt: string;
+}
+
+/** A virtual company (see docs/company-workspace.md). */
+export interface WorkspaceRecord {
+  id: string;
+  ownerId: string;
+  name: string;
+  source: { kind: "url" | "idea"; value: string };
+  mission: string;
+  status: "onboarding" | "active" | "paused" | "archived";
+  ceoBotId?: string;
+  avatarEmoji?: string;
+  scheme?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** An employee's seat in a workspace. */
+export interface BotRoleRecord {
+  workspaceId: string;
+  botId: string;
+  title: string;
+  department: Department;
+  managerBotId?: string;
+  isChair?: boolean;
+  hiredAt: string;
 }
 
 export interface SecretRecord {
@@ -227,6 +254,18 @@ export interface Store {
   listScheduledBots(): Promise<BotRecord[]>;
   updateBot(record: BotRecord): Promise<void>;
   deleteBot(userId: string, id: string): Promise<boolean>;
+
+  /* Company workspaces */
+  createWorkspace(record: WorkspaceRecord): Promise<void>;
+  getWorkspace(id: string): Promise<WorkspaceRecord | null>;
+  listWorkspaces(ownerId: string): Promise<WorkspaceRecord[]>;
+  updateWorkspace(record: WorkspaceRecord): Promise<void>;
+  deleteWorkspace(ownerId: string, id: string): Promise<boolean>;
+
+  setBotRole(record: BotRoleRecord): Promise<void>;
+  getBotRole(workspaceId: string, botId: string): Promise<BotRoleRecord | null>;
+  listBotRoles(workspaceId: string): Promise<BotRoleRecord[]>;
+  deleteBotRole(workspaceId: string, botId: string): Promise<boolean>;
 
   createTask(task: Task): Promise<void>;
   updateTask(task: Task): Promise<void>;

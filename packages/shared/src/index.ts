@@ -145,6 +145,78 @@ export interface Bot {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Company workspaces (see docs/company-workspace.md)                         */
+/* -------------------------------------------------------------------------- */
+
+export type WorkspaceStatus = "onboarding" | "active" | "paused" | "archived";
+
+export type Department =
+  "exec" | "product" | "engineering" | "growth" | "ops" | "finance" | "support" | "design";
+
+/** A virtual company. Owns employees (bots), shared state, and a budget. */
+export interface Workspace {
+  id: string;
+  /** The CEO (a real user). */
+  ownerId: string;
+  name: string;
+  /** The input that spawned it: a website or a free-form idea. */
+  source: { kind: "url" | "idea"; value: string };
+  mission: string;
+  status: WorkspaceStatus;
+  /** The chair bot that reports to the CEO. */
+  ceoBotId?: string;
+  avatarEmoji?: string;
+  scheme?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** The seat an employee bot fills in a workspace. */
+export interface BotRole {
+  workspaceId: string;
+  botId: string;
+  /** e.g. "CTO", "Head of Growth". */
+  title: string;
+  department: Department;
+  /** The bot this one reports to (undefined = reports to the CEO). */
+  managerBotId?: string;
+  /** True for the single chair bot that aggregates standups to the CEO. */
+  isChair?: boolean;
+  hiredAt: string;
+}
+
+/** A workspace together with its employee roles (API shape). */
+export interface WorkspaceWithRoles extends Workspace {
+  roles: BotRole[];
+}
+
+export interface CreateWorkspaceRequest {
+  name: string;
+  source?: { kind: "url" | "idea"; value: string };
+  mission?: string;
+  avatarEmoji?: string;
+  scheme?: number;
+  /** New employee bots to create inside the workspace. */
+  members?: Array<{
+    name: string;
+    emoji?: string;
+    scheme?: number;
+    instructions?: string;
+    title: string;
+    department?: Department;
+    isChair?: boolean;
+  }>;
+  /** Existing owned bots to attach with a role. */
+  memberships?: Array<{
+    botId: string;
+    title: string;
+    department?: Department;
+    isChair?: boolean;
+    managerBotId?: string;
+  }>;
+}
+
+/* -------------------------------------------------------------------------- */
 /* Accounts, secrets, audit                                                    */
 /* -------------------------------------------------------------------------- */
 

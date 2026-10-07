@@ -4,6 +4,7 @@ import type {
   ApiKeyRecord,
   AuditRecord,
   BotRecord,
+  BotRoleRecord,
   ConnectionRecord,
   FileRecord,
   FriendRequestRecord,
@@ -22,6 +23,7 @@ import type {
   UsageRecord,
   UserRecord,
   WalletRecord,
+  WorkspaceRecord,
 } from "./types.js";
 import { SCHEMA_SQL } from "./schema.js";
 
@@ -326,6 +328,73 @@ export class PostgresStore implements Store {
       record.sessionId,
       record.id,
     ]);
+  }
+
+  async createWorkspace(record: WorkspaceRecord): Promise<void> {
+    await this.pool.query(
+      "INSERT INTO workspaces (id, owner_id, data, created_at, updated_at) VALUES ($1, $2, $3, $4, $5)",
+      [record.id, record.ownerId, record, record.createdAt, record.updatedAt],
+    );
+  }
+
+  async getWorkspace(id: string): Promise<WorkspaceRecord | null> {
+    const { rows } = await this.pool.query("SELECT data FROM workspaces WHERE id = $1", [id]);
+    return (rows[0]?.data as WorkspaceRecord) ?? null;
+  }
+
+  async listWorkspaces(ownerId: string): Promise<WorkspaceRecord[]> {
+    const { rows } = await this.pool.query(
+      "SELECT data FROM workspaces WHERE owner_id = $1 ORDER BY created_at ASC",
+      [ownerId],
+    );
+    return rows.map((row) => row.data as WorkspaceRecord);
+  }
+
+  async updateWorkspace(record: WorkspaceRecord): Promise<void> {
+    await this.pool.query("UPDATE workspaces SET data = $1, updated_at = $2 WHERE id = $3", [
+      record,
+      record.updatedAt,
+      record.id,
+    ]);
+  }
+
+  async deleteWorkspace(ownerId: string, id: string): Promise<boolean> {
+    const result = await this.pool.query("DELETE FROM workspaces WHERE owner_id = $1 AND id = $2", [
+      ownerId,
+      id,
+    ]);
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async setBotRole(record: BotRoleRecord): Promise<void> {
+    await this.pool.query(
+      "INSERT INTO workspace_roles (workspace_id, bot_id, data) VALUES ($1, $2, $3) " +
+        "ON CONFLICT (workspace_id, bot_id) DO UPDATE SET data = EXCLUDED.data",
+      [record.workspaceId, record.botId, record],
+    );
+  }
+
+  async getBotRole(workspaceId: string, botId: string): Promise<BotRoleRecord | null> {
+    const { rows } = await this.pool.query(
+      "SELECT data FROM workspace_roles WHERE workspace_id = $1 AND bot_id = $2",
+      [workspaceId, botId],
+    );
+    return (rows[0]?.data as BotRoleRecord) ?? null;
+  }
+
+  async listBotRoles(workspaceId: string): Promise<BotRoleRecord[]> {
+    const { rows } = await this.pool.query("SELECT data FROM workspace_roles WHERE workspace_id = $1", [
+      workspaceId,
+    ]);
+    return rows.map((row) => row.data as BotRoleRecord);
+  }
+
+  async deleteBotRole(workspaceId: string, botId: string): Promise<boolean> {
+    const result = await this.pool.query(
+      "DELETE FROM workspace_roles WHERE workspace_id = $1 AND bot_id = $2",
+      [workspaceId, botId],
+    );
+    return (result.rowCount ?? 0) > 0;
   }
 
   async createTask(task: Task): Promise<void> {

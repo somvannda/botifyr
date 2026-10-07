@@ -123,6 +123,19 @@ export async function summarizeConversation(text: string): Promise<string> {
   }
 }
 
+/** A single tool-less completion, for planning tasks (e.g. company onboarding). */
+export async function oneShot(input: { system: string; user: string; maxTokens: number }): Promise<string> {
+  const response = await getProvider().complete({
+    messages: [
+      { role: "system", content: input.system },
+      { role: "user", content: input.user },
+    ],
+    tools: [],
+    maxTokens: input.maxTokens,
+  });
+  return response.text ?? "";
+}
+
 export function runtimeInfo(): {
   provider: string;
   demo: boolean;

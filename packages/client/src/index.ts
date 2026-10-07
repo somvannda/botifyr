@@ -4,6 +4,7 @@ import type {
   Bot,
   BotFile,
   ConnectionInfo,
+  CreateWorkspaceRequest,
   LearnedSkill,
   MediaRecipe,
   ModelPricingRecord,
@@ -15,6 +16,7 @@ import type {
   Skill,
   Task,
   User,
+  WorkspaceWithRoles,
 } from "@botifyr/shared";
 
 /**
@@ -539,6 +541,50 @@ export class BotifyrClient {
     },
   ): Promise<Bot> {
     return this.request(`/v1/bots/${id}`, { method: "PUT", json: true, body: JSON.stringify(input) });
+  }
+
+  /* Company workspaces (see docs/company-workspace.md). */
+  listWorkspaces(): Promise<WorkspaceWithRoles[]> {
+    return this.request("/v1/workspaces");
+  }
+
+  getWorkspace(id: string): Promise<WorkspaceWithRoles> {
+    return this.request(`/v1/workspaces/${id}`);
+  }
+
+  createWorkspace(input: CreateWorkspaceRequest): Promise<WorkspaceWithRoles> {
+    return this.request("/v1/workspaces", { method: "POST", json: true, body: JSON.stringify(input) });
+  }
+
+  /** Propose an org chart from a website or an idea (creates nothing). */
+  planCompany(source: { kind: "url" | "idea"; value: string; name?: string }): Promise<CreateWorkspaceRequest> {
+    return this.request("/v1/workspaces/plan", {
+      method: "POST",
+      json: true,
+      body: JSON.stringify({ source }),
+    });
+  }
+
+  updateWorkspace(
+    id: string,
+    input: {
+      name?: string;
+      mission?: string;
+      status?: "onboarding" | "active" | "paused" | "archived";
+      avatarEmoji?: string;
+      scheme?: number;
+      ceoBotId?: string;
+    },
+  ): Promise<WorkspaceWithRoles> {
+    return this.request(`/v1/workspaces/${id}`, {
+      method: "PATCH",
+      json: true,
+      body: JSON.stringify(input),
+    });
+  }
+
+  deleteWorkspace(id: string): Promise<void> {
+    return this.request(`/v1/workspaces/${id}`, { method: "DELETE" });
   }
 
   listSessions(): Promise<Session[]> {

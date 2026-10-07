@@ -11,12 +11,16 @@ import type {
   AuthResponse,
   Bot,
   BotFile,
+  BotRole,
   ConnectionInfo,
+  CreateWorkspaceRequest,
   SecretSummary,
   ServerEvent,
   Session,
   Task,
   User,
+  Workspace,
+  WorkspaceWithRoles,
 } from "@botifyr/shared";
 import type { LocalChannel } from "@botifyr/channels";
 import { emit, subscribe } from "./events.js";
@@ -39,7 +43,8 @@ import { resolveTaskApproval } from "./approvals.js";
 import { handleNodeMessage, nodeInfo, registerNode } from "./nodes.js";
 import { createToken, hashPassword, hashToken, verifyPassword } from "./auth.js";
 import { encryptSecret } from "./vault.js";
-import { runTask, runtimeInfo, summarizeConversation } from "./runner.js";
+import { oneShot, runTask, runtimeInfo, summarizeConversation } from "./runner.js";
+import { planCompany, toDepartment } from "./company.js";
 import { createDockerComputerBackend } from "@botifyr/agent-core";
 import {
   chmabaConfigFromEnv,
@@ -2004,6 +2009,175 @@ export async function buildServer(options: ServerOptions) {
     await store.updateBot(bot);
     return bot;
   });
+
+  /* ---------------------------------------------------------------------- */
+  /* Company workspaces (see docs/company-workspace.md)                      */
+  /* ---------------------------------------------------------------------- */
+
+  const workspaceView = async (record: Workspace): Promise<WorkspaceWithRoles> => {
+    const roles: BotRole[] = await store.listBotRoles(record.id);
+    return { ...record, roles };
+  };
+
+  /** Propose an org chart from a website or an idea (creates nothing). */
+  app.post<{ Body: { source?: { kind?: string; value?: string }; name?: string } }>(
+    "/v1/workspaces/plan",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const value = (request.body?.source?.value ?? "").trim().slice(0, 1000);
+      if (!value) return reply.code(400).send({ error: "a website URL or an idea is required" });
+      const kind = request.body?.source?.kind === "url" ? "url" : "idea";
+      return planCompany({ kind, value, name: request.body?.name?.trim().slice(0, 60) }, oneShot);
+    },
+  );
+
+  app.get("/v1/workspaces", { preHandler: requireAuth }, async (request) => {
+    const userId = request.userId as string;
+    const workspaces = await store.listWorkspaces(userId);
+    return Promise.all(workspaces.map((workspace) => workspaceView(workspace)));
+  });
+
+  app.get<{ Params: { id: string } }>(
+    "/v1/workspaces/:id",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const workspace = await store.getWorkspace(request.params.id);
+      if (!workspace || workspace.ownerId !== userId) {
+        return reply.code(404).send({ error: "workspace not found" });
+      }
+      return workspaceView(workspace);
+    },
+  );
+
+  app.post<{ Body: CreateWorkspaceRequest }>(
+    "/v1/workspaces",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const name = (request.body?.name ?? "").trim().slice(0, 60);
+      if (!name) return reply.code(400).send({ error: "a workspace name is required" });
+
+      const now = new Date().toISOString();
+      const workspace: Workspace = {
+        id: randomUUID(),
+        ownerId: userId,
+        name,
+        source: {
+          kind: request.body?.source?.kind === "url" ? "url" : "idea",
+          value: (request.body?.source?.value ?? "").trim().slice(0, 500),
+        },
+        mission: (request.body?.mission ?? "").slice(0, 2000),
+        status: "active",
+        avatarEmoji: request.body?.avatarEmoji?.trim().slice(0, 8) || undefined,
+        scheme: Number.isInteger(request.body?.scheme) ? Number(request.body?.scheme) : undefined,
+        createdAt: now,
+        updatedAt: now,
+      };
+      await store.createWorkspace(workspace);
+
+      // New employee bots, each created with a role. The bot's `workspace`
+      // label matches the company name so the sidebar groups them together.
+      let chairBotId: string | undefined;
+      const members = Array.isArray(request.body?.members) ? request.body.members.slice(0, 20) : [];
+      for (const member of members) {
+        const botName = (member?.name ?? "").trim().slice(0, 40);
+        if (!botName) continue;
+        const bot = await createBotFor(userId, {
+          name: botName,
+          emoji: (member.emoji ?? "🤖").trim().slice(0, 8) || "🤖",
+          scheme: Number.isInteger(member.scheme) ? Number(member.scheme) : 0,
+          instructions: (member.instructions ?? "").slice(0, 4000),
+          workspace: name,
+        });
+        await store.setBotRole({
+          workspaceId: workspace.id,
+          botId: bot.id,
+          title: (member.title ?? "Member").trim().slice(0, 40) || "Member",
+          department: toDepartment(member.department),
+          isChair: member.isChair === true,
+          hiredAt: now,
+        });
+        if (member.isChair === true && !chairBotId) chairBotId = bot.id;
+      }
+
+      // Existing owned bots attached with a role.
+      const memberships = Array.isArray(request.body?.memberships)
+        ? request.body.memberships.slice(0, 50)
+        : [];
+      if (memberships.length > 0) {
+        const owned = new Set((await store.listBots(userId)).map((entry) => entry.id));
+        for (const membership of memberships) {
+          if (!membership?.botId || !owned.has(membership.botId)) continue;
+          await store.setBotRole({
+            workspaceId: workspace.id,
+            botId: membership.botId,
+            title: (membership.title ?? "Member").trim().slice(0, 40) || "Member",
+            department: toDepartment(membership.department),
+            managerBotId: membership.managerBotId,
+            isChair: membership.isChair === true,
+            hiredAt: now,
+          });
+          if (membership.isChair === true && !chairBotId) chairBotId = membership.botId;
+        }
+      }
+
+      if (chairBotId) {
+        workspace.ceoBotId = chairBotId;
+        await store.updateWorkspace(workspace);
+      }
+      return reply.code(201).send(await workspaceView(workspace));
+    },
+  );
+
+  app.patch<{
+    Params: { id: string };
+    Body: {
+      name?: string;
+      mission?: string;
+      status?: Workspace["status"];
+      avatarEmoji?: string;
+      scheme?: number;
+      ceoBotId?: string;
+    };
+  }>("/v1/workspaces/:id", { preHandler: requireAuth }, async (request, reply) => {
+    const userId = request.userId as string;
+    const workspace = await store.getWorkspace(request.params.id);
+    if (!workspace || workspace.ownerId !== userId) {
+      return reply.code(404).send({ error: "workspace not found" });
+    }
+    if (typeof request.body?.name === "string" && request.body.name.trim()) {
+      workspace.name = request.body.name.trim().slice(0, 60);
+    }
+    if (typeof request.body?.mission === "string") {
+      workspace.mission = request.body.mission.slice(0, 2000);
+    }
+    const status = request.body?.status;
+    if (status && ["onboarding", "active", "paused", "archived"].includes(status)) {
+      workspace.status = status;
+    }
+    if (typeof request.body?.avatarEmoji === "string") {
+      workspace.avatarEmoji = request.body.avatarEmoji.trim().slice(0, 8) || undefined;
+    }
+    if (Number.isInteger(request.body?.scheme)) workspace.scheme = Number(request.body.scheme);
+    if (typeof request.body?.ceoBotId === "string") {
+      workspace.ceoBotId = request.body.ceoBotId || undefined;
+    }
+    workspace.updatedAt = new Date().toISOString();
+    await store.updateWorkspace(workspace);
+    return workspaceView(workspace);
+  });
+
+  app.delete<{ Params: { id: string } }>(
+    "/v1/workspaces/:id",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const ok = await store.deleteWorkspace(userId, request.params.id);
+      if (!ok) return reply.code(404).send({ error: "workspace not found" });
+      return reply.code(204).send();
+    },
+  );
 
   /* Bot Library: text files a bot can keep and the agent can read/write. */
   const toBotFile = (record: FileRecord): BotFile => ({

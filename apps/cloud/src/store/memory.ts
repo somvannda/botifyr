@@ -3,6 +3,7 @@ import type {
   ApiKeyRecord,
   AuditRecord,
   BotRecord,
+  BotRoleRecord,
   ConnectionRecord,
   FileRecord,
   FriendRequestRecord,
@@ -21,6 +22,7 @@ import type {
   UsageRecord,
   UserRecord,
   WalletRecord,
+  WorkspaceRecord,
 } from "./types.js";
 
 /** Zero-setup store for development and tests. Nothing survives a restart. */
@@ -31,6 +33,9 @@ export class MemoryStore implements Store {
   private tokens = new Map<string, { userId: string; expiresAt: string; kind: string }>();
   private sessions = new Map<string, SessionRecord>();
   private bots = new Map<string, BotRecord>();
+  private workspaces = new Map<string, WorkspaceRecord>();
+  /** Keyed by `${workspaceId}:${botId}`. */
+  private botRoles = new Map<string, BotRoleRecord>();
   private tasks = new Map<string, Task>();
   private audit: AuditRecord[] = [];
   private secrets = new Map<string, SecretRecord>();
@@ -237,6 +242,55 @@ export class MemoryStore implements Store {
 
   async updateBot(record: BotRecord): Promise<void> {
     this.bots.set(record.id, structuredClone(record));
+  }
+
+  async createWorkspace(record: WorkspaceRecord): Promise<void> {
+    this.workspaces.set(record.id, structuredClone(record));
+  }
+
+  async getWorkspace(id: string): Promise<WorkspaceRecord | null> {
+    const record = this.workspaces.get(id);
+    return record ? structuredClone(record) : null;
+  }
+
+  async listWorkspaces(ownerId: string): Promise<WorkspaceRecord[]> {
+    return [...this.workspaces.values()]
+      .filter((workspace) => workspace.ownerId === ownerId)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      .map((workspace) => structuredClone(workspace));
+  }
+
+  async updateWorkspace(record: WorkspaceRecord): Promise<void> {
+    this.workspaces.set(record.id, structuredClone(record));
+  }
+
+  async deleteWorkspace(ownerId: string, id: string): Promise<boolean> {
+    const record = this.workspaces.get(id);
+    if (!record || record.ownerId !== ownerId) return false;
+    this.workspaces.delete(id);
+    for (const [key, role] of [...this.botRoles.entries()]) {
+      if (role.workspaceId === id) this.botRoles.delete(key);
+    }
+    return true;
+  }
+
+  async setBotRole(record: BotRoleRecord): Promise<void> {
+    this.botRoles.set(`${record.workspaceId}:${record.botId}`, structuredClone(record));
+  }
+
+  async getBotRole(workspaceId: string, botId: string): Promise<BotRoleRecord | null> {
+    const record = this.botRoles.get(`${workspaceId}:${botId}`);
+    return record ? structuredClone(record) : null;
+  }
+
+  async listBotRoles(workspaceId: string): Promise<BotRoleRecord[]> {
+    return [...this.botRoles.values()]
+      .filter((role) => role.workspaceId === workspaceId)
+      .map((role) => structuredClone(role));
+  }
+
+  async deleteBotRole(workspaceId: string, botId: string): Promise<boolean> {
+    return this.botRoles.delete(`${workspaceId}:${botId}`);
   }
 
   async createTask(task: Task): Promise<void> {
