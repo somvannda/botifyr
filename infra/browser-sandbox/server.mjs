@@ -78,6 +78,19 @@ async function tryStartPlayback(active) {
           }
         }
       }
+      // Some players only reveal the video after a "Play Now"-style button.
+      const labeled = Array.from(document.querySelectorAll("button, [role='button'], a")).find((element) => {
+        const text = (element.textContent ?? "").trim();
+        const label = `${element.getAttribute("aria-label") ?? ""} ${element.getAttribute("title") ?? ""}`;
+        return text.length > 0 && text.length < 30 && /play/i.test(`${text} ${label}`);
+      });
+      if (labeled instanceof HTMLElement) {
+        try {
+          labeled.click();
+        } catch {
+          /* ignore */
+        }
+      }
     });
   } catch {
     /* ignore */
