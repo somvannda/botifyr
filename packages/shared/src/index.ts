@@ -421,6 +421,8 @@ export interface BotFile {
   name: string;
   size: number;
   updatedAt: string;
+  /** Optional department/category the file belongs to. */
+  department?: Department;
 }
 
 export interface CreateSecretRequest {
@@ -504,6 +506,26 @@ export interface ModelPricingRecord {
   outputCentsPerM: number;
   markupPercent?: number;
   enabled: boolean;
+  updatedAt: string;
+}
+
+/** Roles in the media pipeline that each route to their own provider/model. */
+export type ProviderRole = "brain" | "translator" | "asr" | "tts" | "lipsync";
+
+/**
+ * One role's provider configuration (video translation, docs/video-translation.md).
+ * Admin-managed; `keyRef` names an encrypted vault secret holding the API key.
+ */
+export interface ProviderRoleConfig {
+  role: ProviderRole;
+  provider: string;
+  baseUrl?: string;
+  model?: string;
+  keyRef?: string;
+  enabled: boolean;
+  isDefault: boolean;
+  /** Per-media-minute price in cents, used for billing. */
+  pricing?: { perMinuteCents: number };
   updatedAt: string;
 }
 

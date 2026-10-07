@@ -635,6 +635,18 @@ export class BotifyrClient {
     return this.request(`/v1/workspaces/${workspaceId}/work`, { method: "DELETE" });
   }
 
+  /** Update a file's content or category (department). */
+  updateFile(
+    id: string,
+    input: { content?: string; department?: string },
+  ): Promise<{ id: string; name: string; department?: string }> {
+    return this.request(`/v1/files/${id}`, {
+      method: "PATCH",
+      json: true,
+      body: JSON.stringify(input),
+    });
+  }
+
   /** Tasks across the company's employees that are waiting for CEO approval. */
   listWorkspaceNeeds(workspaceId: string): Promise<Task[]> {
     return this.request(`/v1/workspaces/${workspaceId}/needs`);
@@ -908,7 +920,9 @@ export class BotifyrClient {
   }
 
   /** The shared company wiki (workspace-scoped files). */
-  listWorkspaceFiles(workspaceId: string): Promise<Array<{ id: string; name: string; content: string }>> {
+  listWorkspaceFiles(
+    workspaceId: string,
+  ): Promise<Array<{ id: string; name: string; content: string; department?: string }>> {
     return this.request(`/v1/workspaces/${workspaceId}/wiki`);
   }
 
