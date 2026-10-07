@@ -53,6 +53,7 @@ export function createDockerComputerBackend(options: DockerComputerOptions = {})
     type: (text) => action("type", { text }),
     key: (key) => action("key", { key }),
     scroll: (amount) => action("scroll", { amount }),
+    record: (start: boolean) => action(start ? "record_start" : "record_stop", {}),
     streamUrl: async () => {
       try {
         return await handle.ensureStarted();

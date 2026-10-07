@@ -428,6 +428,15 @@ export class BotifyrClient {
     });
   }
 
+  /** Start/stop a screen recording of a session's desktop. */
+  recordComputer(sessionId: string, on: boolean): Promise<{ ok: boolean; output: string }> {
+    return this.request(`/v1/sessions/${encodeURIComponent(sessionId)}/computer/record`, {
+      method: "POST",
+      json: true,
+      body: JSON.stringify({ on }),
+    });
+  }
+
   adminSkills(): Promise<AdminSkill[]> {
     return this.request("/admin/learned-skills");
   }

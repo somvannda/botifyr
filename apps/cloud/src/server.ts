@@ -3025,6 +3025,58 @@ export async function buildServer(options: ServerOptions) {
     },
   );
 
+  /* Start/stop screen recording, and download the latest recording. */
+  app.post<{ Params: { id: string }; Body: { on?: boolean } }>(
+    "/v1/sessions/:id/computer/record",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const session = await store.getSession(request.params.id);
+      if (!session || session.userId !== request.userId) {
+        return reply.code(404).send({ error: "session not found" });
+      }
+      const backend = getComputerSandbox(`session:${session.id}`);
+      if (!backend?.record) return reply.code(409).send({ error: "recording isn't available" });
+      const result = await backend.record(request.body?.on !== false);
+      return { ok: result.ok, output: result.output };
+    },
+  );
+
+  app.get<{ Params: { id: string } }>(
+    "/v1/sessions/:id/computer/recording",
+    { preHandler: requireAuth },
+    async (request, reply): Promise<void> => {
+      const session = await store.getSession(request.params.id);
+      if (!session || session.userId !== request.userId) {
+        reply.code(404).send({ error: "session not found" });
+        return;
+      }
+      const backend = getComputerSandbox(`session:${session.id}`);
+      const base = backend?.streamUrl ? await backend.streamUrl() : null;
+      if (!base) {
+        reply.code(404).send({ error: "no live desktop" });
+        return;
+      }
+      const upstream = await fetch(`${base}/recording`);
+      if (!upstream.ok || !upstream.body) {
+        reply.code(404).send({ error: "no recording yet" });
+        return;
+      }
+      reply.hijack();
+      reply.raw.writeHead(200, { "content-type": "video/mp4", "cache-control": "no-store" });
+      const reader = upstream.body.getReader();
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          reply.raw.write(Buffer.from(value));
+        }
+      } catch {
+        // client/upstream closed
+      }
+      reply.raw.end();
+    },
+  );
+
   app.get<{ Params: { id: string } }>(
     "/v1/sessions/:id/stream",
     { preHandler: requireAuth },

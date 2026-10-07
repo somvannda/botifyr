@@ -3824,6 +3824,13 @@ body {
   color: var(--muted);
 }
 
+.computer-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .bot-panel-screen-empty {
   display: flex;
   flex-direction: column;

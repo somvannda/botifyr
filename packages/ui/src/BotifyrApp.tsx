@@ -280,6 +280,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [topUpOpen, setTopUpOpen] = useState(false);
   const [showBotPanel, setShowBotPanel] = useState(() => localStorage.getItem("botifyr.botPanel") !== "0");
   const [screenOn, setScreenOn] = useState(false);
+  const [recording, setRecording] = useState(false);
   const [botPanelTab, setBotPanelTab] = useState<"details" | "library" | "computer">("details");
   const [labels, setLabels] = useState<Record<string, string>>(() => {
     try {
@@ -667,6 +668,29 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     };
     const key = map[event.key];
     if (key) void client.computerInput(activeSessionId, "key", { key }).catch(() => {});
+  }
+
+  /** Start/stop recording the desktop (teach-by-demonstration). */
+  async function toggleRecord(): Promise<void> {
+    if (!activeSessionId) return;
+    const next = !recording;
+    try {
+      await client.recordComputer(activeSessionId, next);
+      setRecording(next);
+    } catch (err: unknown) {
+      setError(messageOf(err));
+    }
+  }
+
+  /** Save the recorded demonstration as a learned task (pending review). */
+  async function saveTask(): Promise<void> {
+    if (!activeSessionId) return;
+    try {
+      const { name } = await client.learnTask(activeSessionId);
+      pushToast({ kind: "task", title: "Task saved", body: `"${name}" is pending review.` });
+    } catch (err: unknown) {
+      setError(messageOf(err));
+    }
   }
 
   /** Open the media viewer at an item so you can browse prev/next. */
@@ -3711,9 +3735,31 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
               onWheel={(event) => onScreenWheel(event)}
               onContextMenu={(event) => event.preventDefault()}
             />
-            <p className="computer-hint">
-              Click and type directly — the sandbox receives your mouse and keyboard.
-            </p>
+            <div className="computer-foot">
+              <button
+                className={`ghost small${recording ? " danger" : ""}`}
+                type="button"
+                onClick={() => void toggleRecord()}
+              >
+                {recording ? "● Stop recording" : "Record"}
+              </button>
+              {!recording && (
+                <a
+                  className="ghost small"
+                  href={`${CLOUD_URL}/v1/sessions/${activeSessionId}/computer/recording?token=${encodeURIComponent(token())}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Download recording
+                </a>
+              )}
+              <button className="ghost small" type="button" onClick={() => void saveTask()}>
+                Save as task
+              </button>
+              <span className="computer-hint">
+                Click and type directly — the sandbox receives your mouse and keyboard.
+              </span>
+            </div>
           </div>
         </div>
       )}

@@ -13,6 +13,8 @@ export interface ComputerBackend {
   type(text: string): Promise<ToolResult>;
   key(key: string): Promise<ToolResult>;
   scroll(amount: number): Promise<ToolResult>;
+  /** Start/stop a screen recording (teach-by-demonstration). */
+  record?(start: boolean): Promise<ToolResult>;
   /** Base URL of the live framebuffer stream, if the backend supports one. */
   streamUrl?(): Promise<string | null>;
   close(): Promise<void>;
