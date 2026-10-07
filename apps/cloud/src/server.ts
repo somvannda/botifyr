@@ -4509,21 +4509,74 @@ export async function buildServer(options: ServerOptions) {
   );
 
   /* Tasks that were mid-flight when the process last stopped can't be resumed
-     from memory, so mark them failed instead of leaving them "running" forever.
-     Re-sending the request re-runs them (yt-dlp resumes partial files). */
+     from memory. Deterministic batch downloads are safe to re-enqueue: yt-dlp
+     skips finished files (--no-overwrites) and resumes partials (--continue).
+     Everything else is marked failed; re-sending the message re-runs it. */
   try {
     const orphaned = await store.listActiveTasks();
+    let resumed = 0;
     for (const task of orphaned) {
-      task.status = "failed";
-      task.error = "Interrupted when the cloud restarted — send the message again to resume.";
-      task.updatedAt = new Date().toISOString();
+      const plan = confidentPlan(task.goal);
+      const session = await store.getSession(task.sessionId).catch(() => null);
+      const resumeCount = task.steps.filter((step) => step.id.startsWith(`resume-${task.id}`)).length;
+      const resumable =
+        session !== null && plan.initialToolCall?.name === "youtube.download" && resumeCount < 2;
+
       for (const step of task.steps) {
         if (step.status === "running" || step.status === "pending") step.status = "failed";
       }
+
+      if (resumable && session && plan.initialToolCall) {
+        task.steps.push({
+          id: `resume-${task.id}-${Date.now()}`,
+          index: task.steps.length,
+          title: "Resuming download",
+          detail: "The cloud restarted mid-download; completed files are kept.",
+          status: "done",
+          finishedAt: new Date().toISOString(),
+        });
+        task.status = "queued";
+        task.error = undefined;
+        task.updatedAt = new Date().toISOString();
+        await store.updateTask(task);
+        emit({ type: "task.updated", task });
+        rememberTask(task.id, task.sessionId, session.userId);
+
+        const bot = session.botId ? await store.getBot(session.botId).catch(() => null) : null;
+        const history = session.messages
+          .slice(-(maxHistoryTurns * 2))
+          .map((message) => ({ role: message.role, content: message.content.slice(0, maxMessageChars) }));
+        void runTask(
+          {
+            store,
+            userId: session.userId,
+            history,
+            local: false,
+            instructions:
+              [bot?.instructions, skillInstructions(bot?.skills)].filter(Boolean).join("\n\n") || undefined,
+            summary: session.summary,
+            vaultKey,
+            author: bot ? { id: bot.id } : undefined,
+            autoApprove: bot?.autoApprove === true,
+            initialToolCall: plan.initialToolCall,
+            initialToolOnly: true,
+          },
+          task,
+        ).catch((error) => app.log.error({ err: error, taskId: task.id }, "media resume failed"));
+        resumed += 1;
+        continue;
+      }
+
+      task.status = "failed";
+      task.error = "Interrupted when the cloud restarted — send the message again to resume.";
+      task.updatedAt = new Date().toISOString();
       await store.updateTask(task);
     }
     if (orphaned.length > 0) {
-      app.log.warn({ count: orphaned.length }, "reconciled interrupted tasks as failed");
+      app.log.warn(
+        { count: orphaned.length, resumed },
+        "reconciled interrupted tasks (batch downloads resumed)",
+      );
     }
   } catch (error) {
     app.log.error({ err: error }, "task reconciliation failed");
