@@ -20,6 +20,7 @@ import { companyContext, isBudgetExhausted } from "./company.js";
 import { createCompanyTools } from "./company-tools.js";
 import { createDelegationTools } from "./delegation-tools.js";
 import { createSocialTools, notConnectedSocial } from "./social-tools.js";
+import { createTelegramSocialClient } from "./social-telegram.js";
 import { createDesignTools } from "./design-tools.js";
 import { createEscalationTools } from "./escalation-tools.js";
 import { removeDeniedTools } from "./tool-capabilities.js";
@@ -408,7 +409,15 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
     const role = roles.find((entry) => entry.botId === authorBot.id);
     const department = role?.department;
     if (department === "marketing" || department === "sales") {
-      tools.push(...createSocialTools(notConnectedSocial()));
+      const record = await store.getUserById(userId).catch(() => null);
+      const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
+      tools.push(
+        ...createSocialTools(
+          telegramToken && record?.telegramChatId
+            ? createTelegramSocialClient({ token: telegramToken, chatId: record.telegramChatId })
+            : notConnectedSocial(),
+        ),
+      );
     }
     if (department === "design" || department === "marketing") {
       tools.push(...createDesignTools(store, userId, authorBot.id));
