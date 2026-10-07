@@ -156,6 +156,43 @@ function token(): string {
 
 const PENDING_KEY = "botifyr.pendingState";
 
+/** A HQ footer icon button that flashes accent-coloured when clicked. */
+function HqButton({
+  title,
+  onClick,
+  primary,
+  danger,
+  disabled,
+  children,
+}: {
+  title: string;
+  onClick: () => void;
+  primary?: boolean;
+  danger?: boolean;
+  disabled?: boolean;
+  children: ReactNode;
+}) {
+  const [flash, setFlash] = useState(false);
+  return (
+    <button
+      className={`hq-icon-btn${primary ? " primary" : ""}${danger ? " danger" : ""}${
+        flash ? " active" : ""
+      }`}
+      type="button"
+      title={title}
+      aria-label={title}
+      disabled={disabled}
+      onClick={() => {
+        setFlash(true);
+        window.setTimeout(() => setFlash(false), 450);
+        onClick();
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
 export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const client = useMemo(() => new BotifyrClient(CLOUD_URL), []);
   const [user, setUser] = useState<User | null>(null);
@@ -5278,88 +5315,63 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                     <span className="hq-autonomy">{autonomy === "manual" ? "Manual" : autonomy}</span>
                     {autonomy === "manual" ? (
                       <>
-                        <button
-                          className="hq-icon-btn primary"
-                          type="button"
-                          disabled={boardBusy}
+                        <HqButton
+                          primary
                           title="Activate (supervised) — schedules on, approvals on"
-                          aria-label="Activate (supervised)"
+                          disabled={boardBusy}
                           onClick={() => void setAutonomy("supervised")}
                         >
                           <PowerIcon size={16} />
-                        </button>
-                        <button
-                          className="hq-icon-btn"
-                          type="button"
-                          disabled={boardBusy}
+                        </HqButton>
+                        <HqButton
                           title="Autonomous — act without asking (within grants and budget)"
-                          aria-label="Autonomous"
+                          disabled={boardBusy}
                           onClick={() => void setAutonomy("autonomous")}
                         >
                           <SparkIcon size={16} />
-                        </button>
+                        </HqButton>
                       </>
                     ) : (
-                      <button
-                        className="hq-icon-btn"
-                        type="button"
-                        disabled={boardBusy}
+                      <HqButton
                         title="Deactivate — back to manual, schedules off"
-                        aria-label="Deactivate"
+                        disabled={boardBusy}
                         onClick={() => void setAutonomy("manual")}
                       >
                         <PowerIcon size={16} />
-                      </button>
+                      </HqButton>
                     )}
-                    <button
-                      className="hq-icon-btn"
-                      type="button"
-                      disabled={boardBusy}
+                    <HqButton
                       title="Run now — make every employee work now"
-                      aria-label="Run now"
+                      disabled={boardBusy}
                       onClick={() => void runNow()}
                     >
                       <PlayIcon size={16} />
-                    </button>
-                    <button
-                      className="hq-icon-btn"
-                      type="button"
-                      disabled={boardBusy}
+                    </HqButton>
+                    <HqButton
                       title="Trust all — skip approval prompts for every employee"
-                      aria-label="Trust all"
+                      disabled={boardBusy}
                       onClick={() => void trustAll()}
                     >
                       <ShieldIcon size={16} />
-                    </button>
-                    <button
-                      className="hq-icon-btn"
-                      type="button"
-                      disabled={boardBusy}
+                    </HqButton>
+                    <HqButton
                       title={paused ? "Resume — let the team work again" : "Pause — stop autonomous runs"}
-                      aria-label={paused ? "Resume" : "Pause"}
+                      disabled={boardBusy}
                       onClick={() => void setCompanyStatus(paused ? "active" : "paused")}
                     >
                       {paused ? <PlayIcon size={16} /> : <PauseIcon size={16} />}
-                    </button>
-                    <button
-                      className="hq-icon-btn danger"
-                      type="button"
-                      disabled={boardBusy}
+                    </HqButton>
+                    <HqButton
+                      danger
                       title="Stop all — cancel every running task"
-                      aria-label="Stop all"
+                      disabled={boardBusy}
                       onClick={() => void stopCompany()}
                     >
                       <StopIcon size={16} />
-                    </button>
-                    <button
-                      className="hq-icon-btn"
-                      type="button"
-                      title="Close"
-                      aria-label="Close"
-                      onClick={closeBoard}
-                    >
+                    </HqButton>
+                    <HqButton title="Close" onClick={closeBoard}>
                       <CloseIcon size={16} />
-                    </button>
+                    </HqButton>
                   </>
                 );
               })()}

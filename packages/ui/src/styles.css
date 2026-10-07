@@ -715,6 +715,19 @@ body {
   transform: translateY(1px);
 }
 
+/* Brief flash after a click (set by HqButton). */
+.hq-icon-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.hq-icon-btn.danger.active {
+  background: #f87171;
+  border-color: #f87171;
+  color: #fff;
+}
+
 .hq-icon-btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
