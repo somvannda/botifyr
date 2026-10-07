@@ -611,6 +611,27 @@ body {
   color: #fff;
 }
 
+.hq-subhead {
+  margin: 14px 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.hq-repo-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.hq-repo-row .workspace-input {
+  flex: 1;
+  min-width: 0;
+}
+
 .hq-autonomy {
   align-self: center;
   padding: 3px 8px;

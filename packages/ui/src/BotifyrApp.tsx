@@ -13,6 +13,7 @@ import type {
   BotRole,
   CapabilityGrant,
   ChatMessage,
+  CodeRepo,
   CompanyReport,
   ConnectionInfo,
   CreateWorkspaceRequest,
@@ -259,6 +260,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [wizardBudget, setWizardBudget] = useState("");
   const [wizardActivate, setWizardActivate] = useState(false);
   const [boardWorkspace, setBoardWorkspace] = useState<{ id: string; name: string } | null>(null);
+  const [repoName, setRepoName] = useState("");
+  const [repoPath, setRepoPath] = useState("");
   const [boardItems, setBoardItems] = useState<Array<WorkItem>>([]);
   const [boardTitle, setBoardTitle] = useState("");
   const [boardBusy, setBoardBusy] = useState(false);
@@ -1284,6 +1287,19 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     if (!workspace) return;
     await client.updateWorkspace(workspace.id, { status }).catch(() => {});
     setWorkspaces(await client.listWorkspaces().catch(() => workspaces));
+  }
+
+  /** Save the company's connected code repositories (read-only for engineering). */
+  async function saveRepos(next: CodeRepo[]) {
+    const workspace = boardWorkspace;
+    if (!workspace) return;
+    setBoardBusy(true);
+    try {
+      const updated = await client.updateWorkspace(workspace.id, { repos: next }).catch(() => null);
+      if (updated) setWorkspaces(await client.listWorkspaces().catch(() => workspaces));
+    } finally {
+      setBoardBusy(false);
+    }
   }
 
   /** One-click halt: cancel every running task across the company's employees. */
@@ -4867,22 +4883,89 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
               )}
 
               {hqTab === "office" && (
-                <ul className="board-list">
-                  {(workspaceByName.get(boardWorkspace.name)?.roles ?? []).map((role) => {
-                    const bot = bots.find((entry) => entry.id === role.botId);
-                    return (
-                      <li key={role.botId} className="board-item">
-                        <span className="board-title">{role.title}</span>
-                        <span className="board-phase">{role.department}</span>
-                        {bot && (
-                          <button className="ghost small" type="button" onClick={() => openEmployee(bot)}>
-                            Open screen
-                          </button>
-                        )}
+                <>
+                  <ul className="board-list">
+                    {(workspaceByName.get(boardWorkspace.name)?.roles ?? []).map((role) => {
+                      const bot = bots.find((entry) => entry.id === role.botId);
+                      return (
+                        <li key={role.botId} className="board-item">
+                          <span className="board-title">{role.title}</span>
+                          <span className="board-phase">{role.department}</span>
+                          {bot && (
+                            <button className="ghost small" type="button" onClick={() => openEmployee(bot)}>
+                              Open screen
+                            </button>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+
+                  <h4 className="hq-subhead">Code repositories</h4>
+                  <p className="company-hint">
+                    Read-only: engineering agents can browse and search a connected checkout.
+                  </p>
+                  <ul className="board-list">
+                    {(workspaceByName.get(boardWorkspace.name)?.repos ?? []).map((repo) => (
+                      <li key={repo.id} className="board-item">
+                        <span className="board-title">{repo.name}</span>
+                        <span className="board-phase">{repo.path}</span>
+                        <button
+                          className="ghost small"
+                          type="button"
+                          disabled={boardBusy}
+                          onClick={() =>
+                            void saveRepos(
+                              (workspaceByName.get(boardWorkspace.name)?.repos ?? []).filter(
+                                (entry) => entry.id !== repo.id,
+                              ),
+                            )
+                          }
+                        >
+                          Remove
+                        </button>
                       </li>
-                    );
-                  })}
-                </ul>
+                    ))}
+                  </ul>
+                  <div className="hq-repo-row">
+                    <input
+                      className="workspace-input"
+                      placeholder="Name (e.g. web)"
+                      value={repoName}
+                      onChange={(event) => setRepoName(event.target.value)}
+                      maxLength={60}
+                    />
+                    <input
+                      className="workspace-input"
+                      placeholder="Server-local path (e.g. /repos/app)"
+                      value={repoPath}
+                      onChange={(event) => setRepoPath(event.target.value)}
+                      maxLength={400}
+                    />
+                    <button
+                      className="ghost small"
+                      type="button"
+                      disabled={boardBusy || !repoPath.trim()}
+                      onClick={() => {
+                        const repos = workspaceByName.get(boardWorkspace.name)?.repos ?? [];
+                        void saveRepos([
+                          ...repos,
+                          {
+                            id: crypto.randomUUID(),
+                            name: repoName.trim() || "repo",
+                            path: repoPath.trim(),
+                            createdAt: new Date().toISOString(),
+                          },
+                        ]).then(() => {
+                          setRepoName("");
+                          setRepoPath("");
+                        });
+                      }}
+                    >
+                      Connect
+                    </button>
+                  </div>
+                </>
               )}
 
               {hqTab === "wiki" && (
