@@ -232,6 +232,9 @@ function buildTools(
       ...createMediaTools(shellBackend, `${downloadsDir}/${task.id}`, getCookies, {
         quality: Number(process.env.BOTIFYR_DOWNLOAD_QUALITY ?? 720),
         audioOnly: (process.env.BOTIFYR_DOWNLOAD_AUDIO ?? "0") === "1",
+        // Save subtitle tracks (English + Khmer) next to the video when available.
+        subtitles: (process.env.BOTIFYR_DOWNLOAD_SUBS ?? "1") === "1",
+        subtitleLangs: process.env.BOTIFYR_DOWNLOAD_SUB_LANGS ?? "en,km",
         // Approved per-domain recipes are applied on a yt-dlp miss; the bot can
         // propose new ones (saved pending for admin approval).
         getRecipe: async (url) => {
@@ -361,8 +364,7 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
     if (company?.dna) companyBrief = companyContext(company.dna);
   }
   const instructions =
-    [companyBrief, deps.instructions, skillIndex, localInstruction].filter(Boolean).join("\n\n") ||
-    undefined;
+    [companyBrief, deps.instructions, skillIndex, localInstruction].filter(Boolean).join("\n\n") || undefined;
   if (hasComputer) {
     task.liveStream = true;
     task.updatedAt = new Date().toISOString();

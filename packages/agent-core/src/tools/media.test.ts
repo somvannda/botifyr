@@ -65,6 +65,26 @@ describe("youtube.download", () => {
     expect(commands.some((command) => command.includes("height<=480"))).toBe(true);
   });
 
+  it("writes subtitles next to the video when enabled", async () => {
+    const { backend, commands } = fakeBackend();
+    const tool = createMediaTools(backend, "/d", undefined, {
+      subtitles: true,
+      subtitleLangs: "en,km",
+    }).tools.find((entry) => entry.name === "youtube.download");
+    if (!tool) throw new Error("youtube.download not found");
+    const result = await tool.run({ url: "https://youtu.be/a" }, ctx);
+
+    expect(result.ok).toBe(true);
+    expect(commands.some((entry) => entry.includes("--write-auto-subs"))).toBe(true);
+    expect(commands.some((entry) => entry.includes("--sub-langs 'en,km'"))).toBe(true);
+  });
+
+  it("does not write subtitles by default", async () => {
+    const { backend, commands } = fakeBackend();
+    await downloadTool(backend).run({ url: "https://youtu.be/a" }, ctx);
+    expect(commands.some((entry) => entry.includes("--write-subs"))).toBe(false);
+  });
+
   it("searches YouTube via yt-dlp", async () => {
     const { backend, commands } = fakeBackend();
     const tool = createMediaTools(backend, "/d").tools.find((entry) => entry.name === "youtube.search");

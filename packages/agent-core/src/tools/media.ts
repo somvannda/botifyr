@@ -50,6 +50,10 @@ export interface MediaToolOptions {
    * For SPA players whose stream URL isn't in the HTML.
    */
   sniffMedia?: (url: string) => Promise<string | null>;
+  /** Also save subtitle tracks (as `.srt`) next to the video when available. */
+  subtitles?: boolean;
+  /** Preferred subtitle languages, e.g. `en,km` (default). */
+  subtitleLangs?: string;
 }
 
 export function createMediaTools(
@@ -83,6 +87,12 @@ export function createMediaTools(
     const cookies = await cookieArg();
     const template = `'${outDir}/%(title)s [%(id)s].%(ext)s'`;
     const common = `${cookies}--no-playlist --ignore-errors --continue --no-overwrites --no-warnings --no-progress`;
+    // Save subtitle tracks next to the video when the site provides them.
+    const subtitleLangs = (options.subtitleLangs ?? "en,km").replace(/[^a-zA-Z0-9,\-_]/g, "");
+    const subsFlag =
+      options.subtitles === true && subtitleLangs
+        ? `--write-subs --write-auto-subs --sub-langs '${subtitleLangs}' --convert-subs srt `
+        : "";
     await backend.exec(`mkdir -p '${outDir}'`);
 
     let ok = true;
@@ -112,7 +122,7 @@ export function createMediaTools(
         audio
           ? `yt-dlp ${common} -x --audio-format mp3 -o ${template} '${candidate}'`
           : `yt-dlp ${common} -f 'bv*[height<=${height}]+ba/b[height<=${height}]' ` +
-              `--merge-output-format mp4 -o ${template} '${candidate}'`,
+              `--merge-output-format mp4 ${subsFlag}-o ${template} '${candidate}'`,
       );
       return retry.ok;
     };
@@ -126,7 +136,7 @@ export function createMediaTools(
         audio
           ? `yt-dlp ${common} -x --audio-format mp3 -o ${template} '${candidate}'`
           : `yt-dlp ${common} -f 'bv*[height<=${height}]+ba/b[height<=${height}]' ` +
-              `--merge-output-format mp4 -o ${template} '${candidate}'`,
+              `--merge-output-format mp4 ${subsFlag}-o ${template} '${candidate}'`,
       );
       return retry.ok;
     };
@@ -148,7 +158,7 @@ export function createMediaTools(
         audio
           ? `yt-dlp ${common} -x --audio-format mp3 -o ${template} '${candidate}'`
           : `yt-dlp ${common} -f 'bv*[height<=${height}]+ba/b[height<=${height}]' ` +
-              `--merge-output-format mp4 -o ${template} '${candidate}'`,
+              `--merge-output-format mp4 ${subsFlag}-o ${template} '${candidate}'`,
       );
       return retry.ok;
     };
@@ -159,7 +169,7 @@ export function createMediaTools(
       const command = audio
         ? `yt-dlp ${common} -x --audio-format mp3 -o ${template} '${url}'`
         : `yt-dlp ${common} -f 'bv*[height<=${height}]+ba/b[height<=${height}]' ` +
-          `--merge-output-format mp4 -o ${template} '${url}'`;
+          `--merge-output-format mp4 ${subsFlag}-o ${template} '${url}'`;
       const result = await backend.exec(command);
       if (!result.ok) {
         const recovered = (await tryRecipe(url)) || (await trySniff(url)) || (await tryFallback(url));
