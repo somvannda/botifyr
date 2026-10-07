@@ -53,6 +53,129 @@ export function companyContext(dna: CompanyDNA): string {
   );
 }
 
+export interface SourceInput {
+  kind: "url" | "idea";
+  value: string;
+}
+
+export interface AnalyzeDeps {
+  complete: CompleteFn;
+  /** Fetch a page's HTML; injected so tests don't hit the network. */
+  fetchText?: (url: string) => Promise<string>;
+}
+
+/** Pull cheap signals (title/meta/headings + visible text) out of a page. */
+export function extractPageSignals(html: string): string {
+  const title = /<title[^>]*>([^<]*)<\/title>/i.exec(html)?.[1]?.trim() ?? "";
+  const description =
+    /<meta[^>]+name=["']description["'][^>]*content=["']([^"']*)["']/i.exec(html)?.[1]?.trim() ?? "";
+  const headings = [...html.matchAll(/<h[12][^>]*>([^<]+)<\/h[12]>/gi)]
+    .map((match) => match[1].trim())
+    .slice(0, 12)
+    .join(" | ");
+  const text = html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 4000);
+  return [
+    title && `Title: ${title}`,
+    description && `Description: ${description}`,
+    headings && `Headings: ${headings}`,
+    `Text: ${text}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+/** Validate / clamp a model-produced DNA; never loses the fallback's shape. */
+export function sanitizeDNA(raw: unknown, fallback: CompanyDNA): CompanyDNA {
+  if (!raw || typeof raw !== "object") return fallback;
+  const record = raw as Record<string, unknown>;
+  const product = (
+    record.product && typeof record.product === "object" ? record.product : {}
+  ) as Record<string, unknown>;
+  const str = (value: unknown, fallbackValue: string, max = 200): string =>
+    typeof value === "string" && value.trim() ? value.trim().slice(0, max) : fallbackValue;
+  const list = (value: unknown, max = 20): string[] =>
+    Array.isArray(value)
+      ? value
+          .filter((item): item is string => typeof item === "string")
+          .map((item) => item.slice(0, 80))
+          .slice(0, max)
+      : [];
+  const stage = ["idea", "mvp", "launched", "scaling"].includes(String(record.stage))
+    ? (record.stage as CompanyDNA["stage"])
+    : fallback.stage;
+  const market = list(record.targetMarket);
+  const customers = list(record.targetCustomers);
+  const features = list(product.features);
+  const gaps = list(product.gaps);
+  const priorities = list(record.priorities, 8);
+  return {
+    industry: str(record.industry, fallback.industry),
+    category: str(record.category, fallback.category),
+    summary: str(record.summary, fallback.summary, 400),
+    businessModel: str(record.businessModel, fallback.businessModel),
+    targetMarket: market.length > 0 ? market : fallback.targetMarket,
+    targetCustomers: customers.length > 0 ? customers : fallback.targetCustomers,
+    product: {
+      type: str(product.type, fallback.product.type),
+      features: features.length > 0 ? features : fallback.product.features,
+      gaps: gaps.length > 0 ? gaps : fallback.product.gaps,
+    },
+    stage,
+    goal: str(record.goal, fallback.goal, 300),
+    priorities: priorities.length > 0 ? priorities : fallback.priorities,
+    brand: fallback.brand,
+    metrics: fallback.metrics,
+  };
+}
+
+/** Turn an idea or website into a Company DNA draft + notes. Never throws. */
+export async function analyzeSource(
+  input: SourceInput,
+  deps: AnalyzeDeps,
+): Promise<{ dna: CompanyDNA; notes: string[] }> {
+  const fallback = defaultCompany({ kind: input.kind, value: input.value }).dna ?? {
+    industry: input.value.slice(0, 60) || "New Company",
+    category: "startup",
+    summary: "",
+    businessModel: "",
+    targetMarket: [],
+    targetCustomers: [],
+    product: { type: "product", features: [], gaps: [] },
+    stage: "idea",
+    goal: "",
+    priorities: [],
+  };
+  const notes: string[] = [];
+  try {
+    let context = input.value;
+    if (input.kind === "url" && deps.fetchText) {
+      try {
+        context = extractPageSignals(await deps.fetchText(input.value));
+        notes.push("Read the website.");
+      } catch {
+        notes.push("Could not read the website; used the URL only.");
+      }
+    }
+    const system =
+      "You analyse a business and reply with STRICT JSON only, no prose: " +
+      '{"industry":string,"category":string,"summary":string,"businessModel":string,' +
+      '"targetMarket":string[],"targetCustomers":string[],"product":{"type":string,' +
+      '"features":string[],"gaps":string[]},"stage":"idea|mvp|launched|scaling",' +
+      '"goal":string,"priorities":string[]}';
+    const user = `Business source (${input.kind}):\n${context.slice(0, 6000)}`;
+    const text = await deps.complete({ system, user, maxTokens: 900 });
+    return { dna: sanitizeDNA(extractJson(text), fallback), notes };
+  } catch {
+    return { dna: fallback, notes };
+  }
+}
+
 const MAX_MEMBERS = 8;
 
 /** Emoji per department, used when the catalog builds a default org. */

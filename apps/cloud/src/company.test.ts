@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { defaultCompany, planCompany, sanitizePlan } from "./company.js";
+import { analyzeSource, defaultCompany, planCompany, sanitizeDNA, sanitizePlan } from "./company.js";
 
 describe("company onboarding planner", () => {
   it("derives a default org with exactly one chair", () => {
@@ -59,5 +59,54 @@ describe("company onboarding planner", () => {
     expect(failed.members.length).toBeGreaterThan(0);
     expect(failed.name.length).toBeGreaterThan(0);
     expect(failed.members.filter((member) => member.isChair)).toHaveLength(1);
+  });
+});
+
+describe("analyzeSource", () => {
+  it("sanitises a model DNA and clamps bad fields", () => {
+    const fallback = defaultCompany({ kind: "idea", value: "x" }).dna!;
+    const dna = sanitizeDNA(
+      {
+        industry: "Cloud POS",
+        stage: "nonsense",
+        product: { features: ["POS", 42, "inventory"] },
+        targetMarket: [],
+      },
+      fallback,
+    );
+    expect(dna.industry).toBe("Cloud POS");
+    expect(dna.stage).toBe(fallback.stage);
+    expect(dna.product.features).toEqual(["POS", "inventory"]);
+    expect(dna.targetMarket).toEqual(fallback.targetMarket);
+  });
+
+  it("reads a website via the injected fetch and uses the model", async () => {
+    const { dna, notes } = await analyzeSource(
+      { kind: "url", value: "https://acme.com" },
+      {
+        fetchText: async () => "<title>Acme POS</title><h1>Cloud POS for restaurants</h1>",
+        complete: async () =>
+          JSON.stringify({ industry: "Cloud POS", stage: "launched", product: { features: ["POS"] } }),
+      },
+    );
+    expect(notes).toContain("Read the website.");
+    expect(dna.industry).toBe("Cloud POS");
+    expect(dna.stage).toBe("launched");
+  });
+
+  it("falls back when the page can't be read and the model fails", async () => {
+    const { dna, notes } = await analyzeSource(
+      { kind: "url", value: "https://acme.com" },
+      {
+        fetchText: async () => {
+          throw new Error("blocked");
+        },
+        complete: async () => {
+          throw new Error("no key");
+        },
+      },
+    );
+    expect(notes).toContain("Could not read the website; used the URL only.");
+    expect(dna.industry.length).toBeGreaterThan(0);
   });
 });

@@ -3,6 +3,7 @@ import type {
   AuthResponse,
   Bot,
   BotFile,
+  CompanyDNA,
   ConnectionInfo,
   CreateWorkspaceRequest,
   LearnedSkill,
@@ -563,6 +564,18 @@ export class BotifyrClient {
     name?: string;
   }): Promise<CreateWorkspaceRequest & { template?: string; rationale?: string[] }> {
     return this.request("/v1/workspaces/plan", {
+      method: "POST",
+      json: true,
+      body: JSON.stringify({ source }),
+    });
+  }
+
+  /** Understand a website or idea → a Company DNA draft (creates nothing). */
+  analyzeCompany(source: {
+    kind: "url" | "idea";
+    value: string;
+  }): Promise<{ dna: CompanyDNA; notes: string[] }> {
+    return this.request("/v1/workspaces/analyze", {
       method: "POST",
       json: true,
       body: JSON.stringify({ source }),

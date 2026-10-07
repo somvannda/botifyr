@@ -45,7 +45,7 @@ import { handleNodeMessage, nodeInfo, registerNode } from "./nodes.js";
 import { createToken, hashPassword, hashToken, verifyPassword } from "./auth.js";
 import { encryptSecret } from "./vault.js";
 import { oneShot, runTask, runtimeInfo, summarizeConversation } from "./runner.js";
-import { planCompany, toDepartment } from "./company.js";
+import { analyzeSource, planCompany, toDepartment } from "./company.js";
 import { createDockerComputerBackend } from "@botifyr/agent-core";
 import {
   chmabaConfigFromEnv,
@@ -2029,6 +2029,23 @@ export async function buildServer(options: ServerOptions) {
       if (!value) return reply.code(400).send({ error: "a website URL or an idea is required" });
       const kind = request.body?.source?.kind === "url" ? "url" : "idea";
       return planCompany({ kind, value, name: request.body?.name?.trim().slice(0, 60) }, oneShot);
+    },
+  );
+
+  /** Understand a website or idea → a Company DNA draft (creates nothing). */
+  app.post<{ Body: { source?: { kind?: string; value?: string } } }>(
+    "/v1/workspaces/analyze",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const value = (request.body?.source?.value ?? "").trim().slice(0, 1000);
+      if (!value) return reply.code(400).send({ error: "a website URL or an idea is required" });
+      const kind = request.body?.source?.kind === "url" ? "url" : "idea";
+      const fetchText = async (url: string): Promise<string> => {
+        const res = await fetch(url, { redirect: "follow" });
+        if (!res.ok) throw new Error(`fetch ${res.status}`);
+        return (await res.text()).slice(0, 40_000);
+      };
+      return analyzeSource({ kind, value }, { complete: oneShot, fetchText });
     },
   );
 
