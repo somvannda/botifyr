@@ -81,6 +81,21 @@ download(domain) ──► yt-dlp ──ok──► done
 4. **Browser network sniffing** — expose the sandbox page's network log to the bot
    so it can find the real media request without hand-held patterns.
 
+## Validated sites
+
+### GoodShort (`goodshort.com`) — **works**
+- Show page: `https://www.goodshort.com/drama/<slug>-<id>`
+- Episode page: `https://www.goodshort.com/episode/<slug>/<NNN>-<id>` — **auto-loads the player**.
+- The stream is an **HLS playlist** on `v3.goodshort.com/…/origin1/<hash>.m3u8` (signed, `?expiredTime=…`).
+- ⚠️ The `m3u8` is **not in the page HTML** (it's fetched by JS), so an HTML-`grep` recipe won't find it.
+  **Use `browser.sniff`:** open the episode page, then sniff → download the captured `.m3u8`.
+
+Verified: `node apps/cloud/scripts/sniff.mjs "https://www.goodshort.com/episode/…/001-…" --wait 12000`
+→ captured the m3u8 + all `.ts` segments.
+
+**Implication:** for these SPA players, the flow is `browser.goto(episode) → browser.sniff → youtube.download(m3u8)`,
+not a static extractor. A future "sniff recipe" (domain → auto-sniff) would make it one-shot.
+
 ## Researched domains (starting points for recipes)
 
 | Platform | Web home | Notes |
