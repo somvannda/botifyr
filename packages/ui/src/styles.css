@@ -591,6 +591,15 @@ body {
   color: #fff;
 }
 
+.standup-text {
+  margin: 0;
+  white-space: pre-wrap;
+  font-family: inherit;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
 .board-add {
   display: flex;
   gap: 8px;

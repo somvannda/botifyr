@@ -13,6 +13,7 @@ import type {
   BotRole,
   CapabilityGrant,
   ChatMessage,
+  CompanyReport,
   ConnectionInfo,
   CreateWorkspaceRequest,
   Department,
@@ -225,11 +226,12 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [boardItems, setBoardItems] = useState<Array<WorkItem>>([]);
   const [boardTitle, setBoardTitle] = useState("");
   const [boardBusy, setBoardBusy] = useState(false);
-  const [hqTab, setHqTab] = useState<"need" | "team" | "board" | "budget">("need");
+  const [hqTab, setHqTab] = useState<"need" | "team" | "board" | "budget" | "standup">("need");
   const [hqNeeds, setHqNeeds] = useState<Array<Task>>([]);
   const [hqBudget, setHqBudget] = useState<WorkspaceBudget | null>(null);
   const [budgetInput, setBudgetInput] = useState("");
   const [hqGrants, setHqGrants] = useState<Array<CapabilityGrant>>([]);
+  const [hqReports, setHqReports] = useState<Array<CompanyReport>>([]);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [editingBotId, setEditingBotId] = useState<string | null>(null);
   const [botName, setBotName] = useState("");
@@ -990,17 +992,19 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     setBoardBusy(true);
     setHqTab("need");
     try {
-      const [items, needs, budget, grants] = await Promise.all([
+      const [items, needs, budget, grants, reports] = await Promise.all([
         client.listWorkItems(workspaceId).catch(() => []),
         client.listWorkspaceNeeds(workspaceId).catch(() => []),
         client.getWorkspaceBudget(workspaceId).catch(() => null),
         client.listCapabilityGrants(workspaceId).catch(() => []),
+        client.listCompanyReports(workspaceId).catch(() => []),
       ]);
       setBoardItems(items);
       setHqNeeds(needs);
       setHqBudget(budget);
       setBudgetInput(budget && budget.limitTokens > 0 ? String(budget.limitTokens) : "");
       setHqGrants(grants);
+      setHqReports(reports);
     } finally {
       setBoardBusy(false);
     }
@@ -1015,6 +1019,19 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     setHqBudget(null);
     setBudgetInput("");
     setHqGrants([]);
+    setHqReports([]);
+  }
+
+  async function runStandup() {
+    const workspace = boardWorkspace;
+    if (!workspace) return;
+    setBoardBusy(true);
+    try {
+      const report = await client.runStandup(workspace.id);
+      setHqReports((prev) => [report, ...prev]);
+    } finally {
+      setBoardBusy(false);
+    }
   }
 
   async function toggleGrant(subject: string, capability: string, granted: boolean) {
@@ -3969,6 +3986,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                   ["team", "Team"],
                   ["board", "Board"],
                   ["budget", "Budget"],
+                  ["standup", "Standup"],
                 ] as const
               ).map(([tab, label]) => (
                 <button
@@ -4124,6 +4142,29 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                       Save
                     </button>
                   </div>
+                </>
+              )}
+
+              {hqTab === "standup" && (
+                <>
+                  <div className="board-add">
+                    <button
+                      className="btn primary small"
+                      type="button"
+                      disabled={boardBusy}
+                      onClick={() => void runStandup()}
+                    >
+                      {boardBusy ? "Running…" : "Run standup"}
+                    </button>
+                  </div>
+                  {hqReports.length === 0 && <p className="company-hint">No standups yet.</p>}
+                  <ul className="board-list">
+                    {hqReports.map((report) => (
+                      <li key={report.id} className="board-item">
+                        <pre className="standup-text">{report.summary}</pre>
+                      </li>
+                    ))}
+                  </ul>
                 </>
               )}
             </div>
