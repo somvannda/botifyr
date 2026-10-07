@@ -224,6 +224,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const seededSessionsRef = useRef<Set<string>>(new Set());
   const taskStatusRef = useRef<Record<string, string>>({});
   const bootAtRef = useRef<number>(Date.now());
+  const hasConnectedRef = useRef(false);
   const [reactions, setReactions] = useState<Record<string, string>>(() => {
     try {
       return JSON.parse(localStorage.getItem("botifyr.reactions") ?? "{}") as Record<string, string>;
@@ -273,9 +274,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [boardBusy, setBoardBusy] = useState(false);
   const [hqTab, setHqTab] = useState<
     "need" | "team" | "board" | "budget" | "standup" | "plans" | "changes" | "office" | "wiki"
-  >(
-    "need",
-  );
+  >("need");
   const [hqNeeds, setHqNeeds] = useState<Array<Task>>([]);
   const [hqBudget, setHqBudget] = useState<WorkspaceBudget | null>(null);
   const [budgetInput, setBudgetInput] = useState("");
@@ -591,7 +590,14 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
 
     const disconnect = client.connect(
       {
-        onOpen: () => mounted && setConnection("online"),
+        onOpen: () => {
+          if (!mounted) return;
+          setConnection("online");
+          // On a reconnect (not the first connect), catch up on anything we
+          // missed while the socket was down.
+          if (hasConnectedRef.current) void resyncConversations();
+          hasConnectedRef.current = true;
+        },
         onClose: () => {
           if (!mounted) return;
           setConnection("offline");
@@ -2492,9 +2498,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   ];
   // Guard against a stale filter (e.g. after the last bot leaves a company).
   const activeWorkspaceFilter =
-    workspaceFilter === "all" ||
-    workspaceFilter === "personal" ||
-    workspaceById.has(workspaceFilter)
+    workspaceFilter === "all" || workspaceFilter === "personal" || workspaceById.has(workspaceFilter)
       ? workspaceFilter
       : "all";
   const workspaceFiltered =
@@ -2503,10 +2507,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       : activeWorkspaceFilter === "personal"
         ? filteredBots.filter((bot) => companyOf(bot).id === "personal")
         : filteredBots.filter((bot) => companyOf(bot).id === activeWorkspaceFilter);
-  const companyGroups = new Map<
-    string,
-    { name: string; workspace?: WorkspaceWithRoles; members: Bot[] }
-  >();
+  const companyGroups = new Map<string, { name: string; workspace?: WorkspaceWithRoles; members: Bot[] }>();
   const ungroupedBots: Bot[] = [];
   for (const bot of workspaceFiltered) {
     const company = companyOf(bot);
@@ -3017,9 +3018,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                     </button>
                   )}
                 </div>
-                {!collapsed && (
-                  <div className="task-section-list">{group.members.map(renderBotRow)}</div>
-                )}
+                {!collapsed && <div className="task-section-list">{group.members.map(renderBotRow)}</div>}
               </div>
             );
           })}
@@ -4738,72 +4737,73 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
 
               {hqTab === "team" && (
                 <>
-                <ul className="board-list">
-                  {(workspaceByName.get(boardWorkspace.name)?.roles ?? []).map((role) => {
-                    const caps = ROLE_CATALOG.find((entry) => entry.title === role.title)?.capabilities ?? [];
-                    const subject = `role:${role.title}`;
-                    return (
-                      <li key={role.botId} className="team-member">
-                        <div className="team-member-head">
-                          <span className="board-title">{role.title}</span>
-                          <span className="board-phase">{role.department}</span>
-                        </div>
-                        {caps.length > 0 && (
-                          <div className="grant-chips">
-                            {caps.map((capability) => {
-                              const granted = hqGrants.some(
-                                (grant) =>
-                                  grant.subject === subject &&
-                                  grant.capability === capability &&
-                                  grant.granted,
-                              );
-                              return (
-                                <button
-                                  key={capability}
-                                  className={`grant-chip${granted ? " granted" : ""}`}
-                                  type="button"
-                                  title="Toggle this capability"
-                                  onClick={() => void toggleGrant(subject, capability, !granted)}
-                                >
-                                  {capability}
-                                </button>
-                              );
-                            })}
+                  <ul className="board-list">
+                    {(workspaceByName.get(boardWorkspace.name)?.roles ?? []).map((role) => {
+                      const caps =
+                        ROLE_CATALOG.find((entry) => entry.title === role.title)?.capabilities ?? [];
+                      const subject = `role:${role.title}`;
+                      return (
+                        <li key={role.botId} className="team-member">
+                          <div className="team-member-head">
+                            <span className="board-title">{role.title}</span>
+                            <span className="board-phase">{role.department}</span>
                           </div>
-                        )}
-                      </li>
+                          {caps.length > 0 && (
+                            <div className="grant-chips">
+                              {caps.map((capability) => {
+                                const granted = hqGrants.some(
+                                  (grant) =>
+                                    grant.subject === subject &&
+                                    grant.capability === capability &&
+                                    grant.granted,
+                                );
+                                return (
+                                  <button
+                                    key={capability}
+                                    className={`grant-chip${granted ? " granted" : ""}`}
+                                    type="button"
+                                    title="Toggle this capability"
+                                    onClick={() => void toggleGrant(subject, capability, !granted)}
+                                  >
+                                    {capability}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  {(() => {
+                    const personal = bots.filter((bot) => !bot.workspace);
+                    if (personal.length === 0) return null;
+                    return (
+                      <div className="board-add">
+                        <select
+                          className="plan-member-dept"
+                          value={addMemberBotId}
+                          onChange={(event) => setAddMemberBotId(event.target.value)}
+                          aria-label="Add an existing bot"
+                        >
+                          <option value="">Add an existing bot…</option>
+                          {personal.map((bot) => (
+                            <option key={bot.id} value={bot.id}>
+                              {bot.name}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          className="btn primary small"
+                          type="button"
+                          disabled={!addMemberBotId || boardBusy}
+                          onClick={() => void addExistingMember()}
+                        >
+                          Add
+                        </button>
+                      </div>
                     );
-                  })}
-                </ul>
-                {(() => {
-                  const personal = bots.filter((bot) => !bot.workspace);
-                  if (personal.length === 0) return null;
-                  return (
-                    <div className="board-add">
-                      <select
-                        className="plan-member-dept"
-                        value={addMemberBotId}
-                        onChange={(event) => setAddMemberBotId(event.target.value)}
-                        aria-label="Add an existing bot"
-                      >
-                        <option value="">Add an existing bot…</option>
-                        {personal.map((bot) => (
-                          <option key={bot.id} value={bot.id}>
-                            {bot.name}
-                          </option>
-                        ))}
-                      </select>
-                      <button
-                        className="btn primary small"
-                        type="button"
-                        disabled={!addMemberBotId || boardBusy}
-                        onClick={() => void addExistingMember()}
-                      >
-                        Add
-                      </button>
-                    </div>
-                  );
-                })()}
+                  })()}
                 </>
               )}
 
@@ -5086,8 +5086,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                   if (docs.length === 0) {
                     return (
                       <p className="company-hint">
-                        No plans yet — run the company and the CEO/CTO will write PLAN.md and
-                        CODEBASE.md.
+                        No plans yet — run the company and the CEO/CTO will write PLAN.md and CODEBASE.md.
                       </p>
                     );
                   }
@@ -5156,8 +5155,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
             <div className="apps-actions hq-footer">
               {(() => {
                 const autonomy = workspaceByName.get(boardWorkspace.name)?.autonomy ?? "manual";
-                const paused =
-                  (workspaceByName.get(boardWorkspace.name)?.status ?? "active") === "paused";
+                const paused = (workspaceByName.get(boardWorkspace.name)?.status ?? "active") === "paused";
                 return (
                   <>
                     <span className="hq-autonomy">{autonomy === "manual" ? "Manual" : autonomy}</span>
