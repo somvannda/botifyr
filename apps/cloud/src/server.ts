@@ -2452,6 +2452,7 @@ export async function buildServer(options: ServerOptions) {
         for (const file of files) await store.deleteFile(userId, file.id).catch(() => false);
         await store.deleteSession(userId, bot.sessionId).catch(() => false);
         await store.deleteBot(userId, bot.id);
+        emit({ type: "bot.deleted", botId: bot.id, sessionId: bot.sessionId, userId });
       }
       await store.deleteWorkspace(userId, workspace.id);
       return reply.code(204).send();

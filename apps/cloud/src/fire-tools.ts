@@ -1,5 +1,6 @@
 import type { ToolDefinition } from "@botifyr/agent-core";
 import type { Store } from "./store/index.js";
+import { emit } from "./events.js";
 
 /**
  * Firing: the CEO (or a department leader) can remove an employee from the
@@ -84,6 +85,8 @@ export function createFireTools(store: Store, userId: string, botId: string): To
         await store.deleteSession(userId, employee.sessionId).catch(() => false);
         await store.deleteBot(userId, employee.id).catch(() => false);
         await store.deleteBotRole(workspace.id, employee.id).catch(() => false);
+        // Tell every open client so the roster refreshes without a manual reload.
+        emit({ type: "bot.deleted", botId: employee.id, sessionId: employee.sessionId, userId });
 
         return {
           ok: true,

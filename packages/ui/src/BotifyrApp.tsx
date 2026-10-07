@@ -712,6 +712,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
           setActiveBotId(next?.id ?? null);
           setActiveSessionId(next?.sessionId ?? null);
         }
+        // The company's roles/roster changed, so pull workspaces too.
+        scheduleSidebarRefresh();
         break;
       }
       case "assistant.delta":
