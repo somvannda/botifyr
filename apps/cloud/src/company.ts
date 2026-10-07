@@ -4,6 +4,7 @@ import {
   type CreateWorkspaceRequest,
   type Department,
   type RoleDefinition,
+  type WorkspaceBudget,
 } from "@botifyr/shared";
 import { recommendTeam, ROLE_BY_ID } from "./recommend.js";
 
@@ -35,6 +36,11 @@ export interface CompanyPlan extends Omit<CreateWorkspaceRequest, "members"> {
 
 /** A one-shot text completion, injected so planning is easy to test. */
 export type CompleteFn = (input: { system: string; user: string; maxTokens: number }) => Promise<string>;
+
+/** True when a company's token budget is set and exhausted (docs/company-os.md §15). */
+export function isBudgetExhausted(budget: WorkspaceBudget | null): boolean {
+  return Boolean(budget && budget.limitTokens > 0 && budget.usedTokens >= budget.limitTokens);
+}
 
 /** The shared business briefing prepended to every employee's instructions. */
 export function companyContext(dna: CompanyDNA): string {

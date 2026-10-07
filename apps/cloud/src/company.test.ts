@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { analyzeSource, defaultCompany, planCompany, sanitizeDNA, sanitizePlan } from "./company.js";
+import {
+  analyzeSource,
+  defaultCompany,
+  isBudgetExhausted,
+  planCompany,
+  sanitizeDNA,
+  sanitizePlan,
+} from "./company.js";
 
 describe("company onboarding planner", () => {
   it("derives a default org with exactly one chair", () => {
@@ -108,5 +115,16 @@ describe("analyzeSource", () => {
     );
     expect(notes).toContain("Could not read the website; used the URL only.");
     expect(dna.industry.length).toBeGreaterThan(0);
+  });
+});
+
+describe("isBudgetExhausted", () => {
+  const base = { workspaceId: "w", updatedAt: "now" };
+  it("only trips when a limit is set and used is at least the limit", () => {
+    expect(isBudgetExhausted(null)).toBe(false);
+    expect(isBudgetExhausted({ ...base, limitTokens: 0, usedTokens: 999 })).toBe(false);
+    expect(isBudgetExhausted({ ...base, limitTokens: 100, usedTokens: 50 })).toBe(false);
+    expect(isBudgetExhausted({ ...base, limitTokens: 100, usedTokens: 100 })).toBe(true);
+    expect(isBudgetExhausted({ ...base, limitTokens: 100, usedTokens: 150 })).toBe(true);
   });
 });
