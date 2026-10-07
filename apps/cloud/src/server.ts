@@ -398,6 +398,8 @@ export async function buildServer(options: ServerOptions) {
   async function billingBlockReason(userId: string): Promise<string | null> {
     const record = await store.getUserById(userId);
     if (!record) return null;
+    // The platform operator's own account is never billing-locked.
+    if (record.role === "admin") return null;
     const settings = await store.getPlatformSettings();
     const plan = record.plan ?? "free";
     const paidPlan = plan === "pro" || plan === "business";
