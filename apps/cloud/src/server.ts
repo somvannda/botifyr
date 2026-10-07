@@ -2023,7 +2023,18 @@ export async function buildServer(options: ServerOptions) {
 
   const workspaceView = async (record: Workspace): Promise<WorkspaceWithRoles> => {
     const roles: BotRole[] = await store.listBotRoles(record.id);
-    return { ...record, roles };
+    const sessions = new Set<string>();
+    for (const role of roles) {
+      const bot = await store.getBot(role.botId);
+      if (bot) sessions.add(bot.sessionId);
+    }
+    let pending = 0;
+    if (sessions.size > 0) {
+      pending = (await store.listTasksForUser(record.ownerId)).filter(
+        (task) => sessions.has(task.sessionId) && task.status === "awaiting_approval",
+      ).length;
+    }
+    return { ...record, roles, pending };
   };
 
   /** Fetch a page's HTML for analysis; content is treated as untrusted data. */

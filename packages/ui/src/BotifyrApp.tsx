@@ -2605,8 +2605,15 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                   <span className="task-section-name">{name}</span>
                 </button>
                 <div className="task-section-sub">
-                  <span className="task-section-count">
+                  <span
+                    className={`task-section-count${
+                      (workspaceByName.get(name)?.pending ?? 0) > 0 ? " has-needs" : ""
+                    }`}
+                  >
                     {members.length} employee{members.length === 1 ? "" : "s"}
+                    {(workspaceByName.get(name)?.pending ?? 0) > 0
+                      ? ` · ${workspaceByName.get(name)?.pending} need you`
+                      : ""}
                   </span>
                   {workspaceByName.get(name) && (
                     <button

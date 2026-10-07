@@ -226,6 +226,8 @@ export interface BotRole {
 /** A workspace together with its employee roles (API shape). */
 export interface WorkspaceWithRoles extends Workspace {
   roles: BotRole[];
+  /** Tasks across the company waiting for the CEO's approval. */
+  pending?: number;
 }
 
 export interface CreateWorkspaceRequest {

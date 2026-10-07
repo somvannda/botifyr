@@ -443,6 +443,10 @@ body {
   letter-spacing: 0.02em;
 }
 
+.task-section-count.has-needs {
+  color: var(--accent);
+}
+
 .task-section-list {
   display: flex;
   flex-direction: column;
