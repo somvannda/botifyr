@@ -355,30 +355,39 @@ body {
 }
 
 .task-section-head {
-  flex: 1;
+  width: 100%;
   display: flex;
   align-items: center;
   gap: 6px;
   min-width: 0;
-  padding: 8px 0 4px 8px;
+  padding: 8px 8px 2px;
   background: transparent;
   border: 0;
   color: var(--text);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
   text-align: left;
   cursor: pointer;
 }
 
 .task-section-head.static {
   cursor: default;
-  padding-right: 8px;
 }
 
 .task-section-head:not(.static):hover {
   color: var(--accent);
+}
+
+.task-section-sub {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 4px 6px 8px;
+}
+
+.task-section-sub .task-section-count {
+  flex: 1;
+  text-align: left;
 }
 
 .task-section-edit {
@@ -413,9 +422,10 @@ body {
 }
 
 .task-caret {
-  width: 10px;
-  font-size: 10px;
+  width: 14px;
+  font-size: 14px;
   line-height: 1;
+  color: var(--muted);
 }
 
 .task-section-name {
@@ -428,8 +438,9 @@ body {
 
 .task-section-count {
   color: var(--muted);
+  font-size: 11px;
   font-weight: 600;
-  opacity: 0.7;
+  letter-spacing: 0.02em;
 }
 
 .task-section-list {
@@ -1838,14 +1849,15 @@ body {
 .conv-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 9px 10px;
+  gap: 10px;
+  padding: 11px 12px;
   border-radius: 12px;
   border: 1px solid transparent;
   background: transparent;
   color: var(--text);
   cursor: pointer;
   text-align: left;
+  transition: background 0.12s ease;
 }
 
 .conv-select {
@@ -1930,6 +1942,28 @@ body {
   color: color-mix(in srgb, var(--text) 62%, var(--muted));
 }
 
+/* The chair (company CEO) gets a subtle ring + dot. */
+.conv-avatar.chair {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.conv-avatar.chair::after {
+  content: "";
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--panel);
+}
+
+/* Make the unread count pop on the tinted active row. */
+.conv-item.active .unread-badge {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
 .conv-avatar {
   width: 34px;
   height: 34px;
@@ -1939,6 +1973,7 @@ body {
   color: #fff;
   font-weight: 600;
   font-size: 13px;
+  position: relative;
 }
 
 .conv-text {
@@ -1959,7 +1994,7 @@ body {
 .conv-name {
   min-width: 0;
   flex: 0 1 auto;
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;

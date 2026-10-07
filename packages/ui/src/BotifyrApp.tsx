@@ -2444,8 +2444,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     return (
       <div key={bot.id} className={`conv-item ${bot.id === activeBotId ? "active" : ""}`}>
         <button className="conv-select" type="button" onClick={() => selectBot(bot)}>
-          <span className="conv-avatar">
-            <BotLogo size={30} scheme={BOT_SCHEMES[bot.scheme % BOT_SCHEMES.length]} />
+          <span className={`conv-avatar${roleByBotId.get(bot.id)?.isChair ? " chair" : ""}`}>
+            <BotLogo size={34} scheme={BOT_SCHEMES[bot.scheme % BOT_SCHEMES.length]} />
           </span>
           <span className="conv-text">
             <span className="conv-line">
@@ -2454,7 +2454,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                 <span className="conv-role">{roleByBotId.get(bot.id)?.title}</span>
               )}
             </span>
-            <span className="conv-preview">{last?.content?.slice(0, 42) || "No messages yet"}</span>
+            <span className="conv-preview">{last?.content?.slice(0, 42) || "No messages yet — say hello"}</span>
           </span>
         </button>
         <span className="conv-aside">
@@ -2594,20 +2594,22 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
             const collapsed = collapsedWorkspaces[name] === true;
             return (
               <div key={name} className="task-section">
-                <div className="task-section-headrow">
-                  <button
-                    className={`task-section-head${collapsed ? " collapsed" : ""}`}
-                    type="button"
-                    onClick={() => setCollapsedWorkspaces((prev) => ({ ...prev, [name]: !prev[name] }))}
-                    aria-expanded={!collapsed}
-                  >
-                    <span className="task-caret">{collapsed ? "▸" : "▾"}</span>
-                    {workspaceByName.get(name)?.avatarEmoji && (
-                      <span className="task-section-emoji">{workspaceByName.get(name)?.avatarEmoji}</span>
-                    )}
-                    <span className="task-section-name">{name}</span>
-                    <span className="task-section-count">{members.length}</span>
-                  </button>
+                <button
+                  className={`task-section-head${collapsed ? " collapsed" : ""}`}
+                  type="button"
+                  onClick={() => setCollapsedWorkspaces((prev) => ({ ...prev, [name]: !prev[name] }))}
+                  aria-expanded={!collapsed}
+                >
+                  <span className="task-caret">{collapsed ? "▸" : "▾"}</span>
+                  {workspaceByName.get(name)?.avatarEmoji && (
+                    <span className="task-section-emoji">{workspaceByName.get(name)?.avatarEmoji}</span>
+                  )}
+                  <span className="task-section-name">{name}</span>
+                </button>
+                <div className="task-section-sub">
+                  <span className="task-section-count">
+                    {members.length} employee{members.length === 1 ? "" : "s"}
+                  </span>
                   {workspaceByName.get(name) && (
                     <button
                       className="task-section-edit"
