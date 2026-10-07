@@ -2391,6 +2391,30 @@ export async function buildServer(options: ServerOptions) {
     },
   );
 
+  /** What the company is waiting on the CEO to approve (docs/company-os.md §19). */
+  app.get<{ Params: { id: string } }>(
+    "/v1/workspaces/:id/needs",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const workspace = await store.getWorkspace(request.params.id);
+      if (!workspace || workspace.ownerId !== userId) {
+        return reply.code(404).send({ error: "workspace not found" });
+      }
+      const roles = await store.listBotRoles(workspace.id);
+      const sessions = new Set<string>();
+      for (const role of roles) {
+        const bot = await store.getBot(role.botId);
+        if (bot) sessions.add(bot.sessionId);
+      }
+      const tasks = await store.listTasksForUser(userId);
+      return tasks
+        .filter((task) => sessions.has(task.sessionId) && task.status === "awaiting_approval")
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+        .slice(0, 50);
+    },
+  );
+
   /* Bot Library: text files a bot can keep and the agent can read/write. */
   const toBotFile = (record: FileRecord): BotFile => ({
     id: record.id,

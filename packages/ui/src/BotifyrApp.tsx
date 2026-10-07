@@ -223,6 +223,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [boardItems, setBoardItems] = useState<Array<WorkItem>>([]);
   const [boardTitle, setBoardTitle] = useState("");
   const [boardBusy, setBoardBusy] = useState(false);
+  const [hqTab, setHqTab] = useState<"need" | "team" | "board">("need");
+  const [hqNeeds, setHqNeeds] = useState<Array<Task>>([]);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [editingBotId, setEditingBotId] = useState<string | null>(null);
   const [botName, setBotName] = useState("");
@@ -981,10 +983,14 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     setBoardWorkspace({ id: workspaceId, name });
     setBoardTitle("");
     setBoardBusy(true);
+    setHqTab("need");
     try {
-      setBoardItems(await client.listWorkItems(workspaceId));
-    } catch {
-      setBoardItems([]);
+      const [items, needs] = await Promise.all([
+        client.listWorkItems(workspaceId).catch(() => []),
+        client.listWorkspaceNeeds(workspaceId).catch(() => []),
+      ]);
+      setBoardItems(items);
+      setHqNeeds(needs);
     } finally {
       setBoardBusy(false);
     }
@@ -995,6 +1001,19 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     setBoardItems([]);
     setBoardTitle("");
     setBoardBusy(false);
+    setHqNeeds([]);
+  }
+
+  async function refreshNeeds(workspaceId: string) {
+    setHqNeeds(await client.listWorkspaceNeeds(workspaceId).catch(() => []));
+  }
+
+  async function resolveNeed(task: Task, decision: "allow" | "deny") {
+    const workspace = boardWorkspace;
+    const approvalId = task.approval?.id;
+    if (!approvalId) return;
+    await client.resolveApproval(task.id, approvalId, decision).catch(() => {});
+    if (workspace) await refreshNeeds(workspace.id);
   }
 
   async function refreshBoard(workspaceId: string) {
@@ -3906,62 +3925,116 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
         <div className="apps-overlay" onClick={closeBoard}>
           <div className="apps-panel company-setup board-panel" onClick={(event) => event.stopPropagation()}>
             <div className="apps-head">
-              <span className="apps-title">Board — {boardWorkspace.name}</span>
+              <span className="apps-title">Company HQ — {boardWorkspace.name}</span>
               <button className="round small" type="button" onClick={closeBoard}>
                 ✕
               </button>
             </div>
-            <div className="company-setup-body">
-              <div className="board-add">
-                <input
-                  className="workspace-input"
-                  placeholder="Add a task…"
-                  value={boardTitle}
-                  onChange={(event) => setBoardTitle(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") void addBoardItem();
-                  }}
-                />
+            <div className="hq-tabs" role="tablist">
+              {(
+                [
+                  ["need", `Needs you${hqNeeds.length ? ` (${hqNeeds.length})` : ""}`],
+                  ["team", "Team"],
+                  ["board", "Board"],
+                ] as const
+              ).map(([tab, label]) => (
                 <button
-                  className="btn primary small"
+                  key={tab}
+                  className={`hq-tab${hqTab === tab ? " active" : ""}`}
                   type="button"
-                  disabled={boardBusy || !boardTitle.trim()}
-                  onClick={() => void addBoardItem()}
+                  role="tab"
+                  aria-selected={hqTab === tab}
+                  onClick={() => setHqTab(tab)}
                 >
-                  Add
+                  {label}
                 </button>
-              </div>
-              {boardItems.length === 0 && <p className="company-hint">No work items yet.</p>}
-              <ul className="board-list">
-                {boardItems.map((item) => (
-                  <li key={item.id} className="board-item">
-                    <select
-                      className={`board-status board-status-${item.status}`}
-                      value={item.status}
-                      onChange={(event) =>
-                        void setWorkStatus(item.id, event.target.value as WorkItem["status"])
-                      }
-                      aria-label="Status"
-                    >
-                      {(["todo", "in_progress", "blocked", "review", "done"] as const).map((status) => (
-                        <option key={status} value={status}>
-                          {status.replace("_", " ")}
-                        </option>
-                      ))}
-                    </select>
-                    <span className="board-title">{item.title}</span>
-                    <span className="board-phase">{item.phase}</span>
+              ))}
+            </div>
+            <div className="company-setup-body">
+              {hqTab === "need" && (
+                <>
+                  {hqNeeds.length === 0 && <p className="company-hint">Nothing needs you right now.</p>}
+                  <ul className="board-list">
+                    {hqNeeds.map((task) => (
+                      <li key={task.id} className="board-item">
+                        <span className="board-title">{task.goal}</span>
+                        <button className="ghost small" type="button" onClick={() => void resolveNeed(task, "deny")}>
+                          Deny
+                        </button>
+                        <button className="btn primary small" type="button" onClick={() => void resolveNeed(task, "allow")}>
+                          Allow
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+
+              {hqTab === "team" && (
+                <ul className="board-list">
+                  {(workspaceByName.get(boardWorkspace.name)?.roles ?? []).map((role) => (
+                    <li key={role.botId} className="board-item">
+                      <span className="board-title">{role.title}</span>
+                      <span className="board-phase">{role.department}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {hqTab === "board" && (
+                <>
+                  <div className="board-add">
+                    <input
+                      className="workspace-input"
+                      placeholder="Add a task…"
+                      value={boardTitle}
+                      onChange={(event) => setBoardTitle(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") void addBoardItem();
+                      }}
+                    />
                     <button
-                      className="plan-member-remove"
+                      className="btn primary small"
                       type="button"
-                      aria-label="Delete task"
-                      onClick={() => void deleteBoardItem(item.id)}
+                      disabled={boardBusy || !boardTitle.trim()}
+                      onClick={() => void addBoardItem()}
                     >
-                      <CloseIcon size={12} />
+                      Add
                     </button>
-                  </li>
-                ))}
-              </ul>
+                  </div>
+                  {boardItems.length === 0 && <p className="company-hint">No work items yet.</p>}
+                  <ul className="board-list">
+                    {boardItems.map((item) => (
+                      <li key={item.id} className="board-item">
+                        <select
+                          className={`board-status board-status-${item.status}`}
+                          value={item.status}
+                          onChange={(event) =>
+                            void setWorkStatus(item.id, event.target.value as WorkItem["status"])
+                          }
+                          aria-label="Status"
+                        >
+                          {(["todo", "in_progress", "blocked", "review", "done"] as const).map((status) => (
+                            <option key={status} value={status}>
+                              {status.replace("_", " ")}
+                            </option>
+                          ))}
+                        </select>
+                        <span className="board-title">{item.title}</span>
+                        <span className="board-phase">{item.phase}</span>
+                        <button
+                          className="plan-member-remove"
+                          type="button"
+                          aria-label="Delete task"
+                          onClick={() => void deleteBoardItem(item.id)}
+                        >
+                          <CloseIcon size={12} />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
             </div>
             <div className="apps-actions">
               <button className="ghost small" type="button" onClick={closeBoard}>

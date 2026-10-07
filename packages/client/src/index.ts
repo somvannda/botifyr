@@ -625,6 +625,11 @@ export class BotifyrClient {
     return this.request(`/v1/work/${id}`, { method: "DELETE" });
   }
 
+  /** Tasks across the company's employees that are waiting for CEO approval. */
+  listWorkspaceNeeds(workspaceId: string): Promise<Task[]> {
+    return this.request(`/v1/workspaces/${workspaceId}/needs`);
+  }
+
   updateWorkspace(
     id: string,
     input: {
