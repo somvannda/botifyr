@@ -150,7 +150,7 @@ export interface Bot {
 
 export type WorkspaceStatus = "onboarding" | "active" | "paused" | "archived";
 
-/** When a company may run autonomously. Hours are UTC, 0–23. */
+/** When a company may run autonomously. Hours are 0–23 in `timezone` (default UTC). */
 export interface OperatingHours {
   /** Days of week (0 = Sun … 6 = Sat). Empty/undefined = every day. */
   days?: number[];
@@ -158,6 +158,8 @@ export interface OperatingHours {
   start: number;
   /** End hour, exclusive (1–24). */
   end: number;
+  /** IANA timezone, e.g. "Asia/Phnom_Penh". Default UTC. */
+  timezone?: string;
 }
 
 export type Department =

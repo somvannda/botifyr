@@ -702,7 +702,7 @@ export class BotifyrClient {
       avatarEmoji?: string;
       scheme?: number;
       ceoBotId?: string;
-      operatingHours?: { start: number; end: number; days?: number[] };
+      operatingHours?: { start: number; end: number; days?: number[]; timezone?: string };
     },
   ): Promise<WorkspaceWithRoles> {
     return this.request(`/v1/workspaces/${id}`, {

@@ -227,6 +227,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [wizardHoursStart, setWizardHoursStart] = useState("9");
   const [wizardHoursEnd, setWizardHoursEnd] = useState("18");
   const [wizardWeekdays, setWizardWeekdays] = useState(true);
+  const [wizardTimezone, setWizardTimezone] = useState("");
   const [wizardBudget, setWizardBudget] = useState("");
   const [wizardActivate, setWizardActivate] = useState(false);
   const [boardWorkspace, setBoardWorkspace] = useState<{ id: string; name: string } | null>(null);
@@ -243,6 +244,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [hoursStart, setHoursStart] = useState("9");
   const [hoursEnd, setHoursEnd] = useState("18");
   const [hoursWeekdays, setHoursWeekdays] = useState(true);
+  const [hoursTimezone, setHoursTimezone] = useState("");
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [editingBotId, setEditingBotId] = useState<string | null>(null);
   const [botName, setBotName] = useState("");
@@ -890,6 +892,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     setWizardHoursStart("9");
     setWizardHoursEnd("18");
     setWizardWeekdays(true);
+    setWizardTimezone("");
     setWizardBudget("");
     setWizardActivate(false);
     setShowNewChat(false);
@@ -937,6 +940,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
               start: Math.max(0, Math.min(23, Math.floor(Number(wizardHoursStart) || 0))),
               end: Math.max(1, Math.min(24, Math.floor(Number(wizardHoursEnd) || 24))),
               days: wizardWeekdays ? [1, 2, 3, 4, 5] : undefined,
+              timezone: wizardTimezone.trim() || undefined,
             },
           });
         }
@@ -1056,6 +1060,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       setHoursStart(hours ? String(hours.start) : "9");
       setHoursEnd(hours ? String(hours.end) : "18");
       setHoursWeekdays(hours ? Boolean(hours.days && hours.days.length > 0) : true);
+      setHoursTimezone(hours?.timezone ?? "");
 
       // Company wiki: the chair bot's Library (BRIEF / OKRS / BACKLOG).
       const chairId = workspaces.find((entry) => entry.id === workspaceId)?.ceoBotId;
@@ -1178,6 +1183,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
             start: Math.max(0, Math.min(23, Math.floor(Number(hoursStart) || 0))),
             end: Math.max(1, Math.min(24, Math.floor(Number(hoursEnd) || 24))),
             days: hoursWeekdays ? [1, 2, 3, 4, 5] : undefined,
+            timezone: hoursTimezone.trim() || undefined,
           },
         })
         .catch(() => null);
@@ -4132,7 +4138,14 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                         />{" "}
                         weekdays
                       </label>
-                      <span className="board-phase">UTC</span>
+                      <input
+                        className="workspace-input board-tz"
+                        type="text"
+                        placeholder="Timezone (e.g. Asia/Phnom_Penh)"
+                        value={wizardTimezone}
+                        onChange={(event) => setWizardTimezone(event.target.value)}
+                        aria-label="Timezone"
+                      />
                     </div>
                   )}
                   <input
@@ -4392,7 +4405,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                     </button>
                   </div>
                   <p className="company-hint">
-                    Work hours (UTC) — scheduled work only happens inside this window.
+                    Work hours — scheduled work only happens inside this window.
                   </p>
                   <div className="board-add">
                     <input
@@ -4422,6 +4435,14 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                       />{" "}
                       weekdays
                     </label>
+                    <input
+                      className="workspace-input board-tz"
+                      type="text"
+                      placeholder="Timezone (e.g. Asia/Phnom_Penh)"
+                      value={hoursTimezone}
+                      onChange={(event) => setHoursTimezone(event.target.value)}
+                      aria-label="Timezone"
+                    />
                     <button
                       className="btn primary small"
                       type="button"

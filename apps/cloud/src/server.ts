@@ -2185,7 +2185,7 @@ export async function buildServer(options: ServerOptions) {
       ceoBotId?: string;
       dna?: CompanyDNA;
       autonomy?: Workspace["autonomy"];
-      operatingHours?: { start?: number; end?: number; days?: number[] };
+      operatingHours?: { start?: number; end?: number; days?: number[]; timezone?: string };
     };
   }>("/v1/workspaces/:id", { preHandler: requireAuth }, async (request, reply) => {
     const userId = request.userId as string;
@@ -2227,7 +2227,14 @@ export async function buildServer(options: ServerOptions) {
       const days = Array.isArray(oh.days)
         ? oh.days.filter((day) => Number.isInteger(day) && day >= 0 && day <= 6)
         : undefined;
-      workspace.operatingHours = { start, end, days: days && days.length > 0 ? days : undefined };
+      const timezone =
+        typeof oh.timezone === "string" && oh.timezone.trim() ? oh.timezone.trim().slice(0, 60) : undefined;
+      workspace.operatingHours = {
+        start,
+        end,
+        days: days && days.length > 0 ? days : undefined,
+        timezone,
+      };
     }
     if (typeof request.body?.avatarEmoji === "string") {
       workspace.avatarEmoji = request.body.avatarEmoji.trim().slice(0, 8) || undefined;

@@ -622,6 +622,10 @@ body {
   max-width: 72px;
 }
 
+.board-tz {
+  max-width: 200px;
+}
+
 .board-hours-check {
   display: inline-flex;
   align-items: center;

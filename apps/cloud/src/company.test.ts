@@ -158,4 +158,11 @@ describe("withinOperatingHours", () => {
     expect(withinOperatingHours(weekdays, new Date("2026-01-04T12:00:00Z"))).toBe(false); // Sunday
     expect(withinOperatingHours(weekdays, new Date("2026-01-05T12:00:00Z"))).toBe(true); // Monday
   });
+
+  it("respects the timezone", () => {
+    // Asia/Phnom_Penh is UTC+7. 03:00Z = 10:00 local (inside 9–18); 16:00Z = 23:00 (outside).
+    const hours = { start: 9, end: 18, timezone: "Asia/Phnom_Penh" };
+    expect(withinOperatingHours(hours, new Date("2026-01-05T03:00:00Z"))).toBe(true);
+    expect(withinOperatingHours(hours, new Date("2026-01-05T16:00:00Z"))).toBe(false);
+  });
 });

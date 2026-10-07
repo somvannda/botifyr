@@ -49,13 +49,38 @@ export function shouldRunSchedule(workspaceStatus: string | undefined): boolean 
   return workspaceStatus !== "paused" && workspaceStatus !== "archived";
 }
 
-/** True when `now` is inside the company's operating hours (UTC). No hours set = always. */
+const WEEKDAYS: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+
+/** Local day-of-week and hour (0–24) for `now` in an IANA timezone (default UTC). */
+function zonedParts(now: Date, timezone?: string): { day: number; hour: number } {
+  if (!timezone) {
+    return { day: now.getUTCDay(), hour: now.getUTCHours() + now.getUTCMinutes() / 60 };
+  }
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      weekday: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(now);
+    const value = (type: string): string => parts.find((part) => part.type === type)?.value ?? "";
+    return {
+      day: WEEKDAYS[value("weekday")] ?? now.getUTCDay(),
+      hour: Number(value("hour")) + Number(value("minute")) / 60,
+    };
+  } catch {
+    return { day: now.getUTCDay(), hour: now.getUTCHours() + now.getUTCMinutes() / 60 };
+  }
+}
+
+/** True when `now` is inside the company's operating hours. No hours set = always. */
 export function withinOperatingHours(hours: OperatingHours | undefined, now: Date): boolean {
   if (!hours) return true;
-  if (Array.isArray(hours.days) && hours.days.length > 0 && !hours.days.includes(now.getUTCDay())) {
+  const { day, hour } = zonedParts(now, hours.timezone);
+  if (Array.isArray(hours.days) && hours.days.length > 0 && !hours.days.includes(day)) {
     return false;
   }
-  const hour = now.getUTCHours() + now.getUTCMinutes() / 60;
   return hour >= hours.start && hour < hours.end;
 }
 
