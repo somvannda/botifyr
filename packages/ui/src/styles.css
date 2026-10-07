@@ -455,8 +455,8 @@ body {
 }
 
 .conv-role {
-  flex: none;
-  max-width: 52%;
+  align-self: flex-start;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1850,7 +1850,7 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 11px 12px;
+  padding: 13px 12px;
   border-radius: 12px;
   border: 1px solid transparent;
   background: transparent;
@@ -1979,7 +1979,7 @@ body {
 .conv-text {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
   min-width: 0;
   overflow: hidden;
 }

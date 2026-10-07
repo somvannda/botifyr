@@ -2448,12 +2448,10 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
             <BotLogo size={34} scheme={BOT_SCHEMES[bot.scheme % BOT_SCHEMES.length]} />
           </span>
           <span className="conv-text">
-            <span className="conv-line">
-              <span className="conv-name">{bot.name}</span>
-              {roleByBotId.get(bot.id) && (
-                <span className="conv-role">{roleByBotId.get(bot.id)?.title}</span>
-              )}
-            </span>
+            <span className="conv-name">{bot.name}</span>
+            {roleByBotId.get(bot.id) && (
+              <span className="conv-role">{roleByBotId.get(bot.id)?.title}</span>
+            )}
             <span className="conv-preview">{last?.content?.slice(0, 42) || "No messages yet — say hello"}</span>
           </span>
         </button>
