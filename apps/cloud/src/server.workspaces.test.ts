@@ -404,4 +404,32 @@ describe("workspaces API", () => {
     expect(personal.map((secret) => secret.name)).not.toContain("STRIPE_KEY");
     await app.close();
   });
+
+  it("attaches an existing bot to a company", async () => {
+    const { app, signup } = await boot();
+    const auth = await signup("ws-add@example.com");
+    const ws = (
+      await app.inject({ method: "POST", url: "/v1/workspaces", headers: auth, payload: { name: "Add Co" } })
+    ).json() as { id: string };
+    const bot = (
+      await app.inject({ method: "POST", url: "/v1/bots", headers: auth, payload: { name: "Solo" } })
+    ).json() as { id: string };
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/v1/workspaces/${ws.id}/members`,
+      headers: auth,
+      payload: { botId: bot.id, title: "Ops Lead", department: "ops" },
+    });
+    expect(res.statusCode).toBe(200);
+    const roles = (res.json() as { roles: Array<{ botId: string; title: string }> }).roles;
+    expect(roles.some((role) => role.botId === bot.id && role.title === "Ops Lead")).toBe(true);
+
+    const bots = (await app.inject({ method: "GET", url: "/v1/bots", headers: auth })).json() as Array<{
+      id: string;
+      workspace?: string;
+    }>;
+    expect(bots.find((entry) => entry.id === bot.id)?.workspace).toBe("Add Co");
+    await app.close();
+  });
 });

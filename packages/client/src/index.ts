@@ -900,6 +900,18 @@ export class BotifyrClient {
     });
   }
 
+  /** Attach an existing (owned) bot to the company with a role. */
+  addWorkspaceMember(
+    workspaceId: string,
+    input: { botId: string; title?: string; department?: Department },
+  ): Promise<WorkspaceWithRoles> {
+    return this.request(`/v1/workspaces/${workspaceId}/members`, {
+      method: "POST",
+      json: true,
+      body: JSON.stringify(input),
+    });
+  }
+
   startConnection(provider: string): Promise<{ url: string }> {
     return this.request(`/v1/connections/${provider}/start`, { method: "POST", json: true, body: "{}" });
   }

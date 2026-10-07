@@ -271,6 +271,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [hqGrants, setHqGrants] = useState<Array<CapabilityGrant>>([]);
   const [hqReports, setHqReports] = useState<Array<CompanyReport>>([]);
   const [hqWiki, setHqWiki] = useState<Array<{ name: string; content: string }>>([]);
+  const [addMemberBotId, setAddMemberBotId] = useState("");
   const [hoursStart, setHoursStart] = useState("9");
   const [hoursEnd, setHoursEnd] = useState("18");
   const [hoursWeekdays, setHoursWeekdays] = useState(true);
@@ -1121,6 +1122,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     setBoardTitle("");
     setBoardBusy(true);
     setHqTab("need");
+    setAddMemberBotId("");
     try {
       const [items, needs, budget, grants, reports] = await Promise.all([
         client.listWorkItems(workspaceId).catch(() => []),
@@ -1160,6 +1162,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     setHqGrants([]);
     setHqReports([]);
     setHqWiki([]);
+    setAddMemberBotId("");
   }
 
   async function runStandup(kind: "standup" | "weekly" = "standup") {
@@ -1221,6 +1224,25 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
           ? await client.deactivateCompany(workspace.id).catch(() => null)
           : await client.activateCompany(workspace.id, level).catch(() => null);
       if (updated) setWorkspaces(await client.listWorkspaces().catch(() => workspaces));
+    } finally {
+      setBoardBusy(false);
+    }
+  }
+
+  /** Attach an existing (personal) bot to this company. */
+  async function addExistingMember() {
+    const workspace = boardWorkspace;
+    if (!workspace || !addMemberBotId) return;
+    setBoardBusy(true);
+    try {
+      const bot = bots.find((entry) => entry.id === addMemberBotId);
+      await client
+        .addWorkspaceMember(workspace.id, { botId: addMemberBotId, title: bot?.name })
+        .catch(() => null);
+      setAddMemberBotId("");
+      const [botList, workspaceList] = await Promise.all([client.listBots(), client.listWorkspaces()]);
+      setBots(botList);
+      setWorkspaces(workspaceList);
     } finally {
       setBoardBusy(false);
     }
@@ -4489,6 +4511,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
               )}
 
               {hqTab === "team" && (
+                <>
                 <ul className="board-list">
                   {(workspaceByName.get(boardWorkspace.name)?.roles ?? []).map((role) => {
                     const caps = ROLE_CATALOG.find((entry) => entry.title === role.title)?.capabilities ?? [];
@@ -4526,6 +4549,36 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                     );
                   })}
                 </ul>
+                {(() => {
+                  const personal = bots.filter((bot) => !bot.workspace);
+                  if (personal.length === 0) return null;
+                  return (
+                    <div className="board-add">
+                      <select
+                        className="plan-member-dept"
+                        value={addMemberBotId}
+                        onChange={(event) => setAddMemberBotId(event.target.value)}
+                        aria-label="Add an existing bot"
+                      >
+                        <option value="">Add an existing bot…</option>
+                        {personal.map((bot) => (
+                          <option key={bot.id} value={bot.id}>
+                            {bot.name}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        className="btn primary small"
+                        type="button"
+                        disabled={!addMemberBotId || boardBusy}
+                        onClick={() => void addExistingMember()}
+                      >
+                        Add
+                      </button>
+                    </div>
+                  );
+                })()}
+                </>
               )}
 
               {hqTab === "board" && (

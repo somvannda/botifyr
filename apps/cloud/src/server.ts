@@ -2641,6 +2641,33 @@ export async function buildServer(options: ServerOptions) {
     },
   );
 
+  /** Attach an existing (owned) bot to the company with a role. */
+  app.post<{
+    Params: { id: string };
+    Body: { botId?: string; title?: string; department?: string; isChair?: boolean };
+  }>("/v1/workspaces/:id/members", { preHandler: requireAuth }, async (request, reply) => {
+    const userId = request.userId as string;
+    const workspace = await store.getWorkspace(request.params.id);
+    if (!workspace || workspace.ownerId !== userId) {
+      return reply.code(404).send({ error: "workspace not found" });
+    }
+    const bot = request.body?.botId ? await store.getBot(request.body.botId) : null;
+    if (!bot || bot.userId !== userId) {
+      return reply.code(404).send({ error: "bot not found" });
+    }
+    bot.workspace = workspace.name;
+    await store.updateBot(bot);
+    await store.setBotRole({
+      workspaceId: workspace.id,
+      botId: bot.id,
+      title: (request.body?.title ?? bot.name).trim().slice(0, 40) || bot.name,
+      department: toDepartment(request.body?.department),
+      isChair: request.body?.isChair === true,
+      hiredAt: new Date().toISOString(),
+    });
+    return workspaceView(workspace);
+  });
+
   /** Activate the company: set the autonomy level, schedules and auto-approve. */
   app.post<{ Params: { id: string }; Body: { level?: string } }>(
     "/v1/workspaces/:id/activate",
