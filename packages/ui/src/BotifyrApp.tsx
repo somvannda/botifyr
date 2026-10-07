@@ -365,6 +365,14 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     if (stored) {
       client.setToken(stored);
       client.setRefreshToken(localStorage.getItem(REFRESH_KEY));
+      // Never let a slow/hung auth check leave the app on "Loading…" forever:
+      // if it doesn't resolve in time, clear the saved session and show sign-in.
+      const giveUp = setTimeout(() => {
+        localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem(REFRESH_KEY);
+        client.setToken(null);
+        setAuthChecked(true);
+      }, 8000);
       client
         .me()
         .then((account) => setUser(account))
@@ -373,8 +381,11 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
           localStorage.removeItem(REFRESH_KEY);
           client.setToken(null);
         })
-        .finally(() => setAuthChecked(true));
-      return;
+        .finally(() => {
+          clearTimeout(giveUp);
+          setAuthChecked(true);
+        });
+      return () => clearTimeout(giveUp);
     }
 
     setAuthChecked(true);
@@ -4019,10 +4030,18 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                     {hqNeeds.map((task) => (
                       <li key={task.id} className="board-item">
                         <span className="board-title">{task.goal}</span>
-                        <button className="ghost small" type="button" onClick={() => void resolveNeed(task, "deny")}>
+                        <button
+                          className="ghost small"
+                          type="button"
+                          onClick={() => void resolveNeed(task, "deny")}
+                        >
                           Deny
                         </button>
-                        <button className="btn primary small" type="button" onClick={() => void resolveNeed(task, "allow")}>
+                        <button
+                          className="btn primary small"
+                          type="button"
+                          onClick={() => void resolveNeed(task, "allow")}
+                        >
                           Allow
                         </button>
                       </li>
