@@ -16,8 +16,11 @@ they land. Keep entries short; link code paths instead of explaining them.
       NetShort, QQTV, DramaWave, FreeReels, RaptDrama, ReelLife, ShortFlix,
       DramaTV, DotDrama, iDrama (WeTV/iQIYI already work via yt-dlp). Generic
       HLS/MP4 sniffer hardened (JSON-escaped URLs); a **self-learning recipe**
-      design is in [`docs/extractors.md`](extractors.md). One sample URL per site
-      still speeds this up.
+      design is in [`docs/extractors.md`](extractors.md). **Done**: `youtube.download`
+      falls back to a **browser sniff** (open the page in the sandbox, capture the
+      stream request, download it) and a `media.sniff` tool exposes this to the
+      model — GoodShort works this way with no per-site code. One sample URL per
+      site still speeds up the rest.
 - [x] **Friend group chats** — create a thread with several friends
       (`kind: "group"` model already exists).
 - [x] **Send a file to a friend** — signed, recipient-scoped, 7-day links from
@@ -87,3 +90,6 @@ sign-in + open signup, Noto Sans Khmer, button design system, cost controls.
 Library media categories (All/Videos/Audio/Images/Files) + in-player prev/next
 browsing; chat-list unread badge (right-aligned) + hover delete (two-step
 confirm); date-grouped Downloads with Save / Send to friend / Delete.
+Docker stack watchdog (`scripts/docker-watchdog.ps1`, scheduled as
+`BotifyrDockerWatchdog` every 5 min) keeps the cloud always on across Docker
+engine flaps.
