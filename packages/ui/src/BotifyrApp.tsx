@@ -283,6 +283,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [showBotPanel, setShowBotPanel] = useState(() => localStorage.getItem("botifyr.botPanel") !== "0");
   const [screenOn, setScreenOn] = useState(false);
   const [recording, setRecording] = useState(false);
+  const [tasksOpen, setTasksOpen] = useState(false);
   const [botPanelTab, setBotPanelTab] = useState<"details" | "library" | "computer">("details");
   const [labels, setLabels] = useState<Record<string, string>>(() => {
     try {
@@ -697,6 +698,17 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     try {
       const { name } = await client.learnTask(activeSessionId);
       pushToast({ kind: "task", title: "Task saved", body: `"${name}" is pending review.` });
+    } catch (err: unknown) {
+      setError(messageOf(err));
+    }
+  }
+
+  /** Replay a learned task (one recorded by demonstration) on this desktop. */
+  async function replayTask(name: string): Promise<void> {
+    if (!activeSessionId) return;
+    try {
+      const { steps } = await client.replayTask(activeSessionId, name);
+      pushToast({ kind: "task", title: "Task replayed", body: `${steps} step(s) re-run.` });
     } catch (err: unknown) {
       setError(messageOf(err));
     }
@@ -3520,6 +3532,26 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                 ))}
               </div>
 
+              <label className="workspace-field">
+                <span className="workspace-field-label">Company</span>
+                <input
+                  className="workspace-input"
+                  type="text"
+                  list="workspace-options"
+                  placeholder="Group under a company (optional)"
+                  value={botWorkspace}
+                  onChange={(event) => setBotWorkspace(event.target.value)}
+                  maxLength={60}
+                />
+                {workspaceNames.length > 0 && (
+                  <datalist id="workspace-options">
+                    {workspaceNames.map((name) => (
+                      <option key={name} value={name} />
+                    ))}
+                  </datalist>
+                )}
+              </label>
+
               {(createBotMode === "group" || createBotMode === "edit") && (
                 <>
                   {(() => {
@@ -3812,10 +3844,50 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
               <button className="ghost small" type="button" onClick={() => stopScreen()}>
                 Stop computer
               </button>
+              <button
+                className={`ghost small${tasksOpen ? " primary" : ""}`}
+                type="button"
+                onClick={() => setTasksOpen((value) => !value)}
+              >
+                Tasks
+              </button>
               <span className="computer-hint">
                 Click and type directly — the sandbox receives your mouse and keyboard.
               </span>
             </div>
+
+            {tasksOpen && (
+              <div className="computer-tasks">
+                {(() => {
+                  const tasks = learnedSkills.filter((skill) =>
+                    (skill.description ?? "").toLowerCase().includes("demonstration"),
+                  );
+                  if (tasks.length === 0) {
+                    return (
+                      <p className="computer-hint">
+                        No learned tasks yet — record a demonstration, then “Save as task”.
+                      </p>
+                    );
+                  }
+                  return (
+                    <ul className="computer-task-list">
+                      {tasks.map((task) => (
+                        <li key={task.id}>
+                          <span className="computer-task-name">{task.name}</span>
+                          <button
+                            className="ghost small"
+                            type="button"
+                            onClick={() => void replayTask(task.name)}
+                          >
+                            Replay
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  );
+                })()}
+              </div>
+            )}
           </div>
         </div>
       )}

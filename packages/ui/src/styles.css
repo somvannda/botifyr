@@ -341,6 +341,92 @@ body {
   padding: 6px 4px;
 }
 
+/* Company / workspace grouping in the sidebar (docs/company-workspace.md). */
+.task-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.task-section-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 8px 4px;
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: left;
+  cursor: pointer;
+}
+
+.task-section-head.static {
+  cursor: default;
+}
+
+.task-section-head:not(.static):hover {
+  color: var(--text);
+}
+
+.task-caret {
+  width: 10px;
+  font-size: 9px;
+  line-height: 1;
+}
+
+.task-section-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-section-count {
+  color: var(--muted);
+  font-weight: 600;
+  opacity: 0.7;
+}
+
+.task-section-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.workspace-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.workspace-field-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+
+.workspace-input {
+  width: 100%;
+  padding: 9px 11px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.workspace-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
 .task-item {
   display: grid;
   grid-template-columns: 10px 1fr auto;
@@ -3829,6 +3915,36 @@ body {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.computer-tasks {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.computer-task-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.computer-task-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.computer-task-name {
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .bot-panel-screen-empty {

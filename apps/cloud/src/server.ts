@@ -24,6 +24,8 @@ import {
   getComputerSandbox,
   setComputerSandbox,
   clearComputerSandbox,
+  touchComputerSandbox,
+  takeIdleComputerSandboxes,
   getScreenshot,
   ownerOfEventTask,
   ownerOfSession,
@@ -2932,6 +2934,7 @@ export async function buildServer(options: ServerOptions) {
         return reply.code(404).send({ error: "session not found" });
       }
       const backend = getComputerSandbox(`session:${session.id}`);
+      touchComputerSandbox(`session:${session.id}`);
       if (!backend) return reply.code(409).send({ error: "start Botifyr's screen first" });
       const args = request.body?.args ?? {};
       const trace = sessionTraces.get(session.id) ?? [];
@@ -3100,6 +3103,7 @@ export async function buildServer(options: ServerOptions) {
         return;
       }
       const backend = getComputerSandbox(`session:${session.id}`);
+      touchComputerSandbox(`session:${session.id}`);
       const base = backend?.streamUrl ? await backend.streamUrl() : null;
       if (!base) {
         reply.code(404).send({ error: "no live desktop for this session" });
@@ -3474,14 +3478,10 @@ export async function buildServer(options: ServerOptions) {
   // Stop session desktops idle for a while (BOTIFYR_COMPUTER_IDLE_MINUTES, default 10).
   const computerIdleMs = Math.max(60_000, Number(process.env.BOTIFYR_COMPUTER_IDLE_MINUTES ?? 10) * 60_000);
   const computerTimer = setInterval(() => {
-    const now = Date.now();
-    for (const [sessionId, lastUsed] of computerLastUsed) {
-      if (now - lastUsed < computerIdleMs) continue;
-      const key = `session:${sessionId}`;
+    for (const key of takeIdleComputerSandboxes(computerIdleMs, Date.now())) {
       const backend = getComputerSandbox(key);
       if (backend) void backend.close().catch(() => {});
       clearComputerSandbox(key);
-      computerLastUsed.delete(sessionId);
     }
   }, 60_000);
 

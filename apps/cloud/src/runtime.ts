@@ -23,9 +23,12 @@ export function resolvePendingApproval(approval: Approval): void {
 }
 
 const computerSandboxes = new Map<string, ComputerBackend>();
+/* Last-use time per live desktop, so idle ones can be reaped. */
+const computerLastUsed = new Map<string, number>();
 
 export function setComputerSandbox(taskId: string, backend: ComputerBackend): void {
   computerSandboxes.set(taskId, backend);
+  computerLastUsed.set(taskId, Date.now());
 }
 
 export function getComputerSandbox(taskId: string): ComputerBackend | undefined {
@@ -34,6 +37,24 @@ export function getComputerSandbox(taskId: string): ComputerBackend | undefined 
 
 export function clearComputerSandbox(taskId: string): void {
   computerSandboxes.delete(taskId);
+  computerLastUsed.delete(taskId);
+}
+
+/** Mark a live desktop as just used, so idle cleanup leaves it alone. */
+export function touchComputerSandbox(taskId: string): void {
+  if (computerSandboxes.has(taskId)) computerLastUsed.set(taskId, Date.now());
+}
+
+/** Keys idle for at least `idleMs`; removed from tracking so the caller can close them. */
+export function takeIdleComputerSandboxes(idleMs: number, now: number): string[] {
+  const idle: string[] = [];
+  for (const [key, lastUsed] of computerLastUsed) {
+    if (now - lastUsed >= idleMs) {
+      idle.push(key);
+      computerLastUsed.delete(key);
+    }
+  }
+  return idle;
 }
 
 /* Task cancellation: mark a task stopped and abort its sandbox. */
