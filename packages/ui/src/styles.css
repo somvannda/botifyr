@@ -431,6 +431,11 @@ body {
 }
 
 .conv-role {
+  flex: none;
+  max-width: 52%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   padding: 1px 6px;
   border-radius: 999px;
   border: 1px solid var(--border);
@@ -1917,13 +1922,21 @@ body {
 .conv-text {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
   gap: 2px;
+  min-width: 0;
   overflow: hidden;
 }
 
+.conv-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
 .conv-name {
-  width: 100%;
+  min-width: 0;
+  flex: 0 1 auto;
   font-size: 13px;
   font-weight: 600;
   overflow: hidden;
@@ -1932,7 +1945,7 @@ body {
 }
 
 .conv-preview {
-  width: 100%;
+  min-width: 0;
   font-size: 12.5px;
   color: var(--muted);
   overflow: hidden;
