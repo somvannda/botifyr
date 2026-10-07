@@ -75,7 +75,8 @@ company has at least one code connection.
 | `code.git_log` | Recent git history (read-only). | no |
 | `code.map` | Summarise the repo → `CODEBASE.md` in the wiki. | no |
 | `code.apply` | Stage a file's new contents under `/work` for review. | yes |
-| `code.test` | Run the repo's tests in a `docker run --network none` sandbox. | yes |
+| `code.test` | Run the repo's tests in a `docker run --network none` sandbox (optional network install step first). | yes |
+| `code.commit` | Apply staged changes to a managed clone and commit on a branch. | yes |
 
 Read tools are cheap (no model calls; deterministic output, bounded size). Write
 tools are approval-gated and produce a diff the CEO reviews — matching the
@@ -128,9 +129,8 @@ Reuse the capability-grant system: a `repo` capability per connection, subject
    repo's tests in a `docker run --network none` sandbox; `sandboxMount()` maps
    `/repos` and `/managed` to host/Docker mounts and fails safe when unmapped.
 
-**Still open:** open a PR from a staged change (branch + push); install/restore
-step before `code.test` for repos without vendored deps; per-tenant checkout
-isolation and quotas.
+**Still open:** pushing a committed branch and opening a PR via the provider
+API; per-tenant checkout isolation and quotas.
 
 ## 9. Open questions
 
