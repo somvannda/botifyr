@@ -836,6 +836,18 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     }
   }
 
+  function dismissNotification(id: string): void {
+    setNotifications((prev) => {
+      const next = prev.filter((entry) => entry.id !== id);
+      try {
+        localStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }
+
   // Close the notification panel when clicking anywhere outside it.
   useEffect(() => {
     if (!notifOpen) return;
@@ -3375,7 +3387,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                     ) : (
                       <ul className="notif-list">
                         {notifications.map((entry) => (
-                          <li key={entry.id}>
+                          <li key={entry.id} className="notif-row">
                             <button
                               className={`notif-item${entry.read ? "" : " unread"}`}
                               type="button"
@@ -3392,6 +3404,14 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                                   minute: "2-digit",
                                 })}
                               </span>
+                            </button>
+                            <button
+                              className="notif-x"
+                              type="button"
+                              title="Dismiss"
+                              onClick={() => dismissNotification(entry.id)}
+                            >
+                              <CloseIcon size={13} />
                             </button>
                           </li>
                         ))}
@@ -5353,11 +5373,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
           <div className="apps-panel company-setup" onClick={(event) => event.stopPropagation()}>
             <div className="apps-head">
               <span className="apps-title">Delete all tasks?</span>
-              <button
-                className="round small"
-                type="button"
-                onClick={() => setConfirmClearBoard(false)}
-              >
+              <button className="round small" type="button" onClick={() => setConfirmClearBoard(false)}>
                 ✕
               </button>
             </div>
@@ -5367,11 +5383,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
               } from the ${boardWorkspace?.name ?? "company"} board. It can't be undone.`}
             </p>
             <div className="apps-actions">
-              <button
-                className="ghost small"
-                type="button"
-                onClick={() => setConfirmClearBoard(false)}
-              >
+              <button className="ghost small" type="button" onClick={() => setConfirmClearBoard(false)}>
                 Cancel
               </button>
               <button
