@@ -258,6 +258,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [companyEdit, setCompanyEdit] = useState<{ id: string; name: string } | null>(null);
   const [companyStep, setCompanyStep] = useState<"source" | "review" | "confirm">("source");
   const [confirmCompanyDelete, setConfirmCompanyDelete] = useState(false);
+  const [confirmClearBoard, setConfirmClearBoard] = useState(false);
   const [wizardUseHours, setWizardUseHours] = useState(false);
   const [wizardHoursStart, setWizardHoursStart] = useState("9");
   const [wizardHoursEnd, setWizardHoursEnd] = useState("18");
@@ -4918,15 +4919,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                         type="button"
                         disabled={boardBusy}
                         title="Delete every task on the board"
-                        onClick={() => {
-                          if (
-                            window.confirm(
-                              `Delete all ${boardItems.length} tasks? This can't be undone.`,
-                            )
-                          ) {
-                            void clearBoard();
-                          }
-                        }}
+                        onClick={() => setConfirmClearBoard(true)}
                       >
                         Clear all
                       </button>
@@ -5350,6 +5343,47 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                   </>
                 );
               })()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmClearBoard && (
+        <div className="apps-overlay" onClick={() => setConfirmClearBoard(false)}>
+          <div className="apps-panel company-setup" onClick={(event) => event.stopPropagation()}>
+            <div className="apps-head">
+              <span className="apps-title">Delete all tasks?</span>
+              <button
+                className="round small"
+                type="button"
+                onClick={() => setConfirmClearBoard(false)}
+              >
+                ✕
+              </button>
+            </div>
+            <p className="company-hint">
+              {`This removes all ${boardItems.length} task${
+                boardItems.length === 1 ? "" : "s"
+              } from the ${boardWorkspace?.name ?? "company"} board. It can't be undone.`}
+            </p>
+            <div className="apps-actions">
+              <button
+                className="ghost small"
+                type="button"
+                onClick={() => setConfirmClearBoard(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="ghost small danger"
+                type="button"
+                onClick={() => {
+                  setConfirmClearBoard(false);
+                  void clearBoard();
+                }}
+              >
+                Delete all
+              </button>
             </div>
           </div>
         </div>
