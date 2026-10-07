@@ -19,6 +19,7 @@ RUN apt-get update \
     ffmpeg \
     openbox \
     xterm \
+    chromium \
     fonts-dejavu-core \
     libgl1 \
   && rm -rf /var/lib/apt/lists/*

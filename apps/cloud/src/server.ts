@@ -22,6 +22,7 @@ import type { LocalChannel } from "@botifyr/channels";
 import { emit, subscribe } from "./events.js";
 import {
   getComputerSandbox,
+  setComputerSandbox,
   getScreenshot,
   ownerOfEventTask,
   ownerOfSession,
@@ -36,6 +37,7 @@ import { handleNodeMessage, nodeInfo, registerNode } from "./nodes.js";
 import { createToken, hashPassword, hashToken, verifyPassword } from "./auth.js";
 import { encryptSecret } from "./vault.js";
 import { runTask, runtimeInfo, summarizeConversation } from "./runner.js";
+import { createDockerComputerBackend } from "@botifyr/agent-core";
 import {
   chmabaConfigFromEnv,
   createPayment,
@@ -2834,6 +2836,66 @@ export async function buildServer(options: ServerOptions) {
         return;
       }
 
+      reply.hijack();
+      reply.raw.writeHead(200, {
+        "content-type": upstream.headers.get("content-type") ?? "multipart/x-mixed-replace; boundary=frame",
+        "cache-control": "no-store",
+      });
+      const reader = upstream.body.getReader();
+      request.raw.on("close", () => {
+        void reader.cancel();
+      });
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          reply.raw.write(Buffer.from(value));
+        }
+      } catch {
+        // client or upstream closed
+      }
+      reply.raw.end();
+    },
+  );
+
+  /* "Botifyr's screen": a session-scoped desktop the user can start and watch
+     (and drive) without running a task — the basis for teach-by-demonstration. */
+  app.post<{ Params: { id: string } }>(
+    "/v1/sessions/:id/computer",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const session = await store.getSession(request.params.id);
+      if (!session || session.userId !== request.userId) {
+        return reply.code(404).send({ error: "session not found" });
+      }
+      const key = `session:${session.id}`;
+      if (!getComputerSandbox(key)) {
+        setComputerSandbox(key, createDockerComputerBackend());
+      }
+      return { ok: true, streaming: true };
+    },
+  );
+
+  app.get<{ Params: { id: string } }>(
+    "/v1/sessions/:id/stream",
+    { preHandler: requireAuth },
+    async (request, reply): Promise<void> => {
+      const session = await store.getSession(request.params.id);
+      if (!session || session.userId !== request.userId) {
+        reply.code(404).send({ error: "session not found" });
+        return;
+      }
+      const backend = getComputerSandbox(`session:${session.id}`);
+      const base = backend?.streamUrl ? await backend.streamUrl() : null;
+      if (!base) {
+        reply.code(404).send({ error: "no live desktop for this session" });
+        return;
+      }
+      const upstream = await fetch(`${base}/stream`);
+      if (!upstream.ok || !upstream.body) {
+        reply.code(502).send({ error: "desktop stream unavailable" });
+        return;
+      }
       reply.hijack();
       reply.raw.writeHead(200, {
         "content-type": upstream.headers.get("content-type") ?? "multipart/x-mixed-replace; boundary=frame",

@@ -273,6 +273,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [billing, setBilling] = useState<Awaited<ReturnType<BotifyrClient["billing"]>> | null>(null);
   const [topUpOpen, setTopUpOpen] = useState(false);
   const [showBotPanel, setShowBotPanel] = useState(() => localStorage.getItem("botifyr.botPanel") !== "0");
+  const [screenOn, setScreenOn] = useState(false);
   const [botPanelTab, setBotPanelTab] = useState<"details" | "library" | "computer">("details");
   const [labels, setLabels] = useState<Record<string, string>>(() => {
     try {
@@ -586,6 +587,17 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
 
   async function openExternal(url: string) {
     await bridge.openExternal(url);
+  }
+
+  /** Start "Botifyr's screen" (a session desktop sandbox) and show its stream. */
+  async function startScreen(): Promise<void> {
+    if (!activeSessionId) return;
+    try {
+      await client.startComputer(activeSessionId);
+      setScreenOn(true);
+    } catch (err: unknown) {
+      setError(messageOf(err));
+    }
   }
 
   /** Open the media viewer at an item so you can browse prev/next. */
@@ -3055,7 +3067,18 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
 
             {botPanelTab === "computer" && (
               <div className="bot-panel-screen">
-                {liveTask && (liveTask.liveStream || liveTask.screenshotAt) ? (
+                {screenOn && activeSessionId ? (
+                  <>
+                    <img
+                      className="bot-panel-screen-img"
+                      src={`${CLOUD_URL}/v1/sessions/${activeSessionId}/stream?token=${encodeURIComponent(token())}`}
+                      alt="Bot screen"
+                    />
+                    <button className="ghost small" type="button" onClick={() => setScreenOn(false)}>
+                      Stop screen
+                    </button>
+                  </>
+                ) : liveTask && (liveTask.liveStream || liveTask.screenshotAt) ? (
                   <img
                     className="bot-panel-screen-img"
                     src={
@@ -3069,6 +3092,9 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                   <div className="bot-panel-screen-empty">
                     <span className="bot-panel-screen-ico">▢</span>
                     <span>{activeBotName}&apos;s screen</span>
+                    <button className="btn primary" type="button" onClick={() => void startScreen()}>
+                      Start {activeBotName}&apos;s screen
+                    </button>
                   </div>
                 )}
               </div>

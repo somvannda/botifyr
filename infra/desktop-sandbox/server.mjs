@@ -1,16 +1,21 @@
 import http from "node:http";
 import { spawn, execFile } from "node:child_process";
+import { createReadStream } from "node:fs";
+import { stat } from "node:fs/promises";
 import { promisify } from "node:util";
 
 /**
  * Desktop sandbox service.
  *
- * Starts a virtual X desktop (Xvfb + openbox + an xterm), then exposes:
+ * Starts a virtual X desktop (Xvfb + openbox + an xterm) with a web browser,
+ * then exposes:
  *
- *   GET  /health   -> "ok"
- *   GET  /stream   -> live MJPEG stream of the framebuffer
- *   POST /action   -> { ok, output, screenshot? } for computer-use actions
- *        { action: "screenshot" | "move" | "click" | "type" | "key" | "scroll", args }
+ *   GET  /health     -> "ok"
+ *   GET  /stream     -> live MJPEG stream of the framebuffer
+ *   GET  /recording  -> the latest screen recording (MP4), for teach-by-demo
+ *   POST /action     -> { ok, output, screenshot? } for computer-use actions
+ *        { action: "screenshot" | "move" | "click" | "type" | "key" | "scroll"
+ *                  | "record_start" | "record_stop", args }
  *
  * Input is driven with xdotool; frames are grabbed with ffmpeg's x11grab.
  */
@@ -25,6 +30,8 @@ const PORT = Number(process.env.PORT ?? 8790);
 const ENV = { ...process.env, DISPLAY };
 
 const children = [];
+let recorder = null;
+let lastRecording = null;
 
 function spawnBg(command, args) {
   const child = spawn(command, args, { env: ENV, stdio: "ignore" });
@@ -68,7 +75,15 @@ async function startDesktop() {
 
   spawnBg("openbox", []);
   spawnBg("xterm", ["-geometry", "100x30+40+40", "-fa", "Monospace", "-fs", "12"]);
-  await sleep(1200); // let the window map
+  // A browser so the user can drive sites (and teach a task) on the desktop.
+  spawnBg("chromium", [
+    "--no-sandbox",
+    "--disable-dev-shm-usage",
+    "--no-first-run",
+    "--start-maximized",
+    "about:blank",
+  ]);
+  await sleep(1500); // let the windows map
 }
 
 async function xdotool(args) {
@@ -153,6 +168,57 @@ const actions = {
     }
     return { ok: true, output: `Scrolled ${amount}.`, screenshot: await frame() };
   },
+
+  async record_start() {
+    if (recorder) return { ok: true, output: `Already recording → ${recorder.path}` };
+    const path = `/tmp/recording-${Date.now()}.mp4`;
+    const child = spawn(
+      "ffmpeg",
+      [
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-y",
+        "-f",
+        "x11grab",
+        "-framerate",
+        "15",
+        "-video_size",
+        SIZE,
+        "-i",
+        DISPLAY,
+        "-c:v",
+        "libx264",
+        "-preset",
+        "ultrafast",
+        "-pix_fmt",
+        "yuv420p",
+        path,
+      ],
+      { env: ENV, stdio: "ignore" },
+    );
+    child.on("error", () => {});
+    children.push(child);
+    recorder = { child, path };
+    return { ok: true, output: `Recording started → ${path}` };
+  },
+
+  async record_stop() {
+    if (!recorder) return { ok: false, output: "Not recording." };
+    const { child, path } = recorder;
+    recorder = null;
+    try {
+      child.kill("SIGINT");
+    } catch {
+      // already gone
+    }
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      if (child.exitCode !== null || child.signalCode) break;
+      await sleep(100);
+    }
+    lastRecording = path;
+    return { ok: true, output: `Recording saved → ${path}` };
+  },
 };
 
 function readBody(request) {
@@ -206,6 +272,18 @@ const server = http.createServer(async (request, response) => {
 
   if (request.method === "GET" && request.url === "/stream") {
     await handleStream(response);
+    return;
+  }
+
+  if (request.method === "GET" && request.url === "/recording") {
+    const info = lastRecording ? await stat(lastRecording).catch(() => null) : null;
+    if (!lastRecording || !info) {
+      response.writeHead(404, { "content-type": "text/plain" });
+      response.end("no recording");
+      return;
+    }
+    response.writeHead(200, { "content-type": "video/mp4", "content-length": info.size });
+    createReadStream(lastRecording).pipe(response);
     return;
   }
 

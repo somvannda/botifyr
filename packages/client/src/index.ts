@@ -377,6 +377,15 @@ export class BotifyrClient {
     return this.request(`/admin/media-recipes/${encodeURIComponent(domain)}`, { method: "DELETE" });
   }
 
+  /** Start "Botifyr's screen": a session-scoped desktop sandbox. */
+  startComputer(sessionId: string): Promise<{ ok: boolean; streaming: boolean }> {
+    return this.request(`/v1/sessions/${encodeURIComponent(sessionId)}/computer`, {
+      method: "POST",
+      json: true,
+      body: "{}",
+    });
+  }
+
   adminSkills(): Promise<AdminSkill[]> {
     return this.request("/admin/learned-skills");
   }
