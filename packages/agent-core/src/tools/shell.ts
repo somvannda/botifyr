@@ -45,7 +45,8 @@ export function createShellTools(backend: ShellBackend): ShellTools {
 
   const write: ToolDefinition = {
     name: "file.write",
-    description: "Write a text file into the sandbox workspace, creating folders as needed.",
+    description:
+      "Write a text file into the sandbox workspace (folders created as needed). Temporary per run — to keep something for the team, use library.write instead.",
     parameters: {
       type: "object",
       properties: {

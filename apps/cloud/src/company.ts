@@ -157,7 +157,9 @@ export function companyContext(dna: CompanyDNA): string {
     dna.goal && `Current goal: ${dna.goal}`,
     dna.priorities.length > 0 && `Priorities: ${dna.priorities.join(", ")}`,
   ].filter((line): line is string => Boolean(line));
-  return `You are an employee of this company — keep it in mind in everything you do.\n${lines.join("\n")}`.slice(
+  const persistence =
+    "Persist anything the team should keep (plans, lists, reports, research) in the company wiki with the library.write tool (or company.plan). The code sandbox's file.write is temporary and is lost after each run.";
+  return `You are an employee of this company — keep it in mind in everything you do.\n${lines.join("\n")}\n${persistence}`.slice(
     0,
     2000,
   );
