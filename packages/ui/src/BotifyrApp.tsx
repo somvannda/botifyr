@@ -395,6 +395,11 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
 
   const activeIdRef = useRef<string | null>(null);
   activeIdRef.current = activeSessionId;
+  const activeBotIdRef = useRef<string | null>(null);
+  activeBotIdRef.current = activeBotId;
+  const botsRef = useRef<Bot[]>([]);
+  botsRef.current = bots;
+  const sidebarRefreshRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const nodeStartedRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const cancelSigninRef = useRef(false);
@@ -600,6 +605,22 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       .catch(() => {});
   }, [activeBotId, botPanelTab, client]);
 
+  /** Pull fresh bots + companies after a new session appears (e.g. company.create
+   *  just hired people) so the sidebar groups them without a manual reload. */
+  function scheduleSidebarRefresh() {
+    if (sidebarRefreshRef.current) clearTimeout(sidebarRefreshRef.current);
+    sidebarRefreshRef.current = setTimeout(() => {
+      sidebarRefreshRef.current = null;
+      Promise.all([client.listBots(), client.listWorkspaces()])
+        .then(([botList, workspaceList]) => {
+          botsRef.current = botList;
+          setBots(botList);
+          setWorkspaces(workspaceList);
+        })
+        .catch(() => {});
+    }, 400);
+  }
+
   function applyEvent(event: ServerEvent) {
     switch (event.type) {
       case "session.created":
@@ -607,6 +628,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
           prev.some((s) => s.id === event.session.id) ? prev : [event.session, ...prev],
         );
         setActiveSessionId((prev) => prev ?? event.session.id);
+        scheduleSidebarRefresh();
         break;
       case "session.updated":
         setSessions((prev) => {
@@ -623,6 +645,22 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
           }
         }
         break;
+      case "bot.deleted": {
+        // Another device removed this bot: drop it (and its thread) so the
+        // sidebar can't keep a stale row that fails to delete again.
+        const remaining = botsRef.current.filter((bot) => bot.id !== event.botId);
+        botsRef.current = remaining;
+        setBots(remaining);
+        if (event.sessionId) {
+          setSessions((prev) => prev.filter((session) => session.id !== event.sessionId));
+        }
+        if (activeBotIdRef.current === event.botId) {
+          const next = remaining[0] ?? null;
+          setActiveBotId(next?.id ?? null);
+          setActiveSessionId(next?.sessionId ?? null);
+        }
+        break;
+      }
       case "assistant.delta":
         setStream((prev) =>
           prev && prev.taskId === event.taskId
@@ -1505,18 +1543,28 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
 
   async function removeBot(bot: Bot) {
     setConfirmDeleteId(null);
-    try {
-      await client.deleteBot(bot.id);
-      const remaining = bots.filter((entry) => entry.id !== bot.id);
+    const dropLocally = () => {
+      const remaining = botsRef.current.filter((entry) => entry.id !== bot.id);
+      botsRef.current = remaining;
       setBots(remaining);
       setSessions((prev) => prev.filter((session) => session.id !== bot.sessionId));
-      if (activeBotId === bot.id) {
+      if (activeBotIdRef.current === bot.id) {
         const next = remaining[0] ?? null;
         setActiveBotId(next?.id ?? null);
         setActiveSessionId(next?.sessionId ?? null);
       }
       closeBotModal();
+    };
+    try {
+      await client.deleteBot(bot.id);
+      dropLocally();
     } catch (err: unknown) {
+      // A bot that is already gone still needs to leave the sidebar: treat the
+      // server's "not found" as success so a stale row self-heals.
+      if (messageOf(err).toLowerCase().includes("not found")) {
+        dropLocally();
+        return;
+      }
       setError(messageOf(err));
     }
   }
