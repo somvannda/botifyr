@@ -16,6 +16,7 @@ import type {
   ConnectionInfo,
   CreateWorkspaceRequest,
   Department,
+  OperatingHours,
   SecretSummary,
   ServerEvent,
   Session,
@@ -47,7 +48,7 @@ import { handleNodeMessage, nodeInfo, registerNode } from "./nodes.js";
 import { createToken, hashPassword, hashToken, verifyPassword } from "./auth.js";
 import { encryptSecret } from "./vault.js";
 import { oneShot, runTask, runtimeInfo, summarizeConversation } from "./runner.js";
-import { analyzeSource, buildStandup, planCompany, shouldRunSchedule, toDepartment } from "./company.js";
+import { analyzeSource, buildStandup, planCompany, shouldRunSchedule, toDepartment, withinOperatingHours } from "./company.js";
 import { seedCompany } from "./company-seed.js";
 import { createDockerComputerBackend } from "@botifyr/agent-core";
 import {
@@ -2184,6 +2185,7 @@ export async function buildServer(options: ServerOptions) {
       ceoBotId?: string;
       dna?: CompanyDNA;
       autonomy?: Workspace["autonomy"];
+      operatingHours?: { start?: number; end?: number; days?: number[] };
     };
   }>("/v1/workspaces/:id", { preHandler: requireAuth }, async (request, reply) => {
     const userId = request.userId as string;
@@ -2217,6 +2219,15 @@ export async function buildServer(options: ServerOptions) {
     const autonomy = request.body?.autonomy;
     if (autonomy && ["manual", "supervised", "autonomous"].includes(autonomy)) {
       workspace.autonomy = autonomy;
+    }
+    if (request.body?.operatingHours) {
+      const oh = request.body.operatingHours;
+      const start = Math.max(0, Math.min(23, Math.floor(Number(oh.start) || 0)));
+      const end = Math.max(1, Math.min(24, Math.floor(Number(oh.end) || 24)));
+      const days = Array.isArray(oh.days)
+        ? oh.days.filter((day) => Number.isInteger(day) && day >= 0 && day <= 6)
+        : undefined;
+      workspace.operatingHours = { start, end, days: days && days.length > 0 ? days : undefined };
     }
     if (typeof request.body?.avatarEmoji === "string") {
       workspace.avatarEmoji = request.body.avatarEmoji.trim().slice(0, 8) || undefined;
@@ -4040,12 +4051,21 @@ export async function buildServer(options: ServerOptions) {
       try {
         const now = Date.now();
         const scheduled = await store.listScheduledBots();
-        const statusesByUser = new Map<string, Map<string, string>>();
-        const statusOf = async (userId: string): Promise<Map<string, string>> => {
-          let map = statusesByUser.get(userId);
+        const workspaceInfoByUser = new Map<
+          string,
+          Map<string, { status: string; operatingHours?: OperatingHours }>
+        >();
+        const workspaceOf = async (
+          userId: string,
+        ): Promise<Map<string, { status: string; operatingHours?: OperatingHours }>> => {
+          let map = workspaceInfoByUser.get(userId);
           if (!map) {
-            map = new Map((await store.listWorkspaces(userId)).map((ws) => [ws.name, ws.status]));
-            statusesByUser.set(userId, map);
+            map = new Map(
+              (await store.listWorkspaces(userId)).map(
+                (ws) => [ws.name, { status: ws.status, operatingHours: ws.operatingHours }] as const,
+              ),
+            );
+            workspaceInfoByUser.set(userId, map);
           }
           return map;
         };
@@ -4053,9 +4073,15 @@ export async function buildServer(options: ServerOptions) {
           const schedule = bot.schedule;
           if (!schedule?.enabled) continue;
           if (schedule.nextRunAt && new Date(schedule.nextRunAt).getTime() > now) continue;
-          // A paused/archived company does not run its schedules.
-          if (bot.workspace && !shouldRunSchedule((await statusOf(bot.userId)).get(bot.workspace))) {
-            continue;
+          // Skip paused/archived companies and anything outside operating hours.
+          if (bot.workspace) {
+            const info = (await workspaceOf(bot.userId)).get(bot.workspace);
+            if (
+              info &&
+              (!shouldRunSchedule(info.status) || !withinOperatingHours(info.operatingHours, new Date(now)))
+            ) {
+              continue;
+            }
           }
           // Advance first so a slow run can't double-fire.
           bot.schedule = {

@@ -233,6 +233,9 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [hqGrants, setHqGrants] = useState<Array<CapabilityGrant>>([]);
   const [hqReports, setHqReports] = useState<Array<CompanyReport>>([]);
   const [hqWiki, setHqWiki] = useState<Array<{ name: string; content: string }>>([]);
+  const [hoursStart, setHoursStart] = useState("9");
+  const [hoursEnd, setHoursEnd] = useState("18");
+  const [hoursWeekdays, setHoursWeekdays] = useState(true);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [editingBotId, setEditingBotId] = useState<string | null>(null);
   const [botName, setBotName] = useState("");
@@ -1017,6 +1020,10 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       setBudgetInput(budget && budget.limitTokens > 0 ? String(budget.limitTokens) : "");
       setHqGrants(grants);
       setHqReports(reports);
+      const hours = workspaces.find((entry) => entry.id === workspaceId)?.operatingHours;
+      setHoursStart(hours ? String(hours.start) : "9");
+      setHoursEnd(hours ? String(hours.end) : "18");
+      setHoursWeekdays(hours ? Boolean(hours.days && hours.days.length > 0) : true);
 
       // Company wiki: the chair bot's Library (BRIEF / OKRS / BACKLOG).
       const chairId = workspaces.find((entry) => entry.id === workspaceId)?.ceoBotId;
@@ -1122,6 +1129,27 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     setBoardBusy(true);
     try {
       setHqBudget(await client.setWorkspaceBudget(workspace.id, limitTokens));
+    } finally {
+      setBoardBusy(false);
+    }
+  }
+
+  /** Operating hours: scheduled work only happens inside this window (cost control). */
+  async function saveHours() {
+    const workspace = boardWorkspace;
+    if (!workspace) return;
+    setBoardBusy(true);
+    try {
+      await client
+        .updateWorkspace(workspace.id, {
+          operatingHours: {
+            start: Math.max(0, Math.min(23, Math.floor(Number(hoursStart) || 0))),
+            end: Math.max(1, Math.min(24, Math.floor(Number(hoursEnd) || 24))),
+            days: hoursWeekdays ? [1, 2, 3, 4, 5] : undefined,
+          },
+        })
+        .catch(() => null);
+      setWorkspaces(await client.listWorkspaces().catch(() => workspaces));
     } finally {
       setBoardBusy(false);
     }
@@ -4229,6 +4257,46 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                       onClick={() => void saveBudget()}
                     >
                       Save
+                    </button>
+                  </div>
+                  <p className="company-hint">
+                    Work hours (UTC) — scheduled work only happens inside this window.
+                  </p>
+                  <div className="board-add">
+                    <input
+                      className="workspace-input board-hours"
+                      type="number"
+                      min={0}
+                      max={23}
+                      value={hoursStart}
+                      onChange={(event) => setHoursStart(event.target.value)}
+                      aria-label="Start hour"
+                    />
+                    <span className="board-phase">to</span>
+                    <input
+                      className="workspace-input board-hours"
+                      type="number"
+                      min={1}
+                      max={24}
+                      value={hoursEnd}
+                      onChange={(event) => setHoursEnd(event.target.value)}
+                      aria-label="End hour"
+                    />
+                    <label className="board-hours-check">
+                      <input
+                        type="checkbox"
+                        checked={hoursWeekdays}
+                        onChange={(event) => setHoursWeekdays(event.target.checked)}
+                      />{" "}
+                      weekdays
+                    </label>
+                    <button
+                      className="btn primary small"
+                      type="button"
+                      disabled={boardBusy}
+                      onClick={() => void saveHours()}
+                    >
+                      Save hours
                     </button>
                   </div>
                 </>

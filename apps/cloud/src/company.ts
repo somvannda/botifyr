@@ -3,6 +3,7 @@ import {
   type CompanyDNA,
   type CreateWorkspaceRequest,
   type Department,
+  type OperatingHours,
   type RoleDefinition,
   type WorkItem,
   type WorkspaceBudget,
@@ -46,6 +47,16 @@ export function isBudgetExhausted(budget: WorkspaceBudget | null): boolean {
 /** A paused or archived company does not run its schedules (docs/company-os.md §22). */
 export function shouldRunSchedule(workspaceStatus: string | undefined): boolean {
   return workspaceStatus !== "paused" && workspaceStatus !== "archived";
+}
+
+/** True when `now` is inside the company's operating hours (UTC). No hours set = always. */
+export function withinOperatingHours(hours: OperatingHours | undefined, now: Date): boolean {
+  if (!hours) return true;
+  if (Array.isArray(hours.days) && hours.days.length > 0 && !hours.days.includes(now.getUTCDay())) {
+    return false;
+  }
+  const hour = now.getUTCHours() + now.getUTCMinutes() / 60;
+  return hour >= hours.start && hour < hours.end;
 }
 
 /** Summarise the board + approvals into a short standup (docs/company-os.md §5). */

@@ -7,6 +7,7 @@ import type {
   Department,
   MediaRecipe,
   ModelPricingRecord,
+  OperatingHours,
   PlatformSettings,
   Task,
   WorkItem,
@@ -99,7 +100,9 @@ export interface WorkspaceRecord {
   mission: string;
   dna?: CompanyDNA;
   status: "onboarding" | "active" | "paused" | "archived";
+  operatingHours?: OperatingHours;
   autonomy?: "manual" | "supervised" | "autonomous";
+  hours?: OperatingHours;
   ceoBotId?: string;
   avatarEmoji?: string;
   scheme?: number;

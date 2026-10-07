@@ -150,6 +150,16 @@ export interface Bot {
 
 export type WorkspaceStatus = "onboarding" | "active" | "paused" | "archived";
 
+/** When a company may run autonomously. Hours are UTC, 0–23. */
+export interface OperatingHours {
+  /** Days of week (0 = Sun … 6 = Sat). Empty/undefined = every day. */
+  days?: number[];
+  /** Start hour, inclusive (0–23). */
+  start: number;
+  /** End hour, exclusive (1–24). */
+  end: number;
+}
+
 export type Department =
   | "exec"
   | "product"
@@ -183,8 +193,12 @@ export interface Workspace {
   /** Structured company profile — the shared context every employee reads. */
   dna?: CompanyDNA;
   status: WorkspaceStatus;
+  /** When the company may run autonomously (schedules outside this window don't fire). */
+  operatingHours?: OperatingHours;
   /** manual = you drive it; supervised = schedules, approvals on; autonomous = schedules + auto-approve. */
   autonomy?: WorkspaceAutonomy;
+  /** The company's operating hours; scheduled runs happen only within them. */
+  hours?: OperatingHours;
   /** The chair bot that reports to the CEO. */
   ceoBotId?: string;
   avatarEmoji?: string;

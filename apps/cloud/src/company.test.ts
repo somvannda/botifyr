@@ -7,6 +7,7 @@ import {
   sanitizeDNA,
   sanitizePlan,
   shouldRunSchedule,
+  withinOperatingHours,
 } from "./company.js";
 
 describe("company onboarding planner", () => {
@@ -137,5 +138,24 @@ describe("shouldRunSchedule", () => {
     expect(shouldRunSchedule(undefined)).toBe(true);
     expect(shouldRunSchedule("paused")).toBe(false);
     expect(shouldRunSchedule("archived")).toBe(false);
+  });
+});
+
+describe("withinOperatingHours", () => {
+  it("allows everything when no hours are set", () => {
+    expect(withinOperatingHours(undefined, new Date("2026-01-05T03:00:00Z"))).toBe(true);
+  });
+
+  it("respects the window (UTC)", () => {
+    const hours = { start: 9, end: 18 };
+    expect(withinOperatingHours(hours, new Date("2026-01-05T08:00:00Z"))).toBe(false);
+    expect(withinOperatingHours(hours, new Date("2026-01-05T10:00:00Z"))).toBe(true);
+    expect(withinOperatingHours(hours, new Date("2026-01-05T18:00:00Z"))).toBe(false);
+  });
+
+  it("respects the days", () => {
+    const weekdays = { days: [1, 2, 3, 4, 5], start: 0, end: 24 };
+    expect(withinOperatingHours(weekdays, new Date("2026-01-04T12:00:00Z"))).toBe(false); // Sunday
+    expect(withinOperatingHours(weekdays, new Date("2026-01-05T12:00:00Z"))).toBe(true); // Monday
   });
 });
