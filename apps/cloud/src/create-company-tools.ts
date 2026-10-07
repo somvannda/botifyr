@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { ToolDefinition } from "@botifyr/agent-core";
 import type { Bot } from "@botifyr/shared";
 import type { Store } from "./store/index.js";
-import { analyzeSource, planCompany, type CompleteFn } from "./company.js";
+import { analyzeSource, planCompany, uniqueWorkspaceName, type CompleteFn } from "./company.js";
 import { seedCompany } from "./company-seed.js";
 import { rememberSession } from "./runtime.js";
 import { emit } from "./events.js";
@@ -49,7 +49,7 @@ export function createCompanyMakerTools(
         const workspace = {
           id: randomUUID(),
           ownerId: userId,
-          name: plan.name,
+          name: await uniqueWorkspaceName(store, userId, plan.name),
           source: { kind, value: value.slice(0, 500) },
           mission: plan.mission ?? "",
           dna,

@@ -55,6 +55,7 @@ import {
   planCompany,
   shouldRunSchedule,
   toDepartment,
+  uniqueWorkspaceName,
   withinOperatingHours,
 } from "./company.js";
 import { seedCompany } from "./company-seed.js";
@@ -2120,8 +2121,10 @@ export async function buildServer(options: ServerOptions) {
     { preHandler: requireAuth },
     async (request, reply) => {
       const userId = request.userId as string;
-      const name = (request.body?.name ?? "").trim().slice(0, 60);
-      if (!name) return reply.code(400).send({ error: "a workspace name is required" });
+      const requestedName = (request.body?.name ?? "").trim().slice(0, 60);
+      if (!requestedName) return reply.code(400).send({ error: "a workspace name is required" });
+      // Names stay unique per owner so the sidebar never merges two companies.
+      const name = await uniqueWorkspaceName(store, userId, requestedName);
 
       const now = new Date().toISOString();
       const workspace: Workspace = {

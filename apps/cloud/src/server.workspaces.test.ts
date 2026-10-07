@@ -466,4 +466,29 @@ describe("workspaces API", () => {
     expect(bots.find((entry) => entry.id === founder.id)?.workspace).toBe("Founder Co");
     await app.close();
   });
+
+  it("keeps company names unique per owner", async () => {
+    const { app, signup } = await boot();
+    const auth = await signup("ws-unique@example.com");
+
+    const first = (
+      await app.inject({ method: "POST", url: "/v1/workspaces", headers: auth, payload: { name: "Chmaba" } })
+    ).json() as { id: string; name: string };
+    const second = (
+      await app.inject({ method: "POST", url: "/v1/workspaces", headers: auth, payload: { name: "Chmaba" } })
+    ).json() as { id: string; name: string };
+
+    expect(first.name).toBe("Chmaba");
+    // A second company with the same name is suffixed, not merged.
+    expect(second.name).toBe("Chmaba 2");
+    expect(second.id).not.toBe(first.id);
+
+    // Another owner may still use the un-suffixed name (scoped per owner).
+    const other = await signup("ws-unique2@example.com");
+    const otherFirst = (
+      await app.inject({ method: "POST", url: "/v1/workspaces", headers: other, payload: { name: "Chmaba" } })
+    ).json() as { name: string };
+    expect(otherFirst.name).toBe("Chmaba");
+    await app.close();
+  });
 });

@@ -9,6 +9,29 @@ import {
   type WorkspaceBudget,
 } from "@botifyr/shared";
 import { recommendTeam, ROLE_BY_ID } from "./recommend.js";
+import type { Store } from "./store/types.js";
+
+/**
+ * Make a company name unique for its owner, so two companies never share a name
+ * (e.g. "Chmaba" → "Chmaba 2"). You can still run many companies; they just get
+ * distinct names. See docs/company-workspace.md.
+ */
+export async function uniqueWorkspaceName(
+  store: Store,
+  ownerId: string,
+  name: string,
+): Promise<string> {
+  const base = name.trim().slice(0, 60) || "Company";
+  const taken = new Set(
+    (await store.listWorkspaces(ownerId)).map((entry) => entry.name.trim().toLowerCase()),
+  );
+  if (!taken.has(base.toLowerCase())) return base;
+  for (let n = 2; n < 1000; n += 1) {
+    const candidate = `${base} ${n}`.slice(0, 60);
+    if (!taken.has(candidate.toLowerCase())) return candidate;
+  }
+  return `${base} ${Date.now()}`.slice(0, 60);
+}
 
 /**
  * Company onboarding: turn a website or a free-form idea into a proposed org

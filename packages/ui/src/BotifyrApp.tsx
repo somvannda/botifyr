@@ -997,7 +997,18 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     setCompanyError(null);
     try {
       const plan = await client.planCompany({ kind: looksLikeUrl(value) ? "url" : "idea", value });
-      setCompanyPlan(plan);
+      // Keep the suggested name unique so two companies never look identical.
+      const taken = new Set(workspaces.map((entry) => entry.name.trim().toLowerCase()));
+      let suggested = plan.name;
+      if (taken.has(suggested.trim().toLowerCase())) {
+        for (let n = 2; n < 1000; n += 1) {
+          if (!taken.has(`${plan.name} ${n}`.toLowerCase())) {
+            suggested = `${plan.name} ${n}`;
+            break;
+          }
+        }
+      }
+      setCompanyPlan({ ...plan, name: suggested });
       setCompanyStep("review");
     } catch (err: unknown) {
       setCompanyError(messageOf(err));
@@ -1043,6 +1054,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       setBots(botList);
       setSessions(sessionList);
       setWorkspaces(workspaceList);
+      setWorkspaceFilter(created.id);
       const chairId = created.ceoBotId ?? created.roles[0]?.botId;
       const chair = botList.find((bot) => bot.id === chairId);
       if (chair) {
@@ -1111,6 +1123,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     setCompanyError(null);
     try {
       await client.deleteWorkspace(companyEdit.id);
+      if (workspaceFilter === companyEdit.id) setWorkspaceFilter("all");
       const [botList, workspaceList] = await Promise.all([client.listBots(), client.listWorkspaces()]);
       setBots(botList);
       setWorkspaces(workspaceList);
@@ -2263,38 +2276,74 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const filteredBots = query.trim()
     ? orderedBots.filter((bot) => bot.name.toLowerCase().includes(query.trim().toLowerCase()))
     : orderedBots;
-  // Companies: bots that share a `workspace` label are grouped under it; the
-  // rest stay in a flat "Personal" list. See docs/company-workspace.md.
-  const workspaceNames = [
-    ...new Set(bots.map((bot) => bot.workspace).filter((name): name is string => Boolean(name))),
-  ];
-  // Real workspace data (roles/emoji) when companies exist in the store.
-  const workspaceByName = new Map(workspaces.map((workspace) => [workspace.name, workspace]));
-  const roleByBotId = new Map<string, BotRole>();
+  // Companies: a bot belongs to a workspace through its role (authoritative) or,
+  // for legacy rows, its `workspace` label. Grouping is keyed by workspace *id*,
+  // so two companies that happen to share a name still render as separate
+  // sections. See docs/company-workspace.md.
+  const workspaceById = new Map(workspaces.map((workspace) => [workspace.id, workspace]));
+  const workspaceByName = new Map<string, WorkspaceWithRoles>();
   for (const workspace of workspaces) {
-    for (const role of workspace.roles) roleByBotId.set(role.botId, role);
+    if (!workspaceByName.has(workspace.name)) workspaceByName.set(workspace.name, workspace);
   }
+  const roleByBotId = new Map<string, BotRole>();
+  const workspaceIdByBotId = new Map<string, string>();
+  for (const workspace of workspaces) {
+    for (const role of workspace.roles) {
+      roleByBotId.set(role.botId, role);
+      workspaceIdByBotId.set(role.botId, workspace.id);
+    }
+  }
+  /** The company a bot belongs to: its role's workspace, else its label. */
+  function companyOf(bot: Bot): { id: string; name: string; workspace?: WorkspaceWithRoles } {
+    const byRole = workspaceIdByBotId.get(bot.id);
+    const workspace =
+      (byRole ? workspaceById.get(byRole) : undefined) ??
+      (bot.workspace ? workspaceByName.get(bot.workspace) : undefined);
+    if (workspace) return { id: workspace.id, name: workspace.name, workspace };
+    if (bot.workspace) return { id: `label:${bot.workspace}`, name: bot.workspace };
+    return { id: "personal", name: "Personal" };
+  }
+  const companies = [...workspaceById.values()];
+  // Names for the "Company" datalist in the bot editor (companies + legacy labels).
+  const workspaceNames = [
+    ...new Set([
+      ...workspaces.map((workspace) => workspace.name),
+      ...bots.map((bot) => bot.workspace).filter((name): name is string => Boolean(name)),
+    ]),
+  ];
   // Guard against a stale filter (e.g. after the last bot leaves a company).
   const activeWorkspaceFilter =
-    workspaceFilter === "all" || workspaceFilter === "personal" || workspaceNames.includes(workspaceFilter)
+    workspaceFilter === "all" ||
+    workspaceFilter === "personal" ||
+    workspaceById.has(workspaceFilter)
       ? workspaceFilter
       : "all";
   const workspaceFiltered =
     activeWorkspaceFilter === "all"
       ? filteredBots
       : activeWorkspaceFilter === "personal"
-        ? filteredBots.filter((bot) => !bot.workspace)
-        : filteredBots.filter((bot) => bot.workspace === activeWorkspaceFilter);
-  const botsByWorkspace = new Map<string, Bot[]>();
+        ? filteredBots.filter((bot) => companyOf(bot).id === "personal")
+        : filteredBots.filter((bot) => companyOf(bot).id === activeWorkspaceFilter);
+  const companyGroups = new Map<
+    string,
+    { name: string; workspace?: WorkspaceWithRoles; members: Bot[] }
+  >();
   const ungroupedBots: Bot[] = [];
   for (const bot of workspaceFiltered) {
-    if (bot.workspace) {
-      const list = botsByWorkspace.get(bot.workspace) ?? [];
-      list.push(bot);
-      botsByWorkspace.set(bot.workspace, list);
-    } else {
+    const company = companyOf(bot);
+    if (company.id === "personal") {
       ungroupedBots.push(bot);
+      continue;
     }
+    const group =
+      companyGroups.get(company.id) ??
+      ({ name: company.name, workspace: company.workspace, members: [] } satisfies {
+        name: string;
+        workspace?: WorkspaceWithRoles;
+        members: Bot[];
+      });
+    group.members.push(bot);
+    companyGroups.set(company.id, group);
   }
   // Messages you've sent in this chat, for ↑/↓ recall in the composer.
   const sentHistory = (sessions.find((entry) => entry.id === activeSessionId)?.messages ?? [])
@@ -2697,7 +2746,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
           <span className="sidebar-brand-name">Botifyr</span>
         </div>
 
-        {workspaceNames.length > 0 && (
+        {companies.length > 0 && (
           <div className="ws-tabs" role="tablist" aria-label="Filter by workspace">
             <button
               className={`ws-tab${activeWorkspaceFilter === "all" ? " active" : ""}`}
@@ -2717,17 +2766,17 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
             >
               Personal
             </button>
-            {workspaceNames.map((name) => (
+            {companies.map((company) => (
               <button
-                key={name}
-                className={`ws-tab${activeWorkspaceFilter === name ? " active" : ""}`}
+                key={company.id}
+                className={`ws-tab${activeWorkspaceFilter === company.id ? " active" : ""}`}
                 type="button"
                 role="tab"
-                aria-selected={activeWorkspaceFilter === name}
-                onClick={() => setWorkspaceFilter(name)}
-                title={name}
+                aria-selected={activeWorkspaceFilter === company.id}
+                onClick={() => setWorkspaceFilter(company.id)}
+                title={company.name}
               >
-                {name}
+                {company.name}
               </button>
             ))}
           </div>
@@ -2741,70 +2790,61 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                 : "No bots in this workspace."}
             </p>
           )}
-          {[...botsByWorkspace.entries()].map(([name, members]) => {
-            const collapsed = collapsedWorkspaces[name] === true;
+          {[...companyGroups.entries()].map(([id, group]) => {
+            const collapsed = collapsedWorkspaces[id] === true;
+            const pending = group.workspace?.pending ?? 0;
             return (
-              <div key={name} className="task-section">
+              <div key={id} className="task-section">
                 <button
                   className={`task-section-head${collapsed ? " collapsed" : ""}`}
                   type="button"
-                  onClick={() => setCollapsedWorkspaces((prev) => ({ ...prev, [name]: !prev[name] }))}
+                  onClick={() => setCollapsedWorkspaces((prev) => ({ ...prev, [id]: !prev[id] }))}
                   aria-expanded={!collapsed}
                 >
                   <span className="task-caret">{collapsed ? "▸" : "▾"}</span>
-                  {workspaceByName.get(name)?.avatarEmoji && (
-                    <span className="task-section-emoji">{workspaceByName.get(name)?.avatarEmoji}</span>
+                  {group.workspace?.avatarEmoji && (
+                    <span className="task-section-emoji">{group.workspace.avatarEmoji}</span>
                   )}
-                  <span className="task-section-name">{name}</span>
+                  <span className="task-section-name">{group.name}</span>
                 </button>
                 <div className="task-section-sub">
-                  <span
-                    className={`task-section-count${
-                      (workspaceByName.get(name)?.pending ?? 0) > 0 ? " has-needs" : ""
-                    }`}
-                  >
-                    {members.length} employee{members.length === 1 ? "" : "s"}
-                    {(workspaceByName.get(name)?.pending ?? 0) > 0
-                      ? ` · ${workspaceByName.get(name)?.pending} need you`
-                      : ""}
+                  <span className={`task-section-count${pending > 0 ? " has-needs" : ""}`}>
+                    {group.members.length} employee{group.members.length === 1 ? "" : "s"}
+                    {pending > 0 ? ` · ${pending} need you` : ""}
                   </span>
-                  {workspaceByName.get(name) && (
+                  {group.workspace && (
                     <button
                       className="task-section-edit"
                       type="button"
                       title="Rename or delete company"
                       aria-label="Rename or delete company"
                       onClick={() => {
-                        const ws = workspaceByName.get(name);
-                        if (ws) {
-                          setConfirmCompanyDelete(false);
-                          setCompanyEdit({ id: ws.id, name });
-                        }
+                        setConfirmCompanyDelete(false);
+                        setCompanyEdit({ id: group.workspace!.id, name: group.name });
                       }}
                     >
                       <GearIcon size={14} />
                     </button>
                   )}
-                  {workspaceByName.get(name) && (
+                  {group.workspace && (
                     <button
                       className="task-section-edit"
                       type="button"
                       title="Company board"
                       aria-label="Company board"
-                      onClick={() => {
-                        const ws = workspaceByName.get(name);
-                        if (ws) void openBoard(ws.id, name);
-                      }}
+                      onClick={() => void openBoard(group.workspace!.id, group.name)}
                     >
                       <ChartIcon size={14} />
                     </button>
                   )}
                 </div>
-                {!collapsed && <div className="task-section-list">{members.map(renderBotRow)}</div>}
+                {!collapsed && (
+                  <div className="task-section-list">{group.members.map(renderBotRow)}</div>
+                )}
               </div>
             );
           })}
-          {botsByWorkspace.size > 0 && ungroupedBots.length > 0 && (
+          {companyGroups.size > 0 && ungroupedBots.length > 0 && (
             <div className="task-section-head static" aria-hidden="true">
               <span className="task-section-name">Personal</span>
               <span className="task-section-count">{ungroupedBots.length}</span>
