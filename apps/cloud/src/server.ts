@@ -1932,9 +1932,21 @@ export async function buildServer(options: ServerOptions) {
     async (request, reply) => {
       const userId = request.userId as string;
       const bot = await store.getBot(request.params.id);
-      if (!bot || bot.userId !== userId) return reply.code(404).send({ error: "bot not found" });
-      await store.deleteBot(userId, bot.id);
-      return reply.code(204).send();
+      if (bot && bot.userId === userId) {
+        // Remove the bot's own thread too, so it can't linger as an orphan.
+        await store.deleteSession(userId, bot.sessionId).catch(() => false);
+        await store.deleteBot(userId, bot.id);
+        return reply.code(204).send();
+      }
+      // The bot may already be gone while a thread still references its id —
+      // clean that up so the client can drop the stale entry.
+      const sessions = await store.listSessions(userId);
+      const orphan = sessions.find((session) => session.botId === request.params.id);
+      if (orphan) {
+        await store.deleteSession(userId, orphan.id);
+        return reply.code(204).send();
+      }
+      return reply.code(404).send({ error: "bot not found" });
     },
   );
 
