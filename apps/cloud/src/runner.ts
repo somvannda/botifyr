@@ -194,6 +194,7 @@ function buildTools(
   local: boolean,
   vaultKey?: Buffer,
   media = false,
+  authorId?: string,
 ): { tools: ToolDefinition[]; closers: Array<() => Promise<void>>; hasComputer: boolean } {
   // Media (yt-dlp) tasks always run in the cloud sandbox, never on the user's
   // machine, so don't offer local tools even when their node is online.
@@ -245,8 +246,17 @@ function buildTools(
     // (Vimeo, short-drama services, …); YOUTUBE_COOKIES is the legacy fallback.
     const getCookies = vaultKey
       ? async (): Promise<string | null> => {
+          // Company (workspace) secrets first, then the user's personal ones.
+          const authorBot = authorId ? await store.getBot(authorId).catch(() => null) : null;
+          const company = authorBot?.workspace
+            ? (await store.listWorkspaces(userId).catch(() => [])).find(
+                (ws) => ws.name === authorBot.workspace,
+              )
+            : undefined;
           for (const name of ["DOWNLOAD_COOKIES", "YOUTUBE_COOKIES"]) {
-            const record = await store.getSecret(userId, name);
+            const record =
+              (company ? await store.getWorkspaceSecret(company.id, name).catch(() => null) : null) ??
+              (await store.getSecret(userId, name).catch(() => null));
             if (!record) continue;
             try {
               return decryptSecret(vaultKey, record);
@@ -347,6 +357,7 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
     Boolean(deps.local),
     deps.vaultKey,
     media,
+    deps.author?.id,
   );
   // Abort the run's sandboxes when the task is cancelled.
   let sandboxesClosed = false;
