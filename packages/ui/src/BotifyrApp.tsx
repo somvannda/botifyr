@@ -647,6 +647,17 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     }
   }
 
+  /** Replay the named learned task on the session's desktop. */
+  async function replayTask(): Promise<void> {
+    if (!activeSessionId || !learnName.trim()) return;
+    try {
+      const { steps } = await client.replayTask(activeSessionId, learnName.trim());
+      pushToast({ kind: "task", title: "Task replayed", body: `${steps} step(s) re-run.` });
+    } catch (err: unknown) {
+      setError(messageOf(err));
+    }
+  }
+
   /** Open the media viewer at an item so you can browse prev/next. */
   function openPlayer(items: Array<{ name: string; url: string }>, index: number): void {
     if (items.length === 0) return;
@@ -3151,6 +3162,9 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                       />
                       <button className="ghost small" type="button" onClick={() => void learnTask()}>
                         Learn task
+                      </button>
+                      <button className="ghost small" type="button" onClick={() => void replayTask()}>
+                        Replay
                       </button>
                     </div>
                   </>

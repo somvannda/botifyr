@@ -2865,6 +2865,18 @@ export async function buildServer(options: ServerOptions) {
     Array<{ t: number; action: string; args: Record<string, unknown> }>
   >();
 
+  /** Pull the JSON trace back out of a learned task's content. */
+  const parseTrace = (content: string): Array<{ action: string; args: Record<string, unknown> }> => {
+    const match = /Trace \(JSON\):\s*(\[[\s\S]*\])\s*$/.exec(content);
+    if (!match) return [];
+    try {
+      const parsed = JSON.parse(match[1]);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  };
+
   /* "Botifyr's screen": a session-scoped desktop the user can start and watch
      (and drive) without running a task — the basis for teach-by-demonstration. */
   app.post<{ Params: { id: string } }>(
@@ -2974,6 +2986,42 @@ export async function buildServer(options: ServerOptions) {
       // Clear the trace so the next lesson starts clean.
       sessionTraces.set(session.id, []);
       return { ok: true, id: record.id, name };
+    },
+  );
+
+  /* Replay a learned task's steps on the session's desktop. */
+  app.post<{ Params: { id: string }; Body: { name?: string; id?: string } }>(
+    "/v1/sessions/:id/computer/replay",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const session = await store.getSession(request.params.id);
+      if (!session || session.userId !== request.userId) {
+        return reply.code(404).send({ error: "session not found" });
+      }
+      const backend = getComputerSandbox(`session:${session.id}`);
+      if (!backend) return reply.code(409).send({ error: "start Botifyr's screen first" });
+      const skill = request.body?.id
+        ? await store.getLearnedSkill(request.body.id)
+        : request.body?.name
+          ? await store.getLearnedSkillByName(request.body.name)
+          : null;
+      if (!skill) return reply.code(404).send({ error: "learned task not found" });
+      const steps = parseTrace(skill.content);
+      if (steps.length === 0) return reply.code(400).send({ error: "this task has no recorded steps" });
+      let ran = 0;
+      for (const step of steps) {
+        const args = step.args ?? {};
+        if (step.action === "click")
+          await backend.click(Number(args.x), Number(args.y), Number(args.button) || 1);
+        else if (step.action === "move") await backend.move(Number(args.x), Number(args.y));
+        else if (step.action === "type") await backend.type(String(args.text ?? ""));
+        else if (step.action === "key") await backend.key(String(args.key ?? ""));
+        else if (step.action === "scroll") await backend.scroll(Number(args.amount) || 3);
+        else continue;
+        ran += 1;
+        await new Promise((resolve) => setTimeout(resolve, 400));
+      }
+      return { ok: true, steps: ran };
     },
   );
 

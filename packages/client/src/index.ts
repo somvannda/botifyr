@@ -419,6 +419,15 @@ export class BotifyrClient {
     });
   }
 
+  /** Replay a learned task's steps on a session's desktop. */
+  replayTask(sessionId: string, name: string): Promise<{ ok: boolean; steps: number }> {
+    return this.request(`/v1/sessions/${encodeURIComponent(sessionId)}/computer/replay`, {
+      method: "POST",
+      json: true,
+      body: JSON.stringify({ name }),
+    });
+  }
+
   adminSkills(): Promise<AdminSkill[]> {
     return this.request("/admin/learned-skills");
   }
