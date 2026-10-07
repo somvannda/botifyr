@@ -523,6 +523,27 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
           model,
           createdAt: now,
         });
+        // Per-workspace budget accounting (docs/company-os.md §15).
+        if (authorBot?.workspace) {
+          const space = (await store.listWorkspaces(userId).catch(() => [])).find(
+            (entry) => entry.name === authorBot.workspace,
+          );
+          if (space) {
+            const spent = result.usage.promptTokens + result.usage.completionTokens;
+            const budget = (await store.getWorkspaceBudget(space.id)) ?? {
+              workspaceId: space.id,
+              limitTokens: 0,
+              usedTokens: 0,
+              updatedAt: now,
+            };
+            await store.saveWorkspaceBudget({
+              workspaceId: space.id,
+              limitTokens: budget.limitTokens,
+              usedTokens: budget.usedTokens + spent,
+              updatedAt: now,
+            });
+          }
+        }
         // On-demand / overage: debit the prepaid credit wallet at the per-model rate.
         const settings = await store.getPlatformSettings();
         const record = await store.getUserById(userId);

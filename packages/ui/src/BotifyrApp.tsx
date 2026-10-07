@@ -24,6 +24,7 @@ import type {
   Task,
   User,
   WorkItem,
+  WorkspaceBudget,
   WorkspaceWithRoles,
 } from "@botifyr/shared";
 import { DEPARTMENTS } from "@botifyr/shared";
@@ -223,8 +224,10 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [boardItems, setBoardItems] = useState<Array<WorkItem>>([]);
   const [boardTitle, setBoardTitle] = useState("");
   const [boardBusy, setBoardBusy] = useState(false);
-  const [hqTab, setHqTab] = useState<"need" | "team" | "board">("need");
+  const [hqTab, setHqTab] = useState<"need" | "team" | "board" | "budget">("need");
   const [hqNeeds, setHqNeeds] = useState<Array<Task>>([]);
+  const [hqBudget, setHqBudget] = useState<WorkspaceBudget | null>(null);
+  const [budgetInput, setBudgetInput] = useState("");
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [editingBotId, setEditingBotId] = useState<string | null>(null);
   const [botName, setBotName] = useState("");
@@ -985,12 +988,15 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     setBoardBusy(true);
     setHqTab("need");
     try {
-      const [items, needs] = await Promise.all([
+      const [items, needs, budget] = await Promise.all([
         client.listWorkItems(workspaceId).catch(() => []),
         client.listWorkspaceNeeds(workspaceId).catch(() => []),
+        client.getWorkspaceBudget(workspaceId).catch(() => null),
       ]);
       setBoardItems(items);
       setHqNeeds(needs);
+      setHqBudget(budget);
+      setBudgetInput(budget && budget.limitTokens > 0 ? String(budget.limitTokens) : "");
     } finally {
       setBoardBusy(false);
     }
@@ -1002,6 +1008,20 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     setBoardTitle("");
     setBoardBusy(false);
     setHqNeeds([]);
+    setHqBudget(null);
+    setBudgetInput("");
+  }
+
+  async function saveBudget() {
+    const workspace = boardWorkspace;
+    if (!workspace) return;
+    const limitTokens = Math.max(0, Math.floor(Number(budgetInput) || 0));
+    setBoardBusy(true);
+    try {
+      setHqBudget(await client.setWorkspaceBudget(workspace.id, limitTokens));
+    } finally {
+      setBoardBusy(false);
+    }
   }
 
   async function refreshNeeds(workspaceId: string) {
@@ -3936,6 +3956,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                   ["need", `Needs you${hqNeeds.length ? ` (${hqNeeds.length})` : ""}`],
                   ["team", "Team"],
                   ["board", "Board"],
+                  ["budget", "Budget"],
                 ] as const
               ).map(([tab, label]) => (
                 <button
@@ -4033,6 +4054,35 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                       </li>
                     ))}
                   </ul>
+                </>
+              )}
+
+              {hqTab === "budget" && (
+                <>
+                  <p className="company-hint">
+                    Company token budget · used {(hqBudget?.usedTokens ?? 0).toLocaleString()}
+                    {hqBudget && hqBudget.limitTokens > 0
+                      ? ` of ${hqBudget.limitTokens.toLocaleString()}`
+                      : " (0 = inherit the account cap)"}
+                  </p>
+                  <div className="board-add">
+                    <input
+                      className="workspace-input"
+                      type="number"
+                      min={0}
+                      placeholder="Token limit (0 = inherit)"
+                      value={budgetInput}
+                      onChange={(event) => setBudgetInput(event.target.value)}
+                    />
+                    <button
+                      className="btn primary small"
+                      type="button"
+                      disabled={boardBusy}
+                      onClick={() => void saveBudget()}
+                    >
+                      Save
+                    </button>
+                  </div>
                 </>
               )}
             </div>
