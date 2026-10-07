@@ -266,7 +266,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [boardTitle, setBoardTitle] = useState("");
   const [boardBusy, setBoardBusy] = useState(false);
   const [hqTab, setHqTab] = useState<
-    "need" | "team" | "board" | "budget" | "standup" | "plans" | "office" | "wiki"
+    "need" | "team" | "board" | "budget" | "standup" | "plans" | "changes" | "office" | "wiki"
   >(
     "need",
   );
@@ -276,6 +276,9 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [hqGrants, setHqGrants] = useState<Array<CapabilityGrant>>([]);
   const [hqReports, setHqReports] = useState<Array<CompanyReport>>([]);
   const [hqWiki, setHqWiki] = useState<Array<{ name: string; content: string }>>([]);
+  const [hqChanges, setHqChanges] = useState<
+    Array<{ repo: string; path: string; content: string; diff: string; exists: boolean }>
+  >([]);
   const [addMemberBotId, setAddMemberBotId] = useState("");
   const [hoursStart, setHoursStart] = useState("9");
   const [hoursEnd, setHoursEnd] = useState("18");
@@ -1222,6 +1225,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       // Company wiki: the chair bot's Library (BRIEF / OKRS / BACKLOG).
       const wiki = await client.listWorkspaceFiles(workspaceId).catch(() => []);
       setHqWiki(wiki.map((file) => ({ name: file.name, content: file.content })));
+      setHqChanges(await client.listProposals(workspaceId).catch(() => []));
     } finally {
       setBoardBusy(false);
     }
@@ -1238,6 +1242,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     setHqGrants([]);
     setHqReports([]);
     setHqWiki([]);
+    setHqChanges([]);
     setAddMemberBotId("");
   }
 
@@ -4609,6 +4614,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                   ["budget", "Budget"],
                   ["standup", "Standup"],
                   ["plans", "Plans"],
+                  ["changes", "Changes"],
                   ["office", "Office"],
                   ["wiki", "Wiki"],
                 ] as const
@@ -4995,6 +5001,42 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                     </ul>
                   );
                 })()}
+
+              {hqTab === "changes" && (
+                <>
+                  {hqChanges.length === 0 && (
+                    <p className="company-hint">
+                      No proposed changes yet — engineering agents stage edits here for your review.
+                    </p>
+                  )}
+                  <ul className="board-list">
+                    {hqChanges.map((change) => (
+                      <li key={`${change.repo}/${change.path}`} className="team-member">
+                        <div className="wiki-doc-name">
+                          {change.repo}/{change.path}
+                          <span className="board-phase">{change.exists ? "modified" : "new"}</span>
+                        </div>
+                        <pre className="diff-view">
+                          {change.diff.split("\n").map((line, index) => (
+                            <div
+                              key={index}
+                              className={
+                                line.startsWith("+")
+                                  ? "diff-add"
+                                  : line.startsWith("-")
+                                    ? "diff-del"
+                                    : "diff-ctx"
+                              }
+                            >
+                              {line || " "}
+                            </div>
+                          ))}
+                        </pre>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
 
               {hqTab === "wiki" && (
                 <>

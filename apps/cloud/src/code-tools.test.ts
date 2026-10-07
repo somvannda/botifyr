@@ -59,13 +59,13 @@ describe("code tools (read-only)", () => {
   it("stages proposed changes in the work dir and jails the path", async () => {
     const repo = await repoFixture();
     const workDir = await mkdtemp(path.join(tmpdir(), "botifyr-work-"));
-    const tools = createCodeTools([repo], { workDir });
+    const tools = createCodeTools([repo], { workDir, workspaceId: "ws1" });
     const apply = tools.find((tool) => tool.name === "code.apply")!;
     expect(apply.requiresApproval).toBe(true);
 
     const ok = await apply.run({ path: "src/new.ts", content: "export const x = 1;" }, ctx);
     expect(ok.ok).toBe(true);
-    const written = await readFile(path.join(workDir, "demo", "src", "new.ts"), "utf8");
+    const written = await readFile(path.join(workDir, "ws1", "demo", "src", "new.ts"), "utf8");
     expect(written).toContain("export const x = 1");
 
     const escape = await apply.run({ path: "../../evil.ts", content: "x" }, ctx);

@@ -3,8 +3,8 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import cors from "@fastify/cors";
 import websocket from "@fastify/websocket";
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
-import { createReadStream, readFileSync } from "node:fs";
-import { readdir, rm, stat } from "node:fs/promises";
+import { createReadStream, existsSync, readFileSync } from "node:fs";
+import { readFile, readdir, rm, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 import type {
   AuditEvent,
@@ -60,6 +60,7 @@ import {
   withinOperatingHours,
 } from "./company.js";
 import { seedCompany } from "./company-seed.js";
+import { unifiedLineDiff } from "./diff.js";
 import { createDockerComputerBackend } from "@botifyr/agent-core";
 import {
   chmabaConfigFromEnv,
@@ -2862,6 +2863,60 @@ export async function buildServer(options: ServerOptions) {
         started += 1;
       }
       return { started };
+    },
+  );
+
+  /** Staged code changes (proposals) the CEO can review — read from /work. */
+  app.get<{ Params: { id: string } }>(
+    "/v1/workspaces/:id/proposals",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const workspace = await store.getWorkspace(request.params.id);
+      if (!workspace || workspace.ownerId !== userId) {
+        return reply.code(404).send({ error: "workspace not found" });
+      }
+      const root = process.env.BOTIFYR_WORK_DIR ?? "/work";
+      const proposals: Array<{
+        repo: string;
+        path: string;
+        content: string;
+        diff: string;
+        exists: boolean;
+      }> = [];
+      const collect = async (dir: string, repoName: string, prefix: string): Promise<void> => {
+        let entries;
+        try {
+          entries = await readdir(dir, { withFileTypes: true });
+        } catch {
+          return;
+        }
+        for (const entry of entries) {
+          const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+          if (entry.isDirectory()) {
+            await collect(join(dir, entry.name), repoName, rel);
+          } else {
+            const content = await readFile(join(dir, entry.name), "utf8").catch(() => "");
+            const repo = (workspace.repos ?? []).find((entryRepo) => entryRepo.name === repoName);
+            const originalPath = repo ? join(repo.path, rel) : "";
+            const exists = Boolean(repo && existsSync(originalPath));
+            const original = exists
+              ? await readFile(originalPath, "utf8").catch(() => "")
+              : "";
+            proposals.push({
+              repo: repoName,
+              path: rel,
+              exists,
+              diff: unifiedLineDiff(original, content),
+              content: content.slice(0, 20_000),
+            });
+          }
+        }
+      };
+      for (const repo of workspace.repos ?? []) {
+        await collect(join(root, workspace.id, repo.name), repo.name, "");
+      }
+      return proposals;
     },
   );
 

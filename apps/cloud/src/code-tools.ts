@@ -47,6 +47,8 @@ function jail(root: string, relative: string): string {
 export interface CodeToolIo {
   /** Writable directory where proposed changes are staged (Phase 2). */
   workDir?: string;
+  /** Workspace id, so staged changes are scoped per company. */
+  workspaceId?: string;
   /** Persist a wiki file on the workspace (e.g. CODEBASE.md). */
   saveWikiFile?: (name: string, content: string) => Promise<void>;
 }
@@ -232,7 +234,7 @@ export function createCodeTools(repos: CodeRepo[], io: CodeToolIo = {}): ToolDef
         const missing = noRepo(repo);
         if (missing || !repo) return { ok: false, output: missing ?? "No repository." };
         if (!io.workDir) return { ok: false, output: "No writable work area is configured." };
-        const base = path.resolve(io.workDir, repo.name);
+        const base = path.resolve(io.workDir, io.workspaceId ?? "_", repo.name);
         const full = path.resolve(base, String(args.path ?? ""));
         if (full !== base && !full.startsWith(base + path.sep)) {
           return { ok: false, output: "That path is outside the work area." };

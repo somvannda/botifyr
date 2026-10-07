@@ -701,6 +701,13 @@ export class BotifyrClient {
     return this.request(`/v1/workspaces/${workspaceId}/run`, { method: "POST", json: true });
   }
 
+  /** Staged code changes (from code.apply) awaiting the CEO's review. */
+  listProposals(
+    workspaceId: string,
+  ): Promise<Array<{ repo: string; path: string; content: string; diff: string; exists: boolean }>> {
+    return this.request(`/v1/workspaces/${workspaceId}/proposals`);
+  }
+
   /** Deactivate the company (manual, schedules off, auto-approve off). */
   deactivateCompany(workspaceId: string): Promise<WorkspaceWithRoles> {
     return this.request(`/v1/workspaces/${workspaceId}/deactivate`, { method: "POST", json: true });

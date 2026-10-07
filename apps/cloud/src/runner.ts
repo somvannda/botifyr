@@ -488,6 +488,7 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
       tools.push(
         ...createCodeTools(company.repos, {
           workDir: process.env.BOTIFYR_WORK_DIR ?? "/work",
+          workspaceId: company.id,
           saveWikiFile: async (name, content) => {
             const existing = (await store.listWorkspaceFiles(company.id)).find(
               (file) => file.name === name,

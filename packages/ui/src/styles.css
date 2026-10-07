@@ -632,6 +632,31 @@ body {
   min-width: 0;
 }
 
+.diff-view {
+  margin: 6px 0 0;
+  padding: 8px;
+  border-radius: 8px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  max-height: 320px;
+  overflow: auto;
+}
+
+.diff-add {
+  color: #4ade80;
+}
+
+.diff-del {
+  color: #f87171;
+}
+
+.diff-ctx {
+  color: var(--muted);
+}
+
 .hq-autonomy {
   align-self: center;
   padding: 3px 8px;
