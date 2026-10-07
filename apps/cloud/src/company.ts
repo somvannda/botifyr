@@ -3,7 +3,9 @@ import {
   type CompanyDNA,
   type CreateWorkspaceRequest,
   type Department,
+  type RoleDefinition,
 } from "@botifyr/shared";
+import { recommendTeam, ROLE_BY_ID } from "./recommend.js";
 
 /**
  * Company onboarding: turn a website or a free-form idea into a proposed org
@@ -49,6 +51,26 @@ export function companyContext(dna: CompanyDNA): string {
 }
 
 const MAX_MEMBERS = 8;
+
+/** Emoji per department, used when the catalog builds a default org. */
+const ROLE_EMOJI: Record<string, string> = {
+  exec: "🧭",
+  product: "📦",
+  engineering: "💻",
+  design: "🎨",
+  data: "📊",
+  ai: "🤖",
+  growth: "📈",
+  marketing: "📣",
+  sales: "💰",
+  support: "🎧",
+  success: "🤝",
+  ops: "⚙️",
+  finance: "💵",
+  legal: "⚖️",
+  people: "🧑‍💼",
+  logistics: "🚚",
+};
 const SCHEME_COUNT = 8;
 
 function titleCase(text: string): string {
@@ -90,49 +112,18 @@ export function defaultCompany(input: PlanInput): CompanyPlan {
       priorities: ["product"],
     },
     avatarEmoji: input.kind === "url" ? "🌐" : "🚀",
-    members: [
-      {
-        name: "Ava (CEO)",
-        emoji: "🧭",
-        scheme: 0,
-        title: "CEO",
-        department: "exec",
-        isChair: true,
-        instructions: `You are the CEO of ${name}. Set direction, prioritise, delegate, and report to the human owner. Keep replies short and decisive.`,
-      },
-      {
-        name: "Ravi (Product)",
-        emoji: "📦",
-        scheme: 1,
-        title: "Head of Product",
-        department: "product",
-        instructions: `You own the product roadmap for ${name}. Turn goals into small, clear tasks and define what "done" means.`,
-      },
-      {
-        name: "Sofia (Engineering)",
-        emoji: "💻",
-        scheme: 2,
-        title: "CTO",
-        department: "engineering",
-        instructions: `You lead engineering for ${name}. Prefer simple, working solutions; explain trade-offs before building.`,
-      },
-      {
-        name: "Milo (Growth)",
-        emoji: "📈",
-        scheme: 3,
-        title: "Head of Growth",
-        department: "growth",
-        instructions: `You own growth for ${name}: positioning, channels, and experiments with measurable outcomes.`,
-      },
-      {
-        name: "Nora (Ops)",
-        emoji: "⚙️",
-        scheme: 4,
-        title: "Head of Operations",
-        department: "ops",
-        instructions: `You run operations and finance for ${name}. Track spend, deadlines, and risks; flag anything the CEO must approve.`,
-      },
-    ],
+    members: recommendTeam({ text: `${name} ${input.value}`, stage: "idea" }).roleIds
+      .map((id) => ROLE_BY_ID.get(id))
+      .filter((role): role is RoleDefinition => Boolean(role))
+      .map((role, index) => ({
+        name: role.title,
+        emoji: ROLE_EMOJI[role.department] ?? "🤖",
+        scheme: index % SCHEME_COUNT,
+        title: role.title,
+        department: role.department,
+        isChair: role.id === "exec.ceo",
+        instructions: role.jobDescription,
+      })),
   };
 }
 

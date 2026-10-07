@@ -5,7 +5,8 @@ describe("company onboarding planner", () => {
   it("derives a default org with exactly one chair", () => {
     const plan = defaultCompany({ kind: "url", value: "https://www.acme.com" });
     expect(plan.name).toBe("Acme Co");
-    expect(plan.members).toHaveLength(5);
+    expect(plan.members.length).toBeGreaterThanOrEqual(4);
+    expect(plan.members.length).toBeLessThanOrEqual(8);
     expect(plan.members.filter((member) => member.isChair)).toHaveLength(1);
     expect(plan.members[0]?.department).toBe("exec");
     expect(plan.source).toEqual({ kind: "url", value: "https://www.acme.com" });
