@@ -485,7 +485,27 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
     tools.push(...createPlanTools(store, userId, authorBot.id));
     // Engineering can read the connected repos (read-only, path-jailed).
     if (department === "engineering" && company.repos && company.repos.length > 0) {
-      tools.push(...createCodeTools(company.repos));
+      tools.push(
+        ...createCodeTools(company.repos, {
+          workDir: process.env.BOTIFYR_WORK_DIR ?? "/work",
+          saveWikiFile: async (name, content) => {
+            const existing = (await store.listWorkspaceFiles(company.id)).find(
+              (file) => file.name === name,
+            );
+            const stamp = new Date().toISOString();
+            await store.upsertFile({
+              id: existing?.id ?? randomUUID(),
+              botId: existing?.botId ?? authorBot.id,
+              userId,
+              workspaceId: company.id,
+              name,
+              content,
+              createdAt: existing?.createdAt ?? stamp,
+              updatedAt: stamp,
+            });
+          },
+        }),
+      );
     }
     // The chair (exec) and department leaders can hire their own specialists
     // (approval-gated), so the company grows on demand instead of being over-hired.

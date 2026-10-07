@@ -265,7 +265,9 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [boardItems, setBoardItems] = useState<Array<WorkItem>>([]);
   const [boardTitle, setBoardTitle] = useState("");
   const [boardBusy, setBoardBusy] = useState(false);
-  const [hqTab, setHqTab] = useState<"need" | "team" | "board" | "budget" | "standup" | "office" | "wiki">(
+  const [hqTab, setHqTab] = useState<
+    "need" | "team" | "board" | "budget" | "standup" | "plans" | "office" | "wiki"
+  >(
     "need",
   );
   const [hqNeeds, setHqNeeds] = useState<Array<Task>>([]);
@@ -4606,6 +4608,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                   ["board", "Board"],
                   ["budget", "Budget"],
                   ["standup", "Standup"],
+                  ["plans", "Plans"],
                   ["office", "Office"],
                   ["wiki", "Wiki"],
                 ] as const
@@ -4967,6 +4970,31 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                   </div>
                 </>
               )}
+
+              {hqTab === "plans" &&
+                (() => {
+                  const docs = hqWiki.filter(
+                    (file) => file.name === "PLAN.md" || file.name === "CODEBASE.md",
+                  );
+                  if (docs.length === 0) {
+                    return (
+                      <p className="company-hint">
+                        No plans yet — run the company and the CEO/CTO will write PLAN.md and
+                        CODEBASE.md.
+                      </p>
+                    );
+                  }
+                  return (
+                    <ul className="board-list">
+                      {docs.map((file) => (
+                        <li key={file.name} className="team-member">
+                          <div className="wiki-doc-name">{file.name}</div>
+                          <pre className="standup-text">{file.content || "(empty)"}</pre>
+                        </li>
+                      ))}
+                    </ul>
+                  );
+                })()}
 
               {hqTab === "wiki" && (
                 <>

@@ -1,4 +1,4 @@
-import { readFile, readdir, stat } from "node:fs/promises";
+import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { execFile } from "node:child_process";
 import path from "node:path";
@@ -44,7 +44,14 @@ function jail(root: string, relative: string): string {
   return resolved;
 }
 
-export function createCodeTools(repos: CodeRepo[]): ToolDefinition[] {
+export interface CodeToolIo {
+  /** Writable directory where proposed changes are staged (Phase 2). */
+  workDir?: string;
+  /** Persist a wiki file on the workspace (e.g. CODEBASE.md). */
+  saveWikiFile?: (name: string, content: string) => Promise<void>;
+}
+
+export function createCodeTools(repos: CodeRepo[], io: CodeToolIo = {}): ToolDefinition[] {
   const choose = (name: unknown): CodeRepo | null => {
     if (repos.length === 0) return null;
     const requested = String(name ?? "")
@@ -204,6 +211,83 @@ export function createCodeTools(repos: CodeRepo[]): ToolDefinition[] {
         } catch {
           return { ok: false, output: "git history is unavailable." };
         }
+      },
+    },
+    {
+      name: "code.apply",
+      description:
+        "Propose a code change: write a file's new contents into the company's writable work area for the CEO to review. Needs approval.",
+      parameters: {
+        type: "object",
+        properties: {
+          path: pathProp,
+          content: { type: "string", description: "The full new contents of the file." },
+          repo: repoProp,
+        },
+        required: ["path", "content"],
+      },
+      requiresApproval: true,
+      run: async (args) => {
+        const repo = choose(args.repo);
+        const missing = noRepo(repo);
+        if (missing || !repo) return { ok: false, output: missing ?? "No repository." };
+        if (!io.workDir) return { ok: false, output: "No writable work area is configured." };
+        const base = path.resolve(io.workDir, repo.name);
+        const full = path.resolve(base, String(args.path ?? ""));
+        if (full !== base && !full.startsWith(base + path.sep)) {
+          return { ok: false, output: "That path is outside the work area." };
+        }
+        await mkdir(path.dirname(full), { recursive: true });
+        await writeFile(full, String(args.content ?? ""));
+        return { ok: true, output: `Proposed change staged at ${full}. The CEO can review it.` };
+      },
+    },
+    {
+      name: "code.map",
+      description:
+        "Summarise the connected repository (structure + file types) and save it as CODEBASE.md in the company wiki.",
+      parameters: { type: "object", properties: { repo: repoProp } },
+      run: async (args) => {
+        const repo = choose(args.repo);
+        const missing = noRepo(repo);
+        if (missing || !repo) return { ok: false, output: missing ?? "No repository." };
+        const files: string[] = [];
+        const walk = async (dir: string, depth: number, prefix: string): Promise<void> => {
+          if (files.length >= MAX_TREE * 5 || depth > MAX_DEPTH) return;
+          const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+          for (const entry of entries) {
+            if (IGNORED.has(entry.name)) continue;
+            const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+            if (entry.isDirectory()) await walk(path.join(dir, entry.name), depth + 1, rel);
+            else files.push(rel);
+          }
+        };
+        await walk(repo.path, 0, "");
+        const byExt = new Map<string, number>();
+        for (const file of files) {
+          const ext = path.extname(file) || "(none)";
+          byExt.set(ext, (byExt.get(ext) ?? 0) + 1);
+        }
+        const top = [...new Set(files.map((file) => file.split("/")[0]))].sort();
+        const content = [
+          `# Codebase map — ${repo.name}`,
+          "",
+          `Path: \`${repo.path}\``,
+          `Files scanned: ${files.length}`,
+          "",
+          "## Top level",
+          ...top.slice(0, 50).map((entry) => `- ${entry}`),
+          "",
+          "## Files by extension",
+          ...[...byExt.entries()]
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 20)
+            .map(([ext, count]) => `- \`${ext}\`: ${count}`),
+        ]
+          .join("\n")
+          .slice(0, 20_000);
+        if (io.saveWikiFile) await io.saveWikiFile("CODEBASE.md", content);
+        return { ok: true, output: content };
       },
     },
   ];
