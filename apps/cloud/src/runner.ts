@@ -19,6 +19,8 @@ import { emit } from "./events.js";
 import { companyContext, isBudgetExhausted } from "./company.js";
 import { createCompanyTools } from "./company-tools.js";
 import { createCompanyMakerTools } from "./create-company-tools.js";
+import { createAdsTools, notConnectedAds } from "./ads-tools.js";
+import { createMetaAdsClient } from "./ads-meta.js";
 import { createDelegationTools } from "./delegation-tools.js";
 import { createSocialTools, notConnectedSocial } from "./social-tools.js";
 import { createTelegramSocialClient } from "./social-telegram.js";
@@ -443,6 +445,17 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
             ? createTelegramSocialClient({ token: telegramToken, chatId: record.telegramChatId })
             : notConnectedSocial();
       tools.push(...createSocialTools(client));
+    }
+    if (department === "marketing" || department === "sales") {
+      const metaToken = process.env.META_ADS_TOKEN;
+      const metaAccount = process.env.META_AD_ACCOUNT_ID;
+      tools.push(
+        ...createAdsTools(
+          metaToken && metaAccount
+            ? createMetaAdsClient({ accessToken: metaToken, adAccountId: metaAccount })
+            : notConnectedAds(),
+        ),
+      );
     }
     if (department === "design" || department === "marketing") {
       tools.push(...createDesignTools(store, userId, authorBot.id));
