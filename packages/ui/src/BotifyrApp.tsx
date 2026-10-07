@@ -1679,27 +1679,32 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     }
   }
 
-  async function saveYoutubeCookies() {
+  async function saveDownloadCookies() {
     if (!ytCookies.trim()) {
       setError("Paste your cookies.txt contents first.");
       return;
     }
     try {
-      const existing = secrets.find((secret) => secret.name === "YOUTUBE_COOKIES");
-      if (existing) await client.deleteSecret(existing.id);
-      await client.createSecret("YOUTUBE_COOKIES", ytCookies);
+      // One cookies file covers every site (YouTube, Vimeo, short-drama sites…).
+      for (const name of ["DOWNLOAD_COOKIES", "YOUTUBE_COOKIES"]) {
+        const existing = secrets.find((secret) => secret.name === name);
+        if (existing) await client.deleteSecret(existing.id);
+      }
+      await client.createSecret("DOWNLOAD_COOKIES", ytCookies);
       setSecrets(await client.listSecrets());
       setYtCookies("");
-      setCheckNote("YouTube cookies saved.");
+      setCheckNote("Download cookies saved.");
     } catch (err: unknown) {
       setError(messageOf(err));
     }
   }
 
-  async function removeYoutubeCookies() {
+  async function removeDownloadCookies() {
     try {
-      const existing = secrets.find((secret) => secret.name === "YOUTUBE_COOKIES");
-      if (existing) await client.deleteSecret(existing.id);
+      for (const name of ["DOWNLOAD_COOKIES", "YOUTUBE_COOKIES"]) {
+        const existing = secrets.find((secret) => secret.name === name);
+        if (existing) await client.deleteSecret(existing.id);
+      }
       setSecrets(await client.listSecrets());
     } catch (err: unknown) {
       setError(messageOf(err));
@@ -5108,30 +5113,36 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                   <div className="settings-section-title">Downloads</div>
                   <div className="settings-list">
                     <label className="settings-line">
-                      <span>YouTube cookies</span>
+                      <span>Download cookies (all sites)</span>
                       <span className="settings-static">
-                        {secrets.some((secret) => secret.name === "YOUTUBE_COOKIES") ? "Saved" : "Not set"}
+                        {secrets.some(
+                          (secret) => secret.name === "DOWNLOAD_COOKIES" || secret.name === "YOUTUBE_COOKIES",
+                        )
+                          ? "Saved"
+                          : "Not set"}
                       </span>
                     </label>
                   </div>
                   <textarea
                     className="bot-instructions"
-                    placeholder="Optional: paste your cookies.txt (Netscape format) so yt-dlp can get past YouTube's bot check. Leave empty to skip."
+                    placeholder="Optional: paste your cookies.txt (Netscape format) so yt-dlp can get past a site's bot check or login (YouTube, Vimeo, short-drama sites…). Leave empty to skip."
                     value={ytCookies}
                     onChange={(event) => setYtCookies(event.target.value)}
                     rows={3}
                   />
                   <div className="apps-actions">
-                    {secrets.some((secret) => secret.name === "YOUTUBE_COOKIES") && (
+                    {secrets.some(
+                      (secret) => secret.name === "DOWNLOAD_COOKIES" || secret.name === "YOUTUBE_COOKIES",
+                    ) && (
                       <button
                         className="ghost small danger"
                         type="button"
-                        onClick={() => void removeYoutubeCookies()}
+                        onClick={() => void removeDownloadCookies()}
                       >
                         Remove
                       </button>
                     )}
-                    <button className="btn primary" type="button" onClick={() => void saveYoutubeCookies()}>
+                    <button className="btn primary" type="button" onClick={() => void saveDownloadCookies()}>
                       Save cookies
                     </button>
                   </div>
