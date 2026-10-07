@@ -93,13 +93,17 @@ function Start-Stack {
   }
 }
 
-if (Test-Cloud) {
+# Poke the engine on every run: a cheap `docker info` keeps an idle Docker
+# engine from stopping itself and tells us whether a restart is needed.
+$cloudUp = Test-Cloud
+$engineUp = Test-Engine
+if ($cloudUp -and $engineUp) {
   Write-Log "ok - cloud healthy"
   exit 0
 }
 
 Write-Log "cloud is DOWN ($HealthUrl)"
-if (-not (Test-Engine)) {
+if (-not $engineUp) {
   if (-not (Restart-DockerDesktop)) { exit 1 }
 }
 Start-Stack
