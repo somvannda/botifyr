@@ -66,6 +66,14 @@ describe("workspaces API", () => {
       id: string;
     }>;
     expect(list.map((entry) => entry.id)).toContain(ws.id);
+
+    // The company wiki is seeded on the chair bot.
+    const files = (
+      await app.inject({ method: "GET", url: `/v1/bots/${ws.ceoBotId}/files`, headers: auth })
+    ).json() as Array<{ name: string }>;
+    expect(files.map((file) => file.name)).toEqual(
+      expect.arrayContaining(["BRIEF.md", "OKRS.md", "BACKLOG.md"]),
+    );
     await app.close();
   });
 

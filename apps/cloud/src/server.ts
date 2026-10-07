@@ -2148,6 +2148,42 @@ export async function buildServer(options: ServerOptions) {
         }
       }
 
+      // Seed the company wiki on the chair bot: brief, OKRs and a first backlog.
+      if (chairBotId) {
+        const dna = request.body?.dna;
+        const seededAt = new Date().toISOString();
+        const writeWiki = async (fileName: string, content: string): Promise<void> => {
+          const existing = (await store.listFiles(chairBotId)).find((file) => file.name === fileName);
+          await store.upsertFile({
+            id: existing?.id ?? randomUUID(),
+            botId: chairBotId,
+            userId,
+            name: fileName,
+            content: content.slice(0, 20_000),
+            createdAt: existing?.createdAt ?? seededAt,
+            updatedAt: seededAt,
+          });
+        };
+        const features = dna?.product.features ?? [];
+        const gaps = dna?.product.gaps ?? [];
+        const bullets = (items: string[], empty: string): string =>
+          (items.length > 0 ? items : [empty]).map((item) => `- ${item}`).join("\n");
+        await writeWiki(
+          "BRIEF.md",
+          `# ${workspace.name}\n\n${workspace.mission}\n\n` +
+            (dna ? `Industry: ${dna.industry}\nStage: ${dna.stage}\nGoal: ${dna.goal}` : ""),
+        );
+        await writeWiki(
+          "OKRS.md",
+          `# OKRs — ${workspace.name}\n\nGoal: ${dna?.goal ?? workspace.mission}`,
+        );
+        await writeWiki(
+          "BACKLOG.md",
+          `# Backlog — ${workspace.name}\n\n## MVP\n${bullets(features, "Define the MVP")}\n\n` +
+            `## Opportunities\n${bullets(gaps, "—")}`,
+        );
+      }
+
       if (chairBotId) {
         workspace.ceoBotId = chairBotId;
         await store.updateWorkspace(workspace);
