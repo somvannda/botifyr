@@ -19,6 +19,8 @@ import type {
   NotificationRecord,
   Plan,
   PlatformSettings,
+  ProviderRole,
+  ProviderRoleConfig,
   SecretRecord,
   SessionRecord,
   Store,
@@ -892,6 +894,23 @@ export class PostgresStore implements Store {
   async deleteModelPricing(model: string): Promise<boolean> {
     const result = await this.pool.query("DELETE FROM model_pricing WHERE model = $1", [model]);
     return (result.rowCount ?? 0) > 0;
+  }
+
+  async listProviderRoles(): Promise<ProviderRoleConfig[]> {
+    const { rows } = await this.pool.query("SELECT data FROM provider_roles");
+    return rows.map((row) => row.data as ProviderRoleConfig);
+  }
+
+  async getProviderRole(role: ProviderRole): Promise<ProviderRoleConfig | null> {
+    const { rows } = await this.pool.query("SELECT data FROM provider_roles WHERE role = $1", [role]);
+    return (rows[0]?.data as ProviderRoleConfig) ?? null;
+  }
+
+  async saveProviderRole(config: ProviderRoleConfig): Promise<void> {
+    await this.pool.query(
+      "INSERT INTO provider_roles (role, data) VALUES ($1, $2) ON CONFLICT (role) DO UPDATE SET data = EXCLUDED.data",
+      [config.role, config],
+    );
   }
 
   async createInvoice(record: InvoiceRecord): Promise<void> {

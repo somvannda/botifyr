@@ -18,6 +18,8 @@ import type {
   NotificationRecord,
   Plan,
   PlatformSettings,
+  ProviderRole,
+  ProviderRoleConfig,
   SecretRecord,
   SessionRecord,
   Store,
@@ -45,6 +47,7 @@ export class MemoryStore implements Store {
   /** Keyed by `${workspaceId}:${subject}:${capability}`. */
   private grants = new Map<string, CapabilityGrantRecord>();
   private reports = new Map<string, CompanyReportRecord>();
+  private providerRoles = new Map<ProviderRole, ProviderRoleConfig>();
   private tasks = new Map<string, Task>();
   private audit: AuditRecord[] = [];
   private secrets = new Map<string, SecretRecord>();
@@ -629,6 +632,19 @@ export class MemoryStore implements Store {
 
   async deleteModelPricing(model: string): Promise<boolean> {
     return this.modelPricing.delete(model);
+  }
+
+  async listProviderRoles(): Promise<ProviderRoleConfig[]> {
+    return [...this.providerRoles.values()].map((record) => ({ ...record }));
+  }
+
+  async getProviderRole(role: ProviderRole): Promise<ProviderRoleConfig | null> {
+    const record = this.providerRoles.get(role);
+    return record ? { ...record } : null;
+  }
+
+  async saveProviderRole(config: ProviderRoleConfig): Promise<void> {
+    this.providerRoles.set(config.role, { ...config });
   }
 
   async createInvoice(record: InvoiceRecord): Promise<void> {

@@ -267,6 +267,12 @@ CREATE TABLE IF NOT EXISTS model_pricing (
   updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Video translation: the admin-managed provider per role (docs/video-translation.md).
+CREATE TABLE IF NOT EXISTS provider_roles (
+  role TEXT PRIMARY KEY,
+  data JSONB NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS invoices (
   id                 TEXT PRIMARY KEY,
   user_id            TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
