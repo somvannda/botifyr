@@ -14,23 +14,43 @@ export function createDelegationTools(store: Store, userId: string, botId: strin
     {
       name: "company.delegate",
       description:
-        "Assign a task on the company board to another employee, by role title (e.g. \"CTO\", \"Head of Growth\"). Use this to hand work to a teammate.",
+        "Assign a task on a company board to an employee, by role title (e.g. \"CTO\", \"Head of Growth\"). Works for the company you own; pass `company` if you have more than one.",
       parameters: {
         type: "object",
         properties: {
           role: { type: "string", description: "The employee's role title or department, e.g. \"CTO\"." },
           task: { type: "string", description: "What to assign." },
           phase: { type: "string", enum: PHASES, description: "Which backlog phase." },
+          company: { type: "string", description: "Company name (optional when you have one company)." },
         },
         required: ["role", "task"],
       },
       run: async (args) => {
         const author = await store.getBot(botId);
-        if (!author?.workspace) return { ok: false, output: "This bot is not part of a company." };
-        const workspace = (await store.listWorkspaces(userId)).find(
-          (entry) => entry.name === author.workspace,
-        );
-        if (!workspace) return { ok: false, output: "Company not found." };
+        const workspaces = await store.listWorkspaces(userId);
+        const requested = String(args.company ?? "")
+          .trim()
+          .toLowerCase();
+        // Prefer the bot's own company; otherwise the company you own (or the
+        // one you named). This lets the CEO's Founder bot delegate.
+        const workspace =
+          (author?.workspace
+            ? workspaces.find((entry) => entry.name === author.workspace)
+            : undefined) ??
+          (requested
+            ? workspaces.find((entry) => entry.name.toLowerCase() === requested)
+            : workspaces.length === 1
+              ? workspaces[0]
+              : undefined);
+        if (!workspace) {
+          return {
+            ok: false,
+            output:
+              workspaces.length === 0
+                ? "You don't have a company yet — create one first."
+                : `Which company? ${workspaces.map((entry) => entry.name).join(", ")}.`,
+          };
+        }
 
         const role = String(args.role ?? "")
           .trim()

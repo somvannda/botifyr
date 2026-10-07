@@ -23,17 +23,35 @@ export function createHireTools(store: Store, userId: string, botId: string): To
           title: { type: "string", description: "The role title." },
           department: { type: "string", description: "Department (e.g. engineering, growth, sales)." },
           instructions: { type: "string", description: "Job description / standing instructions." },
+          company: { type: "string", description: "Company name (optional when you have one company)." },
         },
         required: ["title"],
       },
       requiresApproval: true,
       run: async (args) => {
         const author = await store.getBot(botId);
-        if (!author?.workspace) return { ok: false, output: "This bot is not part of a company." };
-        const workspace = (await store.listWorkspaces(userId)).find(
-          (entry) => entry.name === author.workspace,
-        );
-        if (!workspace) return { ok: false, output: "Company not found." };
+        const workspaces = await store.listWorkspaces(userId);
+        const requested = String(args.company ?? "")
+          .trim()
+          .toLowerCase();
+        const workspace =
+          (author?.workspace
+            ? workspaces.find((entry) => entry.name === author.workspace)
+            : undefined) ??
+          (requested
+            ? workspaces.find((entry) => entry.name.toLowerCase() === requested)
+            : workspaces.length === 1
+              ? workspaces[0]
+              : undefined);
+        if (!workspace) {
+          return {
+            ok: false,
+            output:
+              workspaces.length === 0
+                ? "You don't have a company yet — create one first."
+                : `Which company? ${workspaces.map((entry) => entry.name).join(", ")}.`,
+          };
+        }
 
         const title = String(args.title ?? "")
           .trim()
