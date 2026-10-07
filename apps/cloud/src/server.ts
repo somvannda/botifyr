@@ -974,6 +974,8 @@ export async function buildServer(options: ServerOptions) {
         summary: session.summary,
         vaultKey,
         author: { id: bot.id },
+        // Honour the employee's "Always allow" / Autonomous setting.
+        autoApprove: bot.autoApprove === true,
       },
       task,
     )
