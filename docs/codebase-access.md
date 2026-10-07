@@ -77,7 +77,7 @@ company has at least one code connection.
 | `code.apply` | Stage a file's new contents under `/work` for review. | yes |
 | `code.test` | Run the repo's tests in a `docker run --network none` sandbox (optional network install step first). | yes |
 | `code.commit` | Apply staged changes to a managed clone and commit on a branch. | yes |
-| `code.pr` | Push the committed branch and open a GitHub pull request. | yes |
+| `code.pr` | Push the committed branch and open a GitHub PR (or GitLab MR). | yes |
 
 Read tools are cheap (no model calls; deterministic output, bounded size). Write
 tools are approval-gated and produce a diff the CEO reviews — matching the
@@ -130,8 +130,10 @@ Reuse the capability-grant system: a `repo` capability per connection, subject
    repo's tests in a `docker run --network none` sandbox; `sandboxMount()` maps
    `/repos` and `/managed` to host/Docker mounts and fails safe when unmapped.
 
-**Still open:** per-tenant checkout isolation and quotas; GitLab PR support
-(GitHub is wired through `code.pr`).
+**Still open:** per-workspace quotas (clone size, disk). Path isolation is
+enforced — a connected checkout must live under `BOTIFYR_REPOS_DIR` or
+`BOTIFYR_MANAGED_DIR`, so one tenant's tools can't read another's (or arbitrary
+container) files.
 
 ## 9. Open questions
 

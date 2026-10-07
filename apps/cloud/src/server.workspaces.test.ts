@@ -529,4 +529,30 @@ describe("workspaces API", () => {
     expect((same.json() as { name: string }).name).toBe("One 2");
     await app.close();
   });
+
+  it("rejects repo paths outside the allowed roots", async () => {
+    const { app, signup } = await boot();
+    const auth = await signup("ws-repos@example.com");
+    const ws = (
+      await app.inject({ method: "POST", url: "/v1/workspaces", headers: auth, payload: { name: "Repo Co" } })
+    ).json() as { id: string };
+
+    const bad = await app.inject({
+      method: "PATCH",
+      url: `/v1/workspaces/${ws.id}`,
+      headers: auth,
+      payload: { repos: [{ name: "etc", path: "/etc" }] },
+    });
+    expect(bad.statusCode).toBe(400);
+
+    const good = await app.inject({
+      method: "PATCH",
+      url: `/v1/workspaces/${ws.id}`,
+      headers: auth,
+      payload: { repos: [{ name: "app", path: "/repos/app" }] },
+    });
+    expect(good.statusCode).toBe(200);
+    expect((good.json() as { repos: Array<{ path: string }> }).repos[0]?.path).toBe("/repos/app");
+    await app.close();
+  });
 });

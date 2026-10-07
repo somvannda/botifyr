@@ -579,6 +579,37 @@ export function createCodeTools(repos: CodeRepo[], io: CodeToolIo = {}): ToolDef
             };
           }
         }
+        if (info.host.includes("gitlab")) {
+          try {
+            const project = encodeURIComponent(`${info.owner}/${info.repo}`);
+            const response = await fetch(
+              `https://${info.host}/api/v4/projects/${project}/merge_requests`,
+              {
+                method: "POST",
+                headers: { "PRIVATE-TOKEN": token, "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  source_branch: branch,
+                  target_branch: base,
+                  title: String(args.title).slice(0, 200),
+                  description: String(args.body ?? "").slice(0, 10_000),
+                }),
+              },
+            );
+            const data = (await response.json()) as { web_url?: string; error?: string };
+            if (!response.ok) {
+              return {
+                ok: false,
+                output: `Pushed ${branch}, but the MR failed: ${data.error ?? response.status}`,
+              };
+            }
+            return { ok: true, output: `Pushed ${branch} and opened MR: ${data.web_url}` };
+          } catch (error) {
+            return {
+              ok: false,
+              output: `Pushed ${branch}, but the MR request errored: ${String((error as Error).message).slice(0, 300)}`,
+            };
+          }
+        }
         return {
           ok: true,
           output: `Pushed ${branch}. Open a pull request on ${info.host} (${info.owner}/${info.repo}).`,

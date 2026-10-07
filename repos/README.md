@@ -23,3 +23,8 @@ never write. Engineering agents can also **clone a repo by URL** (with an
 optional token from the shared vault) into `/managed` — see the HQ Office tab →
 *Clone from URL*. `code.apply` stages proposed edits under `/work` and the HQ
 **Changes** tab shows the diff.
+
+Connected repo paths must live under `BOTIFYR_REPOS_DIR` (`/repos`) or
+`BOTIFYR_MANAGED_DIR` (`/managed`); the API rejects anything else. For
+single-tenant self-host, set `BOTIFYR_ALLOW_LOCAL_REPO_PATHS=1` to allow
+arbitrary local paths.

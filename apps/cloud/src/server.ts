@@ -250,6 +250,17 @@ function allowedOrigins(): Set<string> {
 
 export async function buildServer(options: ServerOptions) {
   const { store, vaultKey, localChannel } = options;
+
+  // Repo checkouts must live under the configured roots (multi-tenant safety).
+  const reposRoot = (process.env.BOTIFYR_REPOS_DIR ?? "/repos").replace(/\/+$/, "");
+  const managedRoot = (process.env.BOTIFYR_MANAGED_DIR ?? "/managed").replace(/\/+$/, "");
+  const allowLocalRepoPaths = (process.env.BOTIFYR_ALLOW_LOCAL_REPO_PATHS ?? "0") === "1";
+  const isAllowedRepoPath = (value: string): boolean =>
+    allowLocalRepoPaths ||
+    value === reposRoot ||
+    value.startsWith(reposRoot + "/") ||
+    value === managedRoot ||
+    value.startsWith(managedRoot + "/");
   const corsOrigins = allowedOrigins();
 
   /* ------------------------------------------------------------------------ */
@@ -2356,7 +2367,7 @@ export async function buildServer(options: ServerOptions) {
     }
     if (Number.isInteger(request.body?.scheme)) workspace.scheme = Number(request.body.scheme);
     if (Array.isArray(request.body?.repos)) {
-      workspace.repos = request.body.repos
+      const repos = request.body.repos
         .slice(0, 10)
         .map((repo) => ({
           id: typeof repo?.id === "string" && repo.id ? repo.id : randomUUID(),
@@ -2368,6 +2379,11 @@ export async function buildServer(options: ServerOptions) {
           createdAt: typeof repo?.createdAt === "string" ? repo.createdAt : new Date().toISOString(),
         }))
         .filter((repo) => repo.path.length > 0);
+      const disallowed = repos.find((repo) => !isAllowedRepoPath(repo.path));
+      if (disallowed) {
+        return reply.code(400).send({ error: `repo path must be under ${reposRoot}` });
+      }
+      workspace.repos = repos;
     }
     if (typeof request.body?.ceoBotId === "string") {
       workspace.ceoBotId = request.body.ceoBotId || undefined;
@@ -2925,6 +2941,9 @@ export async function buildServer(options: ServerOptions) {
       }
     }
     if (!path) return reply.code(400).send({ error: "a url or path is required" });
+    if (!isAllowedRepoPath(path)) {
+      return reply.code(400).send({ error: `repo path must be under ${reposRoot}` });
+    }
     const repo = {
       id: randomUUID(),
       name,
