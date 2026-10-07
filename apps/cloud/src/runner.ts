@@ -16,7 +16,7 @@ import {
   type ToolDefinition,
 } from "@botifyr/agent-core";
 import { emit } from "./events.js";
-import { companyContext } from "./company.js";
+import { companyContext, isBudgetExhausted } from "./company.js";
 import { createCompanyTools } from "./company-tools.js";
 import { createDelegationTools } from "./delegation-tools.js";
 import {
@@ -377,15 +377,26 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
     tools.push(...createDelegationTools(store, userId, deps.author.id));
   }
 
-  // Company context: give every employee the shared business briefing (DNA).
+  // Company context + budget: give every employee the shared briefing (DNA),
+  // and stop before spending when the company's token budget is exhausted.
   let companyBrief = "";
   const authorBot = deps.author ? await store.getBot(deps.author.id).catch(() => null) : null;
-  if (authorBot?.workspace) {
-    const label = authorBot.workspace;
-    const company = (await store.listWorkspaces(userId).catch(() => [])).find(
-      (entry) => entry.name === label,
-    );
-    if (company?.dna) companyBrief = companyContext(company.dna);
+  const company = authorBot?.workspace
+    ? (await store.listWorkspaces(userId).catch(() => [])).find(
+        (entry) => entry.name === authorBot.workspace,
+      )
+    : undefined;
+  if (company?.dna) companyBrief = companyContext(company.dna);
+  if (company) {
+    const budget = await store.getWorkspaceBudget(company.id).catch(() => null);
+    if (isBudgetExhausted(budget)) {
+      task.status = "failed";
+      task.error = `Company budget reached (${budget?.usedTokens.toLocaleString()} / ${budget?.limitTokens.toLocaleString()} tokens). Raise it in the Company HQ → Budget.`;
+      task.updatedAt = new Date().toISOString();
+      await store.updateTask(task);
+      emit({ type: "task.failed", task });
+      return;
+    }
   }
   const instructions =
     [companyBrief, deps.instructions, skillIndex, localInstruction].filter(Boolean).join("\n\n") || undefined;
@@ -508,6 +519,15 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
     await chain;
     ok = result.ok;
     reply = result.summary;
+
+    // The batch "Downloads" progress step is opened by onLog while files are
+    // fetched; close it once the run has finished so it doesn't stay "running".
+    const downloadsStep = task.steps.find((step) => step.id === `downloads-${task.id}`);
+    if (downloadsStep && downloadsStep.status === "running") {
+      downloadsStep.status = ok ? "done" : "failed";
+      downloadsStep.finishedAt = new Date().toISOString();
+      queue({ type: "task.updated", task });
+    }
 
     // Best-effort cost accounting: never let a failed write break the task.
     try {
