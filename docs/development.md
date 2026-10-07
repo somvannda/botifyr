@@ -343,6 +343,21 @@ cd apps/cloud && node scripts/verify-stream.mjs                          # termi
 
 Saved proof from a real run: `docs/assets/m1-browser-screenshot.png`.
 
+### Deterministic media check (no model cost)
+
+Media downloads are planned deterministically (`planMedia`), so the whole path
+can be verified without calling the model:
+
+```bash
+npm run verify:media                                              # small sample MP4
+node apps/cloud/scripts/verify-media.mjs https://example.com/page # a page that streams
+```
+
+It signs up (or logs in to) a throwaway account, creates a session, sends
+`download <url>`, approves the tool call, waits for the task and prints the
+saved files. Exit code is 0 only when the task completed and at least one file
+was saved.
+
 ## What Milestone 1 does
 
 ```
