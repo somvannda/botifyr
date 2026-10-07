@@ -262,6 +262,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [boardWorkspace, setBoardWorkspace] = useState<{ id: string; name: string } | null>(null);
   const [repoName, setRepoName] = useState("");
   const [repoPath, setRepoPath] = useState("");
+  const [repoUrl, setRepoUrl] = useState("");
+  const [repoToken, setRepoToken] = useState("");
   const [boardItems, setBoardItems] = useState<Array<WorkItem>>([]);
   const [boardTitle, setBoardTitle] = useState("");
   const [boardBusy, setBoardBusy] = useState(false);
@@ -1304,6 +1306,29 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     try {
       const updated = await client.updateWorkspace(workspace.id, { repos: next }).catch(() => null);
       if (updated) setWorkspaces(await client.listWorkspaces().catch(() => workspaces));
+    } finally {
+      setBoardBusy(false);
+    }
+  }
+
+  /** Clone a repo from a URL (with an optional vault token) and connect it. */
+  async function addRemoteRepo() {
+    const workspace = boardWorkspace;
+    if (!workspace || !repoUrl.trim()) return;
+    setBoardBusy(true);
+    try {
+      await client
+        .addWorkspaceRepo(workspace.id, {
+          name: repoName.trim() || "repo",
+          url: repoUrl.trim(),
+          tokenSecret: repoToken.trim() || undefined,
+        })
+        .catch(() => null);
+      setWorkspaces(await client.listWorkspaces().catch(() => workspaces));
+      setRepoName("");
+      setRepoPath("");
+      setRepoUrl("");
+      setRepoToken("");
     } finally {
       setBoardBusy(false);
     }
@@ -4972,6 +4997,30 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                       }}
                     >
                       Connect
+                    </button>
+                  </div>
+                  <div className="hq-repo-row">
+                    <input
+                      className="workspace-input"
+                      placeholder="Git URL (https://…)"
+                      value={repoUrl}
+                      onChange={(event) => setRepoUrl(event.target.value)}
+                      maxLength={400}
+                    />
+                    <input
+                      className="workspace-input"
+                      placeholder="Token secret name (optional)"
+                      value={repoToken}
+                      onChange={(event) => setRepoToken(event.target.value)}
+                      maxLength={120}
+                    />
+                    <button
+                      className="ghost small"
+                      type="button"
+                      disabled={boardBusy || !repoUrl.trim()}
+                      onClick={() => void addRemoteRepo()}
+                    >
+                      Clone
                     </button>
                   </div>
                 </>

@@ -194,6 +194,8 @@ export interface CodeRepo {
   /** Clone URL (reserved for managed checkouts). */
   url?: string;
   branch?: string;
+  /** Secret name in the shared vault holding a clone token (never the token). */
+  tokenSecret?: string;
   createdAt: string;
 }
 

@@ -708,6 +708,18 @@ export class BotifyrClient {
     return this.request(`/v1/workspaces/${workspaceId}/proposals`);
   }
 
+  /** Connect a repo: clone a URL (with an optional vault token) or a local path. */
+  addWorkspaceRepo(
+    workspaceId: string,
+    input: { name: string; url?: string; path?: string; branch?: string; tokenSecret?: string },
+  ): Promise<{ id: string; name: string; path: string }> {
+    return this.request(`/v1/workspaces/${workspaceId}/repos`, {
+      method: "POST",
+      json: true,
+      body: JSON.stringify(input),
+    });
+  }
+
   /** Deactivate the company (manual, schedules off, auto-approve off). */
   deactivateCompany(workspaceId: string): Promise<WorkspaceWithRoles> {
     return this.request(`/v1/workspaces/${workspaceId}/deactivate`, { method: "POST", json: true });

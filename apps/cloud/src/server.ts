@@ -3,9 +3,11 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import cors from "@fastify/cors";
 import websocket from "@fastify/websocket";
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { createReadStream, existsSync, readFileSync } from "node:fs";
-import { readFile, readdir, rm, stat } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { mkdir, readFile, readdir, rm, stat } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 import type {
   AuditEvent,
   AuthResponse,
@@ -47,7 +49,7 @@ import {
 import { resolveTaskApproval } from "./approvals.js";
 import { handleNodeMessage, nodeInfo, registerNode } from "./nodes.js";
 import { createToken, hashPassword, hashToken, verifyPassword } from "./auth.js";
-import { encryptSecret } from "./vault.js";
+import { encryptSecret, decryptSecret } from "./vault.js";
 import { oneShot, runTask, runtimeInfo, summarizeConversation } from "./runner.js";
 import {
   analyzeSource,
@@ -2865,6 +2867,78 @@ export async function buildServer(options: ServerOptions) {
       return { started };
     },
   );
+
+  const execFileAsync = promisify(execFile);
+
+  /** Connect a repo: clone a URL (with an optional vault token) or use a local path. */
+  app.post<{
+    Params: { id: string };
+    Body: { name?: string; url?: string; path?: string; branch?: string; tokenSecret?: string };
+  }>("/v1/workspaces/:id/repos", { preHandler: requireAuth }, async (request, reply) => {
+    const userId = request.userId as string;
+    const workspace = await store.getWorkspace(request.params.id);
+    if (!workspace || workspace.ownerId !== userId) {
+      return reply.code(404).send({ error: "workspace not found" });
+    }
+    const name = (request.body?.name ?? "").trim().slice(0, 60) || "repo";
+    const url = (request.body?.url ?? "").trim().slice(0, 400) || undefined;
+    let path = (request.body?.path ?? "").trim().slice(0, 400) || undefined;
+    const branch = (request.body?.branch ?? "").trim().slice(0, 120) || undefined;
+    const tokenSecret = (request.body?.tokenSecret ?? "").trim().slice(0, 120) || undefined;
+    let token: string | undefined;
+    if (url) {
+      const id = randomUUID();
+      const slug =
+        name
+          .replace(/[^a-z0-9._-]+/gi, "-")
+          .replace(/^-+|-+$/g, "")
+          .toLowerCase() || "repo";
+      const root = process.env.BOTIFYR_MANAGED_DIR ?? "/managed";
+      path = join(root, workspace.id, `${slug}-${id.slice(0, 8)}`);
+      let cloneUrl = url;
+      if (tokenSecret) {
+        const record = await store.getWorkspaceSecret(workspace.id, tokenSecret).catch(() => null);
+        if (record) {
+          try {
+            token = decryptSecret(vaultKey, record);
+            const parsed = new URL(url);
+            parsed.username = "x-access-token";
+            parsed.password = token;
+            cloneUrl = parsed.toString();
+          } catch {
+            token = undefined;
+          }
+        }
+      }
+      await mkdir(dirname(path), { recursive: true });
+      try {
+        await execFileAsync(
+          "git",
+          ["clone", "--depth", "1", ...(branch ? ["--branch", branch] : []), cloneUrl, path],
+          { timeout: 180_000, maxBuffer: 2_000_000 },
+        );
+      } catch (error) {
+        const detail = String((error as Error).message).slice(0, 300);
+        return reply
+          .code(400)
+          .send({ error: "clone failed", detail: token ? detail.split(token).join("***") : detail });
+      }
+    }
+    if (!path) return reply.code(400).send({ error: "a url or path is required" });
+    const repo = {
+      id: randomUUID(),
+      name,
+      path,
+      url,
+      branch,
+      tokenSecret,
+      createdAt: new Date().toISOString(),
+    };
+    workspace.repos = [...(workspace.repos ?? []), repo].slice(0, 10);
+    workspace.updatedAt = new Date().toISOString();
+    await store.updateWorkspace(workspace);
+    return reply.code(201).send(repo);
+  });
 
   /** Staged code changes (proposals) the CEO can review — read from /work. */
   app.get<{ Params: { id: string } }>(

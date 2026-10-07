@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { CodeRepo } from "@botifyr/shared";
-import { createCodeTools } from "./code-tools.js";
+import { createCodeTools, sandboxMount } from "./code-tools.js";
 
 const ctx = { workspaceDir: ".", log: () => {} };
 
@@ -86,5 +86,19 @@ describe("code tools (read-only)", () => {
     expect(saved[0]?.name).toBe("CODEBASE.md");
     expect(saved[0]?.content).toContain("- src");
     expect(saved[0]?.content).toContain(".ts");
+  });
+});
+
+describe("sandboxMount", () => {
+  it("maps managed checkouts to the named volume", () => {
+    expect(sandboxMount("/managed/ws1/demo")).toEqual({
+      volume: "botifyr-managed:/mnt:ro",
+      workdir: "/mnt/ws1/demo",
+    });
+    expect(sandboxMount("/managed")).toEqual({ volume: "botifyr-managed:/mnt:ro", workdir: "/mnt" });
+  });
+
+  it("fails safe for paths with no sandbox mapping", () => {
+    expect(sandboxMount("/etc/passwd")).toBeNull();
   });
 });

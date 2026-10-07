@@ -11,7 +11,7 @@ ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
     NODE_ENV=development
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates docker.io \
+  && apt-get install -y --no-install-recommends ca-certificates docker.io git \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

@@ -34,6 +34,26 @@ function relPosix(root: string, full: string): string {
   return path.relative(root, full).split(path.sep).join("/");
 }
 
+/**
+ * Map a checkout path inside the cloud to a Docker mount spec usable by a
+ * sibling sandbox container (docker-outside-of-docker needs host paths, not
+ * container paths). Returns null when the checkout isn't sandbox-reachable.
+ */
+export function sandboxMount(containerPath: string): { volume: string; workdir: string } | null {
+  const reposDir = process.env.BOTIFYR_REPOS_DIR ?? "/repos";
+  const managedDir = process.env.BOTIFYR_MANAGED_DIR ?? "/managed";
+  if (containerPath === reposDir || containerPath.startsWith(reposDir + "/")) {
+    const host = process.env.BOTIFYR_REPOS_HOST;
+    if (!host) return null;
+    return { volume: `${host}:${containerPath}:ro`, workdir: containerPath };
+  }
+  if (containerPath === managedDir || containerPath.startsWith(managedDir + "/")) {
+    const sub = containerPath === managedDir ? "" : containerPath.slice(managedDir.length + 1);
+    return { volume: "botifyr-managed:/mnt:ro", workdir: sub ? `/mnt/${sub}` : "/mnt" };
+  }
+  return null;
+}
+
 /** Resolve `relative` inside `root`, refusing anything that escapes it. */
 function jail(root: string, relative: string): string {
   const base = path.resolve(root);
@@ -290,6 +310,60 @@ export function createCodeTools(repos: CodeRepo[], io: CodeToolIo = {}): ToolDef
           .slice(0, 20_000);
         if (io.saveWikiFile) await io.saveWikiFile("CODEBASE.md", content);
         return { ok: true, output: content };
+      },
+    },
+    {
+      name: "code.test",
+      description:
+        "Run the repository's tests in a throwaway sandbox (no network) and return the output. Needs approval.",
+      parameters: {
+        type: "object",
+        properties: {
+          command: { type: "string", description: "Optional command (default: the repo's test script)." },
+          repo: repoProp,
+        },
+      },
+      requiresApproval: true,
+      run: async (args) => {
+        const repo = choose(args.repo);
+        const missing = noRepo(repo);
+        if (missing || !repo) return { ok: false, output: missing ?? "No repository." };
+        const mount = sandboxMount(repo.path);
+        if (!mount) {
+          return { ok: false, output: "This checkout isn't reachable by the sandbox (no host mapping)." };
+        }
+        const image = process.env.BOTIFYR_TEST_IMAGE ?? "node:22-bookworm-slim";
+        const command =
+          String(args.command ?? "").trim() ||
+          process.env.BOTIFYR_TEST_COMMAND ||
+          'if [ -f package.json ]; then npm test --silent --if-present; ' +
+            'elif [ -f Makefile ]; then make test; ' +
+            'else echo "No test runner detected."; fi';
+        try {
+          const { stdout, stderr } = await execFileAsync(
+            "docker",
+            [
+              "run",
+              "--rm",
+              "--network",
+              "none",
+              "-v",
+              mount.volume,
+              "-w",
+              mount.workdir,
+              image,
+              "sh",
+              "-lc",
+              command,
+            ],
+            { timeout: 180_000, maxBuffer: 2_000_000 },
+          );
+          return { ok: true, output: `$ ${command}\n${stdout}\n${stderr}`.slice(0, 20_000) };
+        } catch (error) {
+          const failure = error as { stdout?: string; stderr?: string; message?: string };
+          const text = `${failure.stdout ?? ""}\n${failure.stderr ?? ""}`.trim() || failure.message || "test run failed";
+          return { ok: false, output: text.slice(0, 20_000) };
+        }
       },
     },
   ];

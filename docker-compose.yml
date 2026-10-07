@@ -48,6 +48,10 @@ services:
       BOTIFYR_REPOS_DIR: /repos
       # Writable area where engineering agents stage proposed changes (Phase 2).
       BOTIFYR_WORK_DIR: /work
+      # Managed git checkouts cloned from URLs (with an optional vault token).
+      BOTIFYR_MANAGED_DIR: /managed
+      # Host path behind the /repos mount, so code.test can hand it to a sandbox.
+      BOTIFYR_REPOS_HOST: ${BOTIFYR_REPOS_HOST:-}
     ports:
       - "8787:8787"
     volumes:
@@ -59,6 +63,8 @@ services:
       - "${BOTIFYR_REPOS_HOST:-./repos}:/repos:ro"
       # Writable scratch for staged code changes (never the host repo).
       - botifyr-work:/work
+      # Managed git checkouts cloned from URLs.
+      - botifyr-managed:/managed
     depends_on:
       postgres:
         condition: service_healthy
@@ -102,3 +108,4 @@ volumes:
   botifyr-downloads:
     name: botifyr-downloads
   botifyr-work:
+  botifyr-managed:
