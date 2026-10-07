@@ -168,6 +168,9 @@ export type Department =
   | "people"
   | "logistics";
 
+/** How autonomous a company is (docs/company-os.md §22). */
+export type WorkspaceAutonomy = "manual" | "supervised" | "autonomous";
+
 /** A virtual company. Owns employees (bots), shared state, and a budget. */
 export interface Workspace {
   id: string;
@@ -180,6 +183,8 @@ export interface Workspace {
   /** Structured company profile — the shared context every employee reads. */
   dna?: CompanyDNA;
   status: WorkspaceStatus;
+  /** manual = you drive it; supervised = schedules, approvals on; autonomous = schedules + auto-approve. */
+  autonomy?: WorkspaceAutonomy;
   /** The chair bot that reports to the CEO. */
   ceoBotId?: string;
   avatarEmoji?: string;

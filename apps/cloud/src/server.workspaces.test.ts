@@ -315,4 +315,53 @@ describe("workspaces API", () => {
     expect((res.json() as { stopped: number }).stopped).toBe(0);
     await app.close();
   });
+
+  it("activates and deactivates a company", async () => {
+    const { app, signup } = await boot();
+    const auth = await signup("ws-autonomy@example.com");
+    const ws = (
+      await app.inject({
+        method: "POST",
+        url: "/v1/workspaces",
+        headers: auth,
+        payload: {
+          name: "Auto Co",
+          members: [
+            { name: "Ada", title: "CEO", department: "exec", isChair: true },
+            { name: "Dev", title: "CTO", department: "engineering" },
+          ],
+        },
+      })
+    ).json() as { id: string; ceoBotId: string };
+
+    const activated = await app.inject({
+      method: "POST",
+      url: `/v1/workspaces/${ws.id}/activate`,
+      headers: auth,
+      payload: { level: "autonomous" },
+    });
+    expect(activated.statusCode).toBe(200);
+    expect((activated.json() as { autonomy: string }).autonomy).toBe("autonomous");
+
+    const bots = (
+      await app.inject({ method: "GET", url: "/v1/bots", headers: auth })
+    ).json() as Array<{ id: string; schedule?: unknown; autoApprove?: boolean }>;
+    const ada = bots.find((bot) => bot.id === ws.ceoBotId)!;
+    expect(ada.schedule).toBeDefined();
+    expect(ada.autoApprove).toBe(true);
+
+    const deactivated = await app.inject({
+      method: "POST",
+      url: `/v1/workspaces/${ws.id}/deactivate`,
+      headers: auth,
+    });
+    expect((deactivated.json() as { autonomy: string }).autonomy).toBe("manual");
+    const after = (
+      await app.inject({ method: "GET", url: "/v1/bots", headers: auth })
+    ).json() as Array<{ id: string; schedule?: unknown; autoApprove?: boolean }>;
+    const ada2 = after.find((bot) => bot.id === ws.ceoBotId)!;
+    expect(ada2.schedule).toBeUndefined();
+    expect(ada2.autoApprove).toBeFalsy();
+    await app.close();
+  });
 });

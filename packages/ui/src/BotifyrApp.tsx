@@ -1099,6 +1099,22 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     }
   }
 
+  /** Set the company's autonomy level (manual = deactivate). */
+  async function setAutonomy(level: "manual" | "supervised" | "autonomous") {
+    const workspace = boardWorkspace;
+    if (!workspace) return;
+    setBoardBusy(true);
+    try {
+      const updated =
+        level === "manual"
+          ? await client.deactivateCompany(workspace.id).catch(() => null)
+          : await client.activateCompany(workspace.id, level).catch(() => null);
+      if (updated) setWorkspaces(await client.listWorkspaces().catch(() => workspaces));
+    } finally {
+      setBoardBusy(false);
+    }
+  }
+
   async function saveBudget() {
     const workspace = boardWorkspace;
     if (!workspace) return;
@@ -4275,6 +4291,45 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
               )}
             </div>
             <div className="apps-actions">
+              {(() => {
+                const autonomy = workspaceByName.get(boardWorkspace.name)?.autonomy ?? "manual";
+                if (autonomy === "manual") {
+                  return (
+                    <>
+                      <button
+                        className="btn primary small"
+                        type="button"
+                        disabled={boardBusy}
+                        onClick={() => void setAutonomy("supervised")}
+                      >
+                        Activate
+                      </button>
+                      <button
+                        className="ghost small"
+                        type="button"
+                        disabled={boardBusy}
+                        title="Schedules + auto-approve (they act without asking, within grants and budget)"
+                        onClick={() => void setAutonomy("autonomous")}
+                      >
+                        Autonomous
+                      </button>
+                    </>
+                  );
+                }
+                return (
+                  <>
+                    <span className="hq-autonomy">{autonomy}</span>
+                    <button
+                      className="ghost small"
+                      type="button"
+                      disabled={boardBusy}
+                      onClick={() => void setAutonomy("manual")}
+                    >
+                      Deactivate
+                    </button>
+                  </>
+                );
+              })()}
               <button
                 className="ghost small danger"
                 type="button"

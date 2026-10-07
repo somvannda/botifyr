@@ -99,6 +99,7 @@ export interface WorkspaceRecord {
   mission: string;
   dna?: CompanyDNA;
   status: "onboarding" | "active" | "paused" | "archived";
+  autonomy?: "manual" | "supervised" | "autonomous";
   ceoBotId?: string;
   avatarEmoji?: string;
   scheme?: number;

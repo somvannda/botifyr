@@ -2183,6 +2183,7 @@ export async function buildServer(options: ServerOptions) {
       scheme?: number;
       ceoBotId?: string;
       dna?: CompanyDNA;
+      autonomy?: Workspace["autonomy"];
     };
   }>("/v1/workspaces/:id", { preHandler: requireAuth }, async (request, reply) => {
     const userId = request.userId as string;
@@ -2212,6 +2213,10 @@ export async function buildServer(options: ServerOptions) {
     const status = request.body?.status;
     if (status && ["onboarding", "active", "paused", "archived"].includes(status)) {
       workspace.status = status;
+    }
+    const autonomy = request.body?.autonomy;
+    if (autonomy && ["manual", "supervised", "autonomous"].includes(autonomy)) {
+      workspace.autonomy = autonomy;
     }
     if (typeof request.body?.avatarEmoji === "string") {
       workspace.avatarEmoji = request.body.avatarEmoji.trim().slice(0, 8) || undefined;
@@ -2527,6 +2532,77 @@ export async function buildServer(options: ServerOptions) {
         }
       }
       return { stopped };
+    },
+  );
+
+  /** Activate the company: set the autonomy level, schedules and auto-approve. */
+  app.post<{ Params: { id: string }; Body: { level?: string } }>(
+    "/v1/workspaces/:id/activate",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const workspace = await store.getWorkspace(request.params.id);
+      if (!workspace || workspace.ownerId !== userId) {
+        return reply.code(404).send({ error: "workspace not found" });
+      }
+      const level: "manual" | "supervised" | "autonomous" = ["manual", "supervised", "autonomous"].includes(
+        String(request.body?.level),
+      )
+        ? (request.body?.level as "manual" | "supervised" | "autonomous")
+        : "supervised";
+      const now = new Date();
+      workspace.autonomy = level;
+      workspace.status = level === "manual" ? "paused" : "active";
+      const roles = await store.listBotRoles(workspace.id);
+      for (const role of roles) {
+        const bot = await store.getBot(role.botId);
+        if (!bot) continue;
+        if (level === "manual") {
+          bot.schedule = undefined;
+          bot.autoApprove = false;
+        } else {
+          bot.autoApprove = level === "autonomous" ? true : undefined;
+          const everyMinutes = role.isChair ? 1440 : 240;
+          bot.schedule = {
+            prompt: role.isChair
+              ? "Run the daily standup: summarise the board and flag blockers."
+              : "Review your board tasks and do the next one.",
+            everyMinutes,
+            enabled: true,
+            nextRunAt: new Date(now.getTime() + everyMinutes * 60_000).toISOString(),
+          };
+        }
+        await store.updateBot(bot);
+      }
+      workspace.updatedAt = now.toISOString();
+      await store.updateWorkspace(workspace);
+      return workspaceView(workspace);
+    },
+  );
+
+  /** Deactivate the company: back to manual, schedules off, auto-approve off. */
+  app.post<{ Params: { id: string } }>(
+    "/v1/workspaces/:id/deactivate",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const workspace = await store.getWorkspace(request.params.id);
+      if (!workspace || workspace.ownerId !== userId) {
+        return reply.code(404).send({ error: "workspace not found" });
+      }
+      workspace.autonomy = "manual";
+      workspace.status = "paused";
+      const roles = await store.listBotRoles(workspace.id);
+      for (const role of roles) {
+        const bot = await store.getBot(role.botId);
+        if (!bot) continue;
+        bot.schedule = undefined;
+        bot.autoApprove = false;
+        await store.updateBot(bot);
+      }
+      workspace.updatedAt = new Date().toISOString();
+      await store.updateWorkspace(workspace);
+      return workspaceView(workspace);
     },
   );
 

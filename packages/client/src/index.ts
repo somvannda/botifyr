@@ -676,6 +676,23 @@ export class BotifyrClient {
     return this.request(`/v1/workspaces/${workspaceId}/stop`, { method: "POST", json: true });
   }
 
+  /** Activate the company (schedules + auto-approve per level). */
+  activateCompany(
+    workspaceId: string,
+    level: "manual" | "supervised" | "autonomous",
+  ): Promise<WorkspaceWithRoles> {
+    return this.request(`/v1/workspaces/${workspaceId}/activate`, {
+      method: "POST",
+      json: true,
+      body: JSON.stringify({ level }),
+    });
+  }
+
+  /** Deactivate the company (manual, schedules off, auto-approve off). */
+  deactivateCompany(workspaceId: string): Promise<WorkspaceWithRoles> {
+    return this.request(`/v1/workspaces/${workspaceId}/deactivate`, { method: "POST", json: true });
+  }
+
   updateWorkspace(
     id: string,
     input: {
