@@ -45,3 +45,4 @@ export function createShellBackend(options: DockerShellOptions = {}) {
 // Keep the computer backend factory reachable from one place too.
 export { createDockerComputerBackend as createComputerBackend } from "./computer-docker.js";
 export type { ComputerBackend as AnyComputerBackend } from "./computer.js";
+export { removeOrphanedSandboxes } from "../sandbox/docker.js";

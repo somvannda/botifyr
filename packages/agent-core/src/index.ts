@@ -23,6 +23,7 @@ export {
   createShellTools,
   createDockerShellBackend,
   createMediaTools,
+  removeOrphanedSandboxes,
 } from "./tools/index.js";
 export type {
   BrowserBackend,

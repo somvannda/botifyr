@@ -3,6 +3,7 @@ import { buildServer } from "./server.js";
 import { createStore } from "./store/index.js";
 import { resolveVaultKey } from "./vault.js";
 import { createChannels } from "./channels/index.js";
+import { removeOrphanedSandboxes } from "@botifyr/agent-core";
 
 // Load apps/cloud/.env, explicitly overriding inherited variables. A host
 // process can carry its own DEEPSEEK_API_KEY (e.g. an editor or agent runtime)
@@ -30,6 +31,14 @@ const storeMode = (process.env.BOTIFYR_STORE ?? "memory").toLowerCase();
 
 const store = createStore();
 await store.init();
+
+// Sweep up per-task sandbox containers a previous crash may have left running.
+try {
+  const swept = await removeOrphanedSandboxes();
+  if (swept > 0) console.warn(`[botifyr] removed ${swept} orphaned sandbox container(s)`);
+} catch {
+  // best-effort; never block startup
+}
 
 const { key, ephemeral } = resolveVaultKey();
 if (ephemeral) {

@@ -90,3 +90,30 @@ export function createContainerHandle(spec: ContainerSpec): ContainerHandle {
     },
   };
 }
+
+/**
+ * Remove leftover per-task sandbox containers. A cloud crash can leave them
+ * running (they can't be resumed), so the next boot sweeps them up. Returns the
+ * number of containers removed. Best-effort: never throws.
+ */
+export async function removeOrphanedSandboxes(
+  prefixes: string[] = ["botifyr-sbx", "botifyr-code", "botifyr-desk"],
+): Promise<number> {
+  let removed = 0;
+  for (const prefix of prefixes) {
+    try {
+      const { stdout } = await exec("docker", ["ps", "-aq", "--filter", `name=${prefix}`]);
+      for (const id of stdout.split(/\s+/).filter(Boolean)) {
+        try {
+          await exec("docker", ["rm", "-f", id]);
+          removed += 1;
+        } catch {
+          // already gone
+        }
+      }
+    } catch {
+      // Docker unavailable — nothing to sweep.
+    }
+  }
+  return removed;
+}

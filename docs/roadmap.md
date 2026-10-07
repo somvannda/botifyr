@@ -23,10 +23,11 @@ they land. Keep entries short; link code paths instead of explaining them.
       playback when nothing loads on its own and ranks the HLS master playlist
       first; a found stream is downloaded with the page as `Referer`; direct-file
       URLs fall back to the best single format). Validated end-to-end without the
-      model — in the sandbox (page → sniff → master HLS → yt-dlp → file) and
-      through the cloud API (message → deterministic `youtube.download` →
-      approval → sandbox → file in `/v1/tasks/:id/downloads`). One sample URL per
-      site still speeds up the rest.
+      model — in the sandbox and through the cloud API (message → deterministic
+      `youtube.download` → approval → sandbox → file in `/v1/tasks/:id/downloads`),
+      including a **JS-only HLS page** (cloud sniff captured the master playlist
+      and yt-dlp saved a 170 MB file). One sample URL per site still speeds up the
+      rest.
 - [x] **Friend group chats** — create a thread with several friends
       (`kind: "group"` model already exists).
 - [x] **Send a file to a friend** — signed, recipient-scoped, 7-day links from
