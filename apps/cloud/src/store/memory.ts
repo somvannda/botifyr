@@ -208,6 +208,13 @@ export class MemoryStore implements Store {
     return record ? structuredClone(record) : null;
   }
 
+  async deleteSession(userId: string, id: string): Promise<boolean> {
+    const record = this.sessions.get(id);
+    if (!record || record.userId !== userId) return false;
+    this.sessions.delete(id);
+    return true;
+  }
+
   async listSessions(userId: string): Promise<SessionRecord[]> {
     return [...this.sessions.values()]
       .filter((session) => session.userId === userId)

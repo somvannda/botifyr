@@ -223,6 +223,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [companyError, setCompanyError] = useState<string | null>(null);
   const [companyEdit, setCompanyEdit] = useState<{ id: string; name: string } | null>(null);
   const [companyStep, setCompanyStep] = useState<"source" | "review" | "confirm">("source");
+  const [confirmCompanyDelete, setConfirmCompanyDelete] = useState(false);
   const [wizardUseHours, setWizardUseHours] = useState(false);
   const [wizardHoursStart, setWizardHoursStart] = useState("9");
   const [wizardHoursEnd, setWizardHoursEnd] = useState("18");
@@ -2687,7 +2688,10 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                       aria-label="Rename or delete company"
                       onClick={() => {
                         const ws = workspaceByName.get(name);
-                        if (ws) setCompanyEdit({ id: ws.id, name });
+                        if (ws) {
+                          setConfirmCompanyDelete(false);
+                          setCompanyEdit({ id: ws.id, name });
+                        }
                       }}
                     >
                       <GearIcon size={14} />
@@ -4702,10 +4706,17 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
               <button
                 className="ghost small danger"
                 type="button"
-                onClick={() => void removeCompany()}
+                onClick={() => {
+                  if (confirmCompanyDelete) {
+                    void removeCompany();
+                  } else {
+                    setConfirmCompanyDelete(true);
+                    window.setTimeout(() => setConfirmCompanyDelete(false), 4000);
+                  }
+                }}
                 disabled={companyBusy}
               >
-                Delete company
+                {confirmCompanyDelete ? "Confirm — delete company + employees" : "Delete company"}
               </button>
               <button
                 className="btn primary"

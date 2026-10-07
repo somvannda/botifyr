@@ -2278,14 +2278,15 @@ export async function buildServer(options: ServerOptions) {
       if (!workspace || workspace.ownerId !== userId) {
         return reply.code(404).send({ error: "workspace not found" });
       }
-      // Clear employee labels so they return to the Personal list.
+      // Cascade: delete every employee (its thread and Library) with the company.
       const roles = await store.listBotRoles(workspace.id);
       for (const role of roles) {
         const bot = await store.getBot(role.botId);
-        if (bot) {
-          bot.workspace = undefined;
-          await store.updateBot(bot);
-        }
+        if (!bot) continue;
+        const files = await store.listFiles(bot.id).catch(() => []);
+        for (const file of files) await store.deleteFile(userId, file.id).catch(() => false);
+        await store.deleteSession(userId, bot.sessionId).catch(() => false);
+        await store.deleteBot(userId, bot.id);
       }
       await store.deleteWorkspace(userId, workspace.id);
       return reply.code(204).send();

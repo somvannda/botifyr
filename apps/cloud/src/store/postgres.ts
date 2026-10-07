@@ -279,6 +279,11 @@ export class PostgresStore implements Store {
     return rows[0] ? toSession(rows[0]) : null;
   }
 
+  async deleteSession(userId: string, id: string): Promise<boolean> {
+    const result = await this.pool.query("DELETE FROM sessions WHERE user_id = $1 AND id = $2", [userId, id]);
+    return (result.rowCount ?? 0) > 0;
+  }
+
   async listSessions(userId: string): Promise<SessionRecord[]> {
     const { rows } = await this.pool.query(
       "SELECT id, user_id, data, created_at FROM sessions WHERE user_id = $1 ORDER BY created_at DESC",

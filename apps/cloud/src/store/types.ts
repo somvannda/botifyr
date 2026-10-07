@@ -265,6 +265,7 @@ export interface Store {
   createSession(record: SessionRecord): Promise<void>;
   updateSession(record: SessionRecord): Promise<void>;
   getSession(id: string): Promise<SessionRecord | null>;
+  deleteSession(userId: string, id: string): Promise<boolean>;
   listSessions(userId: string): Promise<SessionRecord[]>;
   /** Sessions the user owns or participates in (human/DM chats). */
   listConversations(userId: string): Promise<SessionRecord[]>;
