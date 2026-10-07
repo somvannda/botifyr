@@ -427,6 +427,61 @@ body {
   border-color: var(--accent);
 }
 
+/* Workspace switcher (sidebar filter) + header badge. */
+.ws-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 0 2px 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.ws-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.ws-tab {
+  flex: 0 0 auto;
+  max-width: 150px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.ws-tab:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.ws-tab.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.thread-workspace {
+  margin-left: 8px;
+  max-width: 160px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .task-item {
   display: grid;
   grid-template-columns: 10px 1fr auto;

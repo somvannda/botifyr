@@ -212,6 +212,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [botIntro, setBotIntro] = useState("");
   const [botWorkspace, setBotWorkspace] = useState("");
   const [collapsedWorkspaces, setCollapsedWorkspaces] = useState<Record<string, boolean>>({});
+  const [workspaceFilter, setWorkspaceFilter] = useState("all");
   const [groupMembers, setGroupMembers] = useState<string[]>([]);
   const [autonomous, setAutonomous] = useState(false);
   const [autoApprove, setAutoApprove] = useState(false);
@@ -1748,9 +1749,23 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     : orderedBots;
   // Companies: bots that share a `workspace` label are grouped under it; the
   // rest stay in a flat "Personal" list. See docs/company-workspace.md.
+  const workspaceNames = [
+    ...new Set(bots.map((bot) => bot.workspace).filter((name): name is string => Boolean(name))),
+  ];
+  // Guard against a stale filter (e.g. after the last bot leaves a company).
+  const activeWorkspaceFilter =
+    workspaceFilter === "all" || workspaceFilter === "personal" || workspaceNames.includes(workspaceFilter)
+      ? workspaceFilter
+      : "all";
+  const workspaceFiltered =
+    activeWorkspaceFilter === "all"
+      ? filteredBots
+      : activeWorkspaceFilter === "personal"
+        ? filteredBots.filter((bot) => !bot.workspace)
+        : filteredBots.filter((bot) => bot.workspace === activeWorkspaceFilter);
   const botsByWorkspace = new Map<string, Bot[]>();
   const ungroupedBots: Bot[] = [];
-  for (const bot of filteredBots) {
+  for (const bot of workspaceFiltered) {
     if (bot.workspace) {
       const list = botsByWorkspace.get(bot.workspace) ?? [];
       list.push(bot);
@@ -1759,9 +1774,6 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       ungroupedBots.push(bot);
     }
   }
-  const workspaceNames = [
-    ...new Set(bots.map((bot) => bot.workspace).filter((name): name is string => Boolean(name))),
-  ];
   // Messages you've sent in this chat, for ↑/↓ recall in the composer.
   const sentHistory = (sessions.find((entry) => entry.id === activeSessionId)?.messages ?? [])
     .filter((message) => message.role === "user")
@@ -2110,8 +2122,50 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
           <span className="sidebar-brand-name">Botifyr</span>
         </div>
 
+        {workspaceNames.length > 0 && (
+          <div className="ws-tabs" role="tablist" aria-label="Filter by workspace">
+            <button
+              className={`ws-tab${activeWorkspaceFilter === "all" ? " active" : ""}`}
+              type="button"
+              role="tab"
+              aria-selected={activeWorkspaceFilter === "all"}
+              onClick={() => setWorkspaceFilter("all")}
+            >
+              All
+            </button>
+            <button
+              className={`ws-tab${activeWorkspaceFilter === "personal" ? " active" : ""}`}
+              type="button"
+              role="tab"
+              aria-selected={activeWorkspaceFilter === "personal"}
+              onClick={() => setWorkspaceFilter("personal")}
+            >
+              Personal
+            </button>
+            {workspaceNames.map((name) => (
+              <button
+                key={name}
+                className={`ws-tab${activeWorkspaceFilter === name ? " active" : ""}`}
+                type="button"
+                role="tab"
+                aria-selected={activeWorkspaceFilter === name}
+                onClick={() => setWorkspaceFilter(name)}
+                title={name}
+              >
+                {name}
+              </button>
+            ))}
+          </div>
+        )}
+
         <div className="task-list">
-          {filteredBots.length === 0 && <p className="empty">No bots yet. Tap ＋ to create one.</p>}
+          {workspaceFiltered.length === 0 && (
+            <p className="empty">
+              {activeWorkspaceFilter === "all"
+                ? "No bots yet. Tap ＋ to create one."
+                : "No bots in this workspace."}
+            </p>
+          )}
           {[...botsByWorkspace.entries()].map(([name, members]) => {
             const collapsed = collapsedWorkspaces[name] === true;
             return (
@@ -2383,6 +2437,11 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                 )}
                 {liveTask && <span className={`status-dot status-${liveTask.status}`} />}
                 <span className="thread-pill-name">{activeBotName}</span>
+                {activeBot?.workspace && (
+                  <span className="thread-workspace" title={`Company: ${activeBot.workspace}`}>
+                    {activeBot.workspace}
+                  </span>
+                )}
               </span>
             )}
             <div className="topbar-right">

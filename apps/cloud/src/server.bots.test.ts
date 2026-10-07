@@ -29,6 +29,7 @@ describe("bots API", () => {
     (await app.inject({ method: "POST", url: "/v1/bots", headers: auth, payload })).json() as {
       id: string;
       name: string;
+      workspace?: string;
       memberIds?: string[];
     };
 
@@ -81,6 +82,32 @@ describe("bots API", () => {
     const b = await create(app, auth, { name: "B" });
     const group = await create(app, auth, { name: "G", memberIds: [a.id, b.id, "ghost"] });
     expect([...(group.memberIds ?? [])].sort()).toEqual([a.id, b.id].sort());
+    await app.close();
+  });
+
+  it("stores a company/workspace label and can set or clear it", async () => {
+    const { app, auth } = await authed();
+    const inCompany = await create(app, auth, { name: "Ada", workspace: "Acme Robotics" });
+    expect(inCompany.workspace).toBe("Acme Robotics");
+
+    const personal = await create(app, auth, { name: "Solo" });
+    expect(personal.workspace).toBeUndefined();
+
+    const set = await app.inject({
+      method: "PUT",
+      url: `/v1/bots/${personal.id}`,
+      headers: auth,
+      payload: { workspace: "Acme Labs" },
+    });
+    expect((set.json() as { workspace?: string }).workspace).toBe("Acme Labs");
+
+    const cleared = await app.inject({
+      method: "PUT",
+      url: `/v1/bots/${personal.id}`,
+      headers: auth,
+      payload: { workspace: "" },
+    });
+    expect((cleared.json() as { workspace?: string }).workspace).toBeUndefined();
     await app.close();
   });
 });
