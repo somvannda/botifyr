@@ -311,6 +311,16 @@ export interface WorkspaceBudget {
   updatedAt: string;
 }
 
+/** A per-subject capability grant within a company (docs/company-os.md §8). */
+export interface CapabilityGrant {
+  workspaceId: string;
+  /** "bot:<id>" or "role:<title>". */
+  subject: string;
+  capability: string;
+  granted: boolean;
+  updatedAt: string;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Accounts, secrets, audit                                                    */
 /* -------------------------------------------------------------------------- */

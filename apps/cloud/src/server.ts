@@ -2461,6 +2461,45 @@ export async function buildServer(options: ServerOptions) {
     },
   );
 
+  /** Capability grants: which tools/connectors an employee (or role) may use. */
+  app.get<{ Params: { id: string } }>(
+    "/v1/workspaces/:id/grants",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const workspace = await store.getWorkspace(request.params.id);
+      if (!workspace || workspace.ownerId !== userId) {
+        return reply.code(404).send({ error: "workspace not found" });
+      }
+      return store.listCapabilityGrants(workspace.id);
+    },
+  );
+
+  app.put<{
+    Params: { id: string };
+    Body: { subject?: string; capability?: string; granted?: boolean };
+  }>("/v1/workspaces/:id/grants", { preHandler: requireAuth }, async (request, reply) => {
+    const userId = request.userId as string;
+    const workspace = await store.getWorkspace(request.params.id);
+    if (!workspace || workspace.ownerId !== userId) {
+      return reply.code(404).send({ error: "workspace not found" });
+    }
+    const subject = (request.body?.subject ?? "").trim().slice(0, 120);
+    const capability = (request.body?.capability ?? "").trim().slice(0, 80);
+    if (!subject || !capability) {
+      return reply.code(400).send({ error: "subject and capability are required" });
+    }
+    const record = {
+      workspaceId: workspace.id,
+      subject,
+      capability,
+      granted: request.body?.granted === true,
+      updatedAt: new Date().toISOString(),
+    };
+    await store.setCapabilityGrant(record);
+    return record;
+  });
+
   /* Bot Library: text files a bot can keep and the agent can read/write. */
   const toBotFile = (record: FileRecord): BotFile => ({
     id: record.id,

@@ -4,6 +4,7 @@ import type {
   AuditRecord,
   BotRecord,
   BotRoleRecord,
+  CapabilityGrantRecord,
   ConnectionRecord,
   FileRecord,
   FriendRequestRecord,
@@ -40,6 +41,8 @@ export class MemoryStore implements Store {
   private botRoles = new Map<string, BotRoleRecord>();
   private workItems = new Map<string, WorkItemRecord>();
   private budgets = new Map<string, WorkspaceBudgetRecord>();
+  /** Keyed by `${workspaceId}:${subject}:${capability}`. */
+  private grants = new Map<string, CapabilityGrantRecord>();
   private tasks = new Map<string, Task>();
   private audit: AuditRecord[] = [];
   private secrets = new Map<string, SecretRecord>();
@@ -331,6 +334,16 @@ export class MemoryStore implements Store {
 
   async saveWorkspaceBudget(record: WorkspaceBudgetRecord): Promise<void> {
     this.budgets.set(record.workspaceId, structuredClone(record));
+  }
+
+  async listCapabilityGrants(workspaceId: string): Promise<CapabilityGrantRecord[]> {
+    return [...this.grants.values()]
+      .filter((grant) => grant.workspaceId === workspaceId)
+      .map((grant) => structuredClone(grant));
+  }
+
+  async setCapabilityGrant(record: CapabilityGrantRecord): Promise<void> {
+    this.grants.set(`${record.workspaceId}:${record.subject}:${record.capability}`, structuredClone(record));
   }
 
   async createTask(task: Task): Promise<void> {

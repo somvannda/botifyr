@@ -241,4 +241,40 @@ describe("workspaces API", () => {
     expect(after.limitTokens).toBe(500000);
     await app.close();
   });
+
+  it("sets and lists capability grants", async () => {
+    const { app, signup } = await boot();
+    const auth = await signup("ws-grant@example.com");
+    const ws = (
+      await app.inject({ method: "POST", url: "/v1/workspaces", headers: auth, payload: { name: "Grant Co" } })
+    ).json() as { id: string };
+
+    const empty = (
+      await app.inject({ method: "GET", url: `/v1/workspaces/${ws.id}/grants`, headers: auth })
+    ).json() as unknown[];
+    expect(empty).toHaveLength(0);
+
+    const set = await app.inject({
+      method: "PUT",
+      url: `/v1/workspaces/${ws.id}/grants`,
+      headers: auth,
+      payload: { subject: "role:CTO", capability: "deploy.production", granted: true },
+    });
+    expect(set.statusCode).toBe(200);
+
+    const list = (
+      await app.inject({ method: "GET", url: `/v1/workspaces/${ws.id}/grants`, headers: auth })
+    ).json() as Array<{ capability: string; granted: boolean }>;
+    expect(list).toHaveLength(1);
+    expect(list[0]).toMatchObject({ capability: "deploy.production", granted: true });
+
+    const bad = await app.inject({
+      method: "PUT",
+      url: `/v1/workspaces/${ws.id}/grants`,
+      headers: auth,
+      payload: { subject: "role:CTO" },
+    });
+    expect(bad.statusCode).toBe(400);
+    await app.close();
+  });
 });

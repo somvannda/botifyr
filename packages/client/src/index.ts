@@ -3,6 +3,7 @@ import type {
   AuthResponse,
   Bot,
   BotFile,
+  CapabilityGrant,
   CompanyDNA,
   ConnectionInfo,
   CreateWorkspaceRequest,
@@ -641,6 +642,22 @@ export class BotifyrClient {
       method: "PATCH",
       json: true,
       body: JSON.stringify({ limitTokens }),
+    });
+  }
+
+  /* Capability grants (authorization). */
+  listCapabilityGrants(workspaceId: string): Promise<CapabilityGrant[]> {
+    return this.request(`/v1/workspaces/${workspaceId}/grants`);
+  }
+
+  setCapabilityGrant(
+    workspaceId: string,
+    input: { subject: string; capability: string; granted: boolean },
+  ): Promise<CapabilityGrant> {
+    return this.request(`/v1/workspaces/${workspaceId}/grants`, {
+      method: "PUT",
+      json: true,
+      body: JSON.stringify(input),
     });
   }
 

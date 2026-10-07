@@ -5,6 +5,7 @@ import type {
   AuditRecord,
   BotRecord,
   BotRoleRecord,
+  CapabilityGrantRecord,
   ConnectionRecord,
   FileRecord,
   FriendRequestRecord,
@@ -455,6 +456,28 @@ export class PostgresStore implements Store {
       "INSERT INTO workspace_budget (workspace_id, limit_tokens, used_tokens, updated_at) VALUES ($1, $2, $3, $4) " +
         "ON CONFLICT (workspace_id) DO UPDATE SET limit_tokens = EXCLUDED.limit_tokens, used_tokens = EXCLUDED.used_tokens, updated_at = EXCLUDED.updated_at",
       [record.workspaceId, record.limitTokens, record.usedTokens, record.updatedAt],
+    );
+  }
+
+  async listCapabilityGrants(workspaceId: string): Promise<CapabilityGrantRecord[]> {
+    const { rows } = await this.pool.query(
+      "SELECT subject, capability, granted, updated_at FROM capability_grants WHERE workspace_id = $1",
+      [workspaceId],
+    );
+    return rows.map((row) => ({
+      workspaceId,
+      subject: row.subject as string,
+      capability: row.capability as string,
+      granted: row.granted as boolean,
+      updatedAt: new Date(row.updated_at as string).toISOString(),
+    }));
+  }
+
+  async setCapabilityGrant(record: CapabilityGrantRecord): Promise<void> {
+    await this.pool.query(
+      "INSERT INTO capability_grants (workspace_id, subject, capability, granted, updated_at) VALUES ($1, $2, $3, $4, $5) " +
+        "ON CONFLICT (workspace_id, subject, capability) DO UPDATE SET granted = EXCLUDED.granted, updated_at = EXCLUDED.updated_at",
+      [record.workspaceId, record.subject, record.capability, record.granted, record.updatedAt],
     );
   }
 

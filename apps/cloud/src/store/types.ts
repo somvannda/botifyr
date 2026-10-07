@@ -1,5 +1,6 @@
 import type {
   BotSchedule,
+  CapabilityGrant,
   ChatMessage,
   CompanyDNA,
   Department,
@@ -120,6 +121,9 @@ export type WorkItemRecord = WorkItem;
 
 /** A company's token budget. */
 export type WorkspaceBudgetRecord = WorkspaceBudget;
+
+/** A per-subject capability grant. */
+export type CapabilityGrantRecord = CapabilityGrant;
 
 export interface SecretRecord {
   id: string;
@@ -287,6 +291,10 @@ export interface Store {
   /* Per-workspace budget */
   getWorkspaceBudget(workspaceId: string): Promise<WorkspaceBudgetRecord | null>;
   saveWorkspaceBudget(record: WorkspaceBudgetRecord): Promise<void>;
+
+  /* Capability grants (authorization) */
+  listCapabilityGrants(workspaceId: string): Promise<CapabilityGrantRecord[]>;
+  setCapabilityGrant(record: CapabilityGrantRecord): Promise<void>;
 
   createTask(task: Task): Promise<void>;
   updateTask(task: Task): Promise<void>;

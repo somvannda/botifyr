@@ -129,6 +129,16 @@ CREATE TABLE IF NOT EXISTS workspace_budget (
   updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+/* Per-subject capability grants (docs/company-os.md §8). */
+CREATE TABLE IF NOT EXISTS capability_grants (
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  subject      TEXT NOT NULL,   -- "bot:<id>" | "role:<title>"
+  capability   TEXT NOT NULL,
+  granted      BOOLEAN NOT NULL DEFAULT false,
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (workspace_id, subject, capability)
+);
+
 CREATE TABLE IF NOT EXISTS connections (
   id         TEXT PRIMARY KEY,
   user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
