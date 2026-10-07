@@ -269,6 +269,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [repoPath, setRepoPath] = useState("");
   const [repoUrl, setRepoUrl] = useState("");
   const [repoToken, setRepoToken] = useState("");
+  const [renameBotId, setRenameBotId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
   const [boardItems, setBoardItems] = useState<Array<WorkItem>>([]);
   const [boardTitle, setBoardTitle] = useState("");
   const [boardBusy, setBoardBusy] = useState(false);
@@ -1375,6 +1377,16 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     } finally {
       setBoardBusy(false);
     }
+  }
+
+  /** Rename an employee's roster name (not their role title). */
+  async function saveRename(botId: string) {
+    const name = renameValue.trim().slice(0, 40);
+    if (!name) return;
+    const updated = await client.updateBot(botId, { name }).catch(() => null);
+    if (updated) setBots((prev) => prev.map((bot) => (bot.id === updated.id ? updated : bot)));
+    setRenameBotId(null);
+    setRenameValue("");
   }
 
   /** Trust every employee in this company (skip their approval prompts). */
@@ -4747,8 +4759,55 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                       return (
                         <li key={role.botId} className="team-member">
                           <div className="team-member-head">
-                            <span className="board-title">{role.title}</span>
-                            <span className="board-phase">{role.department}</span>
+                            {renameBotId === role.botId ? (
+                              <span className="hq-rename">
+                                <input
+                                  className="workspace-input"
+                                  value={renameValue}
+                                  autoFocus
+                                  maxLength={40}
+                                  onChange={(event) => setRenameValue(event.target.value)}
+                                  onKeyDown={(event) => {
+                                    if (event.key === "Enter") void saveRename(role.botId);
+                                    if (event.key === "Escape") setRenameBotId(null);
+                                  }}
+                                />
+                                <button
+                                  className="btn primary small"
+                                  type="button"
+                                  onClick={() => void saveRename(role.botId)}
+                                >
+                                  Save
+                                </button>
+                                <button
+                                  className="ghost small"
+                                  type="button"
+                                  onClick={() => setRenameBotId(null)}
+                                >
+                                  Cancel
+                                </button>
+                              </span>
+                            ) : (
+                              <>
+                                <span className="board-title">
+                                  {bots.find((entry) => entry.id === role.botId)?.name ?? role.title}
+                                </span>
+                                <span className="board-phase">{role.title}</span>
+                                <button
+                                  className="ghost small"
+                                  type="button"
+                                  title="Rename this employee"
+                                  onClick={() => {
+                                    setRenameBotId(role.botId);
+                                    setRenameValue(
+                                      bots.find((entry) => entry.id === role.botId)?.name ?? "",
+                                    );
+                                  }}
+                                >
+                                  Rename
+                                </button>
+                              </>
+                            )}
                           </div>
                           {caps.length > 0 && (
                             <div className="grant-chips">

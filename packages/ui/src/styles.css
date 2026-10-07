@@ -672,6 +672,18 @@ body {
   margin-right: auto;
 }
 
+.hq-rename {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.hq-rename .workspace-input {
+  flex: 1;
+  min-width: 0;
+}
+
 .hq-icon-btn {
   display: inline-flex;
   align-items: center;
