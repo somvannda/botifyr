@@ -20,6 +20,7 @@ import { companyContext, isBudgetExhausted } from "./company.js";
 import { createCompanyTools } from "./company-tools.js";
 import { createDelegationTools } from "./delegation-tools.js";
 import { createSocialTools, notConnectedSocial } from "./social-tools.js";
+import { createDesignTools } from "./design-tools.js";
 import {
   clearComputerSandbox,
   clearTaskCancel,
@@ -399,14 +400,16 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
       return;
     }
   }
-  // Social hands: marketing and sales employees can read insights, publish and
-  // reply on the company's pages (publishing/replying need approval). Until a
-  // provider client is wired, the tools explain how to connect an account.
+  // Social + design hands for the right departments.
   if (company && authorBot) {
     const roles = await store.listBotRoles(company.id).catch(() => []);
     const role = roles.find((entry) => entry.botId === authorBot.id);
-    if (role && (role.department === "marketing" || role.department === "sales")) {
+    const department = role?.department;
+    if (department === "marketing" || department === "sales") {
       tools.push(...createSocialTools(notConnectedSocial()));
+    }
+    if (department === "design" || department === "marketing") {
+      tools.push(...createDesignTools(store, userId, authorBot.id));
     }
   }
   const instructions =
