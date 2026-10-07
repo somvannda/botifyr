@@ -1087,6 +1087,18 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     setWorkspaces(await client.listWorkspaces().catch(() => workspaces));
   }
 
+  /** One-click halt: cancel every running task across the company's employees. */
+  async function stopCompany() {
+    const workspace = boardWorkspace;
+    if (!workspace) return;
+    setBoardBusy(true);
+    try {
+      await client.stopCompany(workspace.id).catch(() => null);
+    } finally {
+      setBoardBusy(false);
+    }
+  }
+
   async function saveBudget() {
     const workspace = boardWorkspace;
     if (!workspace) return;
@@ -4263,6 +4275,14 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
               )}
             </div>
             <div className="apps-actions">
+              <button
+                className="ghost small danger"
+                type="button"
+                disabled={boardBusy}
+                onClick={() => void stopCompany()}
+              >
+                Stop all
+              </button>
               <button
                 className="ghost small"
                 type="button"

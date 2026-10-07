@@ -299,4 +299,20 @@ describe("workspaces API", () => {
     expect(list.some((entry) => entry.kind === "standup")).toBe(true);
     await app.close();
   });
+
+  it("stops a company's running tasks (none running → 0)", async () => {
+    const { app, signup } = await boot();
+    const auth = await signup("ws-stop@example.com");
+    const ws = (
+      await app.inject({ method: "POST", url: "/v1/workspaces", headers: auth, payload: { name: "Stop Co" } })
+    ).json() as { id: string };
+    const res = await app.inject({
+      method: "POST",
+      url: `/v1/workspaces/${ws.id}/stop`,
+      headers: auth,
+    });
+    expect(res.statusCode).toBe(200);
+    expect((res.json() as { stopped: number }).stopped).toBe(0);
+    await app.close();
+  });
 });

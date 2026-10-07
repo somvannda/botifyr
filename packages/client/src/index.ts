@@ -671,6 +671,11 @@ export class BotifyrClient {
     return this.request(`/v1/workspaces/${workspaceId}/standup`, { method: "POST", json: true });
   }
 
+  /** Stop every running task across the company's employees. */
+  stopCompany(workspaceId: string): Promise<{ stopped: number }> {
+    return this.request(`/v1/workspaces/${workspaceId}/stop`, { method: "POST", json: true });
+  }
+
   updateWorkspace(
     id: string,
     input: {

@@ -2498,6 +2498,38 @@ export async function buildServer(options: ServerOptions) {
     },
   );
 
+  /** Stop every running task across the company's employees (one-click halt). */
+  app.post<{ Params: { id: string } }>(
+    "/v1/workspaces/:id/stop",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const workspace = await store.getWorkspace(request.params.id);
+      if (!workspace || workspace.ownerId !== userId) {
+        return reply.code(404).send({ error: "workspace not found" });
+      }
+      const roles = await store.listBotRoles(workspace.id);
+      let stopped = 0;
+      for (const role of roles) {
+        const bot = await store.getBot(role.botId);
+        if (!bot) continue;
+        for (const taskId of runningTasksForSession(bot.sessionId)) {
+          cancelTask(taskId);
+          const active = await store.getTask(taskId);
+          if (active && active.status !== "completed" && active.status !== "failed") {
+            active.status = "cancelled";
+            active.error = "Stopped by you.";
+            active.updatedAt = new Date().toISOString();
+            await store.updateTask(active);
+            emit({ type: "task.updated", task: active });
+          }
+          stopped += 1;
+        }
+      }
+      return { stopped };
+    },
+  );
+
   /* Bot Library: text files a bot can keep and the agent can read/write. */
   const toBotFile = (record: FileRecord): BotFile => ({
     id: record.id,
