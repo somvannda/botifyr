@@ -10,12 +10,20 @@ import type {
   ModelPricingRecord,
   OperatingHours,
   PlatformSettings,
+  ProviderRole,
+  ProviderRoleConfig,
   Task,
   WorkItem,
   WorkspaceBudget,
 } from "@botifyr/shared";
 
-export type { MediaRecipe, ModelPricingRecord, PlatformSettings };
+export type {
+  MediaRecipe,
+  ModelPricingRecord,
+  PlatformSettings,
+  ProviderRole,
+  ProviderRoleConfig,
+};
 
 /** Persistence contracts shared by the memory and Postgres stores. */
 
@@ -379,6 +387,10 @@ export interface Store {
   listModelPricing(): Promise<ModelPricingRecord[]>;
   saveModelPricing(record: ModelPricingRecord): Promise<void>;
   deleteModelPricing(model: string): Promise<boolean>;
+  /* Video translation: role-based provider registry (docs/video-translation.md). */
+  listProviderRoles(): Promise<ProviderRoleConfig[]>;
+  getProviderRole(role: ProviderRole): Promise<ProviderRoleConfig | null>;
+  saveProviderRole(config: ProviderRoleConfig): Promise<void>;
   createInvoice(record: InvoiceRecord): Promise<void>;
   updateInvoice(record: InvoiceRecord): Promise<void>;
   getInvoice(id: string): Promise<InvoiceRecord | null>;
