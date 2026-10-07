@@ -261,8 +261,14 @@ Injection order: DNA → role/JD → wiki summary → conversation summary. Keep
 - **Priority connectors:** Google (mail/calendar/drive), GitHub, Slack/Notion
   (exist), then **Meta** (pages, IG, Messenger, Ads), **LinkedIn**, **Stripe**
   (billing/metrics), a **CRM**, and a **support desk**.
-- **Browser/computer use** is the fallback for software with no API — never for
-  social logins (ToS/2FA/ban risk).
+- **Browser/computer use** is a **first-class, supervised** transport: it drives
+  the CEO's **own logged-in session** (via the local node) with approval-gated,
+  human-paced actions — **no platform approval needed**. It does **not** evade
+  platform security: CAPTCHA / 2FA / checkpoints **hand off to the human**, and a
+  CAPTCHA solver is only ever allowed on domains the customer owns (off by
+  default). Persistent per-employee browser profiles keep sessions alive. See
+  `company-workspace.md` **Part V** for the policy and the
+  Meta/LinkedIn/Ads approval reality.
 
 ## 11. Notifications & digests
 
@@ -347,7 +353,7 @@ delete`.
 
 ## 19. Build order
 
-Authoritative sequence lives in `company-workspace.md` §40. Immediate next items:
+Authoritative sequence lives in `company-workspace.md` §46. Immediate next items:
 
 - **DNA + catalog** (data) → **templates + recommendation** → **website/market
   intelligence** → **builder tools** → **delegation/standups** → **backlog +
@@ -369,7 +375,7 @@ Authoritative sequence lives in `company-workspace.md` §40. Immediate next item
 ## 21. Expected outcome — what "done" looks like
 
 > Added so we build a **true product**, not a demo. This is the acceptance bar
-> for the whole arc, and it is what every phase in `company-workspace.md` §40 is
+> for the whole arc, and it is what every phase in `company-workspace.md` §46 is
 > judged against.
 
 **Definition of success:** a non-technical founder goes from *an idea or a
@@ -436,7 +442,7 @@ standup digest.
 
 | After | You can expect |
 | --- | --- |
-| DNA + catalog (§40 item 4) | every new company knows its business; employees get the right JD/skills/authorization |
+| DNA + catalog (§46 item 4) | every new company knows its business; employees get the right JD/skills/authorization |
 | Templates + website/market intelligence + builder tools (5–7) | create a well-formed company **from chat** in one conversation |
 | Delegation + backlog + HQ (8–10) | the company **runs** — you manage a board + approvals, not a chat |
 | Authorization + budget (11) | it can run **autonomously within limits** you set |

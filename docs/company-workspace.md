@@ -10,11 +10,11 @@
 > methods, sidebar grouping + switcher + role pills + header badge, the
 > onboarding modal with an **editable** org, and rename/delete.
 >
-> **Design-only:** Parts II–IV (Company DNA, the role/capability catalog,
+> **Design-only:** Parts II–V (Company DNA, the role/capability catalog,
 > website intelligence, the conversational builder, the HQ view, and the
-> marketing/sales hands).
+> marketing/sales hands — including the Part V transport/verification policy).
 >
-> §40 is the **authoritative roadmap** (one build order across all parts).
+> §46 is the **authoritative roadmap** (one build order across all parts).
 >
 > **Architecture & full specs** — schema, employee model, the catalog,
 > orchestrator, work system, permissions, memory, integrations, lifecycle, cost
@@ -569,18 +569,21 @@ CEO: "Set up an AI company for https://chmaba.com — cloud POS for Cambodia."
 
 Rule of thumb: **read and draft are free; publish, send, and spend are gated.**
 
-## 26. Mechanism: API connector first, browser last
+## 26. Transport hierarchy (how a hand acts)
 
-The blueprint already says prefer structured APIs over clicking (§3.3). For
-social this is not optional — browser automation of Facebook/LinkedIn breaks the
-platforms' ToS, hits 2FA/CAPTCHA and risks bans.
+Per capability, choose the most **stable + compliant** transport available:
 
-- Connectors reuse the existing `connections-tools.ts` + encrypted vault
-  (`ConnectionRecord`; tokens never enter the model context).
-- Targets: Meta Graph API (pages, Instagram, Messenger, Ads) and LinkedIn
-  (share, organization pages). Each needs an app + permission review
-  (`pages_manage_posts`, `pages_messaging`, `ads_management`).
-- Browser/computer use stays for *internal* software that has no API.
+1. **API connector** — preferred when it exists (self-serve platforms, or an
+   aggregator). Stable, auditable, no UI fragility.
+2. **Browser / computer-use** — on the CEO's **own logged-in session** (via the
+   local node), **supervised** (approval per consequential action), human-paced,
+   per-account. **No platform approval needed — first-class, not a fallback**
+   (this is how Claude/Grok operate).
+3. **Manual-assist** — the bot drafts text + poster, the CEO posts. Zero risk.
+
+`SocialClient` (`apps/cloud/src/social-tools.ts`) is the seam: one interface,
+interchangeable transports. Operational details — sessions, verification, the
+anti-bot policy, and platform realities — are in **Part V**.
 
 ## 27. Content & design
 
@@ -736,9 +739,81 @@ can judge it — not just a list.
 
 ---
 
+# Part V — Hands in practice (sessions, verification, platform reality)
+
+> The revision that replaces "API first, browser last". Our agents drive **real
+> browsers on the CEO's own machine**, supervised — no need to wait on platform
+> approval. This part is the operating policy.
+
+## 40. Owned channels first (unblocked today)
+
+Ship the channels we already control, no platform review:
+
+- **Telegram** — Botifyr already integrates it; a bot can post to a channel and
+  reply to messages.
+- **Email** — outreach + support (SMTP/IMAP).
+- **The company's own website/blog** — built and published by the code/design
+  hands; no external gate.
+
+## 41. Persistent sessions per employee
+
+Each employee gets a **persistent browser profile** (cookies / localStorage) so
+logins survive across tasks and fewer verifications appear. Rules: the profile
+belongs to the employee; credentials live only in the **vault**, never in the
+prompt or the model context.
+
+## 42. Human verification handoff (CAPTCHA / 2FA / checkpoint)
+
+When a platform shows a CAPTCHA, 2FA, or a checkpoint, the agent **pauses**,
+surfaces it in the HQ **Needs you**, and the **CEO solves it on the live screen**
+(existing computer stream + `computer/input`) — then the agent resumes. The
+human stays the human; the agent does the repetitive work.
+
+## 43. Anti-bot policy — no evasion
+
+Botifyr does **not** evade platform security. Specifically: **no CAPTCHA-solving
+to defeat a third party's anti-bot.** A solver hook is allowed **only on domains
+the customer owns** (per-workspace allowlist, **off by default**). Reasons: the
+platforms' ToS, **account bans** (behavioural detection beats any single puzzle),
+legal exposure (unauthorized-access theories; platforms litigate automation), and
+it contradicts the product's **"safe by default"** wedge
+(`docs/botifyr-blueprint.md` §3.2).
+
+## 44. Platform reality (Meta / LinkedIn / Ads)
+
+- **Meta** (Pages, Messenger, **Ads**) and **LinkedIn org pages** need **app
+  review / partner programs** (`pages_manage_posts`, `pages_messaging`,
+  `ads_management`). Hard for a single multi-tenant app; **Ads** also needs
+  business verification.
+- **Per-customer BYO** dissolves the problem: in a company OS each customer
+  manages **their own** pages, so the approved app is **theirs** — approval
+  becomes a **per-customer onboarding step**, not a blocker for us.
+- **Self-serve (no review):** Telegram, Mastodon, Bluesky, Discord, Slack, Reddit.
+- **Aggregators:** **Postiz** (open-source, **AGPL-3.0**, self-hostable; public
+  API + MCP + webhooks) or a hosted aggregator.
+  - **Postiz Cloud** — pre-approved apps for every channel → *you* skip review
+    (paid; tokens live on their infra).
+  - **Postiz self-hosted** — you still create your **own** developer apps per
+    platform and pass review (Meta/YouTube/TikTok can take weeks); it removes the
+    scheduling/connection work, not the approval.
+  - **License:** AGPL-3.0 — calling its API is fine; forking/embedding it as a
+    service triggers network copyleft.
+
+## 45. Ordering — which hand to build
+
+1. **Owned channels:** Telegram, email, own website.
+2. **Self-serve social:** Mastodon / Bluesky / Discord / Slack / Reddit.
+3. **Supervised browser-use** (local node) for FB / IG / LinkedIn / X / Ads,
+   with persistent profiles + the verification handoff.
+4. **Aggregator** (Postiz cloud or self-host) for customers who want
+   multi-platform without browser-use.
+5. **Direct Meta/LinkedIn APIs** only if/when approved.
+
+---
+
 # Roadmap (authoritative)
 
-## 40. Build order across all parts
+## 46. Build order across all parts
 
 One sequence; the per-part lists (§10, §23, §29, §38) are detail views of the
 same items. Status: ✅ shipped · 🔜 next · ⏳ later.
