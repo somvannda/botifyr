@@ -63,6 +63,8 @@ describe("youtube.download", () => {
     const { backend, commands } = fakeBackend();
     await downloadTool(backend, { quality: 480 }).run({ url: "https://youtu.be/a" }, ctx);
     expect(commands.some((command) => command.includes("height<=480"))).toBe(true);
+    // Falls back to the best single file (direct MP4s have no separate streams).
+    expect(commands.some((command) => command.includes("b[height<=480]/b"))).toBe(true);
   });
 
   it("writes subtitles next to the video when enabled", async () => {

@@ -121,7 +121,7 @@ export function createMediaTools(
       const retry = await backend.exec(
         audio
           ? `yt-dlp ${common} -x --audio-format mp3 -o ${template} '${candidate}'`
-          : `yt-dlp ${common} -f 'bv*[height<=${height}]+ba/b[height<=${height}]' ` +
+          : `yt-dlp ${common} -f 'bv*[height<=${height}]+ba/b[height<=${height}]/b' ` +
               `--merge-output-format mp4 ${subsFlag}-o ${template} '${candidate}'`,
       );
       return retry.ok;
@@ -135,7 +135,7 @@ export function createMediaTools(
       const retry = await backend.exec(
         audio
           ? `yt-dlp ${common} -x --audio-format mp3 --referer '${url}' -o ${template} '${candidate}'`
-          : `yt-dlp ${common} -f 'bv*[height<=${height}]+ba/b[height<=${height}]' ` +
+          : `yt-dlp ${common} -f 'bv*[height<=${height}]+ba/b[height<=${height}]/b' ` +
               `--merge-output-format mp4 --referer '${url}' ${subsFlag}-o ${template} '${candidate}'`,
       );
       return retry.ok;
@@ -157,7 +157,7 @@ export function createMediaTools(
       const retry = await backend.exec(
         audio
           ? `yt-dlp ${common} -x --audio-format mp3 --referer '${url}' -o ${template} '${candidate}'`
-          : `yt-dlp ${common} -f 'bv*[height<=${height}]+ba/b[height<=${height}]' ` +
+          : `yt-dlp ${common} -f 'bv*[height<=${height}]+ba/b[height<=${height}]/b' ` +
               `--merge-output-format mp4 --referer '${url}' ${subsFlag}-o ${template} '${candidate}'`,
       );
       return retry.ok;
@@ -177,7 +177,7 @@ export function createMediaTools(
       context.log(`download ${index + 1}/${urls.length} ${url}`);
       const command = audio
         ? `yt-dlp ${common} -x --audio-format mp3 -o ${template} '${url}'`
-        : `yt-dlp ${common} -f 'bv*[height<=${height}]+ba/b[height<=${height}]' ` +
+        : `yt-dlp ${common} -f 'bv*[height<=${height}]+ba/b[height<=${height}]/b' ` +
           `--merge-output-format mp4 ${subsFlag}-o ${template} '${url}'`;
       const result = await backend.exec(command);
       if (!result.ok) {
