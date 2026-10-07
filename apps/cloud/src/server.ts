@@ -47,7 +47,7 @@ import { handleNodeMessage, nodeInfo, registerNode } from "./nodes.js";
 import { createToken, hashPassword, hashToken, verifyPassword } from "./auth.js";
 import { encryptSecret } from "./vault.js";
 import { oneShot, runTask, runtimeInfo, summarizeConversation } from "./runner.js";
-import { analyzeSource, buildStandup, planCompany, toDepartment } from "./company.js";
+import { analyzeSource, buildStandup, planCompany, shouldRunSchedule, toDepartment } from "./company.js";
 import { seedCompany } from "./company-seed.js";
 import { createDockerComputerBackend } from "@botifyr/agent-core";
 import {
@@ -3926,14 +3926,29 @@ export async function buildServer(options: ServerOptions) {
   }
 
   const scheduler = setInterval(() => {
+    // Global kill switch: BOTIFYR_SCHEDULER=0 disables all autonomous runs.
+    if (process.env.BOTIFYR_SCHEDULER === "0") return;
     void (async () => {
       try {
         const now = Date.now();
         const scheduled = await store.listScheduledBots();
+        const statusesByUser = new Map<string, Map<string, string>>();
+        const statusOf = async (userId: string): Promise<Map<string, string>> => {
+          let map = statusesByUser.get(userId);
+          if (!map) {
+            map = new Map((await store.listWorkspaces(userId)).map((ws) => [ws.name, ws.status]));
+            statusesByUser.set(userId, map);
+          }
+          return map;
+        };
         for (const bot of scheduled) {
           const schedule = bot.schedule;
           if (!schedule?.enabled) continue;
           if (schedule.nextRunAt && new Date(schedule.nextRunAt).getTime() > now) continue;
+          // A paused/archived company does not run its schedules.
+          if (bot.workspace && !shouldRunSchedule((await statusOf(bot.userId)).get(bot.workspace))) {
+            continue;
+          }
           // Advance first so a slow run can't double-fire.
           bot.schedule = {
             ...schedule,

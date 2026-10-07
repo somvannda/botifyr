@@ -6,6 +6,7 @@ import {
   planCompany,
   sanitizeDNA,
   sanitizePlan,
+  shouldRunSchedule,
 } from "./company.js";
 
 describe("company onboarding planner", () => {
@@ -126,5 +127,15 @@ describe("isBudgetExhausted", () => {
     expect(isBudgetExhausted({ ...base, limitTokens: 100, usedTokens: 50 })).toBe(false);
     expect(isBudgetExhausted({ ...base, limitTokens: 100, usedTokens: 100 })).toBe(true);
     expect(isBudgetExhausted({ ...base, limitTokens: 100, usedTokens: 150 })).toBe(true);
+  });
+});
+
+describe("shouldRunSchedule", () => {
+  it("stops schedules for paused or archived companies", () => {
+    expect(shouldRunSchedule("active")).toBe(true);
+    expect(shouldRunSchedule("onboarding")).toBe(true);
+    expect(shouldRunSchedule(undefined)).toBe(true);
+    expect(shouldRunSchedule("paused")).toBe(false);
+    expect(shouldRunSchedule("archived")).toBe(false);
   });
 });

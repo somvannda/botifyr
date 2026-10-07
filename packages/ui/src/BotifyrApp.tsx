@@ -1079,6 +1079,14 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     setHqGrants(await client.listCapabilityGrants(workspace.id).catch(() => []));
   }
 
+  /** Pause/resume the company: paused companies stop their autonomous schedules. */
+  async function setCompanyStatus(status: "active" | "paused") {
+    const workspace = boardWorkspace;
+    if (!workspace) return;
+    await client.updateWorkspace(workspace.id, { status }).catch(() => {});
+    setWorkspaces(await client.listWorkspaces().catch(() => workspaces));
+  }
+
   async function saveBudget() {
     const workspace = boardWorkspace;
     if (!workspace) return;
@@ -4255,6 +4263,21 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
               )}
             </div>
             <div className="apps-actions">
+              <button
+                className="ghost small"
+                type="button"
+                onClick={() =>
+                  void setCompanyStatus(
+                    (workspaceByName.get(boardWorkspace.name)?.status ?? "active") === "paused"
+                      ? "active"
+                      : "paused",
+                  )
+                }
+              >
+                {(workspaceByName.get(boardWorkspace.name)?.status ?? "active") === "paused"
+                  ? "Resume"
+                  : "Pause"}
+              </button>
               <button className="ghost small" type="button" onClick={closeBoard}>
                 Close
               </button>

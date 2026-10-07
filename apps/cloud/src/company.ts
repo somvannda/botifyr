@@ -43,6 +43,11 @@ export function isBudgetExhausted(budget: WorkspaceBudget | null): boolean {
   return Boolean(budget && budget.limitTokens > 0 && budget.usedTokens >= budget.limitTokens);
 }
 
+/** A paused or archived company does not run its schedules (docs/company-os.md §22). */
+export function shouldRunSchedule(workspaceStatus: string | undefined): boolean {
+  return workspaceStatus !== "paused" && workspaceStatus !== "archived";
+}
+
 /** Summarise the board + approvals into a short standup (docs/company-os.md §5). */
 export function buildStandup(items: WorkItem[], pendingApprovals: number): string {
   const count = (status: WorkItem["status"]): number => items.filter((item) => item.status === status).length;
