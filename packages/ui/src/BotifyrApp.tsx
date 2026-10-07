@@ -156,13 +156,14 @@ function token(): string {
 
 const PENDING_KEY = "botifyr.pendingState";
 
-/** A HQ footer icon button that flashes accent-coloured when clicked. */
+/** A HQ footer icon button: flashes on click, and stays lit when `pressed`. */
 function HqButton({
   title,
   onClick,
   primary,
   danger,
   disabled,
+  pressed,
   children,
 }: {
   title: string;
@@ -170,27 +171,63 @@ function HqButton({
   primary?: boolean;
   danger?: boolean;
   disabled?: boolean;
+  pressed?: boolean;
   children: ReactNode;
 }) {
   const [flash, setFlash] = useState(false);
+  const on = pressed || flash;
   return (
     <button
       className={`hq-icon-btn${primary ? " primary" : ""}${danger ? " danger" : ""}${
-        flash ? " active" : ""
+        on ? " active" : ""
       }`}
       type="button"
       title={title}
       aria-label={title}
+      aria-pressed={pressed}
       disabled={disabled}
       onClick={() => {
         setFlash(true);
-        window.setTimeout(() => setFlash(false), 450);
+        window.setTimeout(() => setFlash(false), 650);
         onClick();
       }}
     >
       {children}
     </button>
   );
+}
+
+/** Department → friendly label for the file categories. */
+const DEPARTMENT_LABELS: Record<string, string> = {
+  exec: "Strategy",
+  product: "Product",
+  engineering: "Engineering",
+  growth: "Growth & Sales",
+  ops: "Operations",
+  finance: "Finance",
+  support: "Customer Success",
+  design: "Design",
+};
+
+/** Inference rules (B): map a filename to a category when no department is set. */
+const FILE_CATEGORIES: Array<{ id: string; label: string; test: RegExp }> = [
+  { id: "exec", label: "Strategy", test: /PLAN|OKR|BRIEF|ROADMAP|STRATEGY|VISION|CHARTER|MISSION/i },
+  { id: "engineering", label: "Engineering", test: /CODE|API|ARCH|TECH|ENGINEER|SPEC|SCHEMA/i },
+  { id: "product", label: "Product", test: /BACKLOG|FEATURE|PRODUCT|DESIGN|UX|UI/i },
+  { id: "growth", label: "Growth & Sales", test: /GROWTH|MARKET|SALES|CHANNEL|CAMPAIGN|ICP|PRICING/i },
+  { id: "finance", label: "Finance", test: /BUDGET|FINANCE|REVENUE|COST|INVOICE|PAYROLL/i },
+  { id: "support", label: "Customer Success", test: /SUPPORT|SUCCESS|ONBOARD|CUSTOMER|CHURN/i },
+];
+
+/** Explicit department wins; otherwise infer from the filename. */
+function fileCategory(file: { name: string; department?: string }): { id: string; label: string } {
+  if (file.department) {
+    return { id: file.department, label: DEPARTMENT_LABELS[file.department] ?? file.department };
+  }
+  for (const category of FILE_CATEGORIES) {
+    if (category.test.test(file.name)) return { id: category.id, label: category.label };
+  }
+  return { id: "other", label: "Other" };
 }
 
 export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
@@ -321,7 +358,9 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [budgetInput, setBudgetInput] = useState("");
   const [hqGrants, setHqGrants] = useState<Array<CapabilityGrant>>([]);
   const [hqReports, setHqReports] = useState<Array<CompanyReport>>([]);
-  const [hqWiki, setHqWiki] = useState<Array<{ name: string; content: string }>>([]);
+  const [hqWiki, setHqWiki] = useState<
+    Array<{ id: string; name: string; content: string; department?: string }>
+  >([]);
   const [openFile, setOpenFile] = useState<string | null>(null);
   const [hqChanges, setHqChanges] = useState<
     Array<{ repo: string; path: string; content: string; diff: string; exists: boolean }>
@@ -1335,7 +1374,14 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
 
       // Company wiki: the chair bot's Library (BRIEF / OKRS / BACKLOG).
       const wiki = await client.listWorkspaceFiles(workspaceId).catch(() => []);
-      setHqWiki(wiki.map((file) => ({ name: file.name, content: file.content })));
+      setHqWiki(
+        wiki.map((file) => ({
+          id: file.id,
+          name: file.name,
+          content: file.content,
+          department: file.department,
+        })),
+      );
       setHqChanges(await client.listProposals(workspaceId).catch(() => []));
     } finally {
       setBoardBusy(false);
@@ -1451,6 +1497,27 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     if (updated) setBots((prev) => prev.map((bot) => (bot.id === updated.id ? updated : bot)));
     setRenameBotId(null);
     setRenameValue("");
+  }
+
+  /** Re-fetch the company wiki. */
+  async function refreshWiki(workspaceId: string) {
+    const wiki = await client.listWorkspaceFiles(workspaceId).catch(() => []);
+    setHqWiki(
+      wiki.map((file) => ({
+        id: file.id,
+        name: file.name,
+        content: file.content,
+        department: file.department,
+      })),
+    );
+  }
+
+  /** Set (or clear, with "") a file's department/category. */
+  async function setFileDept(fileId: string, department: string) {
+    const workspace = boardWorkspace;
+    if (!workspace) return;
+    await client.updateFile(fileId, { department }).catch(() => null);
+    await refreshWiki(workspace.id);
   }
 
   /** Remove every task from the company board. */
@@ -5308,26 +5375,58 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
               {hqTab === "wiki" && (
                 <>
                   {hqWiki.length === 0 && <p className="company-hint">The company wiki is empty.</p>}
-                  <ul className="board-list">
-                    {hqWiki.map((file) => (
-                      <li key={file.name} className="team-member">
-                        <div
-                          className="wiki-doc-name"
-                          onClick={() =>
-                            setOpenFile((prev) => (prev === file.name ? null : file.name))
-                          }
-                        >
-                          <span className="task-caret">
-                            {openFile === file.name ? "▾" : "▸"}
-                          </span>
-                          {file.name}
-                        </div>
-                        {openFile === file.name && (
-                          <pre className="standup-text">{file.content || "(empty)"}</pre>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
+                  {(() => {
+                    const groups = new Map<string, { label: string; files: typeof hqWiki }>();
+                    for (const file of hqWiki) {
+                      const category = fileCategory(file);
+                      const group = groups.get(category.id) ?? { label: category.label, files: [] };
+                      group.files.push(file);
+                      groups.set(category.id, group);
+                    }
+                    return [...groups.entries()].map(([id, group]) => (
+                      <div key={id} className="wiki-group">
+                        <div className="hq-subhead">{group.label}</div>
+                        <ul className="board-list">
+                          {group.files.map((file) => (
+                            <li key={file.id} className="team-member">
+                              <div className="wiki-doc-row">
+                                <div
+                                  className="wiki-doc-name"
+                                  onClick={() =>
+                                    setOpenFile((prev) =>
+                                      prev === file.name ? null : file.name,
+                                    )
+                                  }
+                                >
+                                  <span className="task-caret">
+                                    {openFile === file.name ? "▾" : "▸"}
+                                  </span>
+                                  {file.name}
+                                </div>
+                                <select
+                                  className="plan-member-dept"
+                                  value={file.department ?? ""}
+                                  onChange={(event) => void setFileDept(file.id, event.target.value)}
+                                  aria-label="File category"
+                                  title="Category"
+                                >
+                                  <option value="">Auto</option>
+                                  {Object.entries(DEPARTMENT_LABELS).map(([value, label]) => (
+                                    <option key={value} value={value}>
+                                      {label}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              {openFile === file.name && (
+                                <pre className="standup-text">{file.content || "(empty)"}</pre>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ));
+                  })()}
                 </>
               )}
             </div>
@@ -5335,6 +5434,12 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
               {(() => {
                 const autonomy = workspaceByName.get(boardWorkspace.name)?.autonomy ?? "manual";
                 const paused = (workspaceByName.get(boardWorkspace.name)?.status ?? "active") === "paused";
+                const roles = workspaceByName.get(boardWorkspace.name)?.roles ?? [];
+                const allTrusted =
+                  roles.length > 0 &&
+                  roles.every(
+                    (role) => bots.find((bot) => bot.id === role.botId)?.autoApprove === true,
+                  );
                 return (
                   <>
                     <span className="hq-autonomy">{autonomy === "manual" ? "Manual" : autonomy}</span>
@@ -5375,6 +5480,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                     <HqButton
                       title="Trust all — skip approval prompts for every employee"
                       disabled={boardBusy}
+                      pressed={allTrusted}
                       onClick={() => void trustAll()}
                     >
                       <ShieldIcon size={16} />
@@ -5382,6 +5488,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                     <HqButton
                       title={paused ? "Resume — let the team work again" : "Pause — stop autonomous runs"}
                       disabled={boardBusy}
+                      pressed={paused}
                       onClick={() => void setCompanyStatus(paused ? "active" : "paused")}
                     >
                       {paused ? <PlayIcon size={16} /> : <PauseIcon size={16} />}

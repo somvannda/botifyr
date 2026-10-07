@@ -421,6 +421,8 @@ export interface BotFile {
   name: string;
   size: number;
   updatedAt: string;
+  /** Optional department/category the file belongs to. */
+  department?: Department;
 }
 
 export interface CreateSecretRequest {

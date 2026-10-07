@@ -198,6 +198,8 @@ export interface FileRecord {
   workspaceId?: string;
   name: string;
   content: string;
+  /** Optional department/category the file belongs to (docs). */
+  department?: Department;
   createdAt: string;
   updatedAt: string;
 }

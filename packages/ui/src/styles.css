@@ -691,6 +691,28 @@ body {
   gap: 6px;
 }
 
+.wiki-group {
+  margin-bottom: 10px;
+}
+
+.wiki-doc-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wiki-doc-row .wiki-doc-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wiki-doc-row .plan-member-dept {
+  flex: 0 0 auto;
+}
+
 .hq-icon-btn {
   display: inline-flex;
   align-items: center;
@@ -733,6 +755,10 @@ body {
   background: #f87171;
   border-color: #f87171;
   color: #fff;
+}
+
+.hq-icon-btn:focus {
+  outline: none;
 }
 
 .hq-icon-btn:focus-visible {

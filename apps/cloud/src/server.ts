@@ -29,6 +29,7 @@ import type {
   Workspace,
   WorkspaceWithRoles,
 } from "@botifyr/shared";
+import { DEPARTMENTS } from "@botifyr/shared";
 import type { LocalChannel } from "@botifyr/channels";
 import { emit, subscribe } from "./events.js";
 import {
@@ -3121,6 +3122,25 @@ export async function buildServer(options: ServerOptions) {
     async (request, reply) => {
       const file = await store.getFile(request.userId as string, request.params.id);
       if (!file) return reply.code(404).send({ error: "file not found" });
+      return file;
+    },
+  );
+
+  app.patch<{ Params: { id: string }; Body: { content?: string; department?: string } }>(
+    "/v1/files/:id",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const file = await store.getFile(request.userId as string, request.params.id);
+      if (!file) return reply.code(404).send({ error: "file not found" });
+      if (typeof request.body?.content === "string") {
+        file.content = request.body.content.slice(0, 200_000);
+      }
+      if (typeof request.body?.department === "string") {
+        const dept = request.body.department.trim().toLowerCase();
+        file.department = (DEPARTMENTS as string[]).includes(dept) ? (dept as Department) : undefined;
+      }
+      file.updatedAt = new Date().toISOString();
+      await store.upsertFile(file);
       return file;
     },
   );
