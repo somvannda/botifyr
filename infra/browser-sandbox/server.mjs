@@ -35,6 +35,55 @@ async function ensurePage() {
   return page;
 }
 
+// Rank captured URLs so the caller gets the best stream first: an HLS master
+// playlist beats other playlists, which beat plain MP4s and DASH manifests.
+function mediaRank(url) {
+  const value = String(url).toLowerCase();
+  let score = 0;
+  if (/\.m3u8(\?|#|$)/.test(value)) score += 100;
+  else if (/\.mp4(\?|#|$)/.test(value)) score += 50;
+  if (/master|index|playlist|manifest/.test(value)) score += 10;
+  if (/\/hls\//.test(value)) score += 5;
+  return score;
+}
+
+// Some players only fetch the stream after a user gesture. Nudge playback
+// (muted, which autoplay policies allow) and click common play buttons.
+async function tryStartPlayback(active) {
+  try {
+    await active.evaluate(() => {
+      for (const video of Array.from(document.querySelectorAll("video"))) {
+        try {
+          video.muted = true;
+          void video.play?.();
+        } catch {
+          /* ignore */
+        }
+      }
+      const selectors = [
+        ".vjs-big-play-button",
+        ".plyr__control--overlaid",
+        "[class*='play' i]",
+        "[aria-label*='play' i]",
+        "[data-testid*='play' i]",
+      ];
+      for (const selector of selectors) {
+        const element = document.querySelector(selector);
+        if (element instanceof HTMLElement) {
+          try {
+            element.click();
+            return;
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+    });
+  } catch {
+    /* ignore */
+  }
+}
+
 async function snap(active) {
   return (await active.screenshot({ type: "png" })).toString("base64");
 }
@@ -79,13 +128,19 @@ const actions = {
     const wait = Math.min(15000, Math.max(0, Number(waitMs) || 0));
     if (wait > 0) await active.waitForTimeout(wait);
     if (mediaUrls.length === 0) {
+      // Nothing loaded on its own — nudge playback, then give the stream time.
+      await tryStartPlayback(active);
+      await active.waitForTimeout(4000);
+    }
+    if (mediaUrls.length === 0) {
       return {
         ok: false,
         output: "No media URLs captured yet. Navigate to the video page and press play, then sniff again.",
       };
     }
-    const list = mediaUrls.map((url, index) => `${index + 1}. ${url}`).join("\n");
-    return { ok: true, output: `Captured ${mediaUrls.length} media URL(s):\n${list}` };
+    const ordered = [...mediaUrls].sort((a, b) => mediaRank(b) - mediaRank(a));
+    const list = ordered.map((url, index) => `${index + 1}. ${url}`).join("\n");
+    return { ok: true, output: `Captured ${ordered.length} media URL(s):\n${list}` };
   },
 };
 
