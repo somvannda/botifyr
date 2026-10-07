@@ -225,17 +225,21 @@ function buildTools(
     tools.push(...shell.tools);
     closers.push(() => shell.close());
     // Media (yt-dlp) tools save into the shared downloads volume, which the
-    // cloud serves back to the user via /v1/tasks/:id/downloads. If the user
-    // stored YouTube cookies (Vault: YOUTUBE_COOKIES), pass them to yt-dlp.
+    // cloud serves back to the user via /v1/tasks/:id/downloads. Pass the user's
+    // cookies to yt-dlp: a generic DOWNLOAD_COOKIES file covers login-gated sites
+    // (Vimeo, short-drama services, …); YOUTUBE_COOKIES is the legacy fallback.
     const getCookies = vaultKey
       ? async (): Promise<string | null> => {
-          const record = await store.getSecret(userId, "YOUTUBE_COOKIES");
-          if (!record) return null;
-          try {
-            return decryptSecret(vaultKey, record);
-          } catch {
-            return null;
+          for (const name of ["DOWNLOAD_COOKIES", "YOUTUBE_COOKIES"]) {
+            const record = await store.getSecret(userId, name);
+            if (!record) continue;
+            try {
+              return decryptSecret(vaultKey, record);
+            } catch {
+              // try the next key
+            }
           }
+          return null;
         }
       : undefined;
     tools.push(
@@ -390,9 +394,7 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
   let companyBrief = "";
   const authorBot = deps.author ? await store.getBot(deps.author.id).catch(() => null) : null;
   const company = authorBot?.workspace
-    ? (await store.listWorkspaces(userId).catch(() => [])).find(
-        (entry) => entry.name === authorBot.workspace,
-      )
+    ? (await store.listWorkspaces(userId).catch(() => [])).find((entry) => entry.name === authorBot.workspace)
     : undefined;
   if (company?.dna) companyBrief = companyContext(company.dna);
   if (company) {
