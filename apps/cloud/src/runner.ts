@@ -258,6 +258,22 @@ function buildTools(
             updatedAt: now,
           });
         },
+        // SPA players (e.g. GoodShort): open the page in a browser sandbox,
+        // capture the media request, then download the URL it found.
+        sniffMedia: async (url) => {
+          const browser = createBrowserBackend({ mode: sandboxMode() });
+          try {
+            await browser.goto(url);
+            const result = await browser.sniff(12_000);
+            if (!result.ok) return null;
+            const match = /https?:\/\/\S+\.(m3u8|mp4)\S*/.exec(result.output);
+            return match ? match[0].replace(/[),\s]+$/, "") : null;
+          } catch {
+            return null;
+          } finally {
+            await browser.close().catch(() => {});
+          }
+        },
       }).tools,
     );
   }
