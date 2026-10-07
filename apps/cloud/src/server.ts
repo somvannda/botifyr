@@ -12,6 +12,7 @@ import type {
   Bot,
   BotFile,
   BotRole,
+  CodeRepo,
   CompanyDNA,
   ConnectionInfo,
   CreateWorkspaceRequest,
@@ -2295,6 +2296,7 @@ export async function buildServer(options: ServerOptions) {
       dna?: CompanyDNA;
       autonomy?: Workspace["autonomy"];
       operatingHours?: { start?: number; end?: number; days?: number[]; timezone?: string };
+      repos?: CodeRepo[];
     };
   }>("/v1/workspaces/:id", { preHandler: requireAuth }, async (request, reply) => {
     const userId = request.userId as string;
@@ -2350,6 +2352,20 @@ export async function buildServer(options: ServerOptions) {
       workspace.avatarEmoji = request.body.avatarEmoji.trim().slice(0, 8) || undefined;
     }
     if (Number.isInteger(request.body?.scheme)) workspace.scheme = Number(request.body.scheme);
+    if (Array.isArray(request.body?.repos)) {
+      workspace.repos = request.body.repos
+        .slice(0, 10)
+        .map((repo) => ({
+          id: typeof repo?.id === "string" && repo.id ? repo.id : randomUUID(),
+          name: String(repo?.name ?? "").trim().slice(0, 60) || "repo",
+          path: String(repo?.path ?? "").trim().slice(0, 400),
+          url: typeof repo?.url === "string" && repo.url.trim() ? repo.url.trim().slice(0, 400) : undefined,
+          branch:
+            typeof repo?.branch === "string" && repo.branch.trim() ? repo.branch.trim().slice(0, 120) : undefined,
+          createdAt: typeof repo?.createdAt === "string" ? repo.createdAt : new Date().toISOString(),
+        }))
+        .filter((repo) => repo.path.length > 0);
+    }
     if (typeof request.body?.ceoBotId === "string") {
       workspace.ceoBotId = request.body.ceoBotId || undefined;
     }

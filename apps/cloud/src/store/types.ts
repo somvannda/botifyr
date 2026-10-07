@@ -2,6 +2,7 @@ import type {
   BotSchedule,
   CapabilityGrant,
   ChatMessage,
+  CodeRepo,
   CompanyDNA,
   CompanyReport,
   Department,
@@ -106,6 +107,8 @@ export interface WorkspaceRecord {
   ceoBotId?: string;
   avatarEmoji?: string;
   scheme?: number;
+  /** Code repositories the engineering team may read (docs/codebase-access.md). */
+  repos?: CodeRepo[];
   createdAt: string;
   updatedAt: string;
 }

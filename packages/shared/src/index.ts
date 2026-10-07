@@ -184,6 +184,19 @@ export type Department =
 export type WorkspaceAutonomy = "manual" | "supervised" | "autonomous";
 
 /** A virtual company. Owns employees (bots), shared state, and a budget. */
+/** A connected code repository the engineering team can read (read-only for now). */
+export interface CodeRepo {
+  id: string;
+  /** Display name, e.g. "botifyr-web". */
+  name: string;
+  /** A local checkout path (server-local) the agents read. */
+  path: string;
+  /** Clone URL (reserved for managed checkouts). */
+  url?: string;
+  branch?: string;
+  createdAt: string;
+}
+
 export interface Workspace {
   id: string;
   /** The CEO (a real user). */
@@ -205,6 +218,8 @@ export interface Workspace {
   ceoBotId?: string;
   avatarEmoji?: string;
   scheme?: number;
+  /** Code repositories the engineering team may read (docs/codebase-access.md). */
+  repos?: CodeRepo[];
   createdAt: string;
   updatedAt: string;
 }
@@ -513,6 +528,7 @@ export interface MediaRecipe {
 export type ServerEvent =
   | { type: "session.created"; session: Session }
   | { type: "session.updated"; session: Session }
+  | { type: "bot.deleted"; botId: string; userId: string; sessionId?: string }
   | { type: "assistant.delta"; sessionId: string; taskId: string; botId?: string; text: string }
   | { type: "assistant.reset"; sessionId: string; taskId: string; botId?: string }
   | { type: "group.working"; sessionId: string; names: string[] }

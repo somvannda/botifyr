@@ -30,6 +30,7 @@ import { createEmailTools, resendSender } from "./email-tools.js";
 import { createEscalationTools } from "./escalation-tools.js";
 import { createHireTools } from "./hire-tools.js";
 import { createPlanTools } from "./plan-tools.js";
+import { createCodeTools } from "./code-tools.js";
 import { removeDeniedTools } from "./tool-capabilities.js";
 import {
   clearComputerSandbox,
@@ -482,6 +483,10 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
     tools.push(...createEscalationTools());
     // Any employee can write down a plan so the whole team shares one strategy.
     tools.push(...createPlanTools(store, userId, authorBot.id));
+    // Engineering can read the connected repos (read-only, path-jailed).
+    if (department === "engineering" && company.repos && company.repos.length > 0) {
+      tools.push(...createCodeTools(company.repos));
+    }
     // The chair (exec) and department leaders can hire their own specialists
     // (approval-gated), so the company grows on demand instead of being over-hired.
     const isLeader =
