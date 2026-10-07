@@ -31,4 +31,11 @@ describe("planMedia", () => {
   it("leaves ordinary chat to the model", () => {
     expect(planMedia("hello, how are you?").mediaTask).toBe(false);
   });
+
+  it("maps 'highest' to 2160p and 'mp3' to audio-only", () => {
+    const plan = planMedia("grab this in highest quality as mp3 https://youtu.be/abc");
+    expect(plan.initialToolCall?.name).toBe("youtube.download");
+    expect(plan.initialToolCall?.arguments.quality).toBe(2160);
+    expect(plan.initialToolCall?.arguments.audio_only).toBe(true);
+  });
 });
