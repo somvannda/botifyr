@@ -1,4 +1,4 @@
-import { chromium, type Browser, type Page } from "playwright";
+import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import type { ToolResult } from "../types.js";
 import type { BrowserBackend } from "./browser.js";
 
@@ -11,27 +11,54 @@ import type { BrowserBackend } from "./browser.js";
 export interface LocalBrowserOptions {
   headless?: boolean;
   viewport?: { width: number; height: number };
+  /**
+   * Persist cookies/localStorage in this directory so logins survive across
+   * tasks (docs/company-workspace.md Part V §41). Per-employee dir.
+   */
+  userDataDir?: string;
 }
 
 export function createLocalBrowserBackend(options: LocalBrowserOptions = {}): BrowserBackend {
   let browser: Browser | null = null;
+  let context: BrowserContext | null = null;
   let page: Page | null = null;
   let mediaUrls: string[] = [];
   const MEDIA_RE = /\.(m3u8|mp4|ts|m4s|mpd)(\?|#|$)/i;
+  const attached = new WeakSet<Page>();
+
+  function attach(active: Page): void {
+    if (attached.has(active)) return;
+    attached.add(active);
+    active.on("response", (response) => {
+      const url = response.url();
+      if (MEDIA_RE.test(url) && !mediaUrls.includes(url)) mediaUrls.push(url);
+    });
+  }
 
   async function ensurePage(): Promise<Page> {
+    // Persistent profile: one context reused across tasks (keeps logins).
+    if (options.userDataDir) {
+      if (!context) {
+        context = await chromium.launchPersistentContext(options.userDataDir, {
+          headless: options.headless ?? true,
+          viewport: options.viewport ?? { width: 1280, height: 800 },
+        });
+      }
+      if (!page || page.isClosed()) {
+        page = context.pages()[0] ?? (await context.newPage());
+        attach(page);
+      }
+      return page;
+    }
     if (!browser) {
       browser = await chromium.launch({ headless: options.headless ?? true });
     }
     if (!page) {
-      const context = await browser.newContext({
+      const fresh = await browser.newContext({
         viewport: options.viewport ?? { width: 1280, height: 800 },
       });
-      page = await context.newPage();
-      page.on("response", (response) => {
-        const url = response.url();
-        if (MEDIA_RE.test(url) && !mediaUrls.includes(url)) mediaUrls.push(url);
-      });
+      page = await fresh.newPage();
+      attach(page);
     }
     return page;
   }
@@ -105,6 +132,11 @@ export function createLocalBrowserBackend(options: LocalBrowserOptions = {}): Br
     },
 
     async close(): Promise<void> {
+      if (context) {
+        await context.close();
+        context = null;
+        page = null;
+      }
       if (browser) {
         await browser.close();
         browser = null;

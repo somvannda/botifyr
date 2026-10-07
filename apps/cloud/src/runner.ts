@@ -205,7 +205,19 @@ function buildTools(
   let hasComputer = false;
 
   if (caps.includes("browser")) {
-    const browser = createBrowserTools(createBrowserBackend({ mode: sandboxMode() }));
+    // Persistent per-employee browser profile (keeps logins) when configured
+    // and running locally. Docker keeps its per-task isolation for now.
+    const profileRoot = process.env.BOTIFYR_BROWSER_PROFILES_DIR;
+    const profileDir =
+      sandboxMode() !== "docker" && profileRoot
+        ? `${profileRoot.replace(/[/\\]$/, "")}/${task.sessionId}`
+        : undefined;
+    const browser = createBrowserTools(
+      createBrowserBackend({
+        mode: sandboxMode(),
+        local: profileDir ? { userDataDir: profileDir } : undefined,
+      }),
+    );
     tools.push(...browser.tools);
     closers.push(() => browser.close());
   }
