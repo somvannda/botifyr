@@ -399,6 +399,26 @@ export class BotifyrClient {
     });
   }
 
+  /** The recorded input trace for a session (teach-by-demonstration). */
+  computerTrace(
+    sessionId: string,
+  ): Promise<{ steps: Array<{ t: number; action: string; args: Record<string, unknown> }> }> {
+    return this.request(`/v1/sessions/${encodeURIComponent(sessionId)}/computer/trace`);
+  }
+
+  /** Turn a session's recorded trace into a learned task (pending review). */
+  learnTask(
+    sessionId: string,
+    name?: string,
+    description?: string,
+  ): Promise<{ ok: boolean; id: string; name: string }> {
+    return this.request(`/v1/sessions/${encodeURIComponent(sessionId)}/computer/learn`, {
+      method: "POST",
+      json: true,
+      body: JSON.stringify({ name, description }),
+    });
+  }
+
   adminSkills(): Promise<AdminSkill[]> {
     return this.request("/admin/learned-skills");
   }

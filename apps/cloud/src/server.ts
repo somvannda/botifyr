@@ -50,6 +50,7 @@ import type { Store } from "./store/index.js";
 import type {
   FileRecord,
   InvoiceRecord,
+  LearnedSkillRecord,
   MediaRecipe,
   ModelPricingRecord,
   PlatformSettings,
@@ -2858,6 +2859,12 @@ export async function buildServer(options: ServerOptions) {
     },
   );
 
+  /* Recorded input per session, for teach-by-demonstration. */
+  const sessionTraces = new Map<
+    string,
+    Array<{ t: number; action: string; args: Record<string, unknown> }>
+  >();
+
   /* "Botifyr's screen": a session-scoped desktop the user can start and watch
      (and drive) without running a task — the basis for teach-by-demonstration. */
   app.post<{ Params: { id: string } }>(
@@ -2889,6 +2896,9 @@ export async function buildServer(options: ServerOptions) {
       const backend = getComputerSandbox(`session:${session.id}`);
       if (!backend) return reply.code(409).send({ error: "start Botifyr's screen first" });
       const args = request.body?.args ?? {};
+      const trace = sessionTraces.get(session.id) ?? [];
+      trace.push({ t: Date.now(), action: request.body?.action ?? "", args });
+      sessionTraces.set(session.id, trace);
       switch (request.body?.action) {
         case "click":
           await backend.click(Number(args.x), Number(args.y), Number(args.button) || 1);
@@ -2909,6 +2919,61 @@ export async function buildServer(options: ServerOptions) {
           return reply.code(400).send({ error: "unknown input action" });
       }
       return { ok: true };
+    },
+  );
+
+  /* The recorded input trace, and turning it into a learned task. */
+  app.get<{ Params: { id: string } }>(
+    "/v1/sessions/:id/computer/trace",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const session = await store.getSession(request.params.id);
+      if (!session || session.userId !== request.userId) {
+        return reply.code(404).send({ error: "session not found" });
+      }
+      return { steps: sessionTraces.get(session.id) ?? [] };
+    },
+  );
+
+  app.post<{ Params: { id: string }; Body: { name?: string; description?: string } }>(
+    "/v1/sessions/:id/computer/learn",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const session = await store.getSession(request.params.id);
+      if (!session || session.userId !== request.userId) {
+        return reply.code(404).send({ error: "session not found" });
+      }
+      const trace = sessionTraces.get(session.id) ?? [];
+      if (trace.length === 0) return reply.code(400).send({ error: "nothing recorded to learn yet" });
+      const userId = request.userId as string;
+      const existing = await store.listLearnedSkills();
+      const name = (request.body?.name ?? `Learned task ${existing.length + 1}`).trim().slice(0, 80);
+      const lines = trace.map((step, index) => {
+        if (step.action === "click") return `${index + 1}. Click (${step.args.x}, ${step.args.y})`;
+        if (step.action === "type") return `${index + 1}. Type "${String(step.args.text ?? "")}"`;
+        if (step.action === "key") return `${index + 1}. Press ${String(step.args.key ?? "")}`;
+        if (step.action === "scroll") return `${index + 1}. Scroll ${String(step.args.amount ?? "")}`;
+        return `${index + 1}. ${step.action}`;
+      });
+      const now = new Date().toISOString();
+      const record: LearnedSkillRecord = {
+        id: randomUUID(),
+        name,
+        description: (request.body?.description ?? "Taught by demonstration on Botifyr's screen.").slice(
+          0,
+          300,
+        ),
+        content: `Recorded from a demonstration.\n\nSteps:\n${lines.join("\n")}\n\nTrace (JSON):\n${JSON.stringify(trace)}`,
+        source: "computer-trace",
+        createdBy: userId,
+        status: "pending",
+        createdAt: now,
+        updatedAt: now,
+      };
+      await store.upsertLearnedSkill(record);
+      // Clear the trace so the next lesson starts clean.
+      sessionTraces.set(session.id, []);
+      return { ok: true, id: record.id, name };
     },
   );
 

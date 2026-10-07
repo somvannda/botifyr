@@ -275,6 +275,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [showBotPanel, setShowBotPanel] = useState(() => localStorage.getItem("botifyr.botPanel") !== "0");
   const [screenOn, setScreenOn] = useState(false);
   const [screenText, setScreenText] = useState("");
+  const [learnName, setLearnName] = useState("");
   const [botPanelTab, setBotPanelTab] = useState<"details" | "library" | "computer">("details");
   const [labels, setLabels] = useState<Record<string, string>>(() => {
     try {
@@ -629,6 +630,18 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     if (!activeSessionId) return;
     try {
       await client.computerInput(activeSessionId, "key", { key });
+    } catch (err: unknown) {
+      setError(messageOf(err));
+    }
+  }
+
+  /** Save the recorded demonstration as a learned task (pending admin review). */
+  async function learnTask(): Promise<void> {
+    if (!activeSessionId) return;
+    try {
+      const { name } = await client.learnTask(activeSessionId, learnName.trim() || undefined);
+      setLearnName("");
+      pushToast({ kind: "task", title: "Task learned", body: `"${name}" was saved for review.` });
     } catch (err: unknown) {
       setError(messageOf(err));
     }
@@ -3127,6 +3140,17 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                       </button>
                       <button className="ghost small" type="button" onClick={() => setScreenOn(false)}>
                         Stop screen
+                      </button>
+                    </div>
+                    <div className="screen-controls">
+                      <input
+                        className="screen-input"
+                        placeholder="Task name (e.g. Download a show)"
+                        value={learnName}
+                        onChange={(event) => setLearnName(event.target.value)}
+                      />
+                      <button className="ghost small" type="button" onClick={() => void learnTask()}>
+                        Learn task
                       </button>
                     </div>
                   </>
