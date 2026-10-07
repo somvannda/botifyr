@@ -29,6 +29,7 @@ import { createDesignTools } from "./design-tools.js";
 import { createEmailTools, resendSender } from "./email-tools.js";
 import { createEscalationTools } from "./escalation-tools.js";
 import { createHireTools } from "./hire-tools.js";
+import { createFireTools } from "./fire-tools.js";
 import { createPlanTools } from "./plan-tools.js";
 import { createCodeTools } from "./code-tools.js";
 import { removeDeniedTools } from "./tool-capabilities.js";
@@ -523,6 +524,7 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
       department === "exec" || /head|lead|chief|cto|ceo|coo|cfo|director|vp|manager/i.test(role?.title ?? "");
     if (isLeader) {
       tools.push(...createHireTools(store, userId, authorBot.id));
+      tools.push(...createFireTools(store, userId, authorBot.id));
     }
 
     // Authorization: revoked capabilities block their tools (docs/company-os.md §8).
