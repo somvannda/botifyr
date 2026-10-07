@@ -630,6 +630,11 @@ export class BotifyrClient {
     return this.request(`/v1/work/${id}`, { method: "DELETE" });
   }
 
+  /** Remove every task from the company board. */
+  clearWorkItems(workspaceId: string): Promise<{ deleted: number }> {
+    return this.request(`/v1/workspaces/${workspaceId}/work`, { method: "DELETE" });
+  }
+
   /** Tasks across the company's employees that are waiting for CEO approval. */
   listWorkspaceNeeds(workspaceId: string): Promise<Task[]> {
     return this.request(`/v1/workspaces/${workspaceId}/needs`);

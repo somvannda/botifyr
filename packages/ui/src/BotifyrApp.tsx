@@ -1402,6 +1402,19 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     setRenameValue("");
   }
 
+  /** Remove every task from the company board. */
+  async function clearBoard() {
+    const workspace = boardWorkspace;
+    if (!workspace) return;
+    setBoardBusy(true);
+    try {
+      await client.clearWorkItems(workspace.id).catch(() => null);
+      setBoardItems(await client.listWorkItems(workspace.id).catch(() => []));
+    } finally {
+      setBoardBusy(false);
+    }
+  }
+
   /** Trust every employee in this company (skip their approval prompts). */
   async function trustAll() {
     const workspace = boardWorkspace;
@@ -4899,6 +4912,25 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                     >
                       Add
                     </button>
+                    {boardItems.length > 0 && (
+                      <button
+                        className="ghost small"
+                        type="button"
+                        disabled={boardBusy}
+                        title="Delete every task on the board"
+                        onClick={() => {
+                          if (
+                            window.confirm(
+                              `Delete all ${boardItems.length} tasks? This can't be undone.`,
+                            )
+                          ) {
+                            void clearBoard();
+                          }
+                        }}
+                      >
+                        Clear all
+                      </button>
+                    )}
                   </div>
                   {boardItems.length === 0 && <p className="company-hint">No work items yet.</p>}
                   <ul className="board-list">

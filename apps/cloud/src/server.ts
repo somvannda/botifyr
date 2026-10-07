@@ -2473,6 +2473,22 @@ export async function buildServer(options: ServerOptions) {
     },
   );
 
+  /** Clear the whole company board. */
+  app.delete<{ Params: { id: string } }>(
+    "/v1/workspaces/:id/work",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const workspace = await store.getWorkspace(request.params.id);
+      if (!workspace || workspace.ownerId !== userId) {
+        return reply.code(404).send({ error: "workspace not found" });
+      }
+      const items = await store.listWorkItems(workspace.id);
+      for (const item of items) await store.deleteWorkItem(workspace.id, item.id).catch(() => false);
+      return { deleted: items.length };
+    },
+  );
+
   app.post<{
     Params: { id: string };
     Body: {
