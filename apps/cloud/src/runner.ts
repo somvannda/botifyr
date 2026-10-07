@@ -18,6 +18,7 @@ import {
 import { emit } from "./events.js";
 import { companyContext, isBudgetExhausted } from "./company.js";
 import { createCompanyTools } from "./company-tools.js";
+import { createCompanyMakerTools } from "./create-company-tools.js";
 import { createDelegationTools } from "./delegation-tools.js";
 import { createSocialTools, notConnectedSocial } from "./social-tools.js";
 import { createTelegramSocialClient } from "./social-telegram.js";
@@ -450,6 +451,10 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
       tools.length = 0;
       tools.push(...kept);
     }
+  }
+  // A Founder bot (not yet in a company) can build a whole company from chat.
+  if (authorBot && !company) {
+    tools.push(...createCompanyMakerTools(store, userId, oneShot, fetchText));
   }
   const instructions =
     [companyBrief, deps.instructions, skillIndex, localInstruction].filter(Boolean).join("\n\n") || undefined;

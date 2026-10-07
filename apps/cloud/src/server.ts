@@ -48,6 +48,7 @@ import { createToken, hashPassword, hashToken, verifyPassword } from "./auth.js"
 import { encryptSecret } from "./vault.js";
 import { oneShot, runTask, runtimeInfo, summarizeConversation } from "./runner.js";
 import { analyzeSource, buildStandup, planCompany, toDepartment } from "./company.js";
+import { seedCompany } from "./company-seed.js";
 import { createDockerComputerBackend } from "@botifyr/agent-core";
 import {
   chmabaConfigFromEnv,
@@ -2150,66 +2151,16 @@ export async function buildServer(options: ServerOptions) {
         }
       }
 
-      // Seed the company wiki on the chair bot: brief, OKRs and a first backlog.
+      // Seed the company wiki + board.
       if (chairBotId) {
-        const dna = request.body?.dna;
-        const seededAt = new Date().toISOString();
-        const writeWiki = async (fileName: string, content: string): Promise<void> => {
-          const existing = (await store.listFiles(chairBotId)).find((file) => file.name === fileName);
-          await store.upsertFile({
-            id: existing?.id ?? randomUUID(),
-            botId: chairBotId,
-            userId,
-            name: fileName,
-            content: content.slice(0, 20_000),
-            createdAt: existing?.createdAt ?? seededAt,
-            updatedAt: seededAt,
-          });
-        };
-        const features = dna?.product.features ?? [];
-        const gaps = dna?.product.gaps ?? [];
-        const bullets = (items: string[], empty: string): string =>
-          (items.length > 0 ? items : [empty]).map((item) => `- ${item}`).join("\n");
-        await writeWiki(
-          "BRIEF.md",
-          `# ${workspace.name}\n\n${workspace.mission}\n\n` +
-            (dna ? `Industry: ${dna.industry}\nStage: ${dna.stage}\nGoal: ${dna.goal}` : ""),
-        );
-        await writeWiki(
-          "OKRS.md",
-          `# OKRs — ${workspace.name}\n\nGoal: ${dna?.goal ?? workspace.mission}`,
-        );
-        await writeWiki(
-          "BACKLOG.md",
-          `# Backlog — ${workspace.name}\n\n## MVP\n${bullets(features, "Define the MVP")}\n\n` +
-            `## Opportunities\n${bullets(gaps, "—")}`,
-        );
-
-        // Seed the board with first work items from the plan.
-        const seedItems: Array<{ title: string; phase: WorkItem["phase"]; department: Department }> = [];
-        for (const feature of features.slice(0, 8)) {
-          seedItems.push({ title: feature, phase: "mvp", department: "product" });
-        }
-        for (const gap of gaps.slice(0, 5)) {
-          seedItems.push({ title: gap, phase: "phase2", department: "product" });
-        }
-        seedItems.push({ title: "Build the marketing website", phase: "mvp", department: "engineering" });
-        if (features.length === 0 && gaps.length === 0) {
-          seedItems.unshift({ title: "Define the MVP", phase: "mvp", department: "product" });
-        }
-        for (const seedItem of seedItems) {
-          await store.createWorkItem({
-            id: randomUUID(),
-            workspaceId: workspace.id,
-            title: seedItem.title.slice(0, 200),
-            phase: seedItem.phase,
-            status: "todo",
-            department: seedItem.department,
-            createdBy: userId,
-            createdAt: seededAt,
-            updatedAt: seededAt,
-          });
-        }
+        await seedCompany(store, {
+          userId,
+          workspaceId: workspace.id,
+          workspaceName: workspace.name,
+          mission: workspace.mission,
+          chairBotId,
+          dna: request.body?.dna,
+        });
       }
 
       if (chairBotId) {
