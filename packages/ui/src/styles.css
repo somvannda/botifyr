@@ -1889,6 +1889,14 @@ body {
   transition: background 0.12s ease;
 }
 
+.conv-item[draggable="true"] {
+  cursor: grab;
+}
+
+.conv-item[draggable="true"]:active {
+  cursor: grabbing;
+}
+
 .conv-select {
   flex: 1;
   min-width: 0;

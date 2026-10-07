@@ -314,6 +314,13 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [density, setDensity] = useState<"cozy" | "compact">(() =>
     localStorage.getItem("botifyr.density") === "compact" ? "compact" : "cozy",
   );
+  const [order, setOrder] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("botifyr.order") ?? "[]") as string[];
+    } catch {
+      return [];
+    }
+  });
   const [language, setLanguage] = useState(() => localStorage.getItem("botifyr.language") ?? "system");
   const [spelling, setSpelling] = useState(() => localStorage.getItem("botifyr.spelling") !== "0");
   const [hardware, setHardware] = useState(() => localStorage.getItem("botifyr.hardware") !== "0");
@@ -2159,7 +2166,15 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     const last = session?.messages[session.messages.length - 1];
     return last?.createdAt ?? bot.createdAt;
   };
-  const orderedBots = [...bots].sort((a, b) => lastActivity(b).localeCompare(lastActivity(a)));
+  const orderIndex = new Map(order.map((id, index) => [id, index]));
+  const orderedBots = [...bots].sort((a, b) => {
+    const ia = orderIndex.get(a.id);
+    const ib = orderIndex.get(b.id);
+    if (ia !== undefined && ib !== undefined) return ia - ib;
+    if (ia !== undefined) return -1;
+    if (ib !== undefined) return 1;
+    return lastActivity(b).localeCompare(lastActivity(a));
+  });
   const filteredBots = query.trim()
     ? orderedBots.filter((bot) => bot.name.toLowerCase().includes(query.trim().toLowerCase()))
     : orderedBots;
@@ -2441,11 +2456,38 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   }
 
   /** One bot row in the sidebar (also used under a company header). */
+  /** Reorder the sidebar list (local only — never changes a bot's company). */
+  function moveBot(dragId: string, targetId: string) {
+    if (dragId === targetId) return;
+    const ids = orderedBots.map((bot) => bot.id);
+    const from = ids.indexOf(dragId);
+    const to = ids.indexOf(targetId);
+    if (from === -1 || to === -1) return;
+    ids.splice(from, 1);
+    ids.splice(to, 0, dragId);
+    setOrder(ids);
+    localStorage.setItem("botifyr.order", JSON.stringify(ids));
+  }
+
   const renderBotRow = (bot: Bot) => {
     const session = sessions.find((entry) => entry.id === bot.sessionId);
     const last = session?.messages[session.messages.length - 1];
     return (
-      <div key={bot.id} className={`conv-item ${bot.id === activeBotId ? "active" : ""}`}>
+      <div
+        key={bot.id}
+        className={`conv-item ${bot.id === activeBotId ? "active" : ""}`}
+        draggable
+        onDragStart={(event) => {
+          event.dataTransfer.setData("text/plain", bot.id);
+          event.dataTransfer.effectAllowed = "move";
+        }}
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={(event) => {
+          event.preventDefault();
+          const id = event.dataTransfer.getData("text/plain");
+          if (id) moveBot(id, bot.id);
+        }}
+      >
         <button className="conv-select" type="button" onClick={() => selectBot(bot)}>
           <span className={`conv-avatar${roleByBotId.get(bot.id)?.isChair ? " chair" : ""}`}>
             <BotLogo size={34} scheme={BOT_SCHEMES[bot.scheme % BOT_SCHEMES.length]} />
