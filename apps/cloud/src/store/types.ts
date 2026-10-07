@@ -8,6 +8,7 @@ import type {
   PlatformSettings,
   Task,
   WorkItem,
+  WorkspaceBudget,
 } from "@botifyr/shared";
 
 export type { MediaRecipe, ModelPricingRecord, PlatformSettings };
@@ -116,6 +117,9 @@ export interface BotRoleRecord {
 
 /** A unit of work on the company board. */
 export type WorkItemRecord = WorkItem;
+
+/** A company's token budget. */
+export type WorkspaceBudgetRecord = WorkspaceBudget;
 
 export interface SecretRecord {
   id: string;
@@ -279,6 +283,10 @@ export interface Store {
   listWorkItems(workspaceId: string): Promise<WorkItemRecord[]>;
   updateWorkItem(record: WorkItemRecord): Promise<void>;
   deleteWorkItem(workspaceId: string, id: string): Promise<boolean>;
+
+  /* Per-workspace budget */
+  getWorkspaceBudget(workspaceId: string): Promise<WorkspaceBudgetRecord | null>;
+  saveWorkspaceBudget(record: WorkspaceBudgetRecord): Promise<void>;
 
   createTask(task: Task): Promise<void>;
   updateTask(task: Task): Promise<void>;

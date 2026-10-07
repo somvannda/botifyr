@@ -19,6 +19,7 @@ import type {
   Task,
   User,
   WorkItem,
+  WorkspaceBudget,
   WorkspaceWithRoles,
 } from "@botifyr/shared";
 
@@ -628,6 +629,19 @@ export class BotifyrClient {
   /** Tasks across the company's employees that are waiting for CEO approval. */
   listWorkspaceNeeds(workspaceId: string): Promise<Task[]> {
     return this.request(`/v1/workspaces/${workspaceId}/needs`);
+  }
+
+  /* Per-workspace budget. */
+  getWorkspaceBudget(workspaceId: string): Promise<WorkspaceBudget> {
+    return this.request(`/v1/workspaces/${workspaceId}/budget`);
+  }
+
+  setWorkspaceBudget(workspaceId: string, limitTokens: number): Promise<WorkspaceBudget> {
+    return this.request(`/v1/workspaces/${workspaceId}/budget`, {
+      method: "PATCH",
+      json: true,
+      body: JSON.stringify({ limitTokens }),
+    });
   }
 
   updateWorkspace(

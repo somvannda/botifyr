@@ -23,6 +23,7 @@ import type {
   UserRecord,
   WalletRecord,
   WorkItemRecord,
+  WorkspaceBudgetRecord,
   WorkspaceRecord,
 } from "./types.js";
 
@@ -38,6 +39,7 @@ export class MemoryStore implements Store {
   /** Keyed by `${workspaceId}:${botId}`. */
   private botRoles = new Map<string, BotRoleRecord>();
   private workItems = new Map<string, WorkItemRecord>();
+  private budgets = new Map<string, WorkspaceBudgetRecord>();
   private tasks = new Map<string, Task>();
   private audit: AuditRecord[] = [];
   private secrets = new Map<string, SecretRecord>();
@@ -320,6 +322,15 @@ export class MemoryStore implements Store {
     if (!record || record.workspaceId !== workspaceId) return false;
     this.workItems.delete(id);
     return true;
+  }
+
+  async getWorkspaceBudget(workspaceId: string): Promise<WorkspaceBudgetRecord | null> {
+    const record = this.budgets.get(workspaceId);
+    return record ? structuredClone(record) : null;
+  }
+
+  async saveWorkspaceBudget(record: WorkspaceBudgetRecord): Promise<void> {
+    this.budgets.set(record.workspaceId, structuredClone(record));
   }
 
   async createTask(task: Task): Promise<void> {

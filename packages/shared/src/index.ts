@@ -303,6 +303,14 @@ export interface WorkItem {
   updatedAt: string;
 }
 
+/** A company's token budget (0 limit = inherit the account cap). */
+export interface WorkspaceBudget {
+  workspaceId: string;
+  limitTokens: number;
+  usedTokens: number;
+  updatedAt: string;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Accounts, secrets, audit                                                    */
 /* -------------------------------------------------------------------------- */

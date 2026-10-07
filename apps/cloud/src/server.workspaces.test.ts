@@ -214,4 +214,31 @@ describe("workspaces API", () => {
     expect(blank.statusCode).toBe(400);
     await app.close();
   });
+
+  it("stores a per-workspace budget", async () => {
+    const { app, signup } = await boot();
+    const auth = await signup("ws-budget@example.com");
+    const ws = (
+      await app.inject({ method: "POST", url: "/v1/workspaces", headers: auth, payload: { name: "Budget Co" } })
+    ).json() as { id: string };
+
+    const before = (
+      await app.inject({ method: "GET", url: `/v1/workspaces/${ws.id}/budget`, headers: auth })
+    ).json() as { limitTokens: number };
+    expect(before.limitTokens).toBe(0);
+
+    const set = await app.inject({
+      method: "PATCH",
+      url: `/v1/workspaces/${ws.id}/budget`,
+      headers: auth,
+      payload: { limitTokens: 500000 },
+    });
+    expect((set.json() as { limitTokens: number }).limitTokens).toBe(500000);
+
+    const after = (
+      await app.inject({ method: "GET", url: `/v1/workspaces/${ws.id}/budget`, headers: auth })
+    ).json() as { limitTokens: number };
+    expect(after.limitTokens).toBe(500000);
+    await app.close();
+  });
 });

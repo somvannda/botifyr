@@ -2415,6 +2415,52 @@ export async function buildServer(options: ServerOptions) {
     },
   );
 
+  /** The company's token budget (0 = inherit the account cap). */
+  app.get<{ Params: { id: string } }>(
+    "/v1/workspaces/:id/budget",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const workspace = await store.getWorkspace(request.params.id);
+      if (!workspace || workspace.ownerId !== userId) {
+        return reply.code(404).send({ error: "workspace not found" });
+      }
+      return (
+        (await store.getWorkspaceBudget(workspace.id)) ?? {
+          workspaceId: workspace.id,
+          limitTokens: 0,
+          usedTokens: 0,
+          updatedAt: workspace.updatedAt,
+        }
+      );
+    },
+  );
+
+  app.patch<{ Params: { id: string }; Body: { limitTokens?: number } }>(
+    "/v1/workspaces/:id/budget",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const workspace = await store.getWorkspace(request.params.id);
+      if (!workspace || workspace.ownerId !== userId) {
+        return reply.code(404).send({ error: "workspace not found" });
+      }
+      const existing = await store.getWorkspaceBudget(workspace.id);
+      const limitTokens = Math.max(
+        0,
+        Math.floor(Number(request.body?.limitTokens ?? existing?.limitTokens ?? 0)) || 0,
+      );
+      const record = {
+        workspaceId: workspace.id,
+        limitTokens,
+        usedTokens: existing?.usedTokens ?? 0,
+        updatedAt: new Date().toISOString(),
+      };
+      await store.saveWorkspaceBudget(record);
+      return record;
+    },
+  );
+
   /* Bot Library: text files a bot can keep and the agent can read/write. */
   const toBotFile = (record: FileRecord): BotFile => ({
     id: record.id,

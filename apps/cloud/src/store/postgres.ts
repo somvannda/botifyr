@@ -24,6 +24,7 @@ import type {
   UserRecord,
   WalletRecord,
   WorkItemRecord,
+  WorkspaceBudgetRecord,
   WorkspaceRecord,
 } from "./types.js";
 import { SCHEMA_SQL } from "./schema.js";
@@ -432,6 +433,29 @@ export class PostgresStore implements Store {
       [workspaceId, id],
     );
     return (result.rowCount ?? 0) > 0;
+  }
+
+  async getWorkspaceBudget(workspaceId: string): Promise<WorkspaceBudgetRecord | null> {
+    const { rows } = await this.pool.query(
+      "SELECT workspace_id, limit_tokens, used_tokens, updated_at FROM workspace_budget WHERE workspace_id = $1",
+      [workspaceId],
+    );
+    const row = rows[0];
+    if (!row) return null;
+    return {
+      workspaceId: row.workspace_id as string,
+      limitTokens: Number(row.limit_tokens),
+      usedTokens: Number(row.used_tokens),
+      updatedAt: new Date(row.updated_at as string).toISOString(),
+    };
+  }
+
+  async saveWorkspaceBudget(record: WorkspaceBudgetRecord): Promise<void> {
+    await this.pool.query(
+      "INSERT INTO workspace_budget (workspace_id, limit_tokens, used_tokens, updated_at) VALUES ($1, $2, $3, $4) " +
+        "ON CONFLICT (workspace_id) DO UPDATE SET limit_tokens = EXCLUDED.limit_tokens, used_tokens = EXCLUDED.used_tokens, updated_at = EXCLUDED.updated_at",
+      [record.workspaceId, record.limitTokens, record.usedTokens, record.updatedAt],
+    );
   }
 
   async createTask(task: Task): Promise<void> {

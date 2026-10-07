@@ -121,6 +121,14 @@ CREATE TABLE IF NOT EXISTS work_items (
 );
 CREATE INDEX IF NOT EXISTS work_items_ws_idx ON work_items (workspace_id, updated_at DESC);
 
+/* Per-workspace token budget (docs/company-os.md §15). */
+CREATE TABLE IF NOT EXISTS workspace_budget (
+  workspace_id TEXT PRIMARY KEY REFERENCES workspaces(id) ON DELETE CASCADE,
+  limit_tokens BIGINT NOT NULL DEFAULT 0,
+  used_tokens  BIGINT NOT NULL DEFAULT 0,
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS connections (
   id         TEXT PRIMARY KEY,
   user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
