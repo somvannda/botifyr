@@ -222,6 +222,13 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [companyBusy, setCompanyBusy] = useState(false);
   const [companyError, setCompanyError] = useState<string | null>(null);
   const [companyEdit, setCompanyEdit] = useState<{ id: string; name: string } | null>(null);
+  const [companyStep, setCompanyStep] = useState<"source" | "review" | "confirm">("source");
+  const [wizardUseHours, setWizardUseHours] = useState(false);
+  const [wizardHoursStart, setWizardHoursStart] = useState("9");
+  const [wizardHoursEnd, setWizardHoursEnd] = useState("18");
+  const [wizardWeekdays, setWizardWeekdays] = useState(true);
+  const [wizardBudget, setWizardBudget] = useState("");
+  const [wizardActivate, setWizardActivate] = useState(false);
   const [boardWorkspace, setBoardWorkspace] = useState<{ id: string; name: string } | null>(null);
   const [boardItems, setBoardItems] = useState<Array<WorkItem>>([]);
   const [boardTitle, setBoardTitle] = useState("");
@@ -878,6 +885,13 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     setCompanySource("");
     setCompanyPlan(null);
     setCompanyError(null);
+    setCompanyStep("source");
+    setWizardUseHours(false);
+    setWizardHoursStart("9");
+    setWizardHoursEnd("18");
+    setWizardWeekdays(true);
+    setWizardBudget("");
+    setWizardActivate(false);
     setShowNewChat(false);
   }
 
@@ -901,6 +915,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     try {
       const plan = await client.planCompany({ kind: looksLikeUrl(value) ? "url" : "idea", value });
       setCompanyPlan(plan);
+      setCompanyStep("review");
     } catch (err: unknown) {
       setCompanyError(messageOf(err));
     } finally {
@@ -914,6 +929,23 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     setCompanyError(null);
     try {
       const created = await client.createWorkspace(companyPlan);
+      // Apply the optional settings chosen in the wizard (best-effort).
+      try {
+        if (wizardUseHours) {
+          await client.updateWorkspace(created.id, {
+            operatingHours: {
+              start: Math.max(0, Math.min(23, Math.floor(Number(wizardHoursStart) || 0))),
+              end: Math.max(1, Math.min(24, Math.floor(Number(wizardHoursEnd) || 24))),
+              days: wizardWeekdays ? [1, 2, 3, 4, 5] : undefined,
+            },
+          });
+        }
+        const budget = Math.max(0, Math.floor(Number(wizardBudget) || 0));
+        if (budget > 0) await client.setWorkspaceBudget(created.id, budget);
+        if (wizardActivate) await client.activateCompany(created.id, "supervised");
+      } catch {
+        // Settings are best-effort; the company already exists.
+      }
       const [botList, sessionList, workspaceList] = await Promise.all([
         client.listBots(),
         client.listSessions(),
@@ -3944,46 +3976,52 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
         <div className="apps-overlay" onClick={closeCompanySetup}>
           <div className="apps-panel company-setup" onClick={(event) => event.stopPropagation()}>
             <div className="apps-head">
-              <span className="apps-title">Start a company</span>
+              <span className="apps-title">
+                {companyStep === "source"
+                  ? "Start a company"
+                  : companyStep === "review"
+                    ? "Review the team"
+                    : "Work hours & budget"}
+              </span>
               <button className="round small" type="button" onClick={closeCompanySetup}>
                 ✕
               </button>
             </div>
 
             <div className="company-setup-body">
-              <p className="company-hint">
-                Paste a website or describe your idea. Botifyr proposes a team you can hire in one click.
-              </p>
-              <input
-                className="workspace-input"
-                placeholder="https://example.com — or “a subscription box for house plants”"
-                value={companySource}
-                onChange={(event) => setCompanySource(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") void runCompanyPlan();
-                }}
-                autoFocus
-              />
-
               {companyError && (
                 <p className="bot-editor-error" role="alert">
                   {companyError}
                 </p>
               )}
 
-              {!companyPlan && (
-                <button
-                  className="btn primary"
-                  type="button"
-                  disabled={companyBusy || !companySource.trim()}
-                  onClick={() => void runCompanyPlan()}
-                >
-                  {companyBusy ? "Planning…" : "Plan the team"}
-                </button>
+              {companyStep === "source" && (
+                <>
+                  <p className="company-hint">
+                    Paste a website or describe your idea. We'll analyse it and recommend a team.
+                  </p>
+                  <input
+                    className="workspace-input"
+                    placeholder="https://example.com — or “a subscription box for house plants”"
+                    value={companySource}
+                    onChange={(event) => setCompanySource(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") void runCompanyPlan();
+                    }}
+                    autoFocus
+                  />
+                </>
               )}
 
-              {companyPlan && (
+              {companyStep === "review" && companyPlan && (
                 <>
+                  {companyPlan.dna && (
+                    <p className="company-hint">
+                      {companyPlan.dna.industry}
+                      {companyPlan.dna.category ? ` · ${companyPlan.dna.category}` : ""} · stage:{" "}
+                      {companyPlan.dna.stage}
+                    </p>
+                  )}
                   <div className="company-plan-name">
                     <span className="company-plan-emoji">{companyPlan.avatarEmoji ?? "🏢"}</span>
                     <input
@@ -4051,6 +4089,70 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                   </button>
                 </>
               )}
+
+              {companyStep === "confirm" && (
+                <>
+                  <p className="company-hint">
+                    Optional — you can change these later in the Company HQ.
+                  </p>
+                  <label className="board-hours-check">
+                    <input
+                      type="checkbox"
+                      checked={wizardUseHours}
+                      onChange={(event) => setWizardUseHours(event.target.checked)}
+                    />{" "}
+                    Set working hours (scheduled work only runs inside them)
+                  </label>
+                  {wizardUseHours && (
+                    <div className="board-add">
+                      <input
+                        className="workspace-input board-hours"
+                        type="number"
+                        min={0}
+                        max={23}
+                        value={wizardHoursStart}
+                        onChange={(event) => setWizardHoursStart(event.target.value)}
+                        aria-label="Start hour"
+                      />
+                      <span className="board-phase">to</span>
+                      <input
+                        className="workspace-input board-hours"
+                        type="number"
+                        min={1}
+                        max={24}
+                        value={wizardHoursEnd}
+                        onChange={(event) => setWizardHoursEnd(event.target.value)}
+                        aria-label="End hour"
+                      />
+                      <label className="board-hours-check">
+                        <input
+                          type="checkbox"
+                          checked={wizardWeekdays}
+                          onChange={(event) => setWizardWeekdays(event.target.checked)}
+                        />{" "}
+                        weekdays
+                      </label>
+                      <span className="board-phase">UTC</span>
+                    </div>
+                  )}
+                  <input
+                    className="workspace-input"
+                    type="number"
+                    min={0}
+                    placeholder="Token budget (0 = inherit account cap)"
+                    value={wizardBudget}
+                    onChange={(event) => setWizardBudget(event.target.value)}
+                  />
+                  <label className="board-hours-check">
+                    <input
+                      type="checkbox"
+                      checked={wizardActivate}
+                      onChange={(event) => setWizardActivate(event.target.checked)}
+                    />{" "}
+                    Activate now (supervised — you still approve consequential actions)
+                  </label>
+                </>
+              )}
             </div>
 
             <div className="apps-actions">
@@ -4062,7 +4164,37 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
               >
                 Cancel
               </button>
-              {companyPlan && (
+              {companyStep !== "source" && (
+                <button
+                  className="ghost small"
+                  type="button"
+                  disabled={companyBusy}
+                  onClick={() => setCompanyStep(companyStep === "confirm" ? "review" : "source")}
+                >
+                  Back
+                </button>
+              )}
+              {companyStep === "source" && (
+                <button
+                  className="btn primary"
+                  type="button"
+                  disabled={companyBusy || !companySource.trim()}
+                  onClick={() => void runCompanyPlan()}
+                >
+                  {companyBusy ? "Planning…" : "Plan the team"}
+                </button>
+              )}
+              {companyStep === "review" && (
+                <button
+                  className="btn primary"
+                  type="button"
+                  disabled={companyBusy}
+                  onClick={() => setCompanyStep("confirm")}
+                >
+                  Next
+                </button>
+              )}
+              {companyStep === "confirm" && (
                 <button
                   className="btn primary"
                   type="button"
