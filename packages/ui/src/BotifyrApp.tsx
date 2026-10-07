@@ -53,12 +53,16 @@ import {
   MonitorIcon,
   MoreIcon,
   PanelIcon,
+  PauseIcon,
+  PlayIcon,
+  PowerIcon,
   PlusIcon,
   RefreshIcon,
   ReplyIcon,
   SparkIcon,
   SearchIcon,
   SendIcon,
+  ShieldIcon,
   SmileyIcon,
   StopIcon,
   UserPlusIcon,
@@ -469,6 +473,37 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client]);
+
+  // Pull anything missed while the realtime socket was down (offline/reconnect):
+  // refresh bot threads and human conversations and merge them in.
+  const resyncConversations = useCallback(async (): Promise<void> => {
+    try {
+      const [sessionList, convos] = await Promise.all([
+        client.listSessions(),
+        client.listConversations().catch(() => [] as Conversation[]),
+      ]);
+      setSessions((prev) => {
+        const byId = new Map(prev.map((session) => [session.id, session]));
+        for (const session of sessionList) byId.set(session.id, session);
+        for (const convo of convos) {
+          if (!byId.has(convo.id)) {
+            byId.set(convo.id, {
+              id: convo.id,
+              userId: user?.id ?? "",
+              title: convo.title,
+              messages: [],
+              createdAt: convo.createdAt,
+              kind: convo.kind,
+              participants: convo.participants,
+            });
+          }
+        }
+        return [...byId.values()];
+      });
+    } catch {
+      // best-effort
+    }
+  }, [client, user?.id]);
 
   // Once authenticated: load conversations and open the realtime stream.
   useEffect(() => {
@@ -5118,89 +5153,101 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                 </>
               )}
             </div>
-            <div className="apps-actions">
+            <div className="apps-actions hq-footer">
               {(() => {
                 const autonomy = workspaceByName.get(boardWorkspace.name)?.autonomy ?? "manual";
-                if (autonomy === "manual") {
-                  return (
-                    <>
-                      <button
-                        className="btn primary small"
-                        type="button"
-                        disabled={boardBusy}
-                        onClick={() => void setAutonomy("supervised")}
-                      >
-                        Activate
-                      </button>
-                      <button
-                        className="ghost small"
-                        type="button"
-                        disabled={boardBusy}
-                        title="Schedules + auto-approve (they act without asking, within grants and budget)"
-                        onClick={() => void setAutonomy("autonomous")}
-                      >
-                        Autonomous
-                      </button>
-                    </>
-                  );
-                }
+                const paused =
+                  (workspaceByName.get(boardWorkspace.name)?.status ?? "active") === "paused";
                 return (
                   <>
-                    <span className="hq-autonomy">{autonomy}</span>
+                    <span className="hq-autonomy">{autonomy === "manual" ? "Manual" : autonomy}</span>
+                    {autonomy === "manual" ? (
+                      <>
+                        <button
+                          className="hq-icon-btn primary"
+                          type="button"
+                          disabled={boardBusy}
+                          title="Activate (supervised) — schedules on, approvals on"
+                          aria-label="Activate (supervised)"
+                          onClick={() => void setAutonomy("supervised")}
+                        >
+                          <PowerIcon size={16} />
+                        </button>
+                        <button
+                          className="hq-icon-btn"
+                          type="button"
+                          disabled={boardBusy}
+                          title="Autonomous — act without asking (within grants and budget)"
+                          aria-label="Autonomous"
+                          onClick={() => void setAutonomy("autonomous")}
+                        >
+                          <SparkIcon size={16} />
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        className="hq-icon-btn"
+                        type="button"
+                        disabled={boardBusy}
+                        title="Deactivate — back to manual, schedules off"
+                        aria-label="Deactivate"
+                        onClick={() => void setAutonomy("manual")}
+                      >
+                        <PowerIcon size={16} />
+                      </button>
+                    )}
                     <button
-                      className="ghost small"
+                      className="hq-icon-btn"
                       type="button"
                       disabled={boardBusy}
-                      onClick={() => void setAutonomy("manual")}
+                      title="Run now — make every employee work now"
+                      aria-label="Run now"
+                      onClick={() => void runNow()}
                     >
-                      Deactivate
+                      <PlayIcon size={16} />
+                    </button>
+                    <button
+                      className="hq-icon-btn"
+                      type="button"
+                      disabled={boardBusy}
+                      title="Trust all — skip approval prompts for every employee"
+                      aria-label="Trust all"
+                      onClick={() => void trustAll()}
+                    >
+                      <ShieldIcon size={16} />
+                    </button>
+                    <button
+                      className="hq-icon-btn"
+                      type="button"
+                      disabled={boardBusy}
+                      title={paused ? "Resume — let the team work again" : "Pause — stop autonomous runs"}
+                      aria-label={paused ? "Resume" : "Pause"}
+                      onClick={() => void setCompanyStatus(paused ? "active" : "paused")}
+                    >
+                      {paused ? <PlayIcon size={16} /> : <PauseIcon size={16} />}
+                    </button>
+                    <button
+                      className="hq-icon-btn danger"
+                      type="button"
+                      disabled={boardBusy}
+                      title="Stop all — cancel every running task"
+                      aria-label="Stop all"
+                      onClick={() => void stopCompany()}
+                    >
+                      <StopIcon size={16} />
+                    </button>
+                    <button
+                      className="hq-icon-btn"
+                      type="button"
+                      title="Close"
+                      aria-label="Close"
+                      onClick={closeBoard}
+                    >
+                      <CloseIcon size={16} />
                     </button>
                   </>
                 );
               })()}
-              <button
-                className="ghost small"
-                type="button"
-                disabled={boardBusy}
-                onClick={() => void runNow()}
-              >
-                Run now
-              </button>
-              <button
-                className="ghost small"
-                type="button"
-                disabled={boardBusy}
-                title="Skip approval prompts for every employee in this company"
-                onClick={() => void trustAll()}
-              >
-                Trust all
-              </button>
-              <button
-                className="ghost small danger"
-                type="button"
-                disabled={boardBusy}
-                onClick={() => void stopCompany()}
-              >
-                Stop all
-              </button>
-              <button
-                className="ghost small"
-                type="button"
-                onClick={() =>
-                  void setCompanyStatus(
-                    (workspaceByName.get(boardWorkspace.name)?.status ?? "active") === "paused"
-                      ? "active"
-                      : "paused",
-                  )
-                }
-              >
-                {(workspaceByName.get(boardWorkspace.name)?.status ?? "active") === "paused"
-                  ? "Resume"
-                  : "Pause"}
-              </button>
-              <button className="ghost small" type="button" onClick={closeBoard}>
-                Close
-              </button>
             </div>
           </div>
         </div>

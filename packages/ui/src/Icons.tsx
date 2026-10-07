@@ -226,6 +226,41 @@ export function StopIcon({ size = 18, className }: IconProps) {
   );
 }
 
+export function PlayIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden className={className}>
+      <path d="M8 5.4v13.2L19 12z" fill="currentColor" />
+    </svg>
+  );
+}
+
+export function PauseIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden className={className}>
+      <rect x="7" y="6" width="3.4" height="12" rx="1.1" fill="currentColor" />
+      <rect x="13.6" y="6" width="3.4" height="12" rx="1.1" fill="currentColor" />
+    </svg>
+  );
+}
+
+export function PowerIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden className={className} {...stroke}>
+      <path d="M12 3v9" />
+      <path d="M7.2 6.6a7.5 7.5 0 1 0 9.6 0" />
+    </svg>
+  );
+}
+
+export function ShieldIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden className={className} {...stroke}>
+      <path d="M12 3l7 2.8v5.4c0 4.4-3 7.9-7 9.8-4-1.9-7-5.4-7-9.8V5.8z" />
+      <path d="M9 12l2 2 4-4" />
+    </svg>
+  );
+}
+
 export function ChevronIcon({ size = 18, className }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden className={className} {...stroke}>

@@ -657,6 +657,62 @@ body {
   color: var(--muted);
 }
 
+/* Company HQ: a roomier panel and a compact icon footer (hover shows the label). */
+.apps-panel.board-panel {
+  width: min(680px, 94vw);
+  max-width: min(680px, 94vw);
+}
+
+.hq-footer {
+  flex-wrap: nowrap;
+  gap: 8px;
+}
+
+.hq-footer .hq-autonomy {
+  margin-right: auto;
+}
+
+.hq-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: inherit;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.hq-icon-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.hq-icon-btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.hq-icon-btn.primary:hover:not(:disabled) {
+  color: #fff;
+  filter: brightness(1.05);
+}
+
+.hq-icon-btn.danger:hover:not(:disabled) {
+  border-color: #f87171;
+  color: #f87171;
+}
+
+.hq-icon-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .hq-autonomy {
   align-self: center;
   padding: 3px 8px;
