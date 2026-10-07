@@ -12,6 +12,8 @@ export interface BrowserBackend {
   type(selector: string, text: string): Promise<ToolResult>;
   click(selector: string): Promise<ToolResult>;
   screenshot(): Promise<ToolResult>;
+  /** Media (m3u8/mp4) network requests seen since the last navigation. */
+  sniff(waitMs?: number): Promise<ToolResult>;
   close(): Promise<void>;
 }
 
@@ -78,8 +80,19 @@ export function createBrowserTools(backend: BrowserBackend): BrowserTools {
     run: (): Promise<ToolResult> => backend.screenshot(),
   };
 
+  const sniff: ToolDefinition = {
+    name: "browser.sniff",
+    description:
+      "List the media (m3u8/mp4) network requests seen since the page loaded. For players whose stream URL isn't in the HTML: open the page, press play, then sniff to discover the real stream URL (then media.learn_recipe or download it).",
+    parameters: {
+      type: "object",
+      properties: { waitMs: { type: "number", description: "Optional extra wait in ms before reporting." } },
+    },
+    run: (args): Promise<ToolResult> => backend.sniff(Number(args.waitMs) || undefined),
+  };
+
   return {
-    tools: [goto, extract, type, click, screenshot],
+    tools: [goto, extract, type, click, screenshot, sniff],
     close: () => backend.close(),
   };
 }

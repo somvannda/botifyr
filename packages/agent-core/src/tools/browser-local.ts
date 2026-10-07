@@ -16,6 +16,8 @@ export interface LocalBrowserOptions {
 export function createLocalBrowserBackend(options: LocalBrowserOptions = {}): BrowserBackend {
   let browser: Browser | null = null;
   let page: Page | null = null;
+  let mediaUrls: string[] = [];
+  const MEDIA_RE = /\.(m3u8|mp4|ts|m4s|mpd)(\?|#|$)/i;
 
   async function ensurePage(): Promise<Page> {
     if (!browser) {
@@ -26,6 +28,10 @@ export function createLocalBrowserBackend(options: LocalBrowserOptions = {}): Br
         viewport: options.viewport ?? { width: 1280, height: 800 },
       });
       page = await context.newPage();
+      page.on("response", (response) => {
+        const url = response.url();
+        if (MEDIA_RE.test(url) && !mediaUrls.includes(url)) mediaUrls.push(url);
+      });
     }
     return page;
   }
@@ -33,6 +39,7 @@ export function createLocalBrowserBackend(options: LocalBrowserOptions = {}): Br
   return {
     async goto(url: string): Promise<ToolResult> {
       const active = await ensurePage();
+      mediaUrls = [];
       await active.goto(url, { waitUntil: "domcontentloaded", timeout: 20_000 });
       const title = await active.title();
       return {
@@ -77,6 +84,23 @@ export function createLocalBrowserBackend(options: LocalBrowserOptions = {}): Br
         ok: true,
         output: "Captured a screenshot of the current page.",
         screenshot: await active.screenshot({ type: "png" }),
+      };
+    },
+
+    async sniff(waitMs?: number): Promise<ToolResult> {
+      const active = await ensurePage();
+      if (waitMs && waitMs > 0) await active.waitForTimeout(Math.min(15_000, waitMs));
+      if (mediaUrls.length === 0) {
+        return {
+          ok: false,
+          output: "No media URLs captured yet. Open the video and press play, then sniff again.",
+        };
+      }
+      return {
+        ok: true,
+        output: `Captured ${mediaUrls.length} media URL(s):\n${mediaUrls
+          .map((url, index) => `${index + 1}. ${url}`)
+          .join("\n")}`,
       };
     },
 

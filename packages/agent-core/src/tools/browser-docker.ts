@@ -53,6 +53,7 @@ export function createDockerBrowserBackend(options: DockerBrowserOptions = {}): 
     type: (selector: string, text: string) => action("type", { selector, text }),
     click: (selector: string) => action("click", { selector }),
     screenshot: () => action("screenshot", {}),
+    sniff: (waitMs?: number) => action("sniff", { waitMs }),
     close: () => handle.close(),
   };
 }

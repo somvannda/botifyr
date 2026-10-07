@@ -9,11 +9,15 @@ import { chromium } from "playwright";
  *
  *   GET  /health          -> "ok"
  *   POST /action          -> { ok, output, screenshot? }
- *        body: { action: "goto" | "extract" | "type" | "click" | "screenshot", args }
+ *        body: { action: "goto" | "extract" | "type" | "click" | "screenshot" | "sniff", args }
  */
 
 let browser = null;
 let page = null;
+// Media responses seen since the last main navigation — lets the agent discover
+// the real stream URL (m3u8/mp4) on sites yt-dlp doesn't support.
+let mediaUrls = [];
+const MEDIA_RE = /\.(m3u8|mp4|ts|m4s|mpd)(\?|#|$)/i;
 
 async function ensurePage() {
   if (!browser) {
@@ -23,6 +27,10 @@ async function ensurePage() {
   if (!page) {
     const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
     page = await context.newPage();
+    page.on("response", (response) => {
+      const url = response.url();
+      if (MEDIA_RE.test(url) && !mediaUrls.includes(url)) mediaUrls.push(url);
+    });
   }
   return page;
 }
@@ -34,6 +42,7 @@ async function snap(active) {
 const actions = {
   async goto({ url }) {
     const active = await ensurePage();
+    mediaUrls = [];
     await active.goto(String(url), { waitUntil: "domcontentloaded", timeout: 20000 });
     const title = await active.title();
     return { ok: true, output: `Opened ${active.url()} — title: "${title}"`, screenshot: await snap(active) };
@@ -63,6 +72,20 @@ const actions = {
   async screenshot() {
     const active = await ensurePage();
     return { ok: true, output: "Captured a screenshot of the current page.", screenshot: await snap(active) };
+  },
+
+  async sniff({ waitMs }) {
+    const active = await ensurePage();
+    const wait = Math.min(15000, Math.max(0, Number(waitMs) || 0));
+    if (wait > 0) await active.waitForTimeout(wait);
+    if (mediaUrls.length === 0) {
+      return {
+        ok: false,
+        output: "No media URLs captured yet. Navigate to the video page and press play, then sniff again.",
+      };
+    }
+    const list = mediaUrls.map((url, index) => `${index + 1}. ${url}`).join("\n");
+    return { ok: true, output: `Captured ${mediaUrls.length} media URL(s):\n${list}` };
   },
 };
 
