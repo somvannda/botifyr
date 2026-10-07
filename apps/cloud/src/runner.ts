@@ -18,6 +18,7 @@ import {
 import { emit } from "./events.js";
 import { companyContext } from "./company.js";
 import { createCompanyTools } from "./company-tools.js";
+import { createDelegationTools } from "./delegation-tools.js";
 import {
   clearComputerSandbox,
   clearTaskCancel,
@@ -372,6 +373,9 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
     return (await res.text()).slice(0, 40_000);
   };
   tools.push(...createCompanyTools(oneShot, fetchText));
+  if (deps.author) {
+    tools.push(...createDelegationTools(store, userId, deps.author.id));
+  }
 
   // Company context: give every employee the shared business briefing (DNA).
   let companyBrief = "";
