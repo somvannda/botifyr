@@ -12,6 +12,7 @@ import type {
   Bot,
   BotFile,
   BotRole,
+  CompanyDNA,
   ConnectionInfo,
   CreateWorkspaceRequest,
   SecretSummary,
@@ -2068,6 +2069,7 @@ export async function buildServer(options: ServerOptions) {
           value: (request.body?.source?.value ?? "").trim().slice(0, 500),
         },
         mission: (request.body?.mission ?? "").slice(0, 2000),
+        dna: request.body?.dna,
         status: "active",
         avatarEmoji: request.body?.avatarEmoji?.trim().slice(0, 8) || undefined,
         scheme: Number.isInteger(request.body?.scheme) ? Number(request.body?.scheme) : undefined,
@@ -2139,6 +2141,7 @@ export async function buildServer(options: ServerOptions) {
       avatarEmoji?: string;
       scheme?: number;
       ceoBotId?: string;
+      dna?: CompanyDNA;
     };
   }>("/v1/workspaces/:id", { preHandler: requireAuth }, async (request, reply) => {
     const userId = request.userId as string;
@@ -2164,6 +2167,7 @@ export async function buildServer(options: ServerOptions) {
     if (typeof request.body?.mission === "string") {
       workspace.mission = request.body.mission.slice(0, 2000);
     }
+    if (request.body?.dna) workspace.dna = request.body.dna;
     const status = request.body?.status;
     if (status && ["onboarding", "active", "paused", "archived"].includes(status)) {
       workspace.status = status;

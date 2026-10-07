@@ -16,6 +16,7 @@ import {
   type ToolDefinition,
 } from "@botifyr/agent-core";
 import { emit } from "./events.js";
+import { companyContext } from "./company.js";
 import {
   clearComputerSandbox,
   clearTaskCancel,
@@ -349,8 +350,19 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
           ? `\n(Showing 25 of ${learned.length}. Use skills.list with a query to search the rest.)`
           : "")
       : "";
+  // Company context: give every employee the shared business briefing (DNA).
+  let companyBrief = "";
+  const authorBot = deps.author ? await store.getBot(deps.author.id).catch(() => null) : null;
+  if (authorBot?.workspace) {
+    const label = authorBot.workspace;
+    const company = (await store.listWorkspaces(userId).catch(() => [])).find(
+      (entry) => entry.name === label,
+    );
+    if (company?.dna) companyBrief = companyContext(company.dna);
+  }
   const instructions =
-    [deps.instructions, skillIndex, localInstruction].filter(Boolean).join("\n\n") || undefined;
+    [companyBrief, deps.instructions, skillIndex, localInstruction].filter(Boolean).join("\n\n") ||
+    undefined;
   if (hasComputer) {
     task.liveStream = true;
     task.updatedAt = new Date().toISOString();

@@ -25,6 +25,7 @@ import type {
   User,
   WorkspaceWithRoles,
 } from "@botifyr/shared";
+import { DEPARTMENTS } from "@botifyr/shared";
 import { AuthError, BotifyrClient, type Conversation, type MediaItem, type Person } from "@botifyr/client";
 import { CalendarIcon, DriveIcon, GmailIcon } from "./AppIcons";
 import { GithubBrand, NotionBrand, SlackBrand, TelegramBrand } from "./BrandIcons";
@@ -106,18 +107,6 @@ function cleanEmoji(value: string | undefined, isGroup: boolean): string {
 }
 const TOKEN_KEY = "botifyr.token";
 const REFRESH_KEY = "botifyr.refresh";
-
-/** Departments an employee bot can be hired into. */
-const DEPARTMENT_OPTIONS: Department[] = [
-  "exec",
-  "product",
-  "engineering",
-  "growth",
-  "ops",
-  "finance",
-  "support",
-  "design",
-];
 
 type ConnectionState = "connecting" | "online" | "offline";
 
@@ -3787,7 +3776,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                           }
                           aria-label="Department"
                         >
-                          {DEPARTMENT_OPTIONS.map((dept) => (
+                          {DEPARTMENTS.map((dept) => (
                             <option key={dept} value={dept}>
                               {dept}
                             </option>

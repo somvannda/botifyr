@@ -151,7 +151,22 @@ export interface Bot {
 export type WorkspaceStatus = "onboarding" | "active" | "paused" | "archived";
 
 export type Department =
-  "exec" | "product" | "engineering" | "growth" | "ops" | "finance" | "support" | "design";
+  | "exec"
+  | "product"
+  | "engineering"
+  | "design"
+  | "data"
+  | "ai"
+  | "growth"
+  | "marketing"
+  | "sales"
+  | "support"
+  | "success"
+  | "ops"
+  | "finance"
+  | "legal"
+  | "people"
+  | "logistics";
 
 /** A virtual company. Owns employees (bots), shared state, and a budget. */
 export interface Workspace {
@@ -162,6 +177,8 @@ export interface Workspace {
   /** The input that spawned it: a website or a free-form idea. */
   source: { kind: "url" | "idea"; value: string };
   mission: string;
+  /** Structured company profile — the shared context every employee reads. */
+  dna?: CompanyDNA;
   status: WorkspaceStatus;
   /** The chair bot that reports to the CEO. */
   ceoBotId?: string;
@@ -194,6 +211,8 @@ export interface CreateWorkspaceRequest {
   name: string;
   source?: { kind: "url" | "idea"; value: string };
   mission?: string;
+  /** Structured company profile (the business). */
+  dna?: CompanyDNA;
   avatarEmoji?: string;
   scheme?: number;
   /** New employee bots to create inside the workspace. */
@@ -215,6 +234,53 @@ export interface CreateWorkspaceRequest {
     managerBotId?: string;
   }>;
 }
+
+/**
+ * Structured company profile: the *business*, not the workforce
+ * (docs/company-os.md §3). Injected into every employee's instructions.
+ */
+export interface CompanyDNA {
+  industry: string;
+  category: string;
+  summary: string;
+  businessModel: string;
+  targetMarket: string[];
+  targetCustomers: string[];
+  product: { type: string; features: string[]; gaps: string[] };
+  stage: "idea" | "mvp" | "launched" | "scaling";
+  goal: string;
+  priorities: string[];
+  brand?: { tone: string; colors: string[]; logoUrl?: string; handles: Record<string, string> };
+  metrics?: { arrCents?: number; customers?: number; source?: string };
+}
+
+/** How risky a capability is; money/consequential actions require approval. */
+export type CapabilityRisk = "none" | "consequential" | "money";
+
+/** A single thing an employee can do (docs/company-os.md §6, §8). */
+export interface CapabilityDef {
+  id: string;
+  kind: "tool" | "connector";
+  risk: CapabilityRisk;
+  description: string;
+}
+
+/** A catalog role — what a hire is based on (docs/company-os.md §6). */
+export interface RoleDefinition {
+  id: string;
+  title: string;
+  department: Department;
+  level: "ic" | "lead" | "head" | "exec";
+  summary: string;
+  jobDescription: string;
+  skills: string[];
+  capabilities: string[];
+  kpis: string[];
+  reportsTo?: string;
+}
+
+/** Employee lifecycle state. */
+export type EmployeeStatus = "hired" | "working" | "paused" | "offboarded";
 
 /* -------------------------------------------------------------------------- */
 /* Accounts, secrets, audit                                                    */
@@ -396,3 +462,6 @@ export interface CreateTaskRequest {
 export interface ResolveApprovalRequest {
   decision: "allow" | "deny";
 }
+
+/* The capability catalog (departments, roles, skills, capabilities). */
+export * from "./catalog.js";

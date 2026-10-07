@@ -1,6 +1,7 @@
 import type {
   BotSchedule,
   ChatMessage,
+  CompanyDNA,
   Department,
   MediaRecipe,
   ModelPricingRecord,
@@ -92,6 +93,7 @@ export interface WorkspaceRecord {
   name: string;
   source: { kind: "url" | "idea"; value: string };
   mission: string;
+  dna?: CompanyDNA;
   status: "onboarding" | "active" | "paused" | "archived";
   ceoBotId?: string;
   avatarEmoji?: string;

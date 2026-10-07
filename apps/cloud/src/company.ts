@@ -1,4 +1,9 @@
-import type { CreateWorkspaceRequest, Department } from "@botifyr/shared";
+import {
+  DEPARTMENTS,
+  type CompanyDNA,
+  type CreateWorkspaceRequest,
+  type Department,
+} from "@botifyr/shared";
 
 /**
  * Company onboarding: turn a website or a free-form idea into a proposed org
@@ -6,17 +11,6 @@ import type { CreateWorkspaceRequest, Department } from "@botifyr/shared";
  * output and fall back to a sensible default company on any failure.
  * See docs/company-workspace.md.
  */
-
-export const DEPARTMENTS: Department[] = [
-  "exec",
-  "product",
-  "engineering",
-  "growth",
-  "ops",
-  "finance",
-  "support",
-  "design",
-];
 
 export const toDepartment = (value: unknown): Department =>
   typeof value === "string" && (DEPARTMENTS as string[]).includes(value) ? (value as Department) : "ops";
@@ -34,6 +28,25 @@ export interface CompanyPlan extends Omit<CreateWorkspaceRequest, "members"> {
 
 /** A one-shot text completion, injected so planning is easy to test. */
 export type CompleteFn = (input: { system: string; user: string; maxTokens: number }) => Promise<string>;
+
+/** The shared business briefing prepended to every employee's instructions. */
+export function companyContext(dna: CompanyDNA): string {
+  const lines = [
+    `Company: ${dna.industry}${dna.category ? ` — ${dna.category}` : ""}`,
+    dna.summary && `What we do: ${dna.summary}`,
+    dna.businessModel && `Business model: ${dna.businessModel}`,
+    dna.targetMarket.length > 0 && `Market: ${dna.targetMarket.join(", ")}`,
+    dna.targetCustomers.length > 0 && `Customers: ${dna.targetCustomers.join(", ")}`,
+    dna.product.features.length > 0 && `Product: ${dna.product.features.join(", ")}`,
+    `Stage: ${dna.stage}`,
+    dna.goal && `Current goal: ${dna.goal}`,
+    dna.priorities.length > 0 && `Priorities: ${dna.priorities.join(", ")}`,
+  ].filter((line): line is string => Boolean(line));
+  return `You are an employee of this company — keep it in mind in everything you do.\n${lines.join("\n")}`.slice(
+    0,
+    2000,
+  );
+}
 
 const MAX_MEMBERS = 8;
 const SCHEME_COUNT = 8;
@@ -64,6 +77,18 @@ export function defaultCompany(input: PlanInput): CompanyPlan {
     name,
     source: { kind: input.kind, value: input.value.slice(0, 500) },
     mission: mission.slice(0, 2000),
+    dna: {
+      industry: name,
+      category: "startup",
+      summary: mission.slice(0, 300),
+      businessModel: "",
+      targetMarket: [],
+      targetCustomers: [],
+      product: { type: input.kind === "url" ? "web" : "product", features: [], gaps: [] },
+      stage: "idea",
+      goal: `Get ${name} to its first customers`,
+      priorities: ["product"],
+    },
     avatarEmoji: input.kind === "url" ? "🌐" : "🚀",
     members: [
       {
