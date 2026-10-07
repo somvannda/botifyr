@@ -19,4 +19,7 @@ may read (see [`docs/codebase-access.md`](../docs/codebase-access.md), #6).
    **path is `/repos`** (or `/repos/<subdir>`).
 
 The mount is **read-only**; the `code.*` tools can browse, search and read, but
-never write. Managed checkouts (clone/pull) and write tools are later phases.
+never write. Engineering agents can also **clone a repo by URL** (with an
+optional token from the shared vault) into `/managed` — see the HQ Office tab →
+*Clone from URL*. `code.apply` stages proposed edits under `/work` and the HQ
+**Changes** tab shows the diff.

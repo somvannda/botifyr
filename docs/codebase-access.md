@@ -1,7 +1,8 @@
 # Codebase access for developer agents
 
-Status: **design** (not implemented). Part of the AI Virtual Company OS
-(see [`company-workspace.md`](company-workspace.md), [`company-os.md`](company-os.md)).
+Status: **partly implemented**. See the phase status at the end. Part of the AI
+Virtual Company OS (see [`company-workspace.md`](company-workspace.md),
+[`company-os.md`](company-os.md)).
 
 ## 1. Goal
 
@@ -69,11 +70,12 @@ company has at least one code connection.
 | Tool | Purpose | Approval |
 | --- | --- | --- |
 | `code.tree` | List the tree (bounded depth, ignored dirs). | no |
-| `code.search` | ripgrep for a pattern; returns file:line hits. | no |
+| `code.search` | Text/regex search; returns file:line hits. | no |
 | `code.read` | Read a file or a line range. | no |
-| `code.diff` | Show `git diff`/`log` for a range or the last commit. | no |
-| `code.apply` | Write a patch to the working tree (never auto-pushed). | yes |
-| `code.commit` | Create a branch + commit (and optionally open a PR). | yes |
+| `code.git_log` | Recent git history (read-only). | no |
+| `code.map` | Summarise the repo → `CODEBASE.md` in the wiki. | no |
+| `code.apply` | Stage a file's new contents under `/work` for review. | yes |
+| `code.test` | Run the repo's tests in a `docker run --network none` sandbox. | yes |
 
 Read tools are cheap (no model calls; deterministic output, bounded size). Write
 tools are approval-gated and produce a diff the CEO reviews — matching the
@@ -113,11 +115,22 @@ Reuse the capability-grant system: a `repo` capability per connection, subject
 
 ## 8. Phased plan
 
-1. **Phase 1 — read-only:** `CodeConnection` + clone/pull + `code.tree`/`code.search`/
-   `code.read`/`code.diff`; grant to engineering roles; CTO instructions.
-2. **Phase 2 — propose changes:** `code.apply`/`code.commit` (approval-gated) with
-   diff review in the HQ.
-3. **Phase 3 — verify:** `code.test` via the code sandbox; surface results on the board.
+1. **Phase 1 — read-only:** ✅ implemented. Repos live on the workspace record
+   (`Workspace.repos`), `code.tree`/`code.search`/`code.read`/`code.git_log` are
+   path-jailed and granted to engineering roles; the HQ Office tab connects a
+   repo; docker-compose mounts a read-only `/repos`.
+2. **Phase 2 — propose changes:** ✅ implemented. `code.apply` (approval-gated)
+   stages a file under `/work/<workspaceId>/<repo>`; `GET
+   /v1/workspaces/:id/proposals` returns a unified diff and the HQ **Changes**
+   tab renders it. Managed cloning: `POST /v1/workspaces/:id/repos` clones a URL
+   into `/managed` using a token from the shared vault.
+3. **Phase 3 — verify:** ✅ implemented. `code.test` (approval-gated) runs the
+   repo's tests in a `docker run --network none` sandbox; `sandboxMount()` maps
+   `/repos` and `/managed` to host/Docker mounts and fails safe when unmapped.
+
+**Still open:** open a PR from a staged change (branch + push); install/restore
+step before `code.test` for repos without vendored deps; per-tenant checkout
+isolation and quotas.
 
 ## 9. Open questions
 
