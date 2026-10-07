@@ -15,6 +15,7 @@ import { emit } from "./events.js";
 export function createCompanyMakerTools(
   store: Store,
   userId: string,
+  botId: string | undefined,
   complete: CompleteFn,
   fetchText?: (url: string) => Promise<string>,
 ): ToolDefinition[] {
@@ -60,8 +61,16 @@ export function createCompanyMakerTools(
         };
         await store.createWorkspace(workspace);
 
+        // The Founder bot that ran this becomes the company CEO (chair), so the
+        // thread you set the company up in *is* the company thread.
+        const founder = botId ? await store.getBot(botId).catch(() => null) : null;
+        const chairMember = plan.members.find((member) => member.isChair === true);
+        const membersToCreate = founder
+          ? plan.members.filter((member) => member !== chairMember)
+          : plan.members;
+
         let chairBotId: string | undefined;
-        for (const member of plan.members) {
+        for (const member of membersToCreate) {
           const title = member.title.trim().slice(0, 40) || member.name.slice(0, 40);
           const session = {
             id: randomUUID(),
@@ -98,6 +107,21 @@ export function createCompanyMakerTools(
           if (member.isChair === true && !chairBotId) chairBotId = bot.id;
         }
 
+        if (founder) {
+          founder.workspace = workspace.name;
+          if (chairMember?.instructions) founder.instructions = chairMember.instructions;
+          await store.updateBot(founder);
+          await store.setBotRole({
+            workspaceId: workspace.id,
+            botId: founder.id,
+            title: (chairMember?.title ?? "CEO").trim().slice(0, 40) || "CEO",
+            department: "exec",
+            isChair: true,
+            hiredAt: now,
+          });
+          chairBotId = founder.id;
+        }
+
         if (chairBotId) {
           workspace.ceoBotId = chairBotId;
           await store.updateWorkspace(workspace);
@@ -111,10 +135,16 @@ export function createCompanyMakerTools(
           });
         }
 
-        const team = plan.members.map((member) => member.title).join(", ");
+        const team = [
+          founder ? `${founder.name} (CEO)` : null,
+          ...membersToCreate.map((member) => member.title),
+        ]
+          .filter(Boolean)
+          .join(", ");
+        const headcount = founder ? membersToCreate.length + 1 : plan.members.length;
         return {
           ok: true,
-          output: `Created "${workspace.name}" with ${plan.members.length} employees: ${team}. Open the app's Company HQ to see it.`,
+          output: `Created "${workspace.name}" with ${headcount} employees: ${team}. You're the CEO of it — keep chatting here, or open the Company HQ.`,
         };
       },
     },

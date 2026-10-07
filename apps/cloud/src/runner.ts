@@ -500,7 +500,7 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
   }
   // A Founder bot (not yet in a company) can build a whole company from chat.
   if (authorBot && !company) {
-    tools.push(...createCompanyMakerTools(store, userId, oneShot, fetchText));
+    tools.push(...createCompanyMakerTools(store, userId, authorBot.id, oneShot, fetchText));
   }
   const instructions =
     [companyBrief, deps.instructions, skillIndex, localInstruction].filter(Boolean).join("\n\n") || undefined;
