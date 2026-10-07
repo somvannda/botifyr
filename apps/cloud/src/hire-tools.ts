@@ -16,12 +16,16 @@ export function createHireTools(store: Store, userId: string, botId: string): To
     {
       name: "company.hire",
       description:
-        "Hire a new employee. You must give their role title (e.g. \"Head of Growth\") AND invent a realistic, unique full name for them (e.g. \"Alex Rivera\") — do not reuse a name already on the team. Needs the owner's approval.",
+        "Hire a new employee. Give their role title (e.g. \"Head of Growth\") AND invent a realistic, unique full name — do not reuse a name already on the team. Match the company's local market (e.g. Cambodian names like \"Sokha Chan\" or \"Dara Sok\" for a Cambodia-based business); if the CEO asks for a specific style or region, follow that. Needs the owner's approval.",
       parameters: {
         type: "object",
         properties: {
           title: { type: "string", description: "The role title, e.g. \"Head of Growth\"." },
-          name: { type: "string", description: "A realistic full name you choose for the new hire." },
+          name: {
+            type: "string",
+            description:
+              "A realistic full name you choose, matching the company's local market (e.g. Cambodian names for a Cambodia business).",
+          },
           department: { type: "string", description: "Department (e.g. engineering, growth, sales)." },
           instructions: { type: "string", description: "Job description / standing instructions." },
           company: { type: "string", description: "Company name (optional when you have one company)." },
