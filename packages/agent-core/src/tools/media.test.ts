@@ -85,6 +85,37 @@ describe("youtube.download", () => {
     expect(commands.some((entry) => entry.includes("--write-subs"))).toBe(false);
   });
 
+  it("reports only the files it created", async () => {
+    let listing = "old [zzz].mp4\n";
+    const backend: ShellBackend = {
+      async exec(command) {
+        if (command.startsWith("ls -1")) return { ok: true, output: listing };
+        if (command.startsWith("yt-dlp")) {
+          listing = "old [zzz].mp4\nclip [abc].mp4\nclip [abc].en.srt\n";
+          return { ok: true, output: "ok" };
+        }
+        return { ok: true, output: "" };
+      },
+      async readFile() {
+        return { ok: true, output: "" };
+      },
+      async writeFile() {
+        return { ok: true, output: "" };
+      },
+      async listFiles() {
+        return { ok: true, output: "" };
+      },
+      async close() {},
+    };
+    const tool = createMediaTools(backend, "/d").tools.find((entry) => entry.name === "youtube.download");
+    if (!tool) throw new Error("youtube.download not found");
+    const result = await tool.run({ url: "https://youtu.be/a" }, ctx);
+
+    expect(result.output).toContain("Saved 2 file(s)");
+    expect(result.output).toContain("clip [abc].en.srt");
+    expect(result.output).not.toContain("old [zzz].mp4");
+  });
+
   it("searches YouTube via yt-dlp", async () => {
     const { backend, commands } = fakeBackend();
     const tool = createMediaTools(backend, "/d").tools.find((entry) => entry.name === "youtube.search");

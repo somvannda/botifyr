@@ -263,21 +263,32 @@ function buildTools(
           });
         },
         // SPA players (e.g. GoodShort): open the page in a browser sandbox,
-        // capture the media request, then download the URL it found.
-        sniffMedia: async (url) => {
-          const browser = createBrowserBackend({ mode: sandboxMode() });
-          try {
-            await browser.goto(url);
-            const result = await browser.sniff(12_000);
-            if (!result.ok) return null;
-            const match = /https?:\/\/\S+\.(m3u8|mp4)\S*/.exec(result.output);
-            return match ? match[0].replace(/[),\s]+$/, "") : null;
-          } catch {
-            return null;
-          } finally {
-            await browser.close().catch(() => {});
-          }
-        },
+        // capture the media request, then download the URL it found. One
+        // browser container is reused for the whole batch (starting one per
+        // URL is slow) and closed with the task's other closers.
+        sniffMedia: (() => {
+          let browser: ReturnType<typeof createBrowserBackend> | null = null;
+          return async (url: string) => {
+            try {
+              if (!browser) {
+                const created = createBrowserBackend({ mode: sandboxMode() });
+                browser = created;
+                closers.push(() => created.close().catch(() => {}));
+              }
+              await browser.goto(url);
+              const result = await browser.sniff(12_000);
+              if (!result.ok) return null;
+              // Prefer an HLS playlist over a plain MP4 segment.
+              const match =
+                /https?:\/\/\S+\.m3u8\S*/.exec(result.output) ?? /https?:\/\/\S+\.mp4\S*/.exec(result.output);
+              return match ? match[0].replace(/[),\s]+$/, "") : null;
+            } catch {
+              await browser?.close().catch(() => {});
+              browser = null;
+              return null;
+            }
+          };
+        })(),
       }).tools,
     );
   }

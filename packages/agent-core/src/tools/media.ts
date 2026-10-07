@@ -163,6 +163,15 @@ export function createMediaTools(
       return retry.ok;
     };
 
+    const listNames = async (): Promise<string[]> => {
+      const listed = await backend.exec(`ls -1 '${outDir}' 2>/dev/null || true`);
+      return listed.output
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => Boolean(line) && line !== "total");
+    };
+    const before = new Set(await listNames());
+
     for (let index = 0; index < urls.length; index += 1) {
       const url = urls[index];
       context.log(`download ${index + 1}/${urls.length} ${url}`);
@@ -177,15 +186,15 @@ export function createMediaTools(
       }
     }
 
-    const listing = await backend.exec(`ls -lh '${outDir}'`);
-    const files = listing.output
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean);
+    const created = (await listNames()).filter((name) => !before.has(name));
     const header = ok
-      ? `Downloaded ${urls.length} item(s) into the downloads folder.`
+      ? `Saved ${created.length} file(s) into the downloads folder.`
       : `Downloaded with some errors (${urls.length} requested).`;
-    return { ok, output: `${header}\n${files.join("\n")}`.slice(0, 4000) };
+    const detail =
+      created.length > 0
+        ? created.join("\n")
+        : "Nothing new was saved — the download may be blocked or unavailable.";
+    return { ok, output: `${header}\n${detail}`.slice(0, 4000) };
   };
 
   /** Enumerate a channel/playlist URL into individual video URLs. */
