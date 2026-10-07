@@ -4,12 +4,14 @@ Living checklist. We work top to bottom, one item per change, and tick boxes as
 they land. Keep entries short; link code paths instead of explaining them.
 
 ## Pending (requested, not finished)
-- [ ] **Company workspaces** — group bots into a "company" (employees + roles),
-      then generate one from a website or idea. Design:
-      [`docs/company-workspace.md`](company-workspace.md). **Implemented**: a bot
-      `workspace` label (shared → store → API → UI) and collapsible company
-      grouping in the sidebar. **Remaining**: `Workspace` + `BotRole` entities,
-      the onboarding generator, shared company state, per-workspace budgets.
+- [ ] **Company workspaces** — group bots into a company (employees + roles) and
+      generate one from a website or idea. Design:
+      [`docs/company-workspace.md`](company-workspace.md). **Done**: `Workspace`
+      + `BotRole` entities (shared → store → API), the onboarding planner
+      (`POST /v1/workspaces/plan`) and the create flow, sidebar grouping +
+      switcher, employee role pills, and the "Start a company" modal.
+      **Remaining**: editable org preview, shared company state (wiki/board),
+      per-workspace budgets, and a dedicated company view.
 - [ ] **Per-platform extractors** — DramaBox, Hongguo, GoodShort, ShortMax,
       NetShort, QQTV, DramaWave, FreeReels, RaptDrama, ReelLife, ShortFlix,
       DramaTV, DotDrama, iDrama (WeTV/iQIYI already work via yt-dlp). Generic

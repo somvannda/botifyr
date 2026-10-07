@@ -213,6 +213,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [companyPlan, setCompanyPlan] = useState<CreateWorkspaceRequest | null>(null);
   const [companyBusy, setCompanyBusy] = useState(false);
   const [companyError, setCompanyError] = useState<string | null>(null);
+  const [companyEdit, setCompanyEdit] = useState<{ id: string; name: string } | null>(null);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [editingBotId, setEditingBotId] = useState<string | null>(null);
   const [botName, setBotName] = useState("");
@@ -897,6 +898,42 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       closeCompanySetup();
     } catch (err: unknown) {
       setCompanyError(messageOf(err));
+      setCompanyBusy(false);
+    }
+  }
+
+  async function renameCompany() {
+    if (!companyEdit || companyBusy) return;
+    const name = companyEdit.name.trim();
+    if (!name) return;
+    setCompanyBusy(true);
+    setCompanyError(null);
+    try {
+      await client.updateWorkspace(companyEdit.id, { name });
+      const [botList, workspaceList] = await Promise.all([client.listBots(), client.listWorkspaces()]);
+      setBots(botList);
+      setWorkspaces(workspaceList);
+      setCompanyEdit(null);
+    } catch (err: unknown) {
+      setCompanyError(messageOf(err));
+    } finally {
+      setCompanyBusy(false);
+    }
+  }
+
+  async function removeCompany() {
+    if (!companyEdit || companyBusy) return;
+    setCompanyBusy(true);
+    setCompanyError(null);
+    try {
+      await client.deleteWorkspace(companyEdit.id);
+      const [botList, workspaceList] = await Promise.all([client.listBots(), client.listWorkspaces()]);
+      setBots(botList);
+      setWorkspaces(workspaceList);
+      setCompanyEdit(null);
+    } catch (err: unknown) {
+      setCompanyError(messageOf(err));
+    } finally {
       setCompanyBusy(false);
     }
   }
@@ -2253,19 +2290,35 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
             const collapsed = collapsedWorkspaces[name] === true;
             return (
               <div key={name} className="task-section">
-                <button
-                  className={`task-section-head${collapsed ? " collapsed" : ""}`}
-                  type="button"
-                  onClick={() => setCollapsedWorkspaces((prev) => ({ ...prev, [name]: !prev[name] }))}
-                  aria-expanded={!collapsed}
-                >
-                  <span className="task-caret">{collapsed ? "▸" : "▾"}</span>
-                  {workspaceByName.get(name)?.avatarEmoji && (
-                    <span className="task-section-emoji">{workspaceByName.get(name)?.avatarEmoji}</span>
+                <div className="task-section-headrow">
+                  <button
+                    className={`task-section-head${collapsed ? " collapsed" : ""}`}
+                    type="button"
+                    onClick={() => setCollapsedWorkspaces((prev) => ({ ...prev, [name]: !prev[name] }))}
+                    aria-expanded={!collapsed}
+                  >
+                    <span className="task-caret">{collapsed ? "▸" : "▾"}</span>
+                    {workspaceByName.get(name)?.avatarEmoji && (
+                      <span className="task-section-emoji">{workspaceByName.get(name)?.avatarEmoji}</span>
+                    )}
+                    <span className="task-section-name">{name}</span>
+                    <span className="task-section-count">{members.length}</span>
+                  </button>
+                  {workspaceByName.get(name) && (
+                    <button
+                      className="task-section-edit"
+                      type="button"
+                      title="Rename or delete company"
+                      aria-label="Rename or delete company"
+                      onClick={() => {
+                        const ws = workspaceByName.get(name);
+                        if (ws) setCompanyEdit({ id: ws.id, name });
+                      }}
+                    >
+                      <GearIcon size={12} />
+                    </button>
                   )}
-                  <span className="task-section-name">{name}</span>
-                  <span className="task-section-count">{members.length}</span>
-                </button>
+                </div>
                 {!collapsed && <div className="task-section-list">{members.map(renderBotRow)}</div>}
               </div>
             );
@@ -3685,6 +3738,55 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                   {companyBusy ? "Hiring…" : "Hire the team"}
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {companyEdit && (
+        <div className="apps-overlay" onClick={() => setCompanyEdit(null)}>
+          <div className="apps-panel company-setup" onClick={(event) => event.stopPropagation()}>
+            <div className="apps-head">
+              <span className="apps-title">Company settings</span>
+              <button className="round small" type="button" onClick={() => setCompanyEdit(null)}>
+                ✕
+              </button>
+            </div>
+            <div className="company-setup-body">
+              <input
+                className="workspace-input"
+                value={companyEdit.name}
+                onChange={(event) =>
+                  setCompanyEdit((prev) => (prev ? { ...prev, name: event.target.value } : prev))
+                }
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") void renameCompany();
+                }}
+                autoFocus
+              />
+              {companyError && (
+                <p className="bot-editor-error" role="alert">
+                  {companyError}
+                </p>
+              )}
+            </div>
+            <div className="apps-actions">
+              <button
+                className="ghost small danger"
+                type="button"
+                onClick={() => void removeCompany()}
+                disabled={companyBusy}
+              >
+                Delete company
+              </button>
+              <button
+                className="btn primary"
+                type="button"
+                onClick={() => void renameCompany()}
+                disabled={companyBusy}
+              >
+                {companyBusy ? "Saving…" : "Save"}
+              </button>
             </div>
           </div>
         </div>

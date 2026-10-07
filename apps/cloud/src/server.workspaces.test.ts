@@ -125,6 +125,33 @@ describe("workspaces API", () => {
     await app.close();
   });
 
+  it("keeps employee labels in sync when a company is renamed", async () => {
+    const { app, signup } = await boot();
+    const auth = await signup("ws-rename@example.com");
+    const created = await app.inject({
+      method: "POST",
+      url: "/v1/workspaces",
+      headers: auth,
+      payload: { name: "Old Co", members: [{ name: "Ada", title: "CTO", isChair: true }] },
+    });
+    const ws = created.json() as { id: string };
+
+    const patched = await app.inject({
+      method: "PATCH",
+      url: `/v1/workspaces/${ws.id}`,
+      headers: auth,
+      payload: { name: "New Co" },
+    });
+    expect(patched.statusCode).toBe(200);
+
+    const bots = (await app.inject({ method: "GET", url: "/v1/bots", headers: auth })).json() as Array<{
+      name: string;
+      workspace?: string;
+    }>;
+    expect(bots.find((bot) => bot.name === "Ada")?.workspace).toBe("New Co");
+    await app.close();
+  });
+
   it("keeps workspaces scoped to their owner", async () => {
     const { app, signup } = await boot();
     const owner = await signup("ws-owner@example.com");

@@ -2147,7 +2147,19 @@ export async function buildServer(options: ServerOptions) {
       return reply.code(404).send({ error: "workspace not found" });
     }
     if (typeof request.body?.name === "string" && request.body.name.trim()) {
-      workspace.name = request.body.name.trim().slice(0, 60);
+      const nextName = request.body.name.trim().slice(0, 60);
+      if (nextName !== workspace.name) {
+        workspace.name = nextName;
+        // Keep employee bots' sidebar labels in sync with the new name.
+        const roles = await store.listBotRoles(workspace.id);
+        for (const role of roles) {
+          const bot = await store.getBot(role.botId);
+          if (bot) {
+            bot.workspace = nextName;
+            await store.updateBot(bot);
+          }
+        }
+      }
     }
     if (typeof request.body?.mission === "string") {
       workspace.mission = request.body.mission.slice(0, 2000);
@@ -2173,8 +2185,20 @@ export async function buildServer(options: ServerOptions) {
     { preHandler: requireAuth },
     async (request, reply) => {
       const userId = request.userId as string;
-      const ok = await store.deleteWorkspace(userId, request.params.id);
-      if (!ok) return reply.code(404).send({ error: "workspace not found" });
+      const workspace = await store.getWorkspace(request.params.id);
+      if (!workspace || workspace.ownerId !== userId) {
+        return reply.code(404).send({ error: "workspace not found" });
+      }
+      // Clear employee labels so they return to the Personal list.
+      const roles = await store.listBotRoles(workspace.id);
+      for (const role of roles) {
+        const bot = await store.getBot(role.botId);
+        if (bot) {
+          bot.workspace = undefined;
+          await store.updateBot(bot);
+        }
+      }
+      await store.deleteWorkspace(userId, workspace.id);
       return reply.code(204).send();
     },
   );

@@ -348,12 +348,19 @@ body {
   gap: 4px;
 }
 
+.task-section-headrow {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
 .task-section-head {
+  flex: 1;
   display: flex;
   align-items: center;
   gap: 6px;
-  width: 100%;
-  padding: 6px 8px 4px;
+  min-width: 0;
+  padding: 6px 0 4px 8px;
   background: transparent;
   border: 0;
   color: var(--muted);
@@ -367,10 +374,29 @@ body {
 
 .task-section-head.static {
   cursor: default;
+  padding-right: 8px;
 }
 
 .task-section-head:not(.static):hover {
   color: var(--text);
+}
+
+.task-section-edit {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.task-section-edit:hover {
+  color: var(--text);
+  background: var(--panel-2);
 }
 
 .task-caret {
