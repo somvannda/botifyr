@@ -19,8 +19,9 @@ they land. Keep entries short; link code paths instead of explaining them.
       design is in [`docs/extractors.md`](extractors.md). **Done**: `youtube.download`
       falls back to a **browser sniff** (open the page in the sandbox, capture the
       stream request, download it) and a `media.sniff` tool exposes this to the
-      model — GoodShort works this way with no per-site code. One sample URL per
-      site still speeds up the rest.
+      model — GoodShort works this way with no per-site code (the sniffer nudges
+      playback when nothing loads on its own and ranks the HLS master playlist
+      first). One sample URL per site still speeds up the rest.
 - [x] **Friend group chats** — create a thread with several friends
       (`kind: "group"` model already exists).
 - [x] **Send a file to a friend** — signed, recipient-scoped, 7-day links from
