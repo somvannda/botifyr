@@ -2184,6 +2184,32 @@ export async function buildServer(options: ServerOptions) {
           `# Backlog — ${workspace.name}\n\n## MVP\n${bullets(features, "Define the MVP")}\n\n` +
             `## Opportunities\n${bullets(gaps, "—")}`,
         );
+
+        // Seed the board with first work items from the plan.
+        const seedItems: Array<{ title: string; phase: WorkItem["phase"]; department: Department }> = [];
+        for (const feature of features.slice(0, 8)) {
+          seedItems.push({ title: feature, phase: "mvp", department: "product" });
+        }
+        for (const gap of gaps.slice(0, 5)) {
+          seedItems.push({ title: gap, phase: "phase2", department: "product" });
+        }
+        seedItems.push({ title: "Build the marketing website", phase: "mvp", department: "engineering" });
+        if (features.length === 0 && gaps.length === 0) {
+          seedItems.unshift({ title: "Define the MVP", phase: "mvp", department: "product" });
+        }
+        for (const seedItem of seedItems) {
+          await store.createWorkItem({
+            id: randomUUID(),
+            workspaceId: workspace.id,
+            title: seedItem.title.slice(0, 200),
+            phase: seedItem.phase,
+            status: "todo",
+            department: seedItem.department,
+            createdBy: userId,
+            createdAt: seededAt,
+            updatedAt: seededAt,
+          });
+        }
       }
 
       if (chairBotId) {

@@ -74,6 +74,13 @@ describe("workspaces API", () => {
     expect(files.map((file) => file.name)).toEqual(
       expect.arrayContaining(["BRIEF.md", "OKRS.md", "BACKLOG.md"]),
     );
+
+    // The board is seeded with first work items.
+    const work = (
+      await app.inject({ method: "GET", url: `/v1/workspaces/${ws.id}/work`, headers: auth })
+    ).json() as Array<{ title: string; phase: string }>;
+    expect(work.length).toBeGreaterThan(0);
+    expect(work.some((item) => item.title === "Build the marketing website")).toBe(true);
     await app.close();
   });
 

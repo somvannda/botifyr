@@ -23,6 +23,7 @@ import type {
   Skill,
   Task,
   User,
+  WorkItem,
   WorkspaceWithRoles,
 } from "@botifyr/shared";
 import { DEPARTMENTS } from "@botifyr/shared";
@@ -218,6 +219,10 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [companyBusy, setCompanyBusy] = useState(false);
   const [companyError, setCompanyError] = useState<string | null>(null);
   const [companyEdit, setCompanyEdit] = useState<{ id: string; name: string } | null>(null);
+  const [boardWorkspace, setBoardWorkspace] = useState<{ id: string; name: string } | null>(null);
+  const [boardItems, setBoardItems] = useState<Array<WorkItem>>([]);
+  const [boardTitle, setBoardTitle] = useState("");
+  const [boardBusy, setBoardBusy] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [editingBotId, setEditingBotId] = useState<string | null>(null);
   const [botName, setBotName] = useState("");
@@ -970,6 +975,56 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     } finally {
       setCompanyBusy(false);
     }
+  }
+
+  async function openBoard(workspaceId: string, name: string) {
+    setBoardWorkspace({ id: workspaceId, name });
+    setBoardTitle("");
+    setBoardBusy(true);
+    try {
+      setBoardItems(await client.listWorkItems(workspaceId));
+    } catch {
+      setBoardItems([]);
+    } finally {
+      setBoardBusy(false);
+    }
+  }
+
+  function closeBoard() {
+    setBoardWorkspace(null);
+    setBoardItems([]);
+    setBoardTitle("");
+    setBoardBusy(false);
+  }
+
+  async function refreshBoard(workspaceId: string) {
+    setBoardItems(await client.listWorkItems(workspaceId).catch(() => []));
+  }
+
+  async function addBoardItem() {
+    const workspace = boardWorkspace;
+    const title = boardTitle.trim();
+    if (!workspace || !title) return;
+    setBoardBusy(true);
+    try {
+      await client.createWorkItem(workspace.id, { title });
+      setBoardTitle("");
+      await refreshBoard(workspace.id);
+    } finally {
+      setBoardBusy(false);
+    }
+  }
+
+  async function setWorkStatus(id: string, status: WorkItem["status"]) {
+    const workspace = boardWorkspace;
+    await client.updateWorkItem(id, { status }).catch(() => {});
+    if (workspace) await refreshBoard(workspace.id);
+  }
+
+  async function deleteBoardItem(id: string) {
+    const workspace = boardWorkspace;
+    await client.deleteWorkItem(id).catch(() => {});
+    if (workspace) await refreshBoard(workspace.id);
   }
 
   function openCreateBot(mode: "bot" | "group") {
@@ -2350,6 +2405,20 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                       }}
                     >
                       <GearIcon size={12} />
+                    </button>
+                  )}
+                  {workspaceByName.get(name) && (
+                    <button
+                      className="task-section-edit"
+                      type="button"
+                      title="Company board"
+                      aria-label="Company board"
+                      onClick={() => {
+                        const ws = workspaceByName.get(name);
+                        if (ws) void openBoard(ws.id, name);
+                      }}
+                    >
+                      <ChartIcon size={12} />
                     </button>
                   )}
                 </div>
@@ -3828,6 +3897,76 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                   {companyBusy ? "Hiring…" : "Hire the team"}
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {boardWorkspace && (
+        <div className="apps-overlay" onClick={closeBoard}>
+          <div className="apps-panel company-setup board-panel" onClick={(event) => event.stopPropagation()}>
+            <div className="apps-head">
+              <span className="apps-title">Board — {boardWorkspace.name}</span>
+              <button className="round small" type="button" onClick={closeBoard}>
+                ✕
+              </button>
+            </div>
+            <div className="company-setup-body">
+              <div className="board-add">
+                <input
+                  className="workspace-input"
+                  placeholder="Add a task…"
+                  value={boardTitle}
+                  onChange={(event) => setBoardTitle(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") void addBoardItem();
+                  }}
+                />
+                <button
+                  className="btn primary small"
+                  type="button"
+                  disabled={boardBusy || !boardTitle.trim()}
+                  onClick={() => void addBoardItem()}
+                >
+                  Add
+                </button>
+              </div>
+              {boardItems.length === 0 && <p className="company-hint">No work items yet.</p>}
+              <ul className="board-list">
+                {boardItems.map((item) => (
+                  <li key={item.id} className="board-item">
+                    <select
+                      className={`board-status board-status-${item.status}`}
+                      value={item.status}
+                      onChange={(event) =>
+                        void setWorkStatus(item.id, event.target.value as WorkItem["status"])
+                      }
+                      aria-label="Status"
+                    >
+                      {(["todo", "in_progress", "blocked", "review", "done"] as const).map((status) => (
+                        <option key={status} value={status}>
+                          {status.replace("_", " ")}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="board-title">{item.title}</span>
+                    <span className="board-phase">{item.phase}</span>
+                    <button
+                      className="plan-member-remove"
+                      type="button"
+                      aria-label="Delete task"
+                      onClick={() => void deleteBoardItem(item.id)}
+                    >
+                      <CloseIcon size={12} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="apps-actions">
+              <button className="ghost small" type="button" onClick={closeBoard}>
+                Close
+              </button>
             </div>
           </div>
         </div>
