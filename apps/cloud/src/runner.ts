@@ -22,6 +22,7 @@ import { createCompanyMakerTools } from "./create-company-tools.js";
 import { createDelegationTools } from "./delegation-tools.js";
 import { createSocialTools, notConnectedSocial } from "./social-tools.js";
 import { createTelegramSocialClient } from "./social-telegram.js";
+import { createPostizSocialClient } from "./social-postiz.js";
 import { createDesignTools } from "./design-tools.js";
 import { createEmailTools, resendSender } from "./email-tools.js";
 import { createEscalationTools } from "./escalation-tools.js";
@@ -428,13 +429,20 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
     if (department === "marketing" || department === "sales") {
       const record = await store.getUserById(userId).catch(() => null);
       const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
-      tools.push(
-        ...createSocialTools(
-          telegramToken && record?.telegramChatId
+      const postizKey = process.env.POSTIZ_API_KEY;
+      const postizIntegration = process.env.POSTIZ_INTEGRATION_ID;
+      const postizPlatform = process.env.POSTIZ_PLATFORM;
+      const client =
+        postizKey && postizIntegration && postizPlatform
+          ? createPostizSocialClient({
+              apiKey: postizKey,
+              integrationId: postizIntegration,
+              platform: postizPlatform,
+            })
+          : telegramToken && record?.telegramChatId
             ? createTelegramSocialClient({ token: telegramToken, chatId: record.telegramChatId })
-            : notConnectedSocial(),
-        ),
-      );
+            : notConnectedSocial();
+      tools.push(...createSocialTools(client));
     }
     if (department === "design" || department === "marketing") {
       tools.push(...createDesignTools(store, userId, authorBot.id));
