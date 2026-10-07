@@ -247,7 +247,7 @@ export const ROLE_CATALOG: RoleDefinition[] = [
     jobDescription:
       "You own marketing: positioning, content, channels and campaigns. Draft everything; publishing and spend need approval.",
     skills: ["copywriting", "seo", "social-media"],
-    capabilities: ["research.web", "files.read", "files.write", "social.read_insights", "social.publish"],
+    capabilities: ["research.web", "files.read", "files.write", "social.read_insights", "social.publish", "email.send"],
     kpis: ["Reach", "Content shipped", "Pipeline influenced"],
     reportsTo: "exec.ceo",
   },

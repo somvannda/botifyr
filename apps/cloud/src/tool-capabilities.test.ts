@@ -8,6 +8,7 @@ describe("tool capabilities", () => {
     expect(capabilityForTool("social.publish")).toBe("social.publish");
     expect(capabilityForTool("browser.click")).toBe("browser.use");
     expect(capabilityForTool("design.poster")).toBe("files.write");
+    expect(capabilityForTool("email.send")).toBe("email.send");
     expect(capabilityForTool("company.delegate")).toBeNull();
   });
 
