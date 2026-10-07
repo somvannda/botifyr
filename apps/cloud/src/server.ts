@@ -4518,7 +4518,7 @@ export async function buildServer(options: ServerOptions) {
     for (const task of orphaned) {
       const plan = confidentPlan(task.goal);
       const session = await store.getSession(task.sessionId).catch(() => null);
-      const resumeCount = task.steps.filter((step) => step.id.startsWith(`resume-${task.id}`)).length;
+      const resumeCount = task.resumeCount ?? 0;
       const resumable =
         session !== null && plan.initialToolCall?.name === "youtube.download" && resumeCount < 2;
 
@@ -4527,14 +4527,7 @@ export async function buildServer(options: ServerOptions) {
       }
 
       if (resumable && session && plan.initialToolCall) {
-        task.steps.push({
-          id: `resume-${task.id}-${Date.now()}`,
-          index: task.steps.length,
-          title: "Resuming download",
-          detail: "The cloud restarted mid-download; completed files are kept.",
-          status: "done",
-          finishedAt: new Date().toISOString(),
-        });
+        task.resumeCount = resumeCount + 1;
         task.status = "queued";
         task.error = undefined;
         task.updatedAt = new Date().toISOString();

@@ -54,6 +54,8 @@ export interface Task {
   liveStream?: boolean;
   result?: string;
   error?: string;
+  /** How many times an interrupted batch download was auto-resumed. */
+  resumeCount?: number;
   createdAt: string;
   updatedAt: string;
 }
