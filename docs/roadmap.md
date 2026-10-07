@@ -21,9 +21,12 @@ they land. Keep entries short; link code paths instead of explaining them.
       stream request, download it) and a `media.sniff` tool exposes this to the
       model — GoodShort works this way with no per-site code (the sniffer nudges
       playback when nothing loads on its own and ranks the HLS master playlist
-      first; a found stream is downloaded with the page as `Referer`). Validated
-      end-to-end without the model: page → sniff → master HLS → yt-dlp → file
-      saved. One sample URL per site still speeds up the rest.
+      first; a found stream is downloaded with the page as `Referer`; direct-file
+      URLs fall back to the best single format). Validated end-to-end without the
+      model — in the sandbox (page → sniff → master HLS → yt-dlp → file) and
+      through the cloud API (message → deterministic `youtube.download` →
+      approval → sandbox → file in `/v1/tasks/:id/downloads`). One sample URL per
+      site still speeds up the rest.
 - [x] **Friend group chats** — create a thread with several friends
       (`kind: "group"` model already exists).
 - [x] **Send a file to a friend** — signed, recipient-scoped, 7-day links from
