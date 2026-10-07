@@ -54,7 +54,7 @@ One `platform_settings` row (JSON), read by billing + cost controls and edited i
 ```
 plans:            { proPriceCents: 500, businessPriceCents: 1900,
                     proPeriodDays: 30, currency: "USD" }
-freeMonthlyTokens: 20000
+freeMonthlyTokens: 500000
 lowBalanceCents:  100              # warn/top-up prompt below this
 graceDays:        7
 reminderDays:     [7, 3, 1]

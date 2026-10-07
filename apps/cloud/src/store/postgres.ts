@@ -430,10 +430,10 @@ export class PostgresStore implements Store {
   }
 
   async deleteWorkItem(workspaceId: string, id: string): Promise<boolean> {
-    const result = await this.pool.query(
-      "DELETE FROM work_items WHERE workspace_id = $1 AND id = $2",
-      [workspaceId, id],
-    );
+    const result = await this.pool.query("DELETE FROM work_items WHERE workspace_id = $1 AND id = $2", [
+      workspaceId,
+      id,
+    ]);
     return (result.rowCount ?? 0) > 0;
   }
 
@@ -1226,7 +1226,7 @@ function DEFAULT_SETTINGS(): PlatformSettings {
       includedTokens: { pro: 5_000_000, business: 50_000_000 },
       currency: "USD",
     },
-    freeMonthlyTokens: 20_000,
+    freeMonthlyTokens: 500_000,
     lowBalanceCents: 100,
     graceDays: 7,
     reminderDays: [7, 3, 1],

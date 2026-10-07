@@ -48,7 +48,14 @@ import { handleNodeMessage, nodeInfo, registerNode } from "./nodes.js";
 import { createToken, hashPassword, hashToken, verifyPassword } from "./auth.js";
 import { encryptSecret } from "./vault.js";
 import { oneShot, runTask, runtimeInfo, summarizeConversation } from "./runner.js";
-import { analyzeSource, buildStandup, planCompany, shouldRunSchedule, toDepartment, withinOperatingHours } from "./company.js";
+import {
+  analyzeSource,
+  buildStandup,
+  planCompany,
+  shouldRunSchedule,
+  toDepartment,
+  withinOperatingHours,
+} from "./company.js";
 import { seedCompany } from "./company-seed.js";
 import { createDockerComputerBackend } from "@botifyr/agent-core";
 import {
@@ -386,6 +393,9 @@ export async function buildServer(options: ServerOptions) {
   /** Whether new work should be refused because the daily budget is spent. */
   async function budgetBlocked(userId: string): Promise<boolean> {
     if (!enforceBudget || dailyTokenBudget <= 0) return false;
+    // The operator account is never budget-capped.
+    const record = await store.getUserById(userId);
+    if (record?.role === "admin") return false;
     const { tokens } = await store.usageSince(userId, startOfToday());
     return tokens >= dailyTokenBudget;
   }

@@ -729,7 +729,7 @@ function DEFAULT_SETTINGS(): PlatformSettings {
       includedTokens: { pro: 5_000_000, business: 50_000_000 },
       currency: "USD",
     },
-    freeMonthlyTokens: 20_000,
+    freeMonthlyTokens: 500_000,
     lowBalanceCents: 100,
     graceDays: 7,
     reminderDays: [7, 3, 1],

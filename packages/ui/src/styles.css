@@ -104,7 +104,7 @@ body {
 
 .app {
   display: grid;
-  grid-template-columns: 270px 1fr;
+  grid-template-columns: 320px 1fr;
   height: calc(100vh - var(--titlebar, 0px));
   margin-top: var(--titlebar, 0px);
 }
@@ -4240,7 +4240,7 @@ body {
 
 /* Bot panel (per conversation) ------------------------------------------- */
 .app.with-panel {
-  grid-template-columns: 270px 1fr 320px;
+  grid-template-columns: 320px 1fr 320px;
 }
 
 .bot-panel {

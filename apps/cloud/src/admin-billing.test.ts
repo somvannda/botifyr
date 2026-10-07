@@ -33,7 +33,7 @@ describe("admin billing", () => {
 
     const before = await app.inject({ method: "GET", url: "/admin/settings", headers: auth });
     expect(before.statusCode).toBe(200);
-    expect((before.json() as { freeMonthlyTokens: number }).freeMonthlyTokens).toBe(20000);
+    expect((before.json() as { freeMonthlyTokens: number }).freeMonthlyTokens).toBe(500000);
 
     const updated = await app.inject({
       method: "PUT",
