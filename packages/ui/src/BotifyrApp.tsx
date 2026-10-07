@@ -321,6 +321,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       return [];
     }
   });
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [language, setLanguage] = useState(() => localStorage.getItem("botifyr.language") ?? "system");
   const [spelling, setSpelling] = useState(() => localStorage.getItem("botifyr.spelling") !== "0");
   const [hardware, setHardware] = useState(() => localStorage.getItem("botifyr.hardware") !== "0");
@@ -2475,17 +2477,29 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     return (
       <div
         key={bot.id}
-        className={`conv-item ${bot.id === activeBotId ? "active" : ""}`}
+        className={`conv-item ${bot.id === activeBotId ? "active" : ""}${
+          bot.id === draggingId ? " dragging" : ""
+        }${bot.id === dragOverId && bot.id !== draggingId ? " drag-over" : ""}`}
         draggable
         onDragStart={(event) => {
           event.dataTransfer.setData("text/plain", bot.id);
           event.dataTransfer.effectAllowed = "move";
+          setDraggingId(bot.id);
         }}
-        onDragOver={(event) => event.preventDefault()}
+        onDragEnd={() => {
+          setDraggingId(null);
+          setDragOverId(null);
+        }}
+        onDragOver={(event) => {
+          event.preventDefault();
+          if (bot.id !== draggingId) setDragOverId(bot.id);
+        }}
         onDrop={(event) => {
           event.preventDefault();
           const id = event.dataTransfer.getData("text/plain");
           if (id) moveBot(id, bot.id);
+          setDraggingId(null);
+          setDragOverId(null);
         }}
       >
         <button className="conv-select" type="button" onClick={() => selectBot(bot)}>

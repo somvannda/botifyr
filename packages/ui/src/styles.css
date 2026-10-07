@@ -1897,6 +1897,14 @@ body {
   cursor: grabbing;
 }
 
+.conv-item.dragging {
+  opacity: 0.5;
+}
+
+.conv-item.drag-over {
+  box-shadow: inset 0 2px 0 0 var(--accent);
+}
+
 .conv-select {
   flex: 1;
   min-width: 0;
