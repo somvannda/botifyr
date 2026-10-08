@@ -27,12 +27,14 @@ Pipeline:
 npx tsx scripts/export-office-scene.ts office-scene.json
 
 # 2. Render it (install Blender first: https://blender.org):
-blender -b -P scripts/blender/office_render.py -- office-scene.json office-render.png
+blender -b -P scripts/blender/office_render.py -- \
+  office-scene.json office-render.png apps/portal/public/office3d
 ```
 
-`office_render.py` builds floors, glass partitions, desks, planters and a
-low-poly person per desk from the JSON, sets a near-orthographic camera and
-Cycles, and writes a PNG.
+`office_render.py` imports the app's **real GLB furniture** (chair, desk,
+sofa, plant, planter) and the **Poly Haven HDRI**, places them from the JSON,
+and renders with Cycles + denoising at a near-orthographic top-down camera.
+It falls back to primitives for any missing model, so it always produces output.
 
 ### To reach true photorealism
 The scene skeleton and camera are done; the remaining gap is **assets**, not code:
