@@ -5,6 +5,7 @@ import type {
   BotFile,
   CapabilityGrant,
   CompanyDNA,
+  CompanyDirection,
   CompanyReport,
   ConnectionInfo,
   CreateWorkspaceRequest,
@@ -14,6 +15,7 @@ import type {
   MediaRecipe,
   ModelPricingRecord,
   PlatformSettings,
+  Quest,
   RuntimeConfig,
   SecretSummary,
   ServerEvent,
@@ -81,6 +83,72 @@ export interface Person {
   incoming?: boolean;
 }
 
+/** A Feed post author summary (see docs/feed.md). */
+export interface FeedAuthor {
+  id: string;
+  handle?: string;
+  displayName?: string;
+  avatarEmoji?: string;
+  avatarScheme?: number;
+  avatarUrl?: string;
+  online: boolean;
+  /** True when the author is a Page rather than a person. */
+  page?: boolean;
+}
+
+/** A comment on a Feed post. */
+export interface FeedComment {
+  id: string;
+  author: FeedAuthor;
+  body: string;
+  createdAt: string;
+}
+
+/** A post in the Feed. */
+export interface FeedPost {
+  id: string;
+  author: FeedAuthor;
+  body: string;
+  mediaId?: string;
+  /** Set when the post was authored by a Page. */
+  pageId?: string;
+  /** Short-lived signed path to the attached image, if any. */
+  imageUrl?: string;
+  createdAt: string;
+  updatedAt: string;
+  likes: number;
+  comments: number;
+  shares: number;
+  likedByMe: boolean;
+  sharedByMe: boolean;
+}
+
+/** One page of the feed (newest first). */
+export interface FeedPage {
+  items: FeedPost[];
+  nextCursor: string | null;
+}
+
+/** A public, followable Page (brand / bot / company face). */
+export interface Page {
+  id: string;
+  handle: string;
+  name: string;
+  category?: string;
+  about?: string;
+  avatarEmoji?: string;
+  avatarUrl?: string;
+  coverUrl?: string;
+  cta?: string;
+  verified: boolean;
+  workspaceId?: string;
+  botId?: string;
+  followers: number;
+  following: boolean;
+  role: "admin" | "editor" | "moderator" | "analyst" | null;
+  createdAt: string;
+}
+
 /** A human conversation (DM or friend group). */
 export interface Conversation {
   id: string;
@@ -121,6 +189,18 @@ export interface AdminSkill {
   createdBy: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/** A reported post shown in the admin console. */
+export interface AdminReport {
+  id: string;
+  postId: string;
+  reporterId: string;
+  reason?: string;
+  status: "pending" | "reviewed" | "dismissed";
+  createdAt: string;
+  postBody: string | null;
+  postAuthor: string | null;
 }
 
 /** Thrown when the token is missing, invalid, or expired. */
@@ -479,6 +559,18 @@ export class BotifyrClient {
     return this.request("/admin/audit");
   }
 
+  adminReports(): Promise<AdminReport[]> {
+    return this.request("/admin/reports");
+  }
+
+  adminResolveReport(id: string, status: "pending" | "reviewed" | "dismissed"): Promise<void> {
+    return this.request(`/admin/reports/${id}`, {
+      method: "PATCH",
+      json: true,
+      body: JSON.stringify({ status }),
+    });
+  }
+
   /* Media manifest — files the user has downloaded, and where they live. */
   listMedia(): Promise<MediaItem[]> {
     return this.request("/v1/media");
@@ -502,6 +594,15 @@ export class BotifyrClient {
       method: "POST",
       json: true,
       body: JSON.stringify({ toUserId }),
+    });
+  }
+
+  /** Upload a local file (base64) so it can be attached to a conversation. */
+  uploadFile(input: { name: string; mime?: string; data: string }): Promise<MediaItem> {
+    return this.request("/v1/uploads", {
+      method: "POST",
+      json: true,
+      body: JSON.stringify(input),
     });
   }
 
@@ -568,11 +669,16 @@ export class BotifyrClient {
   }
 
   /** Propose an org chart from a website or an idea (creates nothing). */
-  planCompany(source: {
-    kind: "url" | "idea";
-    value: string;
-    name?: string;
-  }): Promise<CreateWorkspaceRequest & { template?: string; rationale?: string[] }> {
+  planCompany(source: { kind: "url" | "idea"; value: string; name?: string }): Promise<
+    CreateWorkspaceRequest & {
+      template?: string;
+      rationale?: string[];
+      dna?: CompanyDNA;
+      notes?: string[];
+      /** 2–3 directions the CEO chooses from (docs/company-quests.md). */
+      directions?: CompanyDirection[];
+    }
+  > {
     return this.request("/v1/workspaces/plan", {
       method: "POST",
       json: true,
@@ -636,6 +742,48 @@ export class BotifyrClient {
   /** Remove every task from the company board. */
   clearWorkItems(workspaceId: string): Promise<{ deleted: number }> {
     return this.request(`/v1/workspaces/${workspaceId}/work`, { method: "DELETE" });
+  }
+
+  /* Company quests (missions above the board, docs/company-quests.md). */
+  listQuests(workspaceId: string): Promise<Quest[]> {
+    return this.request(`/v1/workspaces/${workspaceId}/quests`);
+  }
+
+  createQuest(
+    workspaceId: string,
+    input: {
+      title: string;
+      objective: string;
+      acceptance?: string[];
+      directionId?: string;
+      roadmap?: Array<{ phase: WorkItem["phase"]; title: string }>;
+      trust?: WorkspaceWithRoles["autonomy"];
+      activate?: boolean;
+    },
+  ): Promise<Quest> {
+    return this.request(`/v1/workspaces/${workspaceId}/quests`, {
+      method: "POST",
+      json: true,
+      body: JSON.stringify(input),
+    });
+  }
+
+  updateQuest(
+    id: string,
+    input: {
+      title?: string;
+      objective?: string;
+      acceptance?: string[];
+      trust?: WorkspaceWithRoles["autonomy"];
+      budgetTokens?: number | null;
+      status?: Quest["status"];
+    },
+  ): Promise<Quest> {
+    return this.request(`/v1/quests/${id}`, { method: "PATCH", json: true, body: JSON.stringify(input) });
+  }
+
+  completeQuest(workspaceId: string, id: string): Promise<Quest> {
+    return this.request(`/v1/workspaces/${workspaceId}/quests/${id}/complete`, { method: "POST" });
   }
 
   /** Update a file's content or category (department). */
@@ -844,6 +992,11 @@ export class BotifyrClient {
     return this.request(`/v1/dm/${userId}`, { method: "POST", json: true, body: "{}" });
   }
 
+  /** Delete a personal conversation (DM or friend group) for good. */
+  deleteConversation(id: string): Promise<void> {
+    return this.request(`/v1/conversations/${encodeURIComponent(id)}`, { method: "DELETE" });
+  }
+
   createFriendGroup(participantIds: string[], title: string): Promise<Session> {
     return this.request("/v1/conversations", {
       method: "POST",
@@ -871,6 +1024,11 @@ export class BotifyrClient {
 
   searchPeople(query: string): Promise<Person[]> {
     return this.request(`/v1/people?q=${encodeURIComponent(query)}`);
+  }
+
+  /** "Who to follow": people who aren't friends or already pending. */
+  suggestPeople(limit = 8): Promise<Person[]> {
+    return this.request(`/v1/people/suggestions?limit=${limit}`);
   }
 
   addFriend(userId: string): Promise<{ ok: boolean; friend?: boolean; pending?: boolean }> {
@@ -902,6 +1060,145 @@ export class BotifyrClient {
     avatarUrl?: string | null;
   }): Promise<User> {
     return this.request("/v1/profile", { method: "PATCH", json: true, body: JSON.stringify(input) });
+  }
+
+  /* Feed (social posts). */
+  listFeed(cursor?: string, limit = 20): Promise<FeedPage> {
+    const params = new URLSearchParams();
+    if (cursor) params.set("cursor", cursor);
+    params.set("limit", String(limit));
+    return this.request(`/v1/feed?${params.toString()}`);
+  }
+
+  createPost(input: { body: string; mediaId?: string; pageId?: string }): Promise<FeedPost> {
+    return this.request("/v1/posts", { method: "POST", json: true, body: JSON.stringify(input) });
+  }
+
+  deletePost(id: string): Promise<void> {
+    return this.request(`/v1/posts/${id}`, { method: "DELETE" });
+  }
+
+  likePost(id: string, liked = true): Promise<void> {
+    return this.request(`/v1/posts/${id}/like`, { method: liked ? "PUT" : "DELETE" });
+  }
+
+  listComments(id: string): Promise<FeedComment[]> {
+    return this.request(`/v1/posts/${id}/comments`);
+  }
+
+  addComment(id: string, body: string): Promise<FeedComment> {
+    return this.request(`/v1/posts/${id}/comments`, {
+      method: "POST",
+      json: true,
+      body: JSON.stringify({ body }),
+    });
+  }
+
+  deleteComment(id: string): Promise<void> {
+    return this.request(`/v1/comments/${id}`, { method: "DELETE" });
+  }
+
+  sharePost(id: string, shared = true): Promise<void> {
+    return this.request(`/v1/posts/${id}/share`, { method: shared ? "PUT" : "DELETE" });
+  }
+
+  listUserPosts(handle: string): Promise<FeedPost[]> {
+    return this.request(`/v1/users/${encodeURIComponent(handle)}/posts`);
+  }
+
+  /** Engagement-ranked posts from you and your friends (last 7 days). */
+  listTrending(limit = 3): Promise<FeedPost[]> {
+    return this.request(`/v1/feed/trending?limit=${limit}`);
+  }
+
+  /* Pages (public, followable entities). */
+  listMyPages(): Promise<Page[]> {
+    return this.request("/v1/pages");
+  }
+
+  createPage(input: {
+    name: string;
+    handle?: string;
+    category?: string;
+    about?: string;
+    workspaceId?: string;
+    botId?: string;
+    avatarEmoji?: string;
+    avatarUrl?: string;
+    coverUrl?: string;
+    cta?: string;
+  }): Promise<Page> {
+    return this.request("/v1/pages", { method: "POST", json: true, body: JSON.stringify(input) });
+  }
+
+  getPage(handle: string): Promise<Page> {
+    return this.request(`/v1/pages/${encodeURIComponent(handle)}`);
+  }
+
+  updatePage(
+    id: string,
+    input: Partial<{
+      name: string;
+      handle: string;
+      category: string;
+      about: string;
+      avatarEmoji: string;
+      avatarUrl: string;
+      coverUrl: string;
+      cta: string;
+    }>,
+  ): Promise<Page> {
+    return this.request(`/v1/pages/${id}`, { method: "PATCH", json: true, body: JSON.stringify(input) });
+  }
+
+  deletePage(id: string): Promise<void> {
+    return this.request(`/v1/pages/${id}`, { method: "DELETE" });
+  }
+
+  listPagePosts(handle: string): Promise<FeedPost[]> {
+    return this.request(`/v1/pages/${encodeURIComponent(handle)}/posts`);
+  }
+
+  followPage(id: string): Promise<{ ok: boolean }> {
+    return this.request(`/v1/pages/${id}/follow`, { method: "POST", json: true, body: "{}" });
+  }
+
+  unfollowPage(id: string): Promise<void> {
+    return this.request(`/v1/pages/${id}/follow`, { method: "DELETE" });
+  }
+
+  listPageRoles(id: string): Promise<Array<{ userId: string; role: string; person: Person | null }>> {
+    return this.request(`/v1/pages/${id}/roles`);
+  }
+
+  /** Set a role, or pass an empty/undefined role to remove the member. */
+  setPageRole(id: string, userId: string, role?: string): Promise<void> {
+    return this.request(`/v1/pages/${id}/roles`, {
+      method: "PUT",
+      json: true,
+      body: JSON.stringify({ userId, role }),
+    });
+  }
+
+  /* Moderation */
+  reportPost(id: string, reason?: string): Promise<{ ok: boolean }> {
+    return this.request(`/v1/posts/${id}/report`, {
+      method: "POST",
+      json: true,
+      body: JSON.stringify({ reason }),
+    });
+  }
+
+  listBlocks(): Promise<Person[]> {
+    return this.request("/v1/blocks");
+  }
+
+  blockUser(id: string): Promise<{ ok: boolean }> {
+    return this.request(`/v1/users/${id}/block`, { method: "POST", json: true, body: "{}" });
+  }
+
+  unblockUser(id: string): Promise<void> {
+    return this.request(`/v1/users/${id}/block`, { method: "DELETE" });
   }
 
   cancelTask(taskId: string): Promise<void> {

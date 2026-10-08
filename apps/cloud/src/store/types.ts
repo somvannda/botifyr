@@ -13,6 +13,7 @@ import type {
   PlatformSettings,
   ProviderRole,
   ProviderRoleConfig,
+  Quest,
   Task,
   WorkItem,
   WorkspaceBudget,
@@ -69,6 +70,85 @@ export interface FriendRequestRecord {
   updatedAt: string;
 }
 
+/** A social post on the Feed (see docs/feed.md). */
+export interface PostRecord {
+  id: string;
+  authorId: string;
+  body: string;
+  /** Optional reference into the `media` table (single image for v1). */
+  mediaId?: string;
+  /** Set when the post is authored by a Page (authorId = the Page id). */
+  pageId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A comment on a post. */
+export interface PostCommentRecord {
+  id: string;
+  postId: string;
+  authorId: string;
+  body: string;
+  createdAt: string;
+}
+
+/** Per-viewer counters for one post. */
+export interface PostStatsRecord {
+  likes: number;
+  comments: number;
+  shares: number;
+  likedByMe: boolean;
+  sharedByMe: boolean;
+}
+
+/** A moderation report against a post. */
+export interface PostReportRecord {
+  id: string;
+  postId: string;
+  reporterId: string;
+  reason?: string;
+  status: "pending" | "reviewed" | "dismissed";
+  createdAt: string;
+}
+
+/** One user blocking another (one-directional; enforced both ways on read). */
+export interface BlockRecord {
+  blockerId: string;
+  blockedId: string;
+  createdAt: string;
+}
+
+/** A Page: the public, followable face of a company workspace, bot, or user. */
+export interface PageRecord {
+  id: string;
+  ownerId: string;
+  /** Optional link to a company workspace (preferred mapping). */
+  workspaceId?: string;
+  /** Optional link to a bot. */
+  botId?: string;
+  /** Unique, lower-case public handle (no leading @). */
+  handle: string;
+  name: string;
+  category?: string;
+  about?: string;
+  avatarEmoji?: string;
+  avatarUrl?: string;
+  coverUrl?: string;
+  cta?: string;
+  verified: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A user's role on a Page. */
+export type PageRole = "admin" | "editor" | "moderator" | "analyst";
+
+export interface PageRoleRecord {
+  pageId: string;
+  userId: string;
+  role: PageRole;
+}
+
 /** A conversation: id + owner + title + transcript. */
 export interface SessionRecord {
   id: string;
@@ -117,6 +197,10 @@ export interface WorkspaceRecord {
   autonomy?: "manual" | "supervised" | "autonomous";
   hours?: OperatingHours;
   ceoBotId?: string;
+  /** The direction the CEO chose at setup (docs/company-quests.md). */
+  directionId?: string;
+  /** The current mission; at most one active quest at a time. */
+  activeQuestId?: string;
   avatarEmoji?: string;
   scheme?: number;
   /** Code repositories the engineering team may read (docs/codebase-access.md). */
@@ -138,6 +222,9 @@ export interface BotRoleRecord {
 
 /** A unit of work on the company board. */
 export type WorkItemRecord = WorkItem;
+
+/** A company mission above the board (docs/company-quests.md). */
+export type QuestRecord = Quest;
 
 /** A company's token budget. */
 export type WorkspaceBudgetRecord = WorkspaceBudget;
@@ -190,6 +277,8 @@ export interface UsageRecord {
   completionTokens: number;
   /** The model that produced this usage (for per-model pricing). */
   model?: string;
+  /** The quest this usage is attributed to, when the task ran under one (docs/company-quests.md §10.1). */
+  questId?: string;
   createdAt: string;
 }
 
@@ -286,6 +375,60 @@ export interface Store {
   areFriends(a: string, b: string): Promise<boolean>;
   deleteFriendship(a: string, b: string): Promise<boolean>;
 
+  /* Feed (social posts) */
+  createPost(record: PostRecord): Promise<void>;
+  getPost(id: string): Promise<PostRecord | null>;
+  /** Only the author may delete; cascades likes/comments/shares. */
+  deletePost(authorId: string, id: string): Promise<boolean>;
+  /** Newest-first posts by any of `authorIds`, paged by ISO `before` cursor. */
+  listFeedPosts(authorIds: string[], limit: number, before?: string): Promise<PostRecord[]>;
+  listPostsByAuthor(authorId: string, limit: number): Promise<PostRecord[]>;
+  /** Posts by `authorIds` since `sinceIso`, ranked by engagement. */
+  listTrendingPosts(authorIds: string[], sinceIso: string, limit: number): Promise<PostRecord[]>;
+  setPostLike(postId: string, userId: string, liked: boolean): Promise<void>;
+  listPostComments(postId: string): Promise<PostCommentRecord[]>;
+  getPostComment(id: string): Promise<PostCommentRecord | null>;
+  createPostComment(record: PostCommentRecord): Promise<void>;
+  /** Only the comment author may delete. */
+  deletePostComment(authorId: string, id: string): Promise<boolean>;
+  setPostShare(postId: string, userId: string, shared: boolean): Promise<void>;
+  getPostStats(postId: string, viewerId: string): Promise<PostStatsRecord>;
+  /** Batch author lookup for feed serialization. */
+  listUsersByIds(ids: string[]): Promise<UserRecord[]>;
+
+  /* Moderation */
+  blockUser(blockerId: string, blockedId: string): Promise<void>;
+  unblockUser(blockerId: string, blockedId: string): Promise<boolean>;
+  /** Ids this user has blocked (not who blocked them). */
+  listBlockedIds(userId: string): Promise<string[]>;
+  /** Ids blocked in either direction (for visibility filtering). */
+  listBlockedEither(userId: string): Promise<string[]>;
+  /** True if either user has blocked the other. */
+  isBlockedEither(a: string, b: string): Promise<boolean>;
+  createReport(record: PostReportRecord): Promise<void>;
+  listReports(limit: number): Promise<PostReportRecord[]>;
+  /** Resolve a report: mark it reviewed or dismissed. */
+  updateReportStatus(id: string, status: PostReportRecord["status"]): Promise<boolean>;
+
+  /* Pages (public, followable entities) */
+  createPage(record: PageRecord): Promise<void>;
+  getPage(id: string): Promise<PageRecord | null>;
+  getPageByHandle(handle: string): Promise<PageRecord | null>;
+  listPages(ownerId: string): Promise<PageRecord[]>;
+  updatePage(record: PageRecord): Promise<void>;
+  deletePage(ownerId: string, id: string): Promise<boolean>;
+  setPageRole(record: PageRoleRecord): Promise<void>;
+  getPageRole(pageId: string, userId: string): Promise<PageRoleRecord | null>;
+  listPageRoles(pageId: string): Promise<PageRoleRecord[]>;
+  deletePageRole(pageId: string, userId: string): Promise<boolean>;
+  followPage(pageId: string, userId: string): Promise<void>;
+  unfollowPage(pageId: string, userId: string): Promise<boolean>;
+  isFollowingPage(pageId: string, userId: string): Promise<boolean>;
+  listPageFollowerIds(pageId: string): Promise<string[]>;
+  /** Page ids this user follows. */
+  listFollowedPageIds(userId: string): Promise<string[]>;
+  countPageFollowers(pageId: string): Promise<number>;
+
   createToken(tokenHash: string, userId: string, expiresAt: string, kind?: string): Promise<void>;
   getUserIdByTokenHash(tokenHash: string, kind?: string): Promise<string | null>;
   deleteToken(tokenHash: string): Promise<void>;
@@ -324,6 +467,12 @@ export interface Store {
   listWorkItems(workspaceId: string): Promise<WorkItemRecord[]>;
   updateWorkItem(record: WorkItemRecord): Promise<void>;
   deleteWorkItem(workspaceId: string, id: string): Promise<boolean>;
+
+  /* Company quests (missions above the board) */
+  createQuest(record: QuestRecord): Promise<void>;
+  getQuest(id: string): Promise<QuestRecord | null>;
+  listQuests(workspaceId: string): Promise<QuestRecord[]>;
+  updateQuest(record: QuestRecord): Promise<void>;
 
   /* Per-workspace budget */
   getWorkspaceBudget(workspaceId: string): Promise<WorkspaceBudgetRecord | null>;
@@ -366,6 +515,8 @@ export interface Store {
   addUsage(record: UsageRecord): Promise<void>;
   /** Total tokens + request count for a user since an ISO timestamp. */
   usageSince(userId: string, sinceIso: string): Promise<{ tokens: number; requests: number }>;
+  /** Tokens attributed to a company quest (docs/company-quests.md §10.1). */
+  usageTokensForQuest(questId: string): Promise<number>;
 
   upsertFile(record: FileRecord): Promise<void>;
   listFiles(botId: string): Promise<FileRecord[]>;

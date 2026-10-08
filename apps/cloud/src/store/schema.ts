@@ -124,6 +124,18 @@ CREATE TABLE IF NOT EXISTS work_items (
   updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS work_items_ws_idx ON work_items (workspace_id, updated_at DESC);
+ALTER TABLE work_items ADD COLUMN IF NOT EXISTS quest_id TEXT;
+CREATE INDEX IF NOT EXISTS work_items_quest_idx ON work_items (quest_id);
+
+/* Company quests: missions above the board (docs/company-quests.md §4). */
+CREATE TABLE IF NOT EXISTS quests (
+  id           TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  data         JSONB NOT NULL,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS quests_ws_idx ON quests (workspace_id, updated_at DESC);
 
 /* Per-workspace token budget (docs/company-os.md §15). */
 CREATE TABLE IF NOT EXISTS workspace_budget (
@@ -173,6 +185,8 @@ CREATE TABLE IF NOT EXISTS usage_events (
   created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS usage_user_idx ON usage_events (user_id, created_at);
+ALTER TABLE usage_events ADD COLUMN IF NOT EXISTS quest_id TEXT;
+CREATE INDEX IF NOT EXISTS usage_quest_idx ON usage_events (quest_id);
 
 CREATE TABLE IF NOT EXISTS files (
   id         TEXT PRIMARY KEY,
@@ -340,6 +354,97 @@ CREATE TABLE IF NOT EXISTS notifications (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS notifications_user_idx ON notifications (user_id, created_at DESC);
+
+/* Feed (social posts) — see docs/feed.md */
+CREATE TABLE IF NOT EXISTS posts (
+  id         TEXT PRIMARY KEY,
+  author_id  TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  body       TEXT NOT NULL DEFAULT '',
+  media_id   TEXT REFERENCES media(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS posts_author_idx ON posts (author_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS posts_created_idx ON posts (created_at DESC);
+
+CREATE TABLE IF NOT EXISTS post_likes (
+  post_id    TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+  user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (post_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS post_comments (
+  id         TEXT PRIMARY KEY,
+  post_id    TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+  author_id  TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  body       TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS post_comments_post_idx ON post_comments (post_id, created_at);
+
+CREATE TABLE IF NOT EXISTS post_shares (
+  post_id    TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+  user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (post_id, user_id)
+);
+
+/* Moderation: blocks (one-directional, enforced both ways on read) + reports. */
+CREATE TABLE IF NOT EXISTS blocks (
+  blocker_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  blocked_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (blocker_id, blocked_id)
+);
+CREATE INDEX IF NOT EXISTS blocks_blocked_idx ON blocks (blocked_id);
+
+CREATE TABLE IF NOT EXISTS post_reports (
+  id          TEXT PRIMARY KEY,
+  post_id     TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+  reporter_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  reason      TEXT,
+  status      TEXT NOT NULL DEFAULT 'pending',
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS post_reports_status_idx ON post_reports (status, created_at DESC);
+
+/* Pages: public, followable entities (docs/feed-next.md). */
+CREATE TABLE IF NOT EXISTS pages (
+  id           TEXT PRIMARY KEY,
+  owner_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  workspace_id TEXT,
+  bot_id       TEXT,
+  handle       TEXT NOT NULL,
+  name         TEXT NOT NULL,
+  category     TEXT,
+  about        TEXT,
+  avatar_emoji TEXT,
+  avatar_url   TEXT,
+  cover_url    TEXT,
+  cta          TEXT,
+  verified     BOOLEAN NOT NULL DEFAULT false,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS pages_handle_idx ON pages (lower(handle));
+
+CREATE TABLE IF NOT EXISTS page_roles (
+  page_id TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  role    TEXT NOT NULL,
+  PRIMARY KEY (page_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS page_followers (
+  page_id    TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+  user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (page_id, user_id)
+);
+
+/* Posts may be authored by a Page. */
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS page_id TEXT REFERENCES pages(id) ON DELETE CASCADE;
 
 -- Seed the default policy and a starter model price (editable in admin).
 INSERT INTO platform_settings (id, data) VALUES ('global', '{"plans":{"proPriceCents":500,"businessPriceCents":1900,"proPeriodDays":30,"includedTokens":{"pro":5000000,"business":50000000},"currency":"USD"},"freeMonthlyTokens":500000,"lowBalanceCents":100,"graceDays":7,"reminderDays":[7,3,1],"reminderChannels":{"os":true,"email":true,"telegram":true},"onDemand":{"enabled":true,"markupPercent":15,"minTopUpCents":100,"allowPro":false,"onEmpty":"block"},"fallbackPlan":"free"}')

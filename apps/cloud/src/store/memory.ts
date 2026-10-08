@@ -17,10 +17,17 @@ import type {
   MediaRecord,
   ModelPricingRecord,
   NotificationRecord,
+  PageRecord,
+  PageRoleRecord,
   Plan,
   PlatformSettings,
+  PostCommentRecord,
+  PostRecord,
+  PostReportRecord,
+  PostStatsRecord,
   ProviderRole,
   ProviderRoleConfig,
+  QuestRecord,
   SecretRecord,
   SessionRecord,
   Store,
@@ -44,6 +51,7 @@ export class MemoryStore implements Store {
   /** Keyed by `${workspaceId}:${botId}`. */
   private botRoles = new Map<string, BotRoleRecord>();
   private workItems = new Map<string, WorkItemRecord>();
+  private quests = new Map<string, QuestRecord>();
   private budgets = new Map<string, WorkspaceBudgetRecord>();
   /** Keyed by `${workspaceId}:${subject}:${capability}`. */
   private grants = new Map<string, CapabilityGrantRecord>();
@@ -62,6 +70,18 @@ export class MemoryStore implements Store {
   private mediaRecipes = new Map<string, MediaRecipe>();
   private friendRequests = new Map<string, FriendRequestRecord>();
   private friendships = new Set<string>();
+  private posts = new Map<string, PostRecord>();
+  /** Keyed by `${postId}:${userId}`. */
+  private postLikes = new Set<string>();
+  private postComments = new Map<string, PostCommentRecord>();
+  private postShares = new Set<string>();
+  /** Keyed by `${blockerId}:${blockedId}`. */
+  private blocks = new Set<string>();
+  private postReports = new Map<string, PostReportRecord>();
+  private pages = new Map<string, PageRecord>();
+  /** Keyed by `${pageId}:${userId}`. */
+  private pageRoles = new Map<string, PageRoleRecord>();
+  private pageFollowers = new Set<string>();
   private settings: PlatformSettings | null = null;
   private modelPricing = new Map<string, ModelPricingRecord>();
   private invoices = new Map<string, InvoiceRecord>();
@@ -348,6 +368,26 @@ export class MemoryStore implements Store {
     return true;
   }
 
+  async createQuest(record: QuestRecord): Promise<void> {
+    this.quests.set(record.id, structuredClone(record));
+  }
+
+  async getQuest(id: string): Promise<QuestRecord | null> {
+    const record = this.quests.get(id);
+    return record ? structuredClone(record) : null;
+  }
+
+  async listQuests(workspaceId: string): Promise<QuestRecord[]> {
+    return [...this.quests.values()]
+      .filter((quest) => quest.workspaceId === workspaceId)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      .map((quest) => structuredClone(quest));
+  }
+
+  async updateQuest(record: QuestRecord): Promise<void> {
+    this.quests.set(record.id, structuredClone(record));
+  }
+
   async getWorkspaceBudget(workspaceId: string): Promise<WorkspaceBudgetRecord | null> {
     const record = this.budgets.get(workspaceId);
     return record ? structuredClone(record) : null;
@@ -478,6 +518,12 @@ export class MemoryStore implements Store {
       tokens: rows.reduce((sum, record) => sum + record.promptTokens + record.completionTokens, 0),
       requests: rows.length,
     };
+  }
+
+  async usageTokensForQuest(questId: string): Promise<number> {
+    return this.usage
+      .filter((record) => record.questId === questId)
+      .reduce((sum, record) => sum + record.promptTokens + record.completionTokens, 0);
   }
 
   async upsertFile(record: FileRecord): Promise<void> {
@@ -777,6 +823,260 @@ export class MemoryStore implements Store {
   async getDeviceKey(userId: string, deviceId: string): Promise<DeviceKey | null> {
     const record = this.deviceKeys.get(`${userId}:${deviceId}`);
     return record ? { ...record } : null;
+  }
+
+  async listUsersByIds(ids: string[]): Promise<UserRecord[]> {
+    const out: UserRecord[] = [];
+    for (const id of ids) {
+      const record = this.users.get(id);
+      if (record) out.push({ ...record });
+    }
+    return out;
+  }
+
+  async createPost(record: PostRecord): Promise<void> {
+    this.posts.set(record.id, { ...record });
+  }
+
+  async getPost(id: string): Promise<PostRecord | null> {
+    const record = this.posts.get(id);
+    return record ? { ...record } : null;
+  }
+
+  async deletePost(authorId: string, id: string): Promise<boolean> {
+    const record = this.posts.get(id);
+    if (!record || record.authorId !== authorId) return false;
+    this.posts.delete(id);
+    for (const [key, comment] of [...this.postComments]) {
+      if (comment.postId === id) this.postComments.delete(key);
+    }
+    for (const key of [...this.postLikes]) if (key.startsWith(`${id}:`)) this.postLikes.delete(key);
+    for (const key of [...this.postShares]) if (key.startsWith(`${id}:`)) this.postShares.delete(key);
+    return true;
+  }
+
+  async listFeedPosts(authorIds: string[], limit: number, before?: string): Promise<PostRecord[]> {
+    const authors = new Set(authorIds);
+    return [...this.posts.values()]
+      .filter((record) => authors.has(record.authorId) && (!before || record.createdAt < before))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, Math.max(1, Math.min(100, limit)))
+      .map((record) => ({ ...record }));
+  }
+
+  async listPostsByAuthor(authorId: string, limit: number): Promise<PostRecord[]> {
+    return [...this.posts.values()]
+      .filter((record) => record.authorId === authorId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, Math.max(1, Math.min(100, limit)))
+      .map((record) => ({ ...record }));
+  }
+
+  async listTrendingPosts(authorIds: string[], sinceIso: string, limit: number): Promise<PostRecord[]> {
+    const authors = new Set(authorIds);
+    const score = (postId: string): number => {
+      let total = 0;
+      for (const key of this.postLikes) if (key.startsWith(`${postId}:`)) total += 1;
+      for (const key of this.postShares) if (key.startsWith(`${postId}:`)) total += 1;
+      for (const comment of this.postComments.values()) if (comment.postId === postId) total += 1;
+      return total;
+    };
+    return [...this.posts.values()]
+      .filter((record) => authors.has(record.authorId) && record.createdAt >= sinceIso)
+      .sort((a, b) => score(b.id) - score(a.id) || b.createdAt.localeCompare(a.createdAt))
+      .slice(0, Math.max(1, Math.min(50, limit)))
+      .map((record) => ({ ...record }));
+  }
+
+  async setPostLike(postId: string, userId: string, liked: boolean): Promise<void> {
+    const key = `${postId}:${userId}`;
+    if (liked) this.postLikes.add(key);
+    else this.postLikes.delete(key);
+  }
+
+  async listPostComments(postId: string): Promise<PostCommentRecord[]> {
+    return [...this.postComments.values()]
+      .filter((record) => record.postId === postId)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      .map((record) => ({ ...record }));
+  }
+
+  async getPostComment(id: string): Promise<PostCommentRecord | null> {
+    const record = this.postComments.get(id);
+    return record ? { ...record } : null;
+  }
+
+  async createPostComment(record: PostCommentRecord): Promise<void> {
+    this.postComments.set(record.id, { ...record });
+  }
+
+  async deletePostComment(authorId: string, id: string): Promise<boolean> {
+    const record = this.postComments.get(id);
+    if (!record || record.authorId !== authorId) return false;
+    return this.postComments.delete(id);
+  }
+
+  async setPostShare(postId: string, userId: string, shared: boolean): Promise<void> {
+    const key = `${postId}:${userId}`;
+    if (shared) this.postShares.add(key);
+    else this.postShares.delete(key);
+  }
+
+  async getPostStats(postId: string, viewerId: string): Promise<PostStatsRecord> {
+    let likes = 0;
+    for (const key of this.postLikes) if (key.startsWith(`${postId}:`)) likes += 1;
+    let shares = 0;
+    for (const key of this.postShares) if (key.startsWith(`${postId}:`)) shares += 1;
+    let comments = 0;
+    for (const record of this.postComments.values()) if (record.postId === postId) comments += 1;
+    return {
+      likes,
+      comments,
+      shares,
+      likedByMe: this.postLikes.has(`${postId}:${viewerId}`),
+      sharedByMe: this.postShares.has(`${postId}:${viewerId}`),
+    };
+  }
+
+  async blockUser(blockerId: string, blockedId: string): Promise<void> {
+    this.blocks.add(`${blockerId}:${blockedId}`);
+  }
+
+  async unblockUser(blockerId: string, blockedId: string): Promise<boolean> {
+    return this.blocks.delete(`${blockerId}:${blockedId}`);
+  }
+
+  async listBlockedIds(userId: string): Promise<string[]> {
+    const ids: string[] = [];
+    for (const key of this.blocks) {
+      const [blocker, blocked] = key.split(":");
+      if (blocker === userId && blocked) ids.push(blocked);
+    }
+    return ids;
+  }
+
+  async listBlockedEither(userId: string): Promise<string[]> {
+    const ids = new Set<string>();
+    for (const key of this.blocks) {
+      const [blocker, blocked] = key.split(":");
+      if (blocker === userId && blocked) ids.add(blocked);
+      else if (blocked === userId && blocker) ids.add(blocker);
+    }
+    return [...ids];
+  }
+
+  async isBlockedEither(a: string, b: string): Promise<boolean> {
+    return this.blocks.has(`${a}:${b}`) || this.blocks.has(`${b}:${a}`);
+  }
+
+  async createReport(record: PostReportRecord): Promise<void> {
+    this.postReports.set(record.id, { ...record });
+  }
+
+  async listReports(limit: number): Promise<PostReportRecord[]> {
+    return [...this.postReports.values()]
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, Math.max(1, Math.min(200, limit)))
+      .map((record) => ({ ...record }));
+  }
+
+  async updateReportStatus(id: string, status: PostReportRecord["status"]): Promise<boolean> {
+    const record = this.postReports.get(id);
+    if (!record) return false;
+    this.postReports.set(id, { ...record, status });
+    return true;
+  }
+
+  async createPage(record: PageRecord): Promise<void> {
+    this.pages.set(record.id, { ...record });
+  }
+
+  async getPage(id: string): Promise<PageRecord | null> {
+    const record = this.pages.get(id);
+    return record ? { ...record } : null;
+  }
+
+  async getPageByHandle(handle: string): Promise<PageRecord | null> {
+    const wanted = handle.replace(/^@/, "").toLowerCase();
+    for (const record of this.pages.values()) {
+      if (record.handle.toLowerCase() === wanted) return { ...record };
+    }
+    return null;
+  }
+
+  async listPages(ownerId: string): Promise<PageRecord[]> {
+    return [...this.pages.values()]
+      .filter((record) => record.ownerId === ownerId)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      .map((record) => ({ ...record }));
+  }
+
+  async updatePage(record: PageRecord): Promise<void> {
+    if (this.pages.has(record.id)) this.pages.set(record.id, { ...record });
+  }
+
+  async deletePage(ownerId: string, id: string): Promise<boolean> {
+    const record = this.pages.get(id);
+    if (!record || record.ownerId !== ownerId) return false;
+    this.pages.delete(id);
+    for (const [key, role] of [...this.pageRoles]) if (role.pageId === id) this.pageRoles.delete(key);
+    for (const key of [...this.pageFollowers]) if (key.startsWith(`${id}:`)) this.pageFollowers.delete(key);
+    return true;
+  }
+
+  async setPageRole(record: PageRoleRecord): Promise<void> {
+    this.pageRoles.set(`${record.pageId}:${record.userId}`, { ...record });
+  }
+
+  async getPageRole(pageId: string, userId: string): Promise<PageRoleRecord | null> {
+    const record = this.pageRoles.get(`${pageId}:${userId}`);
+    return record ? { ...record } : null;
+  }
+
+  async listPageRoles(pageId: string): Promise<PageRoleRecord[]> {
+    return [...this.pageRoles.values()]
+      .filter((record) => record.pageId === pageId)
+      .map((record) => ({ ...record }));
+  }
+
+  async deletePageRole(pageId: string, userId: string): Promise<boolean> {
+    return this.pageRoles.delete(`${pageId}:${userId}`);
+  }
+
+  async followPage(pageId: string, userId: string): Promise<void> {
+    this.pageFollowers.add(`${pageId}:${userId}`);
+  }
+
+  async unfollowPage(pageId: string, userId: string): Promise<boolean> {
+    return this.pageFollowers.delete(`${pageId}:${userId}`);
+  }
+
+  async isFollowingPage(pageId: string, userId: string): Promise<boolean> {
+    return this.pageFollowers.has(`${pageId}:${userId}`);
+  }
+
+  async listPageFollowerIds(pageId: string): Promise<string[]> {
+    const ids: string[] = [];
+    for (const key of this.pageFollowers) {
+      const [page, user] = key.split(":");
+      if (page === pageId && user) ids.push(user);
+    }
+    return ids;
+  }
+
+  async listFollowedPageIds(userId: string): Promise<string[]> {
+    const ids: string[] = [];
+    for (const key of this.pageFollowers) {
+      const [page, user] = key.split(":");
+      if (user === userId && page) ids.push(page);
+    }
+    return ids;
+  }
+
+  async countPageFollowers(pageId: string): Promise<number> {
+    let count = 0;
+    for (const key of this.pageFollowers) if (key.startsWith(`${pageId}:`)) count += 1;
+    return count;
   }
 }
 

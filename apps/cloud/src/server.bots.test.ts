@@ -73,6 +73,11 @@ describe("bots API", () => {
 
     const removed = await app.inject({ method: "DELETE", url: `/v1/bots/${bot.id}`, headers: auth });
     expect(removed.statusCode).toBe(204);
+
+    // Deleting an already-gone bot is idempotent: a stale client must be able
+    // to drop the row instead of seeing "bot not found".
+    const again = await app.inject({ method: "DELETE", url: `/v1/bots/${bot.id}`, headers: auth });
+    expect(again.statusCode).toBe(204);
     await app.close();
   });
 

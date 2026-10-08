@@ -21,7 +21,8 @@ if (!url || !/^https?:\/\//.test(url)) {
   process.exit(1);
 }
 const waitIndex = process.argv.indexOf("--wait");
-const waitMs = waitIndex >= 0 ? Math.max(0, Math.min(30_000, Number(process.argv[waitIndex + 1]) || 3000)) : 3000;
+const waitMs =
+  waitIndex >= 0 ? Math.max(0, Math.min(30_000, Number(process.argv[waitIndex + 1]) || 3000)) : 3000;
 
 const IMAGE = process.env.BOTIFYR_SANDBOX_IMAGE ?? "botifyr/browser-sandbox:1.63.0";
 const PORT = 8799;

@@ -10,15 +10,39 @@ they land. Keep entries short; link code paths instead of explaining them.
       Role-based model router (brain / translator / ASR / TTS / lip-sync), admin
       provider registry + pricing, local (desktop GPU) *or* cloud executor.
       Design: [`docs/video-translation.md`](video-translation.md). **Not started** —
-      requirements captured, open questions in the doc need answers first.
+      requirements + decisions captured (desktop-local GPU first; both provider types
+      pluggable; **v1 = full dub + lip-sync** with graceful downgrade; stock voices by
+      default). Build order: P0 provider registry → P1 GPU probe + job queue + local
+      worker → P2 subs → P3 dub → P4 lip-sync.
 - [ ] **Company workspaces** — group bots into a company (employees + roles) and
       generate one from a website or idea. Design:
       [`docs/company-workspace.md`](company-workspace.md). **Done**: `Workspace`
       + `BotRole` entities (shared → store → API), the onboarding planner
       (`POST /v1/workspaces/plan`) and the create flow, sidebar grouping +
-      switcher, employee role pills, and the "Start a company" modal.
-      **Remaining**: editable org preview, shared company state (wiki/board),
-      per-workspace budgets, and a dedicated company view.
+      switcher, employee role pills, the "Start a company" modal, the Company HQ
+      (Needs you / Team / Board / Budget / Standup / Office / Wiki), the shared
+      wiki + board, per-workspace budgets, and the **directed quest flow**
+      ([`docs/company-quests.md`](company-quests.md), Q0–Q5).
+      **Remaining**: market & competitor research, product templates → backlog,
+      scheduled delegation/standup automation, and full per-role authorization
+      enforcement.
+- [ ] **Company quests (directed flow)** — fix the experience: Charter →
+      Directions (2–3 cards, CEO chooses) → Assemble → **one** Quest → Operate,
+      instead of "instant org + task dump". "Agents propose, the CEO disposes."
+      Design: [`docs/company-quests.md`](company-quests.md). **Q0–Q2 done**
+      (`CompanyDirection` + `Quest` types/store/schema; `/v1/workspaces/plan`
+      returns direction cards; no silent `saas` fallback; industry from the
+      source; create-from-direction seeds **one** quest with its roadmap).
+      **Q4 done** (quest routes: propose / list / activate / complete +
+      `PATCH /v1/quests/:id`; chair `company.propose` tool; proposed quests
+      surface in **Needs you**). **Q3 done** (setup modal shows direction cards,
+      derives the team + first quest, sends `directionId`/`quest` on create; HQ
+      shows a quest banner with progress and Start/Mark-done). **Q5 done**
+      (quest banner trust dial + budget; the runner attributes usage to the
+      quest, enforces `budgetTokens`, and lets `autonomous` skip approvals; the
+      Grow panel starts the next quest). **Remaining (polish):** `supervised` as
+      a distinct tier (needs per-tool risk at the approval gate), scheduled
+      auto-propose, and market/product intelligence (§15.1–15.2).
 - [ ] **Per-platform extractors** — DramaBox, Hongguo, GoodShort, ShortMax,
       NetShort, QQTV, DramaWave, FreeReels, RaptDrama, ReelLife, ShortFlix,
       DramaTV, DotDrama, iDrama (WeTV/iQIYI already work via yt-dlp). Generic

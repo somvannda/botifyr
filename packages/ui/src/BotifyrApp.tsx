@@ -16,11 +16,14 @@ import type {
   CapabilityGrant,
   ChatMessage,
   CodeRepo,
+  CompanyDirection,
+  CompanyDNA,
   CompanyReport,
   ConnectionInfo,
   CreateWorkspaceRequest,
   Department,
   LearnedSkill,
+  Quest,
   RuntimeConfig,
   SecretSummary,
   ServerEvent,
@@ -40,7 +43,6 @@ import {
   isSealedMessage,
   loadOrCreateDeviceKeys,
   openMessage,
-  sealMessage,
   type Conversation,
   type DeviceKeyPair,
   type MediaItem,
@@ -89,6 +91,7 @@ import {
   UsersIcon,
 } from "./Icons";
 import { Markdown } from "./Markdown";
+import { FeedRail, FeedView } from "./FeedView";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { P2P, deviceId, saveBlob, setIceServers } from "./p2p";
 import { defaultBridge, type BotBridge } from "./bridge";
@@ -141,6 +144,43 @@ function cleanEmoji(value: string | undefined, isGroup: boolean): string {
   if (!trimmed || trimmed.includes("?")) return isGroup ? DEFAULT_GROUP_EMOJI : DEFAULT_EMOJI;
   return trimmed;
 }
+
+/** Emoji per department, used to render a direction's proposed team. */
+const DIRECTION_EMOJI: Record<string, string> = {
+  exec: "🧭",
+  product: "📦",
+  engineering: "💻",
+  design: "🎨",
+  data: "📊",
+  ai: "🤖",
+  growth: "📈",
+  marketing: "📣",
+  sales: "💰",
+  support: "🎧",
+  success: "🤝",
+  ops: "⚙️",
+  finance: "💵",
+  legal: "⚖️",
+  people: "🧑‍💼",
+  logistics: "🚚",
+};
+
+const ROLE_BY_ID = new Map(ROLE_CATALOG.map((role) => [role.id, role]));
+
+/** Turn a chosen direction's role ids into hire-ready members (docs/company-quests.md §2). */
+function membersFromDirection(direction: CompanyDirection): NonNullable<CreateWorkspaceRequest["members"]> {
+  return direction.roles
+    .map((id) => ROLE_BY_ID.get(id))
+    .filter((role): role is (typeof ROLE_CATALOG)[number] => Boolean(role))
+    .map((role) => ({
+      name: role.title,
+      emoji: DIRECTION_EMOJI[role.department] ?? DEFAULT_EMOJI,
+      title: role.title,
+      department: role.department,
+      instructions: role.jobDescription,
+      isChair: role.id === "exec.ceo",
+    }));
+}
 const TOKEN_KEY = "botifyr.token";
 const REFRESH_KEY = "botifyr.refresh";
 
@@ -153,6 +193,12 @@ interface Toast {
   title: string;
   body: string;
   sessionId?: string;
+  /** For message notifications: the source message, so a later decrypt can update the body. */
+  messageId?: string;
+  /** For friend-request notifications: the request to accept or decline. */
+  requestId?: string;
+  /** For feed notifications: clicking opens the Feed tab. */
+  feed?: boolean;
 }
 
 /** A stored notification shown in the header notification centre. */
@@ -174,10 +220,6 @@ const SEEN_MESSAGES_KEY = "botifyr.seenMessages";
 
 /** Marker prefix for an end-to-end encrypted DM body (E2E1:<sealed json>). */
 const E2E_PREFIX = "E2E1:";
-
-function encodeSealed(sealed: SealedMessage): string {
-  return `${E2E_PREFIX}${JSON.stringify(sealed)}`;
-}
 
 function parseSealed(content: string): SealedMessage | null {
   if (!content.startsWith(E2E_PREFIX)) return null;
@@ -344,6 +386,11 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     }
   });
   const [notifOpen, setNotifOpen] = useState(false);
+  const [attachOpen, setAttachOpen] = useState(false);
+  const [lightbox, setLightbox] = useState<{
+    items: { token: string; name: string }[];
+    index: number;
+  } | null>(null);
   const seenMessagesRef = useRef<Set<string>>(
     (() => {
       try {
@@ -357,9 +404,13 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const taskStatusRef = useRef<Record<string, string>>({});
   const bootAtRef = useRef<number>(Date.now());
   const hasConnectedRef = useRef(false);
+  /** Friend-request ids already surfaced (or seeded) so we never double-notify. */
+  const seenRequestsRef = useRef<Set<string>>(new Set());
+  const requestsSeededRef = useRef(false);
   const notifWrapRef = useRef<HTMLDivElement | null>(null);
   const dmKeysRef = useRef<Map<string, CryptoKey>>(new Map());
   const myKeysRef = useRef<DeviceKeyPair | null>(null);
+  const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const [decrypted, setDecrypted] = useState<Record<string, string>>({});
   // When the host renders an OS title bar with a slot, the notification centre
   // is teleported there; otherwise it renders inline in the chat topbar.
@@ -389,8 +440,15 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [companySetupOpen, setCompanySetupOpen] = useState(false);
   const [companySource, setCompanySource] = useState("");
   const [companyPlan, setCompanyPlan] = useState<
-    (CreateWorkspaceRequest & { template?: string; rationale?: string[] }) | null
+    | (CreateWorkspaceRequest & {
+        template?: string;
+        rationale?: string[];
+        directions?: CompanyDirection[];
+        notes?: string[];
+      })
+    | null
   >(null);
+  const [companyDirectionId, setCompanyDirectionId] = useState<string | null>(null);
   const [companyBusy, setCompanyBusy] = useState(false);
   const [companyError, setCompanyError] = useState<string | null>(null);
   const [companyEdit, setCompanyEdit] = useState<{ id: string; name: string } | null>(null);
@@ -431,6 +489,9 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [budgetInput, setBudgetInput] = useState("");
   const [hqGrants, setHqGrants] = useState<Array<CapabilityGrant>>([]);
   const [hqReports, setHqReports] = useState<Array<CompanyReport>>([]);
+  const [hqQuests, setHqQuests] = useState<Array<Quest>>([]);
+  const [growTitle, setGrowTitle] = useState("");
+  const [growObjective, setGrowObjective] = useState("");
   const [hqWiki, setHqWiki] = useState<
     Array<{ id: string; name: string; content: string; department?: string }>
   >([]);
@@ -453,6 +514,10 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [botWorkspace, setBotWorkspace] = useState("");
   const [collapsedWorkspaces, setCollapsedWorkspaces] = useState<Record<string, boolean>>({});
   const [workspaceFilter, setWorkspaceFilter] = useState("all");
+  /** Bumped on any feed event so an open Feed reloads (Phase 3 realtime). */
+  const [feedRefresh, setFeedRefresh] = useState(0);
+  /** When set, the Feed area shows this Page's timeline instead of the feed. */
+  const [feedPage, setFeedPage] = useState<string | null>(null);
   const [groupMembers, setGroupMembers] = useState<string[]>([]);
   const [autonomous, setAutonomous] = useState(false);
   const [autoApprove, setAutoApprove] = useState(false);
@@ -1018,6 +1083,26 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
           return task ? { ...prev, [event.taskId]: { ...task, approval: event.approval } } : prev;
         });
         break;
+      case "feed.post":
+        setFeedRefresh((prev) => prev + 1);
+        break;
+      case "feed.like":
+      case "feed.comment":
+      case "feed.share": {
+        setFeedRefresh((prev) => prev + 1);
+        if (event.toUserId !== user?.id) break;
+        const who = event.fromName?.trim() || "Someone";
+        const title =
+          event.type === "feed.like"
+            ? "New like"
+            : event.type === "feed.comment"
+              ? "New comment"
+              : "New share";
+        const verb =
+          event.type === "feed.like" ? "liked" : event.type === "feed.comment" ? "commented on" : "shared";
+        pushToast({ kind: "message", title, body: `${who} ${verb} your post.`, feed: true });
+        break;
+      }
     }
   }
 
@@ -1028,6 +1113,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       selectBot(bot);
       return;
     }
+    exitFeed();
     setActiveBotId(null);
     setActiveSessionId(sessionId);
   }
@@ -1098,6 +1184,25 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     });
   }
 
+  /** Mark one notification read (so opening it clears it from the bell badge). */
+  function markNotificationRead(id: string): void {
+    setNotifications((prev) => {
+      let changed = false;
+      const next = prev.map((entry) => {
+        if (entry.id !== id || entry.read) return entry;
+        changed = true;
+        return { ...entry, read: true };
+      });
+      if (!changed) return prev;
+      try {
+        localStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }
+
   // Close the notification panel when clicking anywhere outside it.
   useEffect(() => {
     if (!notifOpen) return;
@@ -1127,23 +1232,30 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     [client, user?.id],
   );
 
-  // Decrypt end-to-end encrypted DM bodies for the open conversation.
+  // Decrypt end-to-end encrypted DM bodies. We decrypt every DM (not just the
+  // open one) so notifications and conversation previews can show plaintext.
   useEffect(() => {
     if (!user) return;
-    const session = sessions.find((entry) => entry.id === activeSessionId);
-    if (!session || session.kind !== "dm") return;
-    const sealed = session.messages.filter((message) => parseSealed(message.content));
-    if (sealed.length === 0) return;
+    const pending: Array<{ session: Session; message: Session["messages"][number] }> = [];
+    for (const session of sessions) {
+      if (session.kind !== "dm") continue;
+      for (const message of session.messages) {
+        if (parseSealed(message.content) && !decrypted[message.id]) {
+          pending.push({ session, message });
+        }
+      }
+    }
+    if (pending.length === 0) return;
     let cancelled = false;
     void (async () => {
       try {
-        const key = await getDmKey(session);
-        if (!key) return;
         const entries: Record<string, string> = {};
-        for (const message of sealed) {
+        for (const { session, message } of pending) {
           const envelope = parseSealed(message.content);
           if (!envelope) continue;
           try {
+            const key = await getDmKey(session);
+            if (!key) continue;
             entries[message.id] = await openMessage(key, envelope);
           } catch {
             // wrong key / tampered — leave the ciphertext as-is
@@ -1159,7 +1271,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     return () => {
       cancelled = true;
     };
-  }, [sessions, activeSessionId, user, getDmKey]);
+  }, [sessions, user, decrypted, getDmKey]);
 
   // Pick up the host's title-bar slot once it is mounted (desktop only).
   useEffect(() => {
@@ -1391,7 +1503,13 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     void oauthSignIn();
   }
 
+  /** Leave the Feed workspace when a conversation is picked from the sidebar. */
+  function exitFeed(): void {
+    setWorkspaceFilter((current) => (current === "feed" ? "all" : current));
+  }
+
   function selectBot(bot: Bot) {
+    exitFeed();
     setActiveBotId(bot.id);
     setActiveSessionId(bot.sessionId);
     setShowAudit(false);
@@ -1402,6 +1520,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     setCompanySetupOpen(true);
     setCompanySource("");
     setCompanyPlan(null);
+    setCompanyDirectionId(null);
     setCompanyError(null);
     setCompanyStep("source");
     setWizardUseHours(false);
@@ -1417,6 +1536,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   function closeCompanySetup() {
     setCompanySetupOpen(false);
     setCompanyPlan(null);
+    setCompanyDirectionId(null);
     setCompanyError(null);
     setCompanyBusy(false);
   }
@@ -1509,6 +1629,31 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     }
   }
 
+  /** Apply a chosen direction: its team and its first quest. */
+  function chooseDirection(direction: CompanyDirection) {
+    setCompanyDirectionId(direction.id);
+    setCompanyPlan((prev) =>
+      prev
+        ? {
+            ...prev,
+            directionId: direction.id,
+            members: membersFromDirection(direction),
+            quest: {
+              title: direction.title,
+              objective: direction.objective,
+              acceptance: [direction.objective],
+              roadmap: direction.roadmap,
+            },
+          }
+        : prev,
+    );
+  }
+
+  /** Edit the company's DNA (the shared brief) before hiring — the Charter step. */
+  function updatePlanDna(patch: Partial<CompanyDNA>) {
+    setCompanyPlan((prev) => (prev?.dna ? { ...prev, dna: { ...prev.dna, ...patch } } : prev));
+  }
+
   function updatePlanMember(
     index: number,
     patch: Partial<NonNullable<CreateWorkspaceRequest["members"]>[number]>,
@@ -1589,12 +1734,13 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     setHqPos({ x: 0, y: 0 });
     setAddMemberBotId("");
     try {
-      const [items, needs, budget, grants, reports] = await Promise.all([
+      const [items, needs, budget, grants, reports, quests] = await Promise.all([
         client.listWorkItems(workspaceId).catch(() => []),
         client.listWorkspaceNeeds(workspaceId).catch(() => []),
         client.getWorkspaceBudget(workspaceId).catch(() => null),
         client.listCapabilityGrants(workspaceId).catch(() => []),
         client.listCompanyReports(workspaceId).catch(() => []),
+        client.listQuests(workspaceId).catch(() => []),
       ]);
       setBoardItems(items);
       setHqNeeds(needs);
@@ -1602,6 +1748,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       setBudgetInput(budget && budget.limitTokens > 0 ? String(budget.limitTokens) : "");
       setHqGrants(grants);
       setHqReports(reports);
+      setHqQuests(quests);
       const hours = workspaces.find((entry) => entry.id === workspaceId)?.operatingHours;
       setHoursStart(hours ? String(hours.start) : "9");
       setHoursEnd(hours ? String(hours.end) : "18");
@@ -1961,6 +2108,69 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     if (workspace) await refreshBoard(workspace.id);
   }
 
+  async function refreshQuests(workspaceId: string) {
+    setHqQuests(await client.listQuests(workspaceId).catch(() => []));
+  }
+
+  /** Promote a proposed quest to the active mission (one active at a time). */
+  async function activateQuest(questId: string) {
+    const workspace = boardWorkspace;
+    if (!workspace) return;
+    await client.updateQuest(questId, { status: "active" }).catch(() => {});
+    await refreshQuests(workspace.id);
+  }
+
+  /** Mark the active quest done and refresh the board. */
+  async function finishQuest(questId: string) {
+    const workspace = boardWorkspace;
+    if (!workspace) return;
+    await client.completeQuest(workspace.id, questId).catch(() => {});
+    await refreshQuests(workspace.id);
+    await refreshBoard(workspace.id);
+  }
+
+  /** Set the active quest's autonomy dial (docs/company-quests.md §9). */
+  async function setQuestTrust(trust: Quest["trust"]) {
+    const workspace = boardWorkspace;
+    const quest = hqActiveQuest;
+    if (!workspace || !quest) return;
+    setHqQuests((prev) => prev.map((entry) => (entry.id === quest.id ? { ...entry, trust } : entry)));
+    await client.updateQuest(quest.id, { trust }).catch(() => {});
+  }
+
+  /** Set (or clear) the active quest's token budget. */
+  async function setQuestBudget(value: string) {
+    const workspace = boardWorkspace;
+    const quest = hqActiveQuest;
+    if (!workspace || !quest) return;
+    const tokens = Math.max(0, Math.floor(Number(value) || 0));
+    setHqQuests((prev) =>
+      prev.map((entry) => (entry.id === quest.id ? { ...entry, budgetTokens: tokens || undefined } : entry)),
+    );
+    await client.updateQuest(quest.id, { budgetTokens: tokens || null }).catch(() => {});
+  }
+
+  /** Grow: start the company's next quest (docs/company-quests.md §10.3). */
+  async function startNewQuest() {
+    const workspace = boardWorkspace;
+    const title = growTitle.trim();
+    if (!workspace || !title || boardBusy) return;
+    setBoardBusy(true);
+    try {
+      await client.createQuest(workspace.id, {
+        title,
+        objective: growObjective.trim() || title,
+        activate: true,
+      });
+      setGrowTitle("");
+      setGrowObjective("");
+      await refreshQuests(workspace.id);
+      await refreshBoard(workspace.id);
+    } finally {
+      setBoardBusy(false);
+    }
+  }
+
   function openCreateBot(mode: "bot" | "group") {
     setCreateBotMode(mode);
     setEditingBotId(null);
@@ -2150,6 +2360,26 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     }
   }
 
+  /** Delete a personal conversation from the sidebar and the server. */
+  async function removeChat(session: Session): Promise<void> {
+    setConfirmDeleteId(null);
+    const dropLocally = () => {
+      setSessions((prev) => prev.filter((entry) => entry.id !== session.id));
+      setActiveSessionId((cur) => (cur === session.id ? null : cur));
+    };
+    try {
+      await client.deleteConversation(session.id);
+      dropLocally();
+    } catch (err: unknown) {
+      // A conversation that is already gone still needs to leave the sidebar.
+      if (messageOf(err).toLowerCase().includes("not found")) {
+        dropLocally();
+        return;
+      }
+      setError(messageOf(err));
+    }
+  }
+
   async function sendMessage(raw: string) {
     const trimmed = raw.trim();
     if (!trimmed || !activeSessionId || sending) return;
@@ -2184,19 +2414,11 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     try {
       const session = sessions.find((entry) => entry.id === sessionId);
       const activeKind = session?.kind;
-      let outgoing = payload;
-      // Encrypt direct messages end-to-end when the peer has published a key.
-      if (activeKind === "dm" && session) {
-        try {
-          const key = await getDmKey(session);
-          if (key) outgoing = encodeSealed(await sealMessage(key, payload));
-        } catch {
-          // fall back to plaintext
-        }
-      }
+      // Direct messages are sent in plaintext so conversations stay readable
+      // across devices and after key rotation (E2E for DMs was dropped).
       const result =
         activeKind === "dm" || activeKind === "group"
-          ? await client.sendDm(sessionId, outgoing)
+          ? await client.sendDm(sessionId, payload)
           : await client.sendMessage(sessionId, payload, useComputer);
       const updated = result.session;
       const warning = (result as { warning?: string }).warning;
@@ -2823,9 +3045,15 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   }
 
   async function openDmWith(person: Person): Promise<void> {
+    exitFeed();
     try {
       const session = await client.openDm(person.id);
-      setSessions((prev) => (prev.some((entry) => entry.id === session.id) ? prev : [session, ...prev]));
+      setSessions((prev) => {
+        const exists = prev.some((entry) => entry.id === session.id);
+        // Adopt the freshly fetched session (with its full history) instead of
+        // keeping the empty summary placeholder from the conversation list.
+        return exists ? prev.map((entry) => (entry.id === session.id ? session : entry)) : [session, ...prev];
+      });
       setActiveBotId(null);
       setActiveSessionId(session.id);
       setShowPeople(false);
@@ -2836,6 +3064,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
 
   /** Open an existing human conversation from the Chats list. */
   function openChat(session: Session): void {
+    exitFeed();
     setActiveBotId(null);
     setActiveSessionId(session.id);
     setShowPeople(false);
@@ -2856,10 +3085,59 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     try {
       const { token: shareToken } = await client.shareMedia(item.id, person.id);
       const session = await client.openDm(person.id);
-      await client.sendDm(session.id, `📎 ${prettyFileName(item.name)}\n/shared/${shareToken}`);
+      await client.sendDm(session.id, `📎 ${item.name}\n/shared/${shareToken}`);
       setSessions((prev) => (prev.some((entry) => entry.id === session.id) ? prev : [session, ...prev]));
       setActiveBotId(null);
       setActiveSessionId(session.id);
+    } catch (err: unknown) {
+      setError(messageOf(err));
+    }
+  }
+
+  /** Attach a downloaded file to the open conversation via a signed share link. */
+  async function attachFile(item: MediaItem): Promise<void> {
+    setAttachOpen(false);
+    const session = activeSession;
+    if (!session || (session.kind !== "dm" && session.kind !== "group")) {
+      setError("Files can be attached in personal chats (direct messages and groups).");
+      return;
+    }
+    const recipients = (session.participants ?? []).filter((id) => id !== user?.id);
+    if (recipients.length === 0) {
+      setError("There is no one to share with in this chat.");
+      return;
+    }
+    // Any text already typed in the composer becomes the attachment's caption.
+    const caption = text.trim();
+    try {
+      for (const recipient of recipients) {
+        const { token: shareToken } = await client.shareMedia(item.id, recipient);
+        const body = `📎 ${item.name}\n/shared/${shareToken}${caption ? `\n${caption}` : ""}`;
+        const result = await client.sendDm(session.id, body);
+        setSessions((prev) => prev.map((entry) => (entry.id === result.session.id ? result.session : entry)));
+      }
+      if (caption) setText("");
+    } catch (err: unknown) {
+      setError(messageOf(err));
+    }
+  }
+
+  /** Upload a local file from this device, then attach it to the open chat. */
+  async function uploadAndAttach(file: File): Promise<void> {
+    setAttachOpen(false);
+    if (file.size > 15 * 1024 * 1024) {
+      setError("That file is too large — the limit is 15MB.");
+      return;
+    }
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result ?? ""));
+        reader.onerror = () => reject(new Error("could not read the file"));
+        reader.readAsDataURL(file);
+      });
+      const item = await client.uploadFile({ name: file.name, mime: file.type, data: dataUrl });
+      await attachFile(item);
     } catch (err: unknown) {
       setError(messageOf(err));
     }
@@ -2874,6 +3152,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
         avatarUrl: profileAvatarUrl ?? null,
       });
       setUser(updated);
+      // Refresh the directory so the new name appears in conversations.
+      void loadPeople();
       setCheckNote("Profile saved.");
     } catch (err: unknown) {
       setError(messageOf(err));
@@ -2932,7 +3212,108 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
           (person.handle ?? "").toLowerCase().includes(newChatQ),
       )
     : friends;
-  const activeBotName = activeBot?.name ?? "Botifyr";
+  /** Display name for a human conversation (peer name for DMs, title for groups). */
+  const humanChatName = (session: Session): string => {
+    if (session.kind === "group") return session.title || "Group";
+    const peerId = (session.participants ?? []).find((id) => id !== user?.id);
+    const peer = friends.find((person) => person.id === peerId);
+    return peer?.displayName || (peer?.handle ? `@${peer.handle}` : "") || session.title || "Conversation";
+  };
+  const activePeer =
+    activeSession && activeSession.kind === "dm"
+      ? friends.find(
+          (person) => person.id === (activeSession.participants ?? []).find((id) => id !== user?.id),
+        )
+      : undefined;
+  const activeBotName = activeBot?.name ?? (activeSession ? humanChatName(activeSession) : "Botifyr");
+  // Files shared in the open human conversation (📎 name … /shared/<token>).
+  const activeSharedFiles =
+    activeSession && (activeSession.kind === "dm" || activeSession.kind === "group")
+      ? activeSession.messages
+          .map((message) => {
+            const text = displayText(decrypted, message.content, message.id);
+            const shareToken = sharedTokenOf(text);
+            if (!shareToken) return null;
+            const name =
+              text
+                .split("\n")[0]
+                .replace(/^📎\s*/, "")
+                .trim() || "Shared file";
+            return { token: shareToken, name };
+          })
+          .filter((file): file is { token: string; name: string } => Boolean(file))
+      : [];
+
+  /** Signed, owner/recipient-scoped URL for a shared file. */
+  function sharedUrl(shareToken: string): string {
+    return `${CLOUD_URL}/v1/shared?share=${encodeURIComponent(shareToken)}&token=${encodeURIComponent(token() ?? "")}`;
+  }
+
+  /** Open the media viewer at the given image, across all images in the chat. */
+  function openLightbox(file: { token: string; name: string }): void {
+    const images = activeSharedFiles.filter((entry) => /\.(png|jpe?g|webp|gif|svg)$/i.test(entry.name));
+    if (images.length === 0) return;
+    const index = Math.max(
+      0,
+      images.findIndex((entry) => entry.token === file.token),
+    );
+    setLightbox({ items: images, index });
+  }
+
+  /** Render a shared-file attachment: inline preview for media, else a chip. */
+  function dmFileCard(text: string) {
+    const file = sharedFileOf(text);
+    if (!file) return null;
+    const url = sharedUrl(file.token);
+    const lower = file.name.toLowerCase();
+    const isImage = /\.(png|jpe?g|webp|gif|svg)$/.test(lower);
+    const isVideo = /\.(mp4|webm)$/.test(lower);
+    const isAudio = /\.(mp3|wav|ogg)$/.test(lower);
+    // Media shows as the media itself (click an image to open it); other files
+    // show as a file chip. An optional caption sits under the media.
+    const caption = file.caption ? <div className="dm-caption">{file.caption}</div> : null;
+    if (isImage) {
+      return (
+        <div className="dm-media-wrap">
+          <img
+            className="dm-preview-img"
+            src={url}
+            alt={file.name}
+            loading="lazy"
+            onClick={() => openLightbox(file)}
+          />
+          {caption}
+        </div>
+      );
+    }
+    if (isVideo) {
+      return (
+        <div className="dm-media-wrap">
+          <video className="dm-preview-video" src={url} controls preload="metadata" />
+          {caption}
+        </div>
+      );
+    }
+    if (isAudio) {
+      return (
+        <div className="dm-media-wrap">
+          <audio className="dm-preview-audio" src={url} controls preload="metadata" />
+          {caption}
+        </div>
+      );
+    }
+    return (
+      <div className="dm-media-wrap">
+        <button className="dm-file" type="button" onClick={() => void openExternal(url)}>
+          <span className="dm-file-ico">{fileIconFor(file.name)}</span>
+          <span className="dm-file-name">{file.name}</span>
+          <span className="dm-file-save">Save</span>
+        </button>
+        {caption}
+      </div>
+    );
+  }
+
   const botLabel = activeBotId ? (labels[activeBotId] ?? "") : "";
   const groupMemberBots: Bot[] = activeBot?.memberIds
     ? activeBot.memberIds
@@ -2976,6 +3357,13 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   for (const workspace of workspaces) {
     if (!workspaceByName.has(workspace.name)) workspaceByName.set(workspace.name, workspace);
   }
+  /** The quest the HQ banner shows: the active mission, else the first proposed. */
+  const hqActiveQuest =
+    hqQuests.find((quest) => quest.status === "active") ??
+    hqQuests.find((quest) => quest.status === "proposed") ??
+    null;
+  /** Proposed quests wait on the CEO in the "Needs you" queue. */
+  const hqPendingQuests = hqQuests.filter((quest) => quest.status === "proposed");
   const roleByBotId = new Map<string, BotRole>();
   const workspaceIdByBotId = new Map<string, string>();
   for (const workspace of workspaces) {
@@ -3004,15 +3392,25 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   ];
   // Guard against a stale filter (e.g. after the last bot leaves a company).
   const activeWorkspaceFilter =
-    workspaceFilter === "all" || workspaceFilter === "personal" || workspaceById.has(workspaceFilter)
+    workspaceFilter === "all" ||
+    workspaceFilter === "personal" ||
+    workspaceFilter === "feed" ||
+    workspaceById.has(workspaceFilter)
       ? workspaceFilter
       : "all";
+  // Feed is a view, not a workspace filter: the left list keeps showing the
+  // chats while the main area swaps to the social timeline.
+  const feedActive = activeWorkspaceFilter === "feed";
   const workspaceFiltered =
-    activeWorkspaceFilter === "all"
+    activeWorkspaceFilter === "all" || feedActive
       ? filteredBots
       : activeWorkspaceFilter === "personal"
         ? filteredBots.filter((bot) => companyOf(bot).id === "personal")
         : filteredBots.filter((bot) => companyOf(bot).id === activeWorkspaceFilter);
+  // Human conversations live in the "Personal" workspace: show them on the All
+  // and Personal tabs, hide them when a company tab is selected.
+  const personalChats =
+    activeWorkspaceFilter === "all" || activeWorkspaceFilter === "personal" || feedActive ? humanChats : [];
   const companyGroups = new Map<string, { name: string; workspace?: WorkspaceWithRoles; members: Bot[] }>();
   const ungroupedBots: Bot[] = [];
   for (const bot of workspaceFiltered) {
@@ -3119,17 +3517,30 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       setSessions((prev) => {
         const byId = new Map(prev.map((session) => [session.id, session]));
         for (const convo of human) {
-          if (!byId.has(convo.id)) {
-            byId.set(convo.id, {
-              id: convo.id,
-              userId: user?.id ?? "",
-              title: convo.title,
-              messages: [],
-              createdAt: convo.createdAt,
-              kind: convo.kind,
-              participants: convo.participants,
-            });
-          }
+          if (byId.has(convo.id)) continue;
+          // Seed the last message from the summary so the list shows a preview
+          // before the full thread is loaded. Opening the chat replaces this
+          // placeholder with the real session.
+          const last = convo.last;
+          byId.set(convo.id, {
+            id: convo.id,
+            userId: user?.id ?? "",
+            title: convo.title,
+            messages: last
+              ? [
+                  {
+                    id: last.id,
+                    role: last.role === "assistant" ? "assistant" : "user",
+                    content: last.content,
+                    createdAt: last.createdAt,
+                    senderId: last.senderId,
+                  },
+                ]
+              : [],
+            createdAt: convo.createdAt,
+            kind: convo.kind,
+            participants: convo.participants,
+          });
         }
         return [...byId.values()];
       });
@@ -3141,7 +3552,45 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   useEffect(() => {
     if (!user) return;
     void loadPeople();
+    // Keep friends/requests fresh so name changes and new requests show up
+    // without a reload (there is no realtime event for the directory yet).
+    const refresh = () => void loadPeople();
+    const timer = window.setInterval(refresh, 30_000);
+    const onVisible = () => {
+      if (!document.hidden) refresh();
+    };
+    window.addEventListener("focus", onVisible);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", onVisible);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [user, loadPeople]);
+
+  // Raise a notification for new incoming friend requests. Existing requests are
+  // seeded silently on first load so a refresh doesn't spam the bell.
+  useEffect(() => {
+    if (!user) return;
+    const seen = seenRequestsRef.current;
+    if (!requestsSeededRef.current) {
+      for (const request of friendRequests) seen.add(request.id);
+      requestsSeededRef.current = true;
+      return;
+    }
+    for (const request of friendRequests) {
+      if (request.direction !== "incoming" || seen.has(request.id)) continue;
+      seen.add(request.id);
+      const name =
+        request.person.displayName || (request.person.handle ? `@${request.person.handle}` : "Someone");
+      pushToast({
+        kind: "message",
+        title: "Friend request",
+        body: `${name} wants to connect.`,
+        requestId: request.id,
+      });
+    }
+  }, [friendRequests, user, pushToast]);
 
   // Keep the media manifest handy (bot Library + Media tab).
   useEffect(() => {
@@ -3181,17 +3630,25 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
           session.kind === "dm" || session.kind === "group"
             ? Boolean(message.senderId && message.senderId !== user.id)
             : message.role === "assistant";
-        const body = displayText(decrypted, message.content, message.id).replace(/\s+/g, " ").trim();
+        const body = previewText(displayText(decrypted, message.content, message.id));
         if (!incoming || !body) continue;
         // Never replay history on startup: only notify for messages that
         // arrived after this session of the app began.
         const created = message.createdAt ? Date.parse(message.createdAt) : 0;
         if (created && created < bootAtRef.current - 5_000) continue;
+        const sender =
+          session.kind === "dm" ? friends.find((person) => person.id === message.senderId) : undefined;
+        const title =
+          bot?.name ??
+          (session.kind === "dm"
+            ? sender?.displayName || (sender?.handle ? `@${sender.handle}` : "New message")
+            : session.title || "New message");
         pushToast({
           kind: "message",
-          title: bot?.name ?? (session.kind === "dm" ? "New message" : session.title || "New message"),
+          title,
           body: body.slice(0, 120),
           sessionId: session.id,
+          messageId: message.id,
         });
       }
     }
@@ -3200,7 +3657,40 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     } catch {
       // ignore quota errors
     }
-  }, [sessions, activeSessionId, user, bots, pushToast]);
+  }, [sessions, activeSessionId, user, bots, friends, decrypted, pushToast]);
+
+  // Once a DM body is decrypted, replace the placeholder text in any live toast
+  // or stored notification that was raised before the plaintext was available.
+  useEffect(() => {
+    function bodyFor(entry: Toast): string | null {
+      if (!entry.messageId) return null;
+      const text = decrypted[entry.messageId];
+      if (!text) return null;
+      const body = text.replace(/\s+/g, " ").trim().slice(0, 120);
+      return body && body !== entry.body ? body : null;
+    }
+    function updateList<T extends Toast>(list: T[]): T[] {
+      let changed = false;
+      const next = list.map((entry) => {
+        const body = bodyFor(entry);
+        if (!body) return entry;
+        changed = true;
+        return { ...entry, body };
+      });
+      return changed ? next : list;
+    }
+    setToasts((prev) => updateList(prev));
+    setNotifications((prev) => {
+      const next = updateList(prev);
+      if (next === prev) return prev;
+      try {
+        localStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }, [decrypted]);
 
   // Raise a toast when a task finishes or fails while you're elsewhere.
   useEffect(() => {
@@ -3377,6 +3867,64 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     );
   };
 
+  /** One human conversation (DM / group) row in the sidebar. */
+  const renderChatRow = (chat: Session) => {
+    const last = chat.messages[chat.messages.length - 1];
+    const peer =
+      chat.kind === "dm"
+        ? friends.find((person) => person.id === (chat.participants ?? []).find((id) => id !== user?.id))
+        : undefined;
+    const active = chat.id === activeSessionId && !activeBotId;
+    return (
+      <div key={chat.id} className={`conv-item${active ? " active" : ""}`}>
+        <button className="conv-select" type="button" onClick={() => openChat(chat)}>
+          <span className="conv-avatar">
+            {peer ? (
+              <PersonAvatar person={peer} size={34} />
+            ) : (
+              <span className="newchat-emoji">{chat.kind === "group" ? "👥" : "💬"}</span>
+            )}
+          </span>
+          <span className="conv-text">
+            <span className="conv-name">{humanChatName(chat)}</span>
+            <span className="conv-preview">
+              {last
+                ? previewText(displayText(decrypted, last.content ?? "", last.id)).slice(0, 42) ||
+                  "No messages yet"
+                : "No messages yet"}
+            </span>
+          </span>
+        </button>
+        <span className="conv-aside">
+          {unreadCount(chat.id) > 0 && <span className="unread-badge">{unreadCount(chat.id)}</span>}
+          {confirmDeleteId === chat.id ? (
+            <button
+              className="conv-delete confirm"
+              type="button"
+              title="Tap to confirm delete"
+              onClick={() => void removeChat(chat)}
+            >
+              Delete
+            </button>
+          ) : (
+            <button
+              className="conv-delete"
+              type="button"
+              title="Delete chat"
+              aria-label="Delete chat"
+              onClick={() => {
+                setConfirmDeleteId(chat.id);
+                window.setTimeout(() => setConfirmDeleteId((cur) => (cur === chat.id ? null : cur)), 3000);
+              }}
+            >
+              <CloseIcon size={13} />
+            </button>
+          )}
+        </span>
+      </div>
+    );
+  };
+
   /** The bell + dropdown; teleported into the OS title bar when the host provides a slot. */
   const notificationCentre = (
     <div className="notif-wrap" ref={notifWrapRef}>
@@ -3400,35 +3948,76 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
             <div className="notif-empty">Nothing yet.</div>
           ) : (
             <ul className="notif-list">
-              {notifications.map((entry) => (
-                <li key={entry.id} className="notif-row">
-                  <button
-                    className={`notif-item${entry.read ? "" : " unread"}`}
-                    type="button"
-                    onClick={() => {
-                      if (entry.sessionId) openSessionById(entry.sessionId);
-                      setNotifOpen(false);
-                    }}
-                  >
-                    <span className="notif-title">{entry.title}</span>
-                    <span className="notif-body">{entry.body}</span>
-                    <span className="notif-time">
-                      {new Date(entry.at).toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </span>
-                  </button>
-                  <button
-                    className="notif-x"
-                    type="button"
-                    title="Dismiss"
-                    onClick={() => dismissNotification(entry.id)}
-                  >
-                    <CloseIcon size={13} />
-                  </button>
-                </li>
-              ))}
+              {notifications.map((entry) => {
+                const requestId = entry.requestId;
+                return (
+                  <li key={entry.id} className="notif-row">
+                    {requestId ? (
+                      <div className={`notif-item${entry.read ? "" : " unread"}`}>
+                        <span className="notif-title">{entry.title}</span>
+                        <span className="notif-body">{entry.body}</span>
+                        <span className="notif-time">
+                          {new Date(entry.at).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                        <span className="notif-actions">
+                          <button
+                            className="btn primary small"
+                            type="button"
+                            onClick={() =>
+                              void respondRequest(requestId, "accept").then(() =>
+                                dismissNotification(entry.id),
+                              )
+                            }
+                          >
+                            Accept
+                          </button>
+                          <button
+                            className="btn small"
+                            type="button"
+                            onClick={() =>
+                              void respondRequest(requestId, "decline").then(() =>
+                                dismissNotification(entry.id),
+                              )
+                            }
+                          >
+                            Decline
+                          </button>
+                        </span>
+                      </div>
+                    ) : (
+                      <button
+                        className={`notif-item${entry.read ? "" : " unread"}`}
+                        type="button"
+                        onClick={() => {
+                          markNotificationRead(entry.id);
+                          if (entry.sessionId) openSessionById(entry.sessionId);
+                          setNotifOpen(false);
+                        }}
+                      >
+                        <span className="notif-title">{entry.title}</span>
+                        <span className="notif-body">{entry.body}</span>
+                        <span className="notif-time">
+                          {new Date(entry.at).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                      </button>
+                    )}
+                    <button
+                      className="notif-x"
+                      type="button"
+                      title="Dismiss"
+                      onClick={() => dismissNotification(entry.id)}
+                    >
+                      <CloseIcon size={13} />
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
@@ -3438,9 +4027,58 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
 
   return (
     <div
-      className={`app${showBotPanel && activeBot ? " with-panel" : ""}${officeDocked ? " with-office" : ""}${density === "compact" ? " density-compact" : ""}`}
+      className={`app${feedActive || (showBotPanel && (activeBot || (activeSession && (activeSession.kind === "dm" || activeSession.kind === "group")))) ? " with-panel" : ""}${officeDocked ? " with-office" : ""}${density === "compact" ? " density-compact" : ""}`}
     >
       {titlebarSlot && createPortal(notificationCentre, titlebarSlot)}
+      {lightbox && lightbox.items[lightbox.index] && (
+        <div className="lightbox" onClick={() => setLightbox(null)}>
+          <button className="lightbox-close" type="button" title="Close" onClick={() => setLightbox(null)}>
+            <CloseIcon size={18} />
+          </button>
+          {lightbox.items.length > 1 && (
+            <button
+              className="lightbox-nav prev"
+              type="button"
+              aria-label="Previous"
+              onClick={(event) => {
+                event.stopPropagation();
+                setLightbox((current) =>
+                  current
+                    ? {
+                        ...current,
+                        index: (current.index - 1 + current.items.length) % current.items.length,
+                      }
+                    : current,
+                );
+              }}
+            >
+              ‹
+            </button>
+          )}
+          <img
+            className="lightbox-img"
+            src={sharedUrl(lightbox.items[lightbox.index].token)}
+            alt={lightbox.items[lightbox.index].name}
+            onClick={(event) => event.stopPropagation()}
+          />
+          {lightbox.items.length > 1 && (
+            <button
+              className="lightbox-nav next"
+              type="button"
+              aria-label="Next"
+              onClick={(event) => {
+                event.stopPropagation();
+                setLightbox((current) =>
+                  current ? { ...current, index: (current.index + 1) % current.items.length } : current,
+                );
+              }}
+            >
+              ›
+            </button>
+          )}
+          <div className="lightbox-caption">{lightbox.items[lightbox.index].name}</div>
+        </div>
+      )}
       {toasts.length > 0 && (
         <div className="toast-stack">
           {toasts.map((toast) => (
@@ -3449,6 +4087,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                 className="toast-main"
                 type="button"
                 onClick={() => {
+                  markNotificationRead(toast.id);
+                  if (toast.feed) setWorkspaceFilter("feed");
                   if (toast.sessionId) openSessionById(toast.sessionId);
                   dismissToast(toast.id);
                 }}
@@ -3496,44 +4136,51 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
           <span className="sidebar-brand-name">Botifyr</span>
         </div>
 
-        {companies.length > 0 && (
-          <div className="ws-tabs" role="tablist" aria-label="Filter by workspace">
+        <div className="ws-tabs" role="tablist" aria-label="Filter by workspace">
+          <button
+            className={`ws-tab${activeWorkspaceFilter === "all" ? " active" : ""}`}
+            type="button"
+            role="tab"
+            aria-selected={activeWorkspaceFilter === "all"}
+            onClick={() => setWorkspaceFilter("all")}
+          >
+            All
+          </button>
+          <button
+            className={`ws-tab${activeWorkspaceFilter === "personal" ? " active" : ""}`}
+            type="button"
+            role="tab"
+            aria-selected={activeWorkspaceFilter === "personal"}
+            onClick={() => setWorkspaceFilter("personal")}
+          >
+            Personal
+          </button>
+          <button
+            className={`ws-tab${feedActive ? " active" : ""}`}
+            type="button"
+            role="tab"
+            aria-selected={feedActive}
+            onClick={() => setWorkspaceFilter("feed")}
+          >
+            Feed
+          </button>
+          {companies.map((company) => (
             <button
-              className={`ws-tab${activeWorkspaceFilter === "all" ? " active" : ""}`}
+              key={company.id}
+              className={`ws-tab${activeWorkspaceFilter === company.id ? " active" : ""}`}
               type="button"
               role="tab"
-              aria-selected={activeWorkspaceFilter === "all"}
-              onClick={() => setWorkspaceFilter("all")}
+              aria-selected={activeWorkspaceFilter === company.id}
+              onClick={() => setWorkspaceFilter(company.id)}
+              title={company.name}
             >
-              All
+              {company.name}
             </button>
-            <button
-              className={`ws-tab${activeWorkspaceFilter === "personal" ? " active" : ""}`}
-              type="button"
-              role="tab"
-              aria-selected={activeWorkspaceFilter === "personal"}
-              onClick={() => setWorkspaceFilter("personal")}
-            >
-              Personal
-            </button>
-            {companies.map((company) => (
-              <button
-                key={company.id}
-                className={`ws-tab${activeWorkspaceFilter === company.id ? " active" : ""}`}
-                type="button"
-                role="tab"
-                aria-selected={activeWorkspaceFilter === company.id}
-                onClick={() => setWorkspaceFilter(company.id)}
-                title={company.name}
-              >
-                {company.name}
-              </button>
-            ))}
-          </div>
-        )}
+          ))}
+        </div>
 
         <div className="task-list">
-          {workspaceFiltered.length === 0 && (
+          {workspaceFiltered.length === 0 && personalChats.length === 0 && (
             <p className="empty">
               {activeWorkspaceFilter === "all"
                 ? "No bots yet. Tap ＋ to create one."
@@ -3610,12 +4257,13 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
               </div>
             );
           })}
-          {companyGroups.size > 0 && ungroupedBots.length > 0 && (
+          {companyGroups.size > 0 && (ungroupedBots.length > 0 || personalChats.length > 0) && (
             <div className="task-section-head static" aria-hidden="true">
               <span className="task-section-name">Personal</span>
-              <span className="task-section-count">{ungroupedBots.length}</span>
+              <span className="task-section-count">{ungroupedBots.length + personalChats.length}</span>
             </div>
           )}
+          {personalChats.map(renderChatRow)}
           {ungroupedBots.map(renderBotRow)}
         </div>
 
@@ -3793,807 +4441,877 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       </aside>
 
       <main className="main">
-        {showNewChat && (
-          <div className="newchat-overlay" onClick={() => setShowNewChat(false)}>
-            <span className="newchat-title">To: Start a chat with…</span>
-            <div className="newchat-panel" onClick={(event) => event.stopPropagation()}>
-              <div className="newchat-actions">
-                <button className="newchat-item" type="button" onClick={() => openCreateBot("bot")}>
-                  <span className="newchat-ico">
-                    <PlusIcon size={16} />
-                  </span>
-                  Create new Bot
-                </button>
-                <button className="newchat-item" type="button" onClick={() => openCreateBot("group")}>
-                  <span className="newchat-ico">
-                    <UsersIcon size={16} />
-                  </span>
-                  Create group chat
-                </button>
-                <button className="newchat-item" type="button" onClick={openCompanySetup}>
-                  <span className="newchat-ico">
-                    <BotLogo size={16} />
-                  </span>
-                  Start a company
-                </button>
-              </div>
-
-              <div className="newchat-search">
-                <SearchIcon size={15} />
-                <input
-                  placeholder="Search bots, groups, and people"
-                  value={newChatQuery}
-                  autoFocus
-                  onChange={(event) => setNewChatQuery(event.target.value)}
-                />
-              </div>
-
-              <nav className="people-tabs" role="tablist">
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={newChatTab === "contacts"}
-                  className={`people-tab ${newChatTab === "contacts" ? "active" : ""}`}
-                  onClick={() => setNewChatTab("contacts")}
-                >
-                  <UserIcon size={15} />
-                  Contacts
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={newChatTab === "chats"}
-                  className={`people-tab ${newChatTab === "chats" ? "active" : ""}`}
-                  onClick={() => setNewChatTab("chats")}
-                >
-                  <MessageIcon size={15} />
-                  Chats
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={newChatTab === "calls"}
-                  className={`people-tab ${newChatTab === "calls" ? "active" : ""}`}
-                  onClick={() => setNewChatTab("calls")}
-                >
-                  <PhoneIcon size={15} />
-                  Calls
-                </button>
-              </nav>
-
-              {newChatTab === "contacts" && (
-                <div className="newchat-list">
-                  {matchingFriends.length === 0 ? (
-                    <div className="newchat-empty">
-                      {friends.length === 0
-                        ? "No contacts yet — add friends from People."
-                        : "No contacts match your search."}
-                    </div>
-                  ) : (
-                    matchingFriends.map((person) => (
-                      <button
-                        key={person.id}
-                        className="newchat-item"
-                        type="button"
-                        onClick={() => {
-                          setShowNewChat(false);
-                          void openDmWith(person);
-                        }}
-                      >
-                        <PersonAvatar person={person} size={30} />
-                        <span className="newchat-name">
-                          {person.displayName || (person.handle ? `@${person.handle}` : "Friend")}
-                        </span>
-                        <span className="newchat-meta">{person.online ? "online" : "offline"}</span>
-                      </button>
-                    ))
-                  )}
-                </div>
-              )}
-
-              {newChatTab === "chats" && (
-                <div className="newchat-list">
-                  {matchingBots.length === 0 ? (
-                    <div className="newchat-empty">
-                      {bots.length === 0 ? "No chats yet — create a bot." : "No chats match your search."}
-                    </div>
-                  ) : (
-                    matchingBots.map((bot) => {
-                      const isGroup = Boolean(bot.memberIds && bot.memberIds.length > 0);
-                      return (
-                        <button
-                          key={bot.id}
-                          className={`newchat-item ${bot.id === activeBotId ? "active" : ""}`}
-                          type="button"
-                          onClick={() => selectBot(bot)}
-                        >
-                          <span className="conv-avatar">
-                            <BotLogo size={26} scheme={BOT_SCHEMES[bot.scheme % BOT_SCHEMES.length]} />
-                          </span>
-                          <span className="newchat-name">
-                            <span className="newchat-emoji">{cleanEmoji(bot.emoji, isGroup)}</span>
-                            {bot.name}
-                          </span>
-                          {isGroup && <span className="newchat-meta">{bot.memberIds?.length ?? 0} bots</span>}
-                        </button>
-                      );
-                    })
-                  )}
-                </div>
-              )}
-
-              {newChatTab === "calls" && (
-                <div className="newchat-list">
-                  <div className="people-empty">
-                    <span className="people-empty-ico">
-                      <PhoneIcon size={26} />
-                    </span>
-                    <div className="people-empty-title">Calls are coming soon</div>
-                    <div className="people-empty-sub">Voice and video calls aren't available yet.</div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {!showNewChat && (
-          <header className="topbar">
-            {findOpen ? (
-              <div className="thread-search">
-                <SearchIcon size={15} />
-                <input
-                  placeholder="Search this chat"
-                  value={findQuery}
-                  onChange={(event) => setFindQuery(event.target.value)}
-                  autoFocus
-                />
-                {findQuery.trim() && <span className="thread-search-count">{findMatches}</span>}
-                <button
-                  className="icon-btn sm"
-                  type="button"
-                  aria-label="Close search"
-                  onClick={() => {
-                    setFindOpen(false);
-                    setFindQuery("");
-                  }}
-                >
-                  <CloseIcon size={13} />
-                </button>
-              </div>
-            ) : (
-              <span className="thread-pill">
-                <BotLogo size={18} scheme={activeScheme} />
-                {activeBot && (
-                  <span className="newchat-emoji">
-                    {cleanEmoji(activeBot.emoji, (activeBot.memberIds?.length ?? 0) > 0)}
-                  </span>
-                )}
-                {liveTask && <span className={`status-dot status-${liveTask.status}`} />}
-                <span className="thread-pill-name">{activeBotName}</span>
-                {activeBot?.workspace && (
-                  <span className="thread-workspace" title={`Company: ${activeBot.workspace}`}>
-                    {activeBot.workspace}
-                  </span>
-                )}
-              </span>
-            )}
-            <div className="topbar-right">
-              {!titlebarSlot && notificationCentre}
-              {activeSession && (
-                <button
-                  className="bot-menu-btn"
-                  type="button"
-                  title={findOpen ? "Close search" : "Search this chat"}
-                  onClick={() => {
-                    setFindOpen((value) => !value);
-                    setFindQuery("");
-                  }}
-                >
-                  <SearchIcon size={16} />
-                </button>
-              )}
-              <button
-                className="bot-menu-btn"
-                type="button"
-                title={showBotPanel ? "Hide bot panel" : "Show bot panel"}
-                onClick={() => setShowBotPanel((value) => !value)}
-              >
-                <PanelIcon size={16} />
-              </button>
-              {activeBot && (
-                <button
-                  className="bot-menu-btn"
-                  type="button"
-                  title="Bot settings"
-                  onClick={() => openEditBot(activeBot)}
-                >
-                  <MoreIcon size={16} />
-                </button>
-              )}
-              {latestTask && (
-                <button className="ghost small" type="button" onClick={toggleAudit}>
-                  {showAudit ? "Hide audit" : "Audit"}
-                </button>
-              )}
-            </div>
-          </header>
-        )}
-
-        {config?.demo && (
-          <div className="notice">
-            <strong>Demo model.</strong> Replies are scripted; your message isn't sent to any model. Set
-            BOTIFYR_PROVIDER + an API key for real reasoning.
-          </div>
-        )}
-
-        {(limitWarning ?? budgetNotice) && <div className="notice warn">{limitWarning ?? budgetNotice}</div>}
-
-        {billingNotice && <div className="notice warn">{billingNotice}</div>}
-
-        <section className="content" ref={scrollRef}>
-          {error && <div className="error">{error}</div>}
-
-          {!activeSession && (
-            <div className="hero">
-              <h1>Start a conversation</h1>
-              <p>
-                Ask Botifyr to do something. It plans, works inside an isolated sandbox, and asks before risky
-                steps.
-              </p>
-            </div>
-          )}
-
-          {activeSession && (
-            <div className="thread">
-              {activeSession.messages.length === 0 && (
-                <div className="hero">
-                  <h1>What should Botifyr do?</h1>
-                  <p>Try “summarize the top story on news.ycombinator.com” or “hello”.</p>
-                </div>
-              )}
-
-              {findTerm && visibleMessages.length === 0 && (
-                <div className="bot-panel-empty">No matches in this chat.</div>
-              )}
-              {visibleMessages.map((message) => {
-                if (activeSession.kind === "dm" || activeSession.kind === "group") {
-                  const mine = message.senderId === user.id;
-                  const person = friends.find((entry) => entry.id === message.senderId);
-                  const label = person?.displayName || (person?.handle ? `@${person.handle}` : "Friend");
-                  if (mine) {
-                    return (
-                      <div key={message.id} className="msg-user">
-                        <div className="msg-user-bubble">
-                          {displayText(decrypted, message.content, message.id)}
-                        </div>
-                        <SelfAvatar user={user} email={user.email} className="msg-user-avatar" />
-                      </div>
-                    );
-                  }
-                  return (
-                    <div key={message.id} className="msg-assistant">
-                      {person?.avatarUrl ? (
-                        <img
-                          className="msg-bot-logo person-avatar"
-                          src={person.avatarUrl}
-                          alt=""
-                          style={{ width: 26, height: 26 }}
-                        />
-                      ) : (
-                        <BotLogo
-                          size={26}
-                          scheme={BOT_SCHEMES[(person?.avatarScheme ?? 0) % BOT_SCHEMES.length]}
-                          className="msg-bot-logo"
-                        />
-                      )}
-                      <div className="msg-body">
-                        <div className="msg-author">
-                          <span className="msg-author-emoji">{person?.avatarEmoji ?? "🙂"}</span>
-                          {label}
-                        </div>
-                        <Markdown
-                          text={displayText(decrypted, message.content, message.id)}
-                          onFileRef={openFileRef}
-                        />
-                        {sharedTokenOf(message.content) && (
-                          <button
-                            className="ghost small"
-                            type="button"
-                            onClick={() =>
-                              void openExternal(
-                                `${CLOUD_URL}/v1/shared?share=${encodeURIComponent(
-                                  sharedTokenOf(message.content) as string,
-                                )}&token=${encodeURIComponent(token() ?? "")}`,
-                              )
-                            }
-                          >
-                            Save file
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                }
-                if (message.role === "user") {
-                  return (
-                    <div key={message.id} className="msg-user">
-                      {actionsFor(message, "You")}
-                      <div className="msg-user-bubble">
-                        {displayText(decrypted, message.content, message.id)}
-                        {reactions[message.id] && <span className="reaction">{reactions[message.id]}</span>}
-                      </div>
-                      <SelfAvatar user={user} email={user.email} className="msg-user-avatar" />
-                    </div>
-                  );
-                }
-                const msgBot =
-                  (message.botId && bots.find((entry) => entry.id === message.botId)) || activeBot;
-                const msgScheme = BOT_SCHEMES[(msgBot?.scheme ?? 0) % BOT_SCHEMES.length];
-                const parsed = parseOptions(message.content);
-                return (
-                  <div key={message.id} className="msg-assistant">
-                    <BotLogo size={26} scheme={msgScheme} className="msg-bot-logo" />
-                    <div className="msg-body">
-                      {msgBot && (
-                        <div className="msg-author">
-                          <span className="msg-author-emoji">{cleanEmoji(msgBot.emoji, false)}</span>
-                          {msgBot.name}
-                        </div>
-                      )}
-                      <Markdown text={parsed.body} onFileRef={openFileRef} />
-                      {parsed.options.length > 0 && (
-                        <div className="quick-replies">
-                          {parsed.options.map((option, index) => (
-                            <button
-                              key={index}
-                              className="quick-reply"
-                              type="button"
-                              disabled={busy}
-                              onClick={() => void sendMessage(option)}
-                            >
-                              {option}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                      {reactions[message.id] && <span className="reaction">{reactions[message.id]}</span>}
-                      {actionsFor(message, msgBot?.name ?? activeBotName, message.id === lastAssistantId)}
-                    </div>
-                  </div>
-                );
-              })}
-
-              {streamActive && (
-                <div className="msg-assistant">
-                  <BotLogo size={26} scheme={streamScheme} className="msg-bot-logo" />
-                  <div className="msg-body">
-                    {streamBot && (
-                      <div className="msg-author">
-                        <span className="msg-author-emoji">{cleanEmoji(streamBot.emoji, false)}</span>
-                        {streamBot.name}
-                      </div>
-                    )}
-                    {stream && stream.text ? (
-                      <span className="reveal">{stream.text.split("```options")[0]}</span>
-                    ) : (
-                      <span className="think-dots">
-                        <i />
-                        <i />
-                        <i />
+        {feedActive ? (
+          <FeedView
+            client={client}
+            viewerId={user?.id}
+            cloudUrl={CLOUD_URL}
+            refreshKey={feedRefresh}
+            pageHandle={feedPage}
+            onOpenPage={setFeedPage}
+          />
+        ) : (
+          <>
+            {showNewChat && (
+              <div className="newchat-overlay" onClick={() => setShowNewChat(false)}>
+                <span className="newchat-title">To: Start a chat with…</span>
+                <div className="newchat-panel" onClick={(event) => event.stopPropagation()}>
+                  <div className="newchat-actions">
+                    <button className="newchat-item" type="button" onClick={() => openCreateBot("bot")}>
+                      <span className="newchat-ico">
+                        <PlusIcon size={16} />
                       </span>
-                    )}
+                      Create new Bot
+                    </button>
+                    <button className="newchat-item" type="button" onClick={() => openCreateBot("group")}>
+                      <span className="newchat-ico">
+                        <UsersIcon size={16} />
+                      </span>
+                      Create group chat
+                    </button>
+                    <button className="newchat-item" type="button" onClick={openCompanySetup}>
+                      <span className="newchat-ico">
+                        <BotLogo size={16} />
+                      </span>
+                      Start a company
+                    </button>
                   </div>
+
+                  <div className="newchat-search">
+                    <SearchIcon size={15} />
+                    <input
+                      placeholder="Search bots, groups, and people"
+                      value={newChatQuery}
+                      autoFocus
+                      onChange={(event) => setNewChatQuery(event.target.value)}
+                    />
+                  </div>
+
+                  <nav className="people-tabs" role="tablist">
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={newChatTab === "contacts"}
+                      className={`people-tab ${newChatTab === "contacts" ? "active" : ""}`}
+                      onClick={() => setNewChatTab("contacts")}
+                    >
+                      <UserIcon size={15} />
+                      Contacts
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={newChatTab === "chats"}
+                      className={`people-tab ${newChatTab === "chats" ? "active" : ""}`}
+                      onClick={() => setNewChatTab("chats")}
+                    >
+                      <MessageIcon size={15} />
+                      Chats
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={newChatTab === "calls"}
+                      className={`people-tab ${newChatTab === "calls" ? "active" : ""}`}
+                      onClick={() => setNewChatTab("calls")}
+                    >
+                      <PhoneIcon size={15} />
+                      Calls
+                    </button>
+                  </nav>
+
+                  {newChatTab === "contacts" && (
+                    <div className="newchat-list">
+                      {matchingFriends.length === 0 ? (
+                        <div className="newchat-empty">
+                          {friends.length === 0
+                            ? "No contacts yet — add friends from People."
+                            : "No contacts match your search."}
+                        </div>
+                      ) : (
+                        matchingFriends.map((person) => (
+                          <button
+                            key={person.id}
+                            className="newchat-item"
+                            type="button"
+                            onClick={() => {
+                              setShowNewChat(false);
+                              void openDmWith(person);
+                            }}
+                          >
+                            <PersonAvatar person={person} size={30} />
+                            <span className="newchat-name">
+                              {person.displayName || (person.handle ? `@${person.handle}` : "Friend")}
+                            </span>
+                            <span className="newchat-meta">{person.online ? "online" : "offline"}</span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
+
+                  {newChatTab === "chats" && (
+                    <div className="newchat-list">
+                      {matchingBots.length === 0 ? (
+                        <div className="newchat-empty">
+                          {bots.length === 0 ? "No chats yet — create a bot." : "No chats match your search."}
+                        </div>
+                      ) : (
+                        matchingBots.map((bot) => {
+                          const isGroup = Boolean(bot.memberIds && bot.memberIds.length > 0);
+                          return (
+                            <button
+                              key={bot.id}
+                              className={`newchat-item ${bot.id === activeBotId ? "active" : ""}`}
+                              type="button"
+                              onClick={() => selectBot(bot)}
+                            >
+                              <span className="conv-avatar">
+                                <BotLogo size={26} scheme={BOT_SCHEMES[bot.scheme % BOT_SCHEMES.length]} />
+                              </span>
+                              <span className="newchat-name">
+                                <span className="newchat-emoji">{cleanEmoji(bot.emoji, isGroup)}</span>
+                                {bot.name}
+                              </span>
+                              {isGroup && (
+                                <span className="newchat-meta">{bot.memberIds?.length ?? 0} bots</span>
+                              )}
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                  )}
+
+                  {newChatTab === "calls" && (
+                    <div className="newchat-list">
+                      <div className="people-empty">
+                        <span className="people-empty-ico">
+                          <PhoneIcon size={26} />
+                        </span>
+                        <div className="people-empty-title">Calls are coming soon</div>
+                        <div className="people-empty-sub">Voice and video calls aren't available yet.</div>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
+            )}
 
-              {groupWorking &&
-                groupWorking.sessionId === activeSessionId &&
-                groupWorking.names.length > 0 && (
-                  <div className="thinking-row">
-                    <span>
-                      {groupWorking.names.join(", ")} {groupWorking.names.length > 1 ? "are" : "is"} replying
-                    </span>
-                    <span className="think-dots">
-                      <i />
-                      <i />
-                      <i />
-                    </span>
-                  </div>
-                )}
-
-              {thinking &&
-                !streamActive &&
-                !(
-                  groupWorking &&
-                  groupWorking.sessionId === activeSessionId &&
-                  groupWorking.names.length > 0
-                ) && (
-                  <div className="thinking-row">
-                    <BotLogo size={24} scheme={activeScheme} />
-                    <span>{activeBotName} is thinking</span>
-                    <span className="think-dots">
-                      <i />
-                      <i />
-                      <i />
-                    </span>
-                  </div>
-                )}
-
-              {liveTask && (
-                <div className={`activity ${activityCollapsed ? "collapsed" : ""}`}>
-                  <div className="activity-head">
-                    <span className="activity-title">
-                      {liveTask.status === "awaiting_approval"
-                        ? "Waiting for your approval"
-                        : liveTask.status === "running"
-                          ? "Working…"
-                          : liveTask.status}
-                    </span>
+            {!showNewChat && (
+              <header className="topbar">
+                {findOpen ? (
+                  <div className="thread-search">
+                    <SearchIcon size={15} />
+                    <input
+                      placeholder="Search this chat"
+                      value={findQuery}
+                      onChange={(event) => setFindQuery(event.target.value)}
+                      autoFocus
+                    />
+                    {findQuery.trim() && <span className="thread-search-count">{findMatches}</span>}
                     <button
                       className="icon-btn sm"
                       type="button"
-                      onClick={() => setActivityCollapsed((value) => !value)}
-                      title={activityCollapsed ? "Expand" : "Collapse"}
-                      aria-label={activityCollapsed ? "Expand activity" : "Collapse activity"}
+                      aria-label="Close search"
+                      onClick={() => {
+                        setFindOpen(false);
+                        setFindQuery("");
+                      }}
                     >
-                      <ChevronIcon size={16} className={activityCollapsed ? "chev-collapsed" : ""} />
+                      <CloseIcon size={13} />
                     </button>
                   </div>
-                  {liveTask.liveStream &&
-                  (liveTask.status === "running" || liveTask.status === "awaiting_approval") ? (
-                    <img
-                      className="activity-screen"
-                      src={`${CLOUD_URL}/v1/tasks/${liveTask.id}/stream?token=${encodeURIComponent(token())}`}
-                      alt="Live sandbox"
-                    />
-                  ) : liveTask.screenshotAt ? (
-                    <img
-                      className="activity-screen"
-                      src={`${CLOUD_URL}/v1/tasks/${liveTask.id}/screenshot?v=${encodeURIComponent(liveTask.screenshotAt)}&token=${encodeURIComponent(token())}`}
-                      alt="Sandbox screen"
-                    />
-                  ) : null}
+                ) : (
+                  <span className="thread-pill">
+                    {activePeer ? (
+                      <PersonAvatar person={activePeer} size={18} />
+                    ) : activeSession?.kind === "group" ? (
+                      <span className="newchat-emoji">👥</span>
+                    ) : (
+                      <BotLogo size={18} scheme={activeScheme} />
+                    )}
+                    {activeBot && (
+                      <span className="newchat-emoji">
+                        {cleanEmoji(activeBot.emoji, (activeBot.memberIds?.length ?? 0) > 0)}
+                      </span>
+                    )}
+                    {liveTask && <span className={`status-dot status-${liveTask.status}`} />}
+                    <span className="thread-pill-name">{activeBotName}</span>
+                    {activeBot?.workspace && (
+                      <span className="thread-workspace" title={`Company: ${activeBot.workspace}`}>
+                        {activeBot.workspace}
+                      </span>
+                    )}
+                  </span>
+                )}
+                <div className="topbar-right">
+                  {!titlebarSlot && notificationCentre}
+                  {activeSession && (
+                    <button
+                      className="bot-menu-btn"
+                      type="button"
+                      title={findOpen ? "Close search" : "Search this chat"}
+                      onClick={() => {
+                        setFindOpen((value) => !value);
+                        setFindQuery("");
+                      }}
+                    >
+                      <SearchIcon size={16} />
+                    </button>
+                  )}
+                  <button
+                    className="bot-menu-btn"
+                    type="button"
+                    title={showBotPanel ? "Hide bot panel" : "Show bot panel"}
+                    onClick={() => setShowBotPanel((value) => !value)}
+                  >
+                    <PanelIcon size={16} />
+                  </button>
+                  {activeBot && (
+                    <button
+                      className="bot-menu-btn"
+                      type="button"
+                      title="Bot settings"
+                      onClick={() => openEditBot(activeBot)}
+                    >
+                      <MoreIcon size={16} />
+                    </button>
+                  )}
+                  {latestTask && (
+                    <button className="ghost small" type="button" onClick={toggleAudit}>
+                      {showAudit ? "Hide audit" : "Audit"}
+                    </button>
+                  )}
+                </div>
+              </header>
+            )}
 
-                  <ol className="steps">
-                    {liveTask.steps.map((step) => {
-                      const progress = step.title === "Downloads" ? downloadProgress(step.detail) : null;
-                      if (progress) {
-                        const pct = Math.round((progress.done / progress.total) * 100);
+            {config?.demo && (
+              <div className="notice">
+                <strong>Demo model.</strong> Replies are scripted; your message isn't sent to any model. Set
+                BOTIFYR_PROVIDER + an API key for real reasoning.
+              </div>
+            )}
+
+            {(limitWarning ?? budgetNotice) && (
+              <div className="notice warn">{limitWarning ?? budgetNotice}</div>
+            )}
+
+            {billingNotice && <div className="notice warn">{billingNotice}</div>}
+
+            <section className="content" ref={scrollRef}>
+              {error && <div className="error">{error}</div>}
+
+              {!activeSession && (
+                <div className="hero">
+                  <h1>Start a conversation</h1>
+                  <p>
+                    Ask Botifyr to do something. It plans, works inside an isolated sandbox, and asks before
+                    risky steps.
+                  </p>
+                </div>
+              )}
+
+              {activeSession && (
+                <div className="thread">
+                  {activeSession.messages.length === 0 && (
+                    <div className="hero">
+                      <h1>What should Botifyr do?</h1>
+                      <p>Try “summarize the top story on news.ycombinator.com” or “hello”.</p>
+                    </div>
+                  )}
+
+                  {findTerm && visibleMessages.length === 0 && (
+                    <div className="bot-panel-empty">No matches in this chat.</div>
+                  )}
+                  {visibleMessages.map((message) => {
+                    if (activeSession.kind === "dm" || activeSession.kind === "group") {
+                      const mine = message.senderId === user.id;
+                      const person = friends.find((entry) => entry.id === message.senderId);
+                      const label = person?.displayName || (person?.handle ? `@${person.handle}` : "Friend");
+                      if (mine) {
                         return (
-                          <li key={step.id} className="step step-download">
-                            <div className="step-progress-wrap">
-                              <div className="step-progress-head">
-                                <span className="step-title">Downloading</span>
-                                <span className="step-progress-count">
-                                  {progress.done} / {progress.total}
-                                </span>
+                          <div key={message.id} className="msg-user">
+                            <div className="msg-user-bubble">
+                              <div className="msg-author">
+                                {user.displayName || (user.handle ? `@${user.handle}` : "You")}
                               </div>
-                              <div className="step-progress-bar">
-                                <span style={{ width: `${pct}%` }} />
-                              </div>
+                              {dmFileCard(displayText(decrypted, message.content, message.id)) ??
+                                displayText(decrypted, message.content, message.id)}
                             </div>
-                          </li>
+                            <SelfAvatar user={user} email={user.email} className="msg-user-avatar" />
+                          </div>
                         );
                       }
-                      const detail = stepDetail(step.title, step.detail);
                       return (
-                        <li key={step.id} className={`step step-${step.status}`}>
-                          <span className="step-icon">{iconFor(step.status)}</span>
-                          <div>
-                            <div className="step-title">{stepLabel(step.title)}</div>
-                            {detail && <div className="step-detail">{detail}</div>}
+                        <div key={message.id} className="msg-assistant">
+                          {person?.avatarUrl ? (
+                            <img
+                              className="msg-bot-logo person-avatar"
+                              src={person.avatarUrl}
+                              alt=""
+                              style={{ width: 26, height: 26 }}
+                            />
+                          ) : (
+                            <BotLogo
+                              size={26}
+                              scheme={BOT_SCHEMES[(person?.avatarScheme ?? 0) % BOT_SCHEMES.length]}
+                              className="msg-bot-logo"
+                            />
+                          )}
+                          <div className="msg-body">
+                            <div className="msg-author">{label}</div>
+                            {dmFileCard(displayText(decrypted, message.content, message.id)) ?? (
+                              <Markdown
+                                text={displayText(decrypted, message.content, message.id)}
+                                onFileRef={openFileRef}
+                              />
+                            )}
                           </div>
-                        </li>
+                        </div>
                       );
-                    })}
-                  </ol>
-                </div>
-              )}
-
-              {(downloads.length > 0 || downloadActive || downloadStep) && (
-                <div className="downloads">
-                  <div className="downloads-head">
-                    <span className="downloads-title">Downloads</span>
-                    {downloadTotal && (
-                      <span className="downloads-count">
-                        {downloadTotal.done} / {downloadTotal.total}
-                      </span>
-                    )}
-                    <span className="downloads-spacer" />
-                    <button
-                      className="icon-btn sm"
-                      type="button"
-                      onClick={() => setDownloadsExpanded((value) => !value)}
-                      title={downloadsExpanded ? "Collapse list" : "Expand list"}
-                      aria-label={downloadsExpanded ? "Collapse downloads" : "Expand downloads"}
-                    >
-                      <ChevronIcon size={15} className={downloadsExpanded ? "chev-up" : ""} />
-                    </button>
-                  </div>
-                  {downloadStep && (
-                    <div className="step-progress-bar downloads-bar">
-                      <span
-                        style={{
-                          width: `${
-                            downloadTotal ? Math.round((downloadTotal.done / downloadTotal.total) * 100) : 8
-                          }%`,
-                        }}
-                      />
-                    </div>
-                  )}
-                  {liveTask && (liveTask.status === "running" || liveTask.status === "awaiting_approval") && (
-                    <div className="download-row download-active">
-                      <span className="download-ico">↓</span>
-                      <div className="download-main">
-                        <div className="download-name">
-                          Downloading
-                          {downloadTotal ? ` ${downloadTotal.done} / ${downloadTotal.total}` : "…"}
+                    }
+                    if (message.role === "user") {
+                      return (
+                        <div key={message.id} className="msg-user">
+                          {actionsFor(message, "You")}
+                          <div className="msg-user-bubble">
+                            {displayText(decrypted, message.content, message.id)}
+                            {reactions[message.id] && (
+                              <span className="reaction">{reactions[message.id]}</span>
+                            )}
+                          </div>
+                          <SelfAvatar user={user} email={user.email} className="msg-user-avatar" />
                         </div>
-                        <div className="download-bar indeterminate">
-                          <span />
+                      );
+                    }
+                    const msgBot =
+                      (message.botId && bots.find((entry) => entry.id === message.botId)) || activeBot;
+                    const msgScheme = BOT_SCHEMES[(msgBot?.scheme ?? 0) % BOT_SCHEMES.length];
+                    const parsed = parseOptions(message.content);
+                    return (
+                      <div key={message.id} className="msg-assistant">
+                        <BotLogo size={26} scheme={msgScheme} className="msg-bot-logo" />
+                        <div className="msg-body">
+                          {msgBot && (
+                            <div className="msg-author">
+                              <span className="msg-author-emoji">{cleanEmoji(msgBot.emoji, false)}</span>
+                              {msgBot.name}
+                            </div>
+                          )}
+                          <Markdown text={parsed.body} onFileRef={openFileRef} />
+                          {parsed.options.length > 0 && (
+                            <div className="quick-replies">
+                              {parsed.options.map((option, index) => (
+                                <button
+                                  key={index}
+                                  className="quick-reply"
+                                  type="button"
+                                  disabled={busy}
+                                  onClick={() => void sendMessage(option)}
+                                >
+                                  {option}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                          {reactions[message.id] && <span className="reaction">{reactions[message.id]}</span>}
+                          {actionsFor(message, msgBot?.name ?? activeBotName, message.id === lastAssistantId)}
                         </div>
                       </div>
-                    </div>
-                  )}
-                  <ul className={`downloads-list ${downloadsExpanded ? "expanded" : ""}`}>
-                    {downloads.map((file, index) => (
-                      <li key={file.name} className="download-row">
-                        <span className="download-ico">{isPlayable(file.name) ? "▶" : "▢"}</span>
-                        <div className="download-main">
-                          <div className="download-name" title={file.name}>
-                            {prettyFileName(file.name)}
+                    );
+                  })}
+
+                  {streamActive && (
+                    <div className="msg-assistant">
+                      <BotLogo size={26} scheme={streamScheme} className="msg-bot-logo" />
+                      <div className="msg-body">
+                        {streamBot && (
+                          <div className="msg-author">
+                            <span className="msg-author-emoji">{cleanEmoji(streamBot.emoji, false)}</span>
+                            {streamBot.name}
                           </div>
-                          <div className="download-bar">
-                            <span />
-                          </div>
-                        </div>
-                        <span className="download-size">
-                          {Math.max(1, Math.round(file.size / 1024)).toLocaleString()} KB
-                        </span>
-                        {isPlayable(file.name) && (
-                          <button
-                            className="ghost small"
-                            type="button"
-                            onClick={() =>
-                              openPlayer(
-                                downloads.map((entry) => ({
-                                  name: entry.name,
-                                  url: downloadUrl(entry.name),
-                                })),
-                                index,
-                              )
-                            }
-                          >
-                            Play
-                          </button>
                         )}
-                        <button
-                          className="ghost small"
-                          type="button"
-                          onClick={() => void openExternal(downloadUrl(file.name, true))}
-                        >
-                          Save
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {showAudit && (
-                <div className="audit">
-                  <div className="audit-head">Audit log · {audit.length} events</div>
-                  <ul>
-                    {audit.length === 0 && <li className="muted">No events recorded yet.</li>}
-                    {audit.map((entry) => (
-                      <li key={entry.id}>
-                        <span className={`audit-type audit-${entry.type}`}>{entry.type}</span>
-                        <span className="mono">{entry.toolName ?? "—"}</span>
-                        <span className="audit-detail">{entry.detail}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          )}
-        </section>
-
-        {(pendingApprovals.length > 0 || approvalNotice) && (
-          <div className="approval-panel">
-            <div className="approval-panel-head">
-              <span
-                className={`approval-tag${
-                  approvalNotice ? (approvalNotice.decision === "allow" ? " ok" : " denied") : ""
-                }`}
-              >
-                {approvalNotice
-                  ? approvalNotice.decision === "allow"
-                    ? "Approved ✓"
-                    : "Denied"
-                  : "Approval needed"}
-                {!approvalNotice && pendingApprovals.length > 1
-                  ? ` · ${pendingApprovals.length} pending`
-                  : ""}
-              </span>
-              {!approvalNotice && pendingApprovals.length > 1 && (
-                <button className="ghost small" type="button" onClick={() => void approveAll()}>
-                  Approve all ({pendingApprovals.length})
-                </button>
-              )}
-            </div>
-            {pendingApprovals.length > 0
-              ? (() => {
-                  const task = pendingApprovals[0];
-                  const approval = task.approval;
-                  if (!approval) return null;
-                  return (
-                    <div className="approval-card">
-                      <div className="approval-card-title">{approval.title}</div>
-                      <div className="approval-card-desc">{approval.description}</div>
-                      <div className="approval-card-actions">
-                        <button
-                          className="btn deny"
-                          type="button"
-                          onClick={() =>
-                            void resolveApprovalFor(task.id, approval.id, "deny", approval.title)
-                          }
-                        >
-                          Deny
-                        </button>
-                        <button
-                          className="btn allow"
-                          type="button"
-                          onClick={() =>
-                            void resolveApprovalFor(task.id, approval.id, "allow", approval.title)
-                          }
-                        >
-                          Allow once
-                        </button>
-                        <button className="ghost small" type="button" onClick={() => void allowAlways(task)}>
-                          Always allow
-                        </button>
+                        {stream && stream.text ? (
+                          <span className="reveal">{stream.text.split("```options")[0]}</span>
+                        ) : (
+                          <span className="think-dots">
+                            <i />
+                            <i />
+                            <i />
+                          </span>
+                        )}
                       </div>
                     </div>
-                  );
-                })()
-              : approvalNotice && (
-                  <div
-                    className={`approval-card approval-resolved ${
-                      approvalNotice.decision === "allow" ? "is-allowed" : "is-denied"
+                  )}
+
+                  {groupWorking &&
+                    groupWorking.sessionId === activeSessionId &&
+                    groupWorking.names.length > 0 && (
+                      <div className="thinking-row">
+                        <span>
+                          {groupWorking.names.join(", ")} {groupWorking.names.length > 1 ? "are" : "is"}{" "}
+                          replying
+                        </span>
+                        <span className="think-dots">
+                          <i />
+                          <i />
+                          <i />
+                        </span>
+                      </div>
+                    )}
+
+                  {thinking &&
+                    !streamActive &&
+                    !(
+                      groupWorking &&
+                      groupWorking.sessionId === activeSessionId &&
+                      groupWorking.names.length > 0
+                    ) && (
+                      <div className="thinking-row">
+                        <BotLogo size={24} scheme={activeScheme} />
+                        <span>{activeBotName} is thinking</span>
+                        <span className="think-dots">
+                          <i />
+                          <i />
+                          <i />
+                        </span>
+                      </div>
+                    )}
+
+                  {liveTask && (
+                    <div className={`activity ${activityCollapsed ? "collapsed" : ""}`}>
+                      <div className="activity-head">
+                        <span className="activity-title">
+                          {liveTask.status === "awaiting_approval"
+                            ? "Waiting for your approval"
+                            : liveTask.status === "running"
+                              ? "Working…"
+                              : liveTask.status}
+                        </span>
+                        <button
+                          className="icon-btn sm"
+                          type="button"
+                          onClick={() => setActivityCollapsed((value) => !value)}
+                          title={activityCollapsed ? "Expand" : "Collapse"}
+                          aria-label={activityCollapsed ? "Expand activity" : "Collapse activity"}
+                        >
+                          <ChevronIcon size={16} className={activityCollapsed ? "chev-collapsed" : ""} />
+                        </button>
+                      </div>
+                      {liveTask.liveStream &&
+                      (liveTask.status === "running" || liveTask.status === "awaiting_approval") ? (
+                        <img
+                          className="activity-screen"
+                          src={`${CLOUD_URL}/v1/tasks/${liveTask.id}/stream?token=${encodeURIComponent(token())}`}
+                          alt="Live sandbox"
+                        />
+                      ) : liveTask.screenshotAt ? (
+                        <img
+                          className="activity-screen"
+                          src={`${CLOUD_URL}/v1/tasks/${liveTask.id}/screenshot?v=${encodeURIComponent(liveTask.screenshotAt)}&token=${encodeURIComponent(token())}`}
+                          alt="Sandbox screen"
+                        />
+                      ) : null}
+
+                      <ol className="steps">
+                        {liveTask.steps.map((step) => {
+                          const progress = step.title === "Downloads" ? downloadProgress(step.detail) : null;
+                          if (progress) {
+                            const pct = Math.round((progress.done / progress.total) * 100);
+                            return (
+                              <li key={step.id} className="step step-download">
+                                <div className="step-progress-wrap">
+                                  <div className="step-progress-head">
+                                    <span className="step-title">Downloading</span>
+                                    <span className="step-progress-count">
+                                      {progress.done} / {progress.total}
+                                    </span>
+                                  </div>
+                                  <div className="step-progress-bar">
+                                    <span style={{ width: `${pct}%` }} />
+                                  </div>
+                                </div>
+                              </li>
+                            );
+                          }
+                          const detail = stepDetail(step.title, step.detail);
+                          return (
+                            <li key={step.id} className={`step step-${step.status}`}>
+                              <span className="step-icon">{iconFor(step.status)}</span>
+                              <div>
+                                <div className="step-title">{stepLabel(step.title)}</div>
+                                {detail && <div className="step-detail">{detail}</div>}
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ol>
+                    </div>
+                  )}
+
+                  {(downloads.length > 0 || downloadActive || downloadStep) && (
+                    <div className="downloads">
+                      <div className="downloads-head">
+                        <span className="downloads-title">Downloads</span>
+                        {downloadTotal && (
+                          <span className="downloads-count">
+                            {downloadTotal.done} / {downloadTotal.total}
+                          </span>
+                        )}
+                        <span className="downloads-spacer" />
+                        <button
+                          className="icon-btn sm"
+                          type="button"
+                          onClick={() => setDownloadsExpanded((value) => !value)}
+                          title={downloadsExpanded ? "Collapse list" : "Expand list"}
+                          aria-label={downloadsExpanded ? "Collapse downloads" : "Expand downloads"}
+                        >
+                          <ChevronIcon size={15} className={downloadsExpanded ? "chev-up" : ""} />
+                        </button>
+                      </div>
+                      {downloadStep && (
+                        <div className="step-progress-bar downloads-bar">
+                          <span
+                            style={{
+                              width: `${
+                                downloadTotal
+                                  ? Math.round((downloadTotal.done / downloadTotal.total) * 100)
+                                  : 8
+                              }%`,
+                            }}
+                          />
+                        </div>
+                      )}
+                      {liveTask &&
+                        (liveTask.status === "running" || liveTask.status === "awaiting_approval") && (
+                          <div className="download-row download-active">
+                            <span className="download-ico">↓</span>
+                            <div className="download-main">
+                              <div className="download-name">
+                                Downloading
+                                {downloadTotal ? ` ${downloadTotal.done} / ${downloadTotal.total}` : "…"}
+                              </div>
+                              <div className="download-bar indeterminate">
+                                <span />
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      <ul className={`downloads-list ${downloadsExpanded ? "expanded" : ""}`}>
+                        {downloads.map((file, index) => (
+                          <li key={file.name} className="download-row">
+                            <span className="download-ico">{isPlayable(file.name) ? "▶" : "▢"}</span>
+                            <div className="download-main">
+                              <div className="download-name" title={file.name}>
+                                {prettyFileName(file.name)}
+                              </div>
+                              <div className="download-bar">
+                                <span />
+                              </div>
+                            </div>
+                            <span className="download-size">
+                              {Math.max(1, Math.round(file.size / 1024)).toLocaleString()} KB
+                            </span>
+                            {isPlayable(file.name) && (
+                              <button
+                                className="ghost small"
+                                type="button"
+                                onClick={() =>
+                                  openPlayer(
+                                    downloads.map((entry) => ({
+                                      name: entry.name,
+                                      url: downloadUrl(entry.name),
+                                    })),
+                                    index,
+                                  )
+                                }
+                              >
+                                Play
+                              </button>
+                            )}
+                            <button
+                              className="ghost small"
+                              type="button"
+                              onClick={() => void openExternal(downloadUrl(file.name, true))}
+                            >
+                              Save
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {showAudit && (
+                    <div className="audit">
+                      <div className="audit-head">Audit log · {audit.length} events</div>
+                      <ul>
+                        {audit.length === 0 && <li className="muted">No events recorded yet.</li>}
+                        {audit.map((entry) => (
+                          <li key={entry.id}>
+                            <span className={`audit-type audit-${entry.type}`}>{entry.type}</span>
+                            <span className="mono">{entry.toolName ?? "—"}</span>
+                            <span className="audit-detail">{entry.detail}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+            </section>
+
+            {(pendingApprovals.length > 0 || approvalNotice) && (
+              <div className="approval-panel">
+                <div className="approval-panel-head">
+                  <span
+                    className={`approval-tag${
+                      approvalNotice ? (approvalNotice.decision === "allow" ? " ok" : " denied") : ""
                     }`}
                   >
-                    <div className="approval-card-title">{approvalNotice.title}</div>
-                  </div>
-                )}
-          </div>
-        )}
-
-        <form
-          className="composer"
-          onSubmit={(event: FormEvent) => {
-            event.preventDefault();
-            void send();
-          }}
-        >
-          {" "}
-          {mentionQuery !== null && mentionMatches.length > 0 && (
-            <div className="mention-popup">
-              {mentionMatches.map((bot, index) => (
-                <button
-                  key={bot.id}
-                  type="button"
-                  className={`mention-item${index === mentionIndex ? " active" : ""}`}
-                  onMouseEnter={() => setMentionIndex(index)}
-                  onClick={() => insertMention(bot.name)}
-                >
-                  <BotLogo size={18} scheme={BOT_SCHEMES[bot.scheme % BOT_SCHEMES.length]} />
-                  {bot.name}
-                </button>
-              ))}
-            </div>
-          )}
-          {replyTo && (
-            <div className="reply-bar">
-              <span className="reply-bar-text">
-                ↩ {replyTo.author}: {replyTo.content.slice(0, 90)}
-              </span>
-              <button className="reply-bar-close" type="button" onClick={() => setReplyTo(null)}>
-                ✕
-              </button>
-            </div>
-          )}
-          <div className="composer-bar">
-            <button className="round" type="button" title="New chat" onClick={openNewChat}>
-              <PlusIcon size={18} />
-            </button>
-            <textarea
-              value={text}
-              onChange={(event) => onComposerChange(event.target.value)}
-              placeholder={`Message ${activeBotName}`}
-              rows={1}
-              onKeyDown={(event) => {
-                if (mentionQuery !== null && mentionMatches.length > 0) {
-                  if (event.key === "ArrowDown") {
-                    event.preventDefault();
-                    setMentionIndex((index) => Math.min(mentionMatches.length - 1, index + 1));
-                    return;
-                  }
-                  if (event.key === "ArrowUp") {
-                    event.preventDefault();
-                    setMentionIndex((index) => Math.max(0, index - 1));
-                    return;
-                  }
-                  if (event.key === "Enter" || event.key === "Tab") {
-                    event.preventDefault();
-                    insertMention(mentionMatches[mentionIndex]?.name ?? mentionMatches[0].name);
-                    return;
-                  }
-                  if (event.key === "Escape") {
-                    event.preventDefault();
-                    setMentionQuery(null);
-                    return;
-                  }
-                }
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  void send();
-                  return;
-                }
-                if (event.key === "ArrowUp" && (text === "" || historyIndex !== null)) {
-                  if (sentHistory.length === 0) return;
-                  event.preventDefault();
-                  const next = historyIndex === null ? sentHistory.length - 1 : Math.max(0, historyIndex - 1);
-                  setHistoryIndex(next);
-                  setText(sentHistory[next]);
-                  return;
-                }
-                if (event.key === "ArrowDown" && historyIndex !== null) {
-                  event.preventDefault();
-                  const next = historyIndex + 1;
-                  if (next >= sentHistory.length) {
-                    setHistoryIndex(null);
-                    setText("");
-                  } else {
-                    setHistoryIndex(next);
-                    setText(sentHistory[next]);
-                  }
-                }
-              }}
-            />
-            <button
-              className={`round mic${listening ? " on" : ""}`}
-              type="button"
-              title="Voice input"
-              onClick={toggleMic}
-            >
-              <MicIcon size={16} />
-            </button>
-            {busy && liveTask ? (
-              <button
-                className="round stop"
-                type="button"
-                title="Stop"
-                onClick={() =>
-                  void client
-                    .cancelSession(activeSessionId ?? "")
-                    .catch((err: unknown) => setError(messageOf(err)))
-                }
-              >
-                <StopIcon size={16} />
-              </button>
-            ) : (
-              <button
-                className="send round"
-                type="submit"
-                disabled={!text.trim() || !activeSessionId || sending}
-              >
-                <SendIcon size={16} />
-              </button>
+                    {approvalNotice
+                      ? approvalNotice.decision === "allow"
+                        ? "Approved ✓"
+                        : "Denied"
+                      : "Approval needed"}
+                    {!approvalNotice && pendingApprovals.length > 1
+                      ? ` · ${pendingApprovals.length} pending`
+                      : ""}
+                  </span>
+                  {!approvalNotice && pendingApprovals.length > 1 && (
+                    <button className="ghost small" type="button" onClick={() => void approveAll()}>
+                      Approve all ({pendingApprovals.length})
+                    </button>
+                  )}
+                </div>
+                {pendingApprovals.length > 0
+                  ? (() => {
+                      const task = pendingApprovals[0];
+                      const approval = task.approval;
+                      if (!approval) return null;
+                      return (
+                        <div className="approval-card">
+                          <div className="approval-card-title">{approval.title}</div>
+                          <div className="approval-card-desc">{approval.description}</div>
+                          <div className="approval-card-actions">
+                            <button
+                              className="btn deny"
+                              type="button"
+                              onClick={() =>
+                                void resolveApprovalFor(task.id, approval.id, "deny", approval.title)
+                              }
+                            >
+                              Deny
+                            </button>
+                            <button
+                              className="btn allow"
+                              type="button"
+                              onClick={() =>
+                                void resolveApprovalFor(task.id, approval.id, "allow", approval.title)
+                              }
+                            >
+                              Allow once
+                            </button>
+                            <button
+                              className="ghost small"
+                              type="button"
+                              onClick={() => void allowAlways(task)}
+                            >
+                              Always allow
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()
+                  : approvalNotice && (
+                      <div
+                        className={`approval-card approval-resolved ${
+                          approvalNotice.decision === "allow" ? "is-allowed" : "is-denied"
+                        }`}
+                      >
+                        <div className="approval-card-title">{approvalNotice.title}</div>
+                      </div>
+                    )}
+              </div>
             )}
-          </div>
-        </form>
+
+            <form
+              className="composer"
+              onSubmit={(event: FormEvent) => {
+                event.preventDefault();
+                void send();
+              }}
+            >
+              {" "}
+              {mentionQuery !== null && mentionMatches.length > 0 && (
+                <div className="mention-popup">
+                  {mentionMatches.map((bot, index) => (
+                    <button
+                      key={bot.id}
+                      type="button"
+                      className={`mention-item${index === mentionIndex ? " active" : ""}`}
+                      onMouseEnter={() => setMentionIndex(index)}
+                      onClick={() => insertMention(bot.name)}
+                    >
+                      <BotLogo size={18} scheme={BOT_SCHEMES[bot.scheme % BOT_SCHEMES.length]} />
+                      {bot.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {replyTo && (
+                <div className="reply-bar">
+                  <span className="reply-bar-text">
+                    ↩ {replyTo.author}: {replyTo.content.slice(0, 90)}
+                  </span>
+                  <button className="reply-bar-close" type="button" onClick={() => setReplyTo(null)}>
+                    ✕
+                  </button>
+                </div>
+              )}
+              {attachOpen && (
+                <div className="attach-menu">
+                  <div className="attach-head">Attach a file</div>
+                  <button
+                    className="attach-item"
+                    type="button"
+                    onClick={() => uploadInputRef.current?.click()}
+                  >
+                    ⬆ Upload from this device
+                  </button>
+                  <div className="attach-head">From downloads</div>
+                  {media.length === 0 ? (
+                    <div className="attach-empty">No files yet. Ask a bot to download something first.</div>
+                  ) : (
+                    <ul className="attach-list">
+                      {[...media]
+                        .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""))
+                        .slice(0, 5)
+                        .map((item) => (
+                          <li key={item.id}>
+                            <button
+                              className="attach-item"
+                              type="button"
+                              onClick={() => void attachFile(item)}
+                            >
+                              {prettyFileName(item.name)}
+                            </button>
+                          </li>
+                        ))}
+                    </ul>
+                  )}
+                  <input
+                    ref={uploadInputRef}
+                    type="file"
+                    hidden
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      event.target.value = "";
+                      if (file) void uploadAndAttach(file);
+                    }}
+                  />
+                </div>
+              )}
+              <div className="composer-bar">
+                <button
+                  className="round"
+                  type="button"
+                  title="Attach a file"
+                  onClick={() => setAttachOpen((value) => !value)}
+                >
+                  <PlusIcon size={18} />
+                </button>
+                <textarea
+                  value={text}
+                  onChange={(event) => onComposerChange(event.target.value)}
+                  placeholder={`Message ${activeBotName}`}
+                  rows={1}
+                  onKeyDown={(event) => {
+                    if (mentionQuery !== null && mentionMatches.length > 0) {
+                      if (event.key === "ArrowDown") {
+                        event.preventDefault();
+                        setMentionIndex((index) => Math.min(mentionMatches.length - 1, index + 1));
+                        return;
+                      }
+                      if (event.key === "ArrowUp") {
+                        event.preventDefault();
+                        setMentionIndex((index) => Math.max(0, index - 1));
+                        return;
+                      }
+                      if (event.key === "Enter" || event.key === "Tab") {
+                        event.preventDefault();
+                        insertMention(mentionMatches[mentionIndex]?.name ?? mentionMatches[0].name);
+                        return;
+                      }
+                      if (event.key === "Escape") {
+                        event.preventDefault();
+                        setMentionQuery(null);
+                        return;
+                      }
+                    }
+                    if (event.key === "Enter" && !event.shiftKey) {
+                      event.preventDefault();
+                      void send();
+                      return;
+                    }
+                    if (event.key === "ArrowUp" && (text === "" || historyIndex !== null)) {
+                      if (sentHistory.length === 0) return;
+                      event.preventDefault();
+                      const next =
+                        historyIndex === null ? sentHistory.length - 1 : Math.max(0, historyIndex - 1);
+                      setHistoryIndex(next);
+                      setText(sentHistory[next]);
+                      return;
+                    }
+                    if (event.key === "ArrowDown" && historyIndex !== null) {
+                      event.preventDefault();
+                      const next = historyIndex + 1;
+                      if (next >= sentHistory.length) {
+                        setHistoryIndex(null);
+                        setText("");
+                      } else {
+                        setHistoryIndex(next);
+                        setText(sentHistory[next]);
+                      }
+                    }
+                  }}
+                />
+                <button
+                  className={`round mic${listening ? " on" : ""}`}
+                  type="button"
+                  title="Voice input"
+                  onClick={toggleMic}
+                >
+                  <MicIcon size={16} />
+                </button>
+                {busy && liveTask ? (
+                  <button
+                    className="round stop"
+                    type="button"
+                    title="Stop"
+                    onClick={() =>
+                      void client
+                        .cancelSession(activeSessionId ?? "")
+                        .catch((err: unknown) => setError(messageOf(err)))
+                    }
+                  >
+                    <StopIcon size={16} />
+                  </button>
+                ) : (
+                  <button
+                    className="send round"
+                    type="submit"
+                    disabled={!text.trim() || !activeSessionId || sending}
+                  >
+                    <SendIcon size={16} />
+                  </button>
+                )}
+              </div>
+            </form>
+          </>
+        )}
       </main>
 
       {officeDocked && (
@@ -4604,7 +5322,97 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
         </aside>
       )}
 
-      {showBotPanel && activeBot && (
+      {!feedActive &&
+        showBotPanel &&
+        !activeBot &&
+        activeSession &&
+        (activeSession.kind === "dm" || activeSession.kind === "group") && (
+          <aside className="bot-panel">
+            <div className="bot-panel-head">
+              {activePeer ? (
+                <PersonAvatar person={activePeer} size={72} />
+              ) : (
+                <span className="person-avatar emoji" style={{ width: 72, height: 72, fontSize: 34 }}>
+                  {activeSession.kind === "group" ? "👥" : "💬"}
+                </span>
+              )}
+              <div className="bot-panel-name">{humanChatName(activeSession)}</div>
+              <div className="bot-panel-sub">
+                {activeSession.kind === "group"
+                  ? `${activeSession.participants?.length ?? 0} members`
+                  : activePeer?.handle
+                    ? `@${activePeer.handle}`
+                    : activePeer?.online
+                      ? "Online"
+                      : "Offline"}
+              </div>
+            </div>
+
+            <div className="bot-panel-body">
+              <div className="bot-panel-details">
+                {activePeer && (
+                  <>
+                    <div className="bot-panel-kv">
+                      <span>Name</span>
+                      <span>
+                        {activePeer.displayName || (activePeer.handle ? `@${activePeer.handle}` : "Friend")}
+                      </span>
+                    </div>
+                    <div className="bot-panel-kv">
+                      <span>Status</span>
+                      <span>{activePeer.online ? "Online" : "Offline"}</span>
+                    </div>
+                  </>
+                )}
+                {activeSession.kind === "group" && (
+                  <div className="bot-panel-kv">
+                    <span>Members</span>
+                    <span>{activeSession.participants?.length ?? 0}</span>
+                  </div>
+                )}
+                <div className="bot-panel-kv">
+                  <span>Messages</span>
+                  <span>{activeSession.messages.length}</span>
+                </div>
+              </div>
+
+              <div className="bot-panel-section-head">Shared files</div>
+              {activeSharedFiles.length === 0 ? (
+                <div className="bot-panel-empty">No files shared yet.</div>
+              ) : (
+                <ul className="downloads-list">
+                  {activeSharedFiles.map((file) => (
+                    <li key={file.token} className="download-row">
+                      <div className="download-main">
+                        <div className="download-name">{file.name}</div>
+                      </div>
+                      <button
+                        className="ghost small"
+                        type="button"
+                        onClick={() =>
+                          void openExternal(
+                            `${CLOUD_URL}/v1/shared?share=${encodeURIComponent(file.token)}&token=${encodeURIComponent(token())}`,
+                          )
+                        }
+                      >
+                        Save
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </aside>
+        )}
+
+      {feedActive && (
+        <aside className="bot-panel feed-rail">
+          <div className="feed-rail-title">Discover</div>
+          <FeedRail client={client} onOpenPage={setFeedPage} />
+        </aside>
+      )}
+
+      {!feedActive && showBotPanel && activeBot && (
         <aside className="bot-panel">
           <div className="bot-panel-head">
             <BotLogo size={96} scheme={activeScheme} />
@@ -5081,7 +5889,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                 {companyStep === "source"
                   ? "Start a company"
                   : companyStep === "review"
-                    ? "Review the team"
+                    ? "Review the charter & team"
                     : "Work hours & budget"}
               </span>
               <button className="round small" type="button" onClick={closeCompanySetup}>
@@ -5117,11 +5925,38 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
               {companyStep === "review" && companyPlan && (
                 <>
                   {companyPlan.dna && (
-                    <p className="company-hint">
-                      {companyPlan.dna.industry}
-                      {companyPlan.dna.category ? ` · ${companyPlan.dna.category}` : ""} · stage:{" "}
-                      {companyPlan.dna.stage}
-                    </p>
+                    <div className="company-charter">
+                      <p className="company-hint">
+                        Charter — the brief every employee reads. Stage: {companyPlan.dna.stage}
+                      </p>
+                      <label className="company-charter-field">
+                        <span>Industry</span>
+                        <input
+                          className="workspace-input"
+                          value={companyPlan.dna.industry}
+                          onChange={(event) => updatePlanDna({ industry: event.target.value })}
+                          aria-label="Industry"
+                        />
+                      </label>
+                      <label className="company-charter-field">
+                        <span>Goal</span>
+                        <input
+                          className="workspace-input"
+                          value={companyPlan.dna.goal}
+                          onChange={(event) => updatePlanDna({ goal: event.target.value })}
+                          aria-label="Company goal"
+                        />
+                      </label>
+                      <label className="company-charter-field">
+                        <span>Summary</span>
+                        <input
+                          className="workspace-input"
+                          value={companyPlan.dna.summary}
+                          onChange={(event) => updatePlanDna({ summary: event.target.value })}
+                          aria-label="Company summary"
+                        />
+                      </label>
+                    </div>
                   )}
                   <div className="company-plan-name">
                     <span className="company-plan-emoji">{companyPlan.avatarEmoji ?? "🏢"}</span>
@@ -5135,6 +5970,39 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                     />
                   </div>
                   {companyPlan.mission && <p className="company-plan-mission">{companyPlan.mission}</p>}
+                  {companyPlan.directions && companyPlan.directions.length > 0 && (
+                    <div className="company-directions">
+                      <p className="company-hint">
+                        {companyDirectionId
+                          ? "Direction chosen — you can still edit the team below."
+                          : "Choose a direction — it shapes the team and the first quest:"}
+                      </p>
+                      <div className="company-direction-cards">
+                        {companyPlan.directions.map((direction) => {
+                          const chosen = companyDirectionId === direction.id;
+                          return (
+                            <button
+                              key={direction.id}
+                              type="button"
+                              className={`company-direction-card${chosen ? " chosen" : ""}`}
+                              onClick={() => chooseDirection(direction)}
+                              aria-pressed={chosen}
+                            >
+                              <span className="company-direction-title">{direction.title}</span>
+                              <span className="company-direction-thesis">{direction.thesis}</span>
+                              <span className="company-direction-roles">
+                                {direction.roles.map((id) => ROLE_BY_ID.get(id)?.title ?? id).join(" · ")}
+                              </span>
+                              <span className="company-direction-meta">
+                                {direction.objective} · ~{Math.round(direction.estimatedTokens / 1000)}k
+                                tokens
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                   {companyPlan.rationale && companyPlan.rationale.length > 0 && (
                     <ul className="company-rationale">
                       {companyPlan.rationale.map((line, index) => (
@@ -5350,10 +6218,119 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                 ✕
               </button>
             </div>
+            {hqActiveQuest && (
+              <div className={`hq-quest${hqActiveQuest.status === "active" ? " active" : ""}`}>
+                <div className="hq-quest-row">
+                  <span className="hq-quest-label">
+                    {hqActiveQuest.status === "active" ? "Current quest" : "Proposed quest"}
+                  </span>
+                  <span className="hq-quest-title">{hqActiveQuest.title}</span>
+                  {hqActiveQuest.status === "active" && (
+                    <span className="hq-quest-progress">
+                      {
+                        boardItems.filter(
+                          (item) => item.questId === hqActiveQuest.id && item.status === "done",
+                        ).length
+                      }
+                      {" / "}
+                      {boardItems.filter((item) => item.questId === hqActiveQuest.id).length}
+                    </span>
+                  )}
+                  {hqActiveQuest.status === "proposed" ? (
+                    <button
+                      className="btn primary small"
+                      type="button"
+                      onClick={() => void activateQuest(hqActiveQuest.id)}
+                    >
+                      Start
+                    </button>
+                  ) : (
+                    <button
+                      className="ghost small"
+                      type="button"
+                      onClick={() => void finishQuest(hqActiveQuest.id)}
+                    >
+                      Mark done
+                    </button>
+                  )}
+                </div>
+                <p className="hq-quest-objective">{hqActiveQuest.objective}</p>
+                {hqActiveQuest.status === "active" && (
+                  <div className="hq-quest-controls">
+                    <label className="hq-quest-field">
+                      Trust
+                      <select
+                        className="plan-member-dept"
+                        value={hqActiveQuest.trust}
+                        onChange={(event) => void setQuestTrust(event.target.value as Quest["trust"])}
+                      >
+                        <option value="manual">manual</option>
+                        <option value="supervised">supervised</option>
+                        <option value="autonomous">autonomous</option>
+                      </select>
+                    </label>
+                    <label className="hq-quest-field">
+                      Budget
+                      <input
+                        className="workspace-input hq-quest-budget"
+                        type="number"
+                        min={0}
+                        defaultValue={
+                          hqActiveQuest.budgetTokens && hqActiveQuest.budgetTokens > 0
+                            ? String(hqActiveQuest.budgetTokens)
+                            : ""
+                        }
+                        placeholder="inherit"
+                        aria-label="Quest token budget"
+                        onBlur={(event) => void setQuestBudget(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") (event.target as HTMLInputElement).blur();
+                        }}
+                      />
+                    </label>
+                  </div>
+                )}
+              </div>
+            )}
+            {!hqActiveQuest && (
+              <div className="hq-quest grow">
+                <div className="hq-quest-row">
+                  <span className="hq-quest-label">Grow</span>
+                  <span className="hq-quest-title">Start the next quest</span>
+                </div>
+                <div className="hq-quest-controls">
+                  <input
+                    className="workspace-input"
+                    placeholder="Quest title (e.g. Launch the MVP)"
+                    value={growTitle}
+                    onChange={(event) => setGrowTitle(event.target.value)}
+                    aria-label="New quest title"
+                  />
+                  <input
+                    className="workspace-input"
+                    placeholder="Objective — what does done look like?"
+                    value={growObjective}
+                    onChange={(event) => setGrowObjective(event.target.value)}
+                    aria-label="New quest objective"
+                  />
+                  <button
+                    className="btn primary small"
+                    type="button"
+                    disabled={!growTitle.trim() || boardBusy}
+                    onClick={() => void startNewQuest()}
+                  >
+                    Start quest
+                  </button>
+                </div>
+              </div>
+            )}
             <div className="hq-tabs" role="tablist">
               {(
                 [
-                  ["need", `Needs you${hqNeeds.length ? ` (${hqNeeds.length})` : ""}`],
+                  [
+                    "need",
+                    `Needs you${hqNeeds.length + hqPendingQuests.length ? ` (${hqNeeds.length + hqPendingQuests.length})` : ""}`,
+                  ],
                   ["team", "Team"],
                   ["board", "Board"],
                   ["budget", "Budget"],
@@ -5379,7 +6356,25 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
             <div className="company-setup-body">
               {hqTab === "need" && (
                 <>
-                  {hqNeeds.length === 0 && <p className="company-hint">Nothing needs you right now.</p>}
+                  {hqNeeds.length === 0 && hqPendingQuests.length === 0 && (
+                    <p className="company-hint">Nothing needs you right now.</p>
+                  )}
+                  {hqPendingQuests.length > 0 && (
+                    <ul className="board-list">
+                      {hqPendingQuests.map((quest) => (
+                        <li key={quest.id} className="board-item">
+                          <span className="board-title">Quest · {quest.title}</span>
+                          <button
+                            className="btn primary small"
+                            type="button"
+                            onClick={() => void activateQuest(quest.id)}
+                          >
+                            Start
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                   <ul className="board-list">
                     {hqNeeds.map((task) => (
                       <li key={task.id} className="board-item">
@@ -6907,9 +7902,13 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                             </span>
                           )}
                           <div className="download-main">
-                            <div className="download-name">{chat.title || "Conversation"}</div>
+                            <div className="download-name">{humanChatName(chat)}</div>
                             <div className="download-size">
-                              {last ? last.content.replace(/\s+/g, " ").slice(0, 60) : "No messages yet"}
+                              {last
+                                ? displayText(decrypted, last.content, last.id)
+                                    .replace(/\s+/g, " ")
+                                    .slice(0, 60)
+                                : "No messages yet"}
                             </div>
                           </div>
                           <button className="ghost small" type="button" onClick={() => openChat(chat)}>
@@ -7891,6 +8890,44 @@ function prettyFileName(name: string): string {
 function sharedTokenOf(text: string): string | null {
   const match = /\/shared\/([A-Za-z0-9._-]+)/.exec(text);
   return match ? match[1] : null;
+}
+
+/** Split an attachment message (`📎 name\n/shared/<token>`) into name + token. */
+export function sharedFileOf(text: string): { name: string; token: string; caption: string } | null {
+  const shareToken = sharedTokenOf(text);
+  if (!shareToken) return null;
+  const lines = text.split("\n");
+  const tokenLine = lines.findIndex((line) => line.includes("/shared/"));
+  const firstLine = (lines[0] ?? "").replace(/^📎\s*/, "").trim();
+  // Guard against a bare `/shared/<token>` line becoming the display name.
+  const name = firstLine && !firstLine.startsWith("/shared/") ? firstLine : "Shared file";
+  // Anything after the `/shared/<token>` line is the caption (Telegram-style).
+  const caption = lines
+    .slice(tokenLine + 1)
+    .join("\n")
+    .trim();
+  return { name, token: shareToken, caption };
+}
+
+/** One-line preview text for a message: shows the file name, never the raw token. */
+export function previewText(text: string): string {
+  const file = sharedFileOf(text);
+  if (file) return (file.caption || `📎 ${file.name}`).replace(/\s+/g, " ").trim();
+  return text.replace(/\s+/g, " ").trim();
+}
+
+/** A small type icon for a document row, chosen from the file extension. */
+export function fileIconFor(name: string): string {
+  const ext = name.toLowerCase().split(".").pop() ?? "";
+  if (ext === "pdf") return "📕";
+  if (ext === "doc" || ext === "docx" || ext === "rtf" || ext === "odt") return "📘";
+  if (ext === "xls" || ext === "xlsx" || ext === "csv" || ext === "ods") return "📗";
+  if (ext === "ppt" || ext === "pptx" || ext === "odp") return "📙";
+  if (ext === "zip" || ext === "rar" || ext === "7z" || ext === "tar" || ext === "gz") return "🗜️";
+  if (ext === "txt" || ext === "md" || ext === "log") return "📄";
+  if (ext === "json" || ext === "xml" || ext === "yml" || ext === "yaml") return "🧾";
+  if (ext === "html" || ext === "htm" || ext === "css" || ext === "js" || ext === "ts") return "🧩";
+  return "📎";
 }
 
 /** Library category tabs (id matches `mediaKind`, plus "all"). */

@@ -166,6 +166,27 @@ describe("MemoryStore", () => {
     expect(await store.usageSince("u1", "2026-01-15T00:00:00Z")).toEqual({ tokens: 27, requests: 1 });
   });
 
+  it("attributes usage to a quest", async () => {
+    const store = new MemoryStore();
+    const record = (id: string, questId?: string) => ({
+      id,
+      userId: "u1",
+      taskId: null,
+      promptTokens: 10,
+      completionTokens: 5,
+      questId,
+      createdAt: now,
+    });
+    await store.addUsage(record("1", "q1"));
+    await store.addUsage(record("2", "q1"));
+    await store.addUsage(record("3", "q2"));
+    await store.addUsage(record("4"));
+
+    expect(await store.usageTokensForQuest("q1")).toBe(30);
+    expect(await store.usageTokensForQuest("q2")).toBe(15);
+    expect(await store.usageTokensForQuest("missing")).toBe(0);
+  });
+
   it("stores API keys hashed and resolves/touches/revokes them", async () => {
     const store = new MemoryStore();
     await store.createApiKey({
@@ -300,5 +321,31 @@ describe("MemoryStore", () => {
     });
     expect((await store.getDeviceKey("u1", "d1"))?.publicKey).toEqual({ kty: "EC", crv: "P-256" });
     expect((await store.listDeviceKeys("u1")).length).toBe(2);
+  });
+
+  it("stores company quests scoped to a workspace", async () => {
+    const store = new MemoryStore();
+    const quest = (id: string, workspaceId: string) => ({
+      id,
+      workspaceId,
+      title: "Launch the MVP",
+      objective: "A working MVP",
+      acceptance: ["ships"],
+      status: "active" as const,
+      stage: "idea" as const,
+      trust: "manual" as const,
+      workItemIds: [] as string[],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await store.createQuest(quest("q1", "w1"));
+    await store.createQuest(quest("q2", "w2"));
+
+    expect((await store.getQuest("q1"))?.workspaceId).toBe("w1");
+    expect((await store.listQuests("w1")).map((entry) => entry.id)).toEqual(["q1"]);
+
+    const updated = { ...(await store.getQuest("q1"))!, status: "done" as const, completedAt: now };
+    await store.updateQuest(updated);
+    expect((await store.getQuest("q1"))?.status).toBe("done");
   });
 });

@@ -5,6 +5,8 @@
 > systems and specs — so nothing is left implicit. Read together:
 >
 > - **Part I–IV design** → `company-workspace.md`
+> - **Directed flow (Charter → Directions → Assemble → Quest → Operate → Grow)**
+>   → [`company-quests.md`](company-quests.md)
 > - **Architecture & specs (this file)** → everything an engineer needs to build.
 >
 > Status legend: ✅ shipped · 🟡 partial · ⏳ planned.
@@ -353,22 +355,28 @@ delete`.
 
 ## 19. Build order
 
-Authoritative sequence lives in `company-workspace.md` §46. Immediate next items:
+Authoritative sequence lives in `company-workspace.md` §46; the **directed flow**
+(the Charter → Directions → Assemble → Quest → Operate → Grow loop) is tracked
+in [`company-quests.md`](company-quests.md) §12 and is **shipped (Q0–Q5)**.
 
-- **DNA + catalog** (data) → **templates + recommendation** → **website/market
-  intelligence** → **builder tools** → **delegation/standups** → **backlog +
-  board** → **HQ** → **authorization + budget** → **hands** (social, ads,
-  design).
+Shipped: **DNA + catalog** → **templates + recommendation** → **website
+intelligence** → **builder tools** → **backlog + board** → **HQ** →
+**authorization + budget** → **hands** (social, email, ads, design) →
+**quests + per-quest budget/trust**.
+
+Remaining: market & competitor research, product templates → backlog, scheduled
+delegation/standup automation, and full per-role authorization enforcement.
 
 ## 20. Open decisions
 
-- **`Department` taxonomy:** the shipped union has 8; this doc proposes 16.
-  Decide before the catalog ships.
-- **`Bot.workspace` label vs. real `workspace_id`:** move to IDs with the
-  catalog.
-- **DNA on `workspaces.data` vs. its own table:** start on the workspace JSON.
-- **Image vendor** for design (API vs. template render).
-- **Connector priority** after Meta/LinkedIn (Stripe? CRM? support desk?).
+- **`Department` taxonomy:** resolved — the shipped catalog (`catalog.ts`) uses
+  the 16-value union.
+- **`Bot.workspace` label vs. real `workspace_id`:** still open — bots are
+  grouped by the name label; moving to IDs is a later cleanup.
+- **DNA on `workspaces.data` vs. its own table:** resolved — DNA lives on the
+  workspace JSON (no migration).
+- **Image vendor** for design (API vs. template render): open.
+- **Connector priority** after Meta/LinkedIn (Stripe? CRM? support desk?): open.
 
 ---
 

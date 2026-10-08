@@ -6,7 +6,7 @@ import { createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypt
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { createReadStream, existsSync, readFileSync } from "node:fs";
-import { mkdir, readFile, readdir, rm, stat } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import type {
   AuditEvent,
@@ -20,6 +20,7 @@ import type {
   CreateWorkspaceRequest,
   Department,
   OperatingHours,
+  Quest,
   SecretSummary,
   ServerEvent,
   Session,
@@ -56,13 +57,13 @@ import {
   analyzeSource,
   buildStandup,
   buildWeeklyReport,
-  planCompany,
+  planCompanyDirections,
   shouldRunSchedule,
   toDepartment,
   uniqueWorkspaceName,
   withinOperatingHours,
 } from "./company.js";
-import { seedCompany } from "./company-seed.js";
+import { seedCompany, seedQuest } from "./company-seed.js";
 import { unifiedLineDiff } from "./diff.js";
 import { createDockerComputerBackend } from "@botifyr/agent-core";
 import {
@@ -80,8 +81,11 @@ import type {
   LearnedSkillRecord,
   MediaRecipe,
   ModelPricingRecord,
+  PageRecord,
   PlatformSettings,
   Plan,
+  PostCommentRecord,
+  PostRecord,
 } from "./store/types.js";
 
 declare module "fastify" {
@@ -263,6 +267,9 @@ function allowedOrigins(): Set<string> {
     "http://127.0.0.1:4322",
     "http://localhost:4323",
     "http://127.0.0.1:4323",
+    // Portal Vite dev server (apps/portal `server.port`).
+    "http://localhost:1421",
+    "http://127.0.0.1:1421",
     "https://botifyr.xyz",
     "https://www.botifyr.xyz",
     "https://app.botifyr.xyz",
@@ -1379,6 +1386,36 @@ export async function buildServer(options: ServerOptions) {
 
   app.get("/admin/audit", { preHandler: requireAdmin }, async () => store.listAuditRecent(100));
 
+  /* Reported posts for the admin console (docs/feed.md moderation). */
+  app.get("/admin/reports", { preHandler: requireAdmin }, async () => {
+    const reports = await store.listReports(200);
+    const out = [];
+    for (const report of reports) {
+      const post = await store.getPost(report.postId);
+      const author = post ? await store.getUserById(post.authorId) : null;
+      out.push({
+        ...report,
+        postBody: post?.body ?? null,
+        postAuthor: author ? (author.displayName ?? author.handle ?? post?.authorId) : null,
+      });
+    }
+    return out;
+  });
+
+  app.patch<{ Params: { id: string }; Body: { status?: string } }>(
+    "/admin/reports/:id",
+    { preHandler: requireAdmin },
+    async (request, reply) => {
+      const status = request.body?.status;
+      if (status !== "pending" && status !== "reviewed" && status !== "dismissed") {
+        return reply.code(400).send({ error: "status must be pending, reviewed, or dismissed" });
+      }
+      const ok = await store.updateReportStatus(request.params.id, status);
+      if (!ok) return reply.code(404).send({ error: "report not found" });
+      return reply.code(204).send();
+    },
+  );
+
   /* Billing / plans. Stripe is optional: without keys the endpoint explains
      that billing isn't configured rather than pretending to charge. */
   const chmabaConfig = chmabaConfigFromEnv();
@@ -2171,11 +2208,15 @@ export async function buildServer(options: ServerOptions) {
       const value = (request.body?.source?.value ?? "").trim().slice(0, 1000);
       if (!value) return reply.code(400).send({ error: "a website URL or an idea is required" });
       const kind = request.body?.source?.kind === "url" ? "url" : "idea";
-      const { dna } = await analyzeSource({ kind, value }, { complete: oneShot, fetchText: fetchPageText });
-      return planCompany(
+      const { dna, notes } = await analyzeSource(
+        { kind, value },
+        { complete: oneShot, fetchText: fetchPageText },
+      );
+      return planCompanyDirections(
         { kind, value, name: request.body?.name?.trim().slice(0, 60), stage: dna.stage },
         oneShot,
         dna,
+        notes,
       );
     },
   );
@@ -2220,6 +2261,7 @@ export async function buildServer(options: ServerOptions) {
       if (!requestedName) return reply.code(400).send({ error: "a workspace name is required" });
       // Names stay unique per owner so the sidebar never merges two companies.
       const name = await uniqueWorkspaceName(store, userId, requestedName);
+      const directionId = request.body?.directionId?.trim().slice(0, 60) || undefined;
 
       const now = new Date().toISOString();
       const workspace: Workspace = {
@@ -2232,6 +2274,7 @@ export async function buildServer(options: ServerOptions) {
         },
         mission: (request.body?.mission ?? "").slice(0, 2000),
         dna: request.body?.dna,
+        directionId,
         status: "active",
         avatarEmoji: request.body?.avatarEmoji?.trim().slice(0, 8) || undefined,
         scheme: Number.isInteger(request.body?.scheme) ? Number(request.body?.scheme) : undefined,
@@ -2315,8 +2358,13 @@ export async function buildServer(options: ServerOptions) {
         chairBotId = promoteCeo.id;
       }
 
-      // Seed the company wiki + board.
+      // Set the chair first, then seed. Seeding writes `activeQuestId` onto the
+      // stored workspace; doing it after a stale `updateWorkspace(workspace)`
+      // would wipe it (breaking per-quest budget attribution).
       if (chairBotId) {
+        workspace.ceoBotId = chairBotId;
+        await store.updateWorkspace(workspace);
+        // Seed the company wiki + board (one quest with its roadmap).
         await seedCompany(store, {
           userId,
           workspaceId: workspace.id,
@@ -2324,12 +2372,10 @@ export async function buildServer(options: ServerOptions) {
           mission: workspace.mission,
           chairBotId,
           dna: request.body?.dna,
+          quest: request.body?.quest ? { ...request.body.quest, directionId } : undefined,
         });
-      }
-
-      if (chairBotId) {
-        workspace.ceoBotId = chairBotId;
-        await store.updateWorkspace(workspace);
+        const fresh = await store.getWorkspace(workspace.id);
+        return reply.code(201).send(await workspaceView(fresh ?? workspace));
       }
       return reply.code(201).send(await workspaceView(workspace));
     },
@@ -2475,6 +2521,143 @@ export async function buildServer(options: ServerOptions) {
       return store.listWorkItems(workspace.id);
     },
   );
+
+  /* Company quests (missions above the board, docs/company-quests.md §5.3). */
+  app.get<{ Params: { id: string } }>(
+    "/v1/workspaces/:id/quests",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const workspace = await store.getWorkspace(request.params.id);
+      if (!workspace || workspace.ownerId !== userId) {
+        return reply.code(404).send({ error: "workspace not found" });
+      }
+      return store.listQuests(workspace.id);
+    },
+  );
+
+  /** Propose a quest; `proposed` by default, `active` when `activate` is true. */
+  app.post<{
+    Params: { id: string };
+    Body: {
+      title?: string;
+      objective?: string;
+      acceptance?: string[];
+      directionId?: string;
+      roadmap?: Array<{ phase: WorkItem["phase"]; title: string }>;
+      trust?: Workspace["autonomy"];
+      activate?: boolean;
+    };
+  }>("/v1/workspaces/:id/quests", { preHandler: requireAuth }, async (request, reply) => {
+    const userId = request.userId as string;
+    const workspace = await store.getWorkspace(request.params.id);
+    if (!workspace || workspace.ownerId !== userId) {
+      return reply.code(404).send({ error: "workspace not found" });
+    }
+    const title = (request.body?.title ?? "").trim().slice(0, 120);
+    if (!title) return reply.code(400).send({ error: "a quest title is required" });
+    const activate = request.body?.activate === true;
+    if (activate) {
+      const active = (await store.listQuests(workspace.id)).find((entry) => entry.status === "active");
+      if (active) return reply.code(409).send({ error: "a quest is already active" });
+    }
+    const quest = await seedQuest(store, {
+      userId,
+      workspaceId: workspace.id,
+      dna: workspace.dna,
+      quest: {
+        title,
+        objective: (request.body?.objective ?? "").trim().slice(0, 500),
+        acceptance: Array.isArray(request.body?.acceptance)
+          ? request.body.acceptance.filter((entry): entry is string => typeof entry === "string")
+          : undefined,
+        directionId: request.body?.directionId?.trim().slice(0, 60),
+        roadmap: Array.isArray(request.body?.roadmap) ? request.body.roadmap.slice(0, 12) : undefined,
+        trust: request.body?.trust,
+        status: activate ? "active" : "proposed",
+      },
+    });
+    return reply.code(201).send(quest);
+  });
+
+  /** Mark a quest done and clear it as the active mission. */
+  app.post<{ Params: { id: string; qid: string } }>(
+    "/v1/workspaces/:id/quests/:qid/complete",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const quest = await store.getQuest(request.params.qid);
+      const workspace = quest ? await store.getWorkspace(quest.workspaceId) : null;
+      if (!quest || !workspace || workspace.ownerId !== userId || workspace.id !== request.params.id) {
+        return reply.code(404).send({ error: "quest not found" });
+      }
+      const now = new Date().toISOString();
+      quest.status = "done";
+      quest.completedAt = now;
+      quest.updatedAt = now;
+      await store.updateQuest(quest);
+      if (workspace.activeQuestId === quest.id) {
+        workspace.activeQuestId = undefined;
+        await store.updateWorkspace(workspace);
+      }
+      return quest;
+    },
+  );
+
+  /** Update a quest. Status transitions keep at most one active quest. */
+  app.patch<{
+    Params: { id: string };
+    Body: {
+      title?: string;
+      objective?: string;
+      acceptance?: string[];
+      trust?: Workspace["autonomy"];
+      budgetTokens?: number | null;
+      status?: Quest["status"];
+    };
+  }>("/v1/quests/:id", { preHandler: requireAuth }, async (request, reply) => {
+    const userId = request.userId as string;
+    const quest = await store.getQuest(request.params.id);
+    const workspace = quest ? await store.getWorkspace(quest.workspaceId) : null;
+    if (!quest || !workspace || workspace.ownerId !== userId) {
+      return reply.code(404).send({ error: "quest not found" });
+    }
+    if (typeof request.body?.title === "string" && request.body.title.trim()) {
+      quest.title = request.body.title.trim().slice(0, 120);
+    }
+    if (typeof request.body?.objective === "string")
+      quest.objective = request.body.objective.trim().slice(0, 500);
+    if (Array.isArray(request.body?.acceptance)) {
+      quest.acceptance = request.body.acceptance
+        .filter((entry): entry is string => typeof entry === "string")
+        .slice(0, 8);
+    }
+    if (request.body?.trust) quest.trust = request.body.trust;
+    if (request.body?.budgetTokens === null) quest.budgetTokens = undefined;
+    else if (typeof request.body?.budgetTokens === "number") {
+      quest.budgetTokens = Math.max(0, Math.floor(request.body.budgetTokens));
+    }
+    const now = new Date().toISOString();
+    if (request.body?.status && request.body.status !== quest.status) {
+      const next = request.body.status;
+      if (next === "active") {
+        const active = (await store.listQuests(workspace.id)).find(
+          (entry) => entry.status === "active" && entry.id !== quest.id,
+        );
+        if (active) return reply.code(409).send({ error: "a quest is already active" });
+        workspace.activeQuestId = quest.id;
+        await store.updateWorkspace(workspace);
+      } else if (workspace.activeQuestId === quest.id) {
+        workspace.activeQuestId = undefined;
+        await store.updateWorkspace(workspace);
+      }
+      quest.status = next;
+      quest.completedAt = next === "done" ? now : undefined;
+    }
+    quest.updatedAt = now;
+    await store.updateQuest(quest);
+    return quest;
+  });
 
   /** Clear the whole company board. */
   app.delete<{ Params: { id: string } }>(
@@ -2875,7 +3058,7 @@ export async function buildServer(options: ServerOptions) {
           const everyMinutes = role.isChair ? 1440 : 240;
           bot.schedule = {
             prompt: role.isChair
-              ? "Run the daily standup. If the company has no PLAN.md yet, write one now with company.plan (goal, approach, who, channels, metrics); if the team lacks the roles or capacity to execute it, hire them with company.hire. Otherwise summarise the board, flag blockers, and delegate the next steps."
+              ? "Run the daily standup. If the company has no PLAN.md yet, write one now with company.plan (goal, approach, who, channels, metrics); if the team lacks the roles or capacity to execute it, hire them with company.hire. If no quest is active, propose the next one with company.propose (title + objective + acceptance). Otherwise summarise the board, flag blockers, and delegate the next steps."
               : "Review your board tasks and do the next one. If you're blocked, escalate; if the plan is unclear, ask the CEO.",
             everyMinutes,
             enabled: true,
@@ -3328,6 +3511,22 @@ export async function buildServer(options: ServerOptions) {
     },
   );
 
+  // Delete a personal conversation (DM or friend group). Any participant may
+  // remove it; the session row is owned by its creator, so delete by that id.
+  app.delete<{ Params: { id: string } }>(
+    "/v1/conversations/:id",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const session = await store.getSession(request.params.id);
+      if (!session) return reply.code(204).send();
+      const isParticipant = session.userId === userId || (session.participants ?? []).includes(userId);
+      if (!isParticipant) return reply.code(404).send({ error: "conversation not found" });
+      await store.deleteSession(session.userId, session.id);
+      return reply.code(204).send();
+    },
+  );
+
   app.post<{ Params: { id: string }; Body: { text?: string } }>(
     "/v1/dm/:id/messages",
     { preHandler: requireAuth },
@@ -3554,7 +3753,8 @@ export async function buildServer(options: ServerOptions) {
     const userId = request.userId as string;
     const query = String((request.query as { q?: string } | undefined)?.q ?? "").trim();
     if (query.length < 1) return [];
-    const results = await store.searchUsers(query, userId, 20);
+    const blocked = new Set(await store.listBlockedEither(userId));
+    const results = (await store.searchUsers(query, userId, 20)).filter((record) => !blocked.has(record.id));
     const friendIds = new Set(await store.listFriends(userId));
     const requests = await store.listFriendRequests(userId);
     const outgoing = new Set(
@@ -3577,6 +3777,88 @@ export async function buildServer(options: ServerOptions) {
     const people = await Promise.all(ids.map((id) => store.getUserById(id)));
     return people.filter((record): record is NonNullable<typeof record> => Boolean(record)).map(personOf);
   });
+
+  /* "Who to follow": registered users who are neither friends nor already
+     pending. Bounded; a real suggestions ranker can replace this later. */
+  app.get<{ Querystring: { limit?: string } }>(
+    "/v1/people/suggestions",
+    { preHandler: requireAuth },
+    async (request) => {
+      const userId = request.userId as string;
+      const limit = Math.max(1, Math.min(20, Number(request.query?.limit ?? 8) || 8));
+      const friendIds = new Set(await store.listFriends(userId));
+      const pending = new Set<string>();
+      for (const entry of await store.listFriendRequests(userId)) {
+        if (entry.status !== "pending") continue;
+        pending.add(entry.fromUserId === userId ? entry.toUserId : entry.fromUserId);
+      }
+      const blocked = new Set(await store.listBlockedEither(userId));
+      const out: ReturnType<typeof personOf>[] = [];
+      for (const record of await store.listUsers()) {
+        if (
+          record.id === userId ||
+          friendIds.has(record.id) ||
+          pending.has(record.id) ||
+          blocked.has(record.id)
+        ) {
+          continue;
+        }
+        out.push(personOf(record));
+        if (out.length >= limit) break;
+      }
+      return out;
+    },
+  );
+
+  /* Moderation: block / report (docs/feed.md). */
+  app.get("/v1/blocks", { preHandler: requireAuth }, async (request) => {
+    const ids = await store.listBlockedIds(request.userId as string);
+    return (await store.listUsersByIds(ids)).map(personOf);
+  });
+
+  app.post<{ Params: { id: string } }>(
+    "/v1/users/:id/block",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const targetId = request.params.id;
+      if (targetId === userId) return reply.code(400).send({ error: "you can't block yourself" });
+      const target = await store.getUserById(targetId);
+      if (!target) return reply.code(404).send({ error: "user not found" });
+      await store.blockUser(userId, targetId);
+      // Blocking ends the friendship; the removal is mutual.
+      await store.deleteFriendship(userId, targetId);
+      return { ok: true };
+    },
+  );
+
+  app.delete<{ Params: { id: string } }>(
+    "/v1/users/:id/block",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      await store.unblockUser(request.userId as string, request.params.id);
+      return reply.code(204).send();
+    },
+  );
+
+  app.post<{ Params: { id: string }; Body: { reason?: string } }>(
+    "/v1/posts/:id/report",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const post = await store.getPost(request.params.id);
+      if (!post) return reply.code(404).send({ error: "post not found" });
+      const reason = typeof request.body?.reason === "string" ? request.body.reason.trim().slice(0, 500) : "";
+      await store.createReport({
+        id: randomUUID(),
+        postId: post.id,
+        reporterId: request.userId as string,
+        reason: reason || undefined,
+        status: "pending",
+        createdAt: new Date().toISOString(),
+      });
+      return reply.code(201).send({ ok: true });
+    },
+  );
 
   app.get("/v1/friend-requests", { preHandler: requireAuth }, async (request) => {
     const userId = request.userId as string;
@@ -3609,6 +3891,9 @@ export async function buildServer(options: ServerOptions) {
       if (!target && request.body?.handle) target = await store.getUserByHandle(request.body.handle);
       if (!target) return reply.code(404).send({ error: "user not found" });
       if (target.id === userId) return reply.code(400).send({ error: "you can't add yourself" });
+      if (await store.isBlockedEither(userId, target.id)) {
+        return reply.code(403).send({ error: "not allowed" });
+      }
       if (await store.areFriends(userId, target.id)) return { ok: true, friend: true };
       const existing = (await store.listFriendRequests(userId)).find(
         (record) =>
@@ -3675,6 +3960,585 @@ export async function buildServer(options: ServerOptions) {
       return reply.code(204).send();
     },
   );
+
+  /* ------------------------------------------------------------------------ */
+  /* Feed: social posts (docs/feed.md)                                        */
+  /* ------------------------------------------------------------------------ */
+  const MAX_POST_BODY = 4000;
+  type FeedAuthorDto = ReturnType<typeof personOf> & { page?: boolean };
+
+  /* Feed images are served without an auth header (an <img> can't send one), so
+     the URL itself carries a short-lived HMAC token — the same possession model
+     as the signed file-share links. */
+  const signImage = (mediaId: string): string => {
+    const body = Buffer.from(
+      JSON.stringify({ m: mediaId, e: Date.now() + 7 * 24 * 60 * 60 * 1000 }),
+    ).toString("base64url");
+    const mac = createHmac("sha256", vaultKey).update(body).digest("base64url");
+    return `${body}.${mac}`;
+  };
+  const verifyImage = (token: string): { m: string; e: number } | null => {
+    const [body, mac] = token.split(".");
+    if (!body || !mac) return null;
+    const expected = createHmac("sha256", vaultKey).update(body).digest("base64url");
+    const given = Buffer.from(mac);
+    const want = Buffer.from(expected);
+    if (given.length !== want.length || !timingSafeEqual(given, want)) return null;
+    try {
+      const payload = JSON.parse(Buffer.from(body, "base64url").toString("utf8")) as { m: string; e: number };
+      if (!payload.m || typeof payload.e !== "number" || payload.e < Date.now()) return null;
+      return payload;
+    } catch {
+      return null;
+    }
+  };
+
+  const feedAuthorOf = async (
+    authorId: string,
+    cache: Map<string, FeedAuthorDto>,
+  ): Promise<FeedAuthorDto> => {
+    const cached = cache.get(authorId);
+    if (cached) return cached;
+    const record = await store.getUserById(authorId);
+    const author: FeedAuthorDto = record
+      ? personOf(record)
+      : {
+          id: authorId,
+          handle: undefined,
+          displayName: "Unknown",
+          avatarEmoji: undefined,
+          avatarScheme: undefined,
+          avatarUrl: undefined,
+          online: false,
+        };
+    cache.set(authorId, author);
+    return author;
+  };
+
+  const pageAuthorOf = async (pageId: string, cache: Map<string, FeedAuthorDto>): Promise<FeedAuthorDto> => {
+    const cached = cache.get(pageId);
+    if (cached) return cached;
+    const page = await store.getPage(pageId);
+    const author: FeedAuthorDto = page
+      ? {
+          id: page.id,
+          handle: page.handle,
+          displayName: page.name,
+          avatarEmoji: page.avatarEmoji,
+          avatarScheme: undefined,
+          avatarUrl: page.avatarUrl,
+          online: false,
+          page: true,
+        }
+      : {
+          id: pageId,
+          handle: undefined,
+          displayName: "Page",
+          avatarEmoji: undefined,
+          avatarScheme: undefined,
+          avatarUrl: undefined,
+          online: false,
+          page: true,
+        };
+    cache.set(pageId, author);
+    return author;
+  };
+
+  const feedPostOf = async (record: PostRecord, viewerId: string, cache: Map<string, FeedAuthorDto>) => {
+    const author = record.pageId ? await pageAuthorOf(record.pageId, cache) : await feedAuthorOf(record.authorId, cache);
+    const stats = await store.getPostStats(record.id, viewerId);
+    return {
+      id: record.id,
+      author,
+      body: record.body,
+      mediaId: record.mediaId,
+      pageId: record.pageId,
+      imageUrl: record.mediaId ? `/v1/feed/image?t=${signImage(record.mediaId)}` : undefined,
+      createdAt: record.createdAt,
+      updatedAt: record.updatedAt,
+      likes: stats.likes,
+      comments: stats.comments,
+      shares: stats.shares,
+      likedByMe: stats.likedByMe,
+      sharedByMe: stats.sharedByMe,
+    };
+  };
+
+  const feedCommentOf = async (record: PostCommentRecord, cache: Map<string, FeedAuthorDto>) => ({
+    id: record.id,
+    author: await feedAuthorOf(record.authorId, cache),
+    body: record.body,
+    createdAt: record.createdAt,
+  });
+
+  app.get<{ Querystring: { cursor?: string; limit?: string } }>(
+    "/v1/feed",
+    { preHandler: requireAuth },
+    async (request) => {
+      const userId = request.userId as string;
+      const cursor = request.query?.cursor?.trim() || undefined;
+      const limit = Math.max(1, Math.min(50, Number(request.query?.limit ?? 20) || 20));
+      const blocked = new Set(await store.listBlockedEither(userId));
+      const friendIds = (await store.listFriends(userId)).filter((id) => !blocked.has(id));
+      const followedPages = (await store.listFollowedPageIds(userId)).filter((id) => !blocked.has(id));
+      const posts = await store.listFeedPosts([userId, ...friendIds, ...followedPages], limit + 1, cursor);
+      const hasMore = posts.length > limit;
+      const page = hasMore ? posts.slice(0, limit) : posts;
+      const cache = new Map<string, FeedAuthorDto>();
+      const items = [];
+      for (const record of page) items.push(await feedPostOf(record, userId, cache));
+      return { items, nextCursor: hasMore ? (page[page.length - 1]?.createdAt ?? null) : null };
+    },
+  );
+
+  app.post<{ Body: { body?: string; mediaId?: string; pageId?: string } }>(
+    "/v1/posts",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const body = typeof request.body?.body === "string" ? request.body.body.trim() : "";
+      const mediaId = typeof request.body?.mediaId === "string" ? request.body.mediaId.trim() : "";
+      if (!body && !mediaId) return reply.code(400).send({ error: "post needs text or an image" });
+      if (body.length > MAX_POST_BODY) return reply.code(413).send({ error: "post is too long" });
+
+      // Post as a Page when pageId is given (requires an editor/admin role).
+      const pageId = typeof request.body?.pageId === "string" ? request.body.pageId.trim() : "";
+      let authorId = userId;
+      let page: PageRecord | null = null;
+      if (pageId) {
+        page = await store.getPage(pageId);
+        if (!page) return reply.code(404).send({ error: "page not found" });
+        const role = page.ownerId === userId ? "admin" : (await store.getPageRole(pageId, userId))?.role;
+        if (role !== "admin" && role !== "editor") {
+          return reply.code(403).send({ error: "you can't post as this page" });
+        }
+        authorId = page.id;
+      }
+
+      const now = new Date().toISOString();
+      const record: PostRecord = {
+        id: randomUUID(),
+        authorId,
+        body,
+        mediaId: mediaId || undefined,
+        pageId: page?.id,
+        createdAt: now,
+        updatedAt: now,
+      };
+      await store.createPost(record);
+      emit({ type: "feed.post", postId: record.id, authorId });
+      return reply.code(201).send(await feedPostOf(record, userId, new Map()));
+    },
+  );
+
+  app.delete<{ Params: { id: string } }>(
+    "/v1/posts/:id",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const ok = await store.deletePost(request.userId as string, request.params.id);
+      if (!ok) return reply.code(404).send({ error: "post not found" });
+      return reply.code(204).send();
+    },
+  );
+
+  for (const [method, liked] of [
+    ["PUT", true],
+    ["DELETE", false],
+  ] as const) {
+    app.route<{ Params: { id: string } }>({
+      method,
+      url: "/v1/posts/:id/like",
+      preHandler: requireAuth,
+      handler: async (request, reply) => {
+        const post = await store.getPost(request.params.id);
+        if (!post) return reply.code(404).send({ error: "post not found" });
+        const userId = request.userId as string;
+        if (await store.isBlockedEither(userId, post.authorId)) {
+          return reply.code(403).send({ error: "not allowed" });
+        }
+        await store.setPostLike(post.id, userId, liked);
+        if (liked && post.authorId !== userId) {
+          const actor = await store.getUserById(userId);
+          emit({
+            type: "feed.like",
+            postId: post.id,
+            fromUserId: userId,
+            fromName: actor?.displayName ?? actor?.handle,
+            toUserId: post.authorId,
+          });
+        }
+        return { ok: true };
+      },
+    });
+  }
+
+  app.get<{ Params: { id: string } }>(
+    "/v1/posts/:id/comments",
+    { preHandler: requireAuth },
+    async (request) => {
+      const blocked = new Set(await store.listBlockedEither(request.userId as string));
+      const comments = await store.listPostComments(request.params.id);
+      const cache = new Map<string, FeedAuthorDto>();
+      const items = [];
+      for (const record of comments) {
+        if (blocked.has(record.authorId)) continue;
+        items.push(await feedCommentOf(record, cache));
+      }
+      return items;
+    },
+  );
+
+  app.post<{ Params: { id: string }; Body: { body?: string } }>(
+    "/v1/posts/:id/comments",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const post = await store.getPost(request.params.id);
+      if (!post) return reply.code(404).send({ error: "post not found" });
+      if (await store.isBlockedEither(request.userId as string, post.authorId)) {
+        return reply.code(403).send({ error: "not allowed" });
+      }
+      const body = typeof request.body?.body === "string" ? request.body.body.trim() : "";
+      if (!body) return reply.code(400).send({ error: "comment can't be empty" });
+      if (body.length > MAX_POST_BODY) return reply.code(413).send({ error: "comment is too long" });
+      const record: PostCommentRecord = {
+        id: randomUUID(),
+        postId: post.id,
+        authorId: request.userId as string,
+        body,
+        createdAt: new Date().toISOString(),
+      };
+      await store.createPostComment(record);
+      if (post.authorId !== record.authorId) {
+        const actor = await store.getUserById(record.authorId);
+        emit({
+          type: "feed.comment",
+          postId: post.id,
+          fromUserId: record.authorId,
+          fromName: actor?.displayName ?? actor?.handle,
+          toUserId: post.authorId,
+        });
+      }
+      return reply.code(201).send(await feedCommentOf(record, new Map()));
+    },
+  );
+
+  app.delete<{ Params: { id: string } }>(
+    "/v1/comments/:id",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const ok = await store.deletePostComment(request.userId as string, request.params.id);
+      if (!ok) return reply.code(404).send({ error: "comment not found" });
+      return reply.code(204).send();
+    },
+  );
+
+  for (const [method, shared] of [
+    ["PUT", true],
+    ["DELETE", false],
+  ] as const) {
+    app.route<{ Params: { id: string } }>({
+      method,
+      url: "/v1/posts/:id/share",
+      preHandler: requireAuth,
+      handler: async (request, reply) => {
+        const post = await store.getPost(request.params.id);
+        if (!post) return reply.code(404).send({ error: "post not found" });
+        const userId = request.userId as string;
+        if (await store.isBlockedEither(userId, post.authorId)) {
+          return reply.code(403).send({ error: "not allowed" });
+        }
+        await store.setPostShare(post.id, userId, shared);
+        if (shared && post.authorId !== userId) {
+          const actor = await store.getUserById(userId);
+          emit({
+            type: "feed.share",
+            postId: post.id,
+            fromUserId: userId,
+            fromName: actor?.displayName ?? actor?.handle,
+            toUserId: post.authorId,
+          });
+        }
+        return { ok: true };
+      },
+    });
+  }
+
+  app.get<{ Params: { handle: string } }>(
+    "/v1/users/:handle/posts",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const viewerId = request.userId as string;
+      const user = await store.getUserByHandle(request.params.handle);
+      if (!user) return reply.code(404).send({ error: "user not found" });
+      if (user.id !== viewerId && !(await store.areFriends(viewerId, user.id))) {
+        return reply.code(403).send({ error: "not allowed" });
+      }
+      const posts = await store.listPostsByAuthor(user.id, 20);
+      const cache = new Map<string, FeedAuthorDto>();
+      const items = [];
+      for (const record of posts) items.push(await feedPostOf(record, viewerId, cache));
+      return items;
+    },
+  );
+
+  /* Top posts: engagement-ranked posts from you and your friends (last 7 days). */
+  app.get<{ Querystring: { limit?: string } }>(
+    "/v1/feed/trending",
+    { preHandler: requireAuth },
+    async (request) => {
+      const userId = request.userId as string;
+      const limit = Math.max(1, Math.min(10, Number(request.query?.limit ?? 3) || 3));
+      const blocked = new Set(await store.listBlockedEither(userId));
+      const friendIds = (await store.listFriends(userId)).filter((id) => !blocked.has(id));
+      const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const posts = await store.listTrendingPosts([userId, ...friendIds], since, limit);
+      const cache = new Map<string, FeedAuthorDto>();
+      const items = [];
+      for (const record of posts) items.push(await feedPostOf(record, userId, cache));
+      return items;
+    },
+  );
+
+  /* ------------------------------------------------------------------------ */
+  /* Pages: public, followable entities (docs/feed-next.md)                    */
+  /* ------------------------------------------------------------------------ */
+  const pageDto = async (page: PageRecord, viewerId: string) => ({
+    id: page.id,
+    handle: page.handle,
+    name: page.name,
+    category: page.category,
+    about: page.about,
+    avatarEmoji: page.avatarEmoji,
+    avatarUrl: page.avatarUrl,
+    coverUrl: page.coverUrl,
+    cta: page.cta,
+    verified: page.verified,
+    workspaceId: page.workspaceId,
+    botId: page.botId,
+    followers: await store.countPageFollowers(page.id),
+    following: await store.isFollowingPage(page.id, viewerId),
+    role: page.ownerId === viewerId ? "admin" : ((await store.getPageRole(page.id, viewerId))?.role ?? null),
+    createdAt: page.createdAt,
+  });
+
+  app.get("/v1/pages", { preHandler: requireAuth }, async (request) => {
+    const userId = request.userId as string;
+    const owned = await store.listPages(userId);
+    return Promise.all(owned.map((page) => pageDto(page, userId)));
+  });
+
+  app.post<{
+    Body: {
+      name?: string;
+      handle?: string;
+      category?: string;
+      about?: string;
+      workspaceId?: string;
+      botId?: string;
+      avatarEmoji?: string;
+      avatarUrl?: string;
+      coverUrl?: string;
+      cta?: string;
+    };
+  }>("/v1/pages", { preHandler: requireAuth }, async (request, reply) => {
+    const userId = request.userId as string;
+    const name = (request.body?.name ?? "").trim().slice(0, 60);
+    if (name.length < 2) return reply.code(400).send({ error: "name must be at least 2 characters" });
+    const handle = slugify(request.body?.handle || name);
+    if (handle.length < 3) return reply.code(400).send({ error: "handle must be at least 3 characters" });
+    if (await store.getPageByHandle(handle)) return reply.code(409).send({ error: "that handle is taken" });
+    const now = new Date().toISOString();
+    const record: PageRecord = {
+      id: randomUUID(),
+      ownerId: userId,
+      workspaceId: request.body?.workspaceId?.trim() || undefined,
+      botId: request.body?.botId?.trim() || undefined,
+      handle,
+      name,
+      category: request.body?.category?.trim().slice(0, 40) || undefined,
+      about: request.body?.about?.trim().slice(0, 500) || undefined,
+      avatarEmoji: request.body?.avatarEmoji?.trim().slice(0, 8) || undefined,
+      avatarUrl: typeof request.body?.avatarUrl === "string" ? request.body.avatarUrl.trim() || undefined : undefined,
+      coverUrl: typeof request.body?.coverUrl === "string" ? request.body.coverUrl.trim() || undefined : undefined,
+      cta: request.body?.cta?.trim().slice(0, 40) || undefined,
+      verified: false,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await store.createPage(record);
+    await store.setPageRole({ pageId: record.id, userId, role: "admin" });
+    return reply.code(201).send(await pageDto(record, userId));
+  });
+
+  app.get<{ Params: { handle: string } }>(
+    "/v1/pages/:handle",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const page = await store.getPageByHandle(request.params.handle);
+      if (!page) return reply.code(404).send({ error: "page not found" });
+      return pageDto(page, request.userId as string);
+    },
+  );
+
+  app.patch<{
+    Params: { id: string };
+    Body: {
+      name?: string;
+      handle?: string;
+      category?: string;
+      about?: string;
+      avatarEmoji?: string;
+      avatarUrl?: string;
+      coverUrl?: string;
+      cta?: string;
+    };
+  }>("/v1/pages/:id", { preHandler: requireAuth }, async (request, reply) => {
+    const userId = request.userId as string;
+    const page = await store.getPage(request.params.id);
+    if (!page) return reply.code(404).send({ error: "page not found" });
+    const role = page.ownerId === userId ? "admin" : (await store.getPageRole(page.id, userId))?.role;
+    if (role !== "admin" && role !== "editor") return reply.code(403).send({ error: "not allowed" });
+    if (typeof request.body?.name === "string") page.name = request.body.name.trim().slice(0, 60) || page.name;
+    if (typeof request.body?.handle === "string") {
+      const handle = slugify(request.body.handle);
+      if (handle.length < 3) return reply.code(400).send({ error: "handle must be at least 3 characters" });
+      const clash = await store.getPageByHandle(handle);
+      if (clash && clash.id !== page.id) return reply.code(409).send({ error: "that handle is taken" });
+      page.handle = handle;
+    }
+    if (typeof request.body?.category === "string")
+      page.category = request.body.category.trim().slice(0, 40) || undefined;
+    if (typeof request.body?.about === "string") page.about = request.body.about.trim().slice(0, 500) || undefined;
+    if (typeof request.body?.avatarEmoji === "string")
+      page.avatarEmoji = request.body.avatarEmoji.trim().slice(0, 8) || undefined;
+    if (typeof request.body?.avatarUrl === "string") page.avatarUrl = request.body.avatarUrl.trim() || undefined;
+    if (typeof request.body?.coverUrl === "string") page.coverUrl = request.body.coverUrl.trim() || undefined;
+    if (typeof request.body?.cta === "string") page.cta = request.body.cta.trim().slice(0, 40) || undefined;
+    page.updatedAt = new Date().toISOString();
+    await store.updatePage(page);
+    return pageDto(page, userId);
+  });
+
+  app.delete<{ Params: { id: string } }>(
+    "/v1/pages/:id",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const ok = await store.deletePage(request.userId as string, request.params.id);
+      if (!ok) return reply.code(404).send({ error: "page not found" });
+      return reply.code(204).send();
+    },
+  );
+
+  app.get<{ Params: { handle: string } }>(
+    "/v1/pages/:handle/posts",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const page = await store.getPageByHandle(request.params.handle);
+      if (!page) return reply.code(404).send({ error: "page not found" });
+      const posts = await store.listPostsByAuthor(page.id, 20);
+      const cache = new Map<string, FeedAuthorDto>();
+      const items = [];
+      for (const record of posts) items.push(await feedPostOf(record, request.userId as string, cache));
+      return items;
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    "/v1/pages/:id/follow",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const page = await store.getPage(request.params.id);
+      if (!page) return reply.code(404).send({ error: "page not found" });
+      await store.followPage(page.id, request.userId as string);
+      return { ok: true };
+    },
+  );
+
+  app.delete<{ Params: { id: string } }>(
+    "/v1/pages/:id/follow",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      await store.unfollowPage(request.params.id, request.userId as string);
+      return reply.code(204).send();
+    },
+  );
+
+  app.get<{ Params: { id: string } }>(
+    "/v1/pages/:id/roles",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const page = await store.getPage(request.params.id);
+      if (!page) return reply.code(404).send({ error: "page not found" });
+      const userId = request.userId as string;
+      const role = page.ownerId === userId ? "admin" : (await store.getPageRole(page.id, userId))?.role;
+      if (role !== "admin") return reply.code(403).send({ error: "not allowed" });
+      const roles = await store.listPageRoles(page.id);
+      const people = await store.listUsersByIds(roles.map((entry) => entry.userId));
+      const byId = new Map(people.map((person) => [person.id, person]));
+      return roles.map((entry) => ({
+        userId: entry.userId,
+        role: entry.role,
+        person: byId.has(entry.userId) ? personOf(byId.get(entry.userId)!) : null,
+      }));
+    },
+  );
+
+  app.put<{ Params: { id: string }; Body: { userId?: string; role?: string } }>(
+    "/v1/pages/:id/roles",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const page = await store.getPage(request.params.id);
+      if (!page) return reply.code(404).send({ error: "page not found" });
+      const userId = request.userId as string;
+      const callerRole = page.ownerId === userId ? "admin" : (await store.getPageRole(page.id, userId))?.role;
+      if (callerRole !== "admin") return reply.code(403).send({ error: "not allowed" });
+      const targetId = request.body?.userId?.trim();
+      if (!targetId) return reply.code(400).send({ error: "userId is required" });
+      const role = request.body?.role;
+      if (role !== "admin" && role !== "editor" && role !== "moderator" && role !== "analyst") {
+        if (!role) {
+          await store.deletePageRole(page.id, targetId);
+          return reply.code(204).send();
+        }
+        return reply.code(400).send({ error: "invalid role" });
+      }
+      if (targetId === page.ownerId) return reply.code(400).send({ error: "the owner is always admin" });
+      await store.setPageRole({ pageId: page.id, userId: targetId, role });
+      return { ok: true };
+    },
+  );
+
+  /* Serve a feed image by its short-lived signed token. No auth header: the
+     token is the capability (see signImage). The token rides in a query param
+     because it exceeds Fastify's path-parameter length limit. */
+  app.get<{ Querystring: { t?: string } }>("/v1/feed/image", async (request, reply) => {
+    const payload = verifyImage(request.query?.t ?? "");
+    if (!payload) return reply.code(403).send({ error: "invalid or expired image link" });
+    const sep = payload.m.indexOf(":");
+    if (sep < 0) return reply.code(404).send({ error: "image not found" });
+    const name = payload.m.slice(sep + 1);
+    const lower = name.toLowerCase();
+    const type = lower.endsWith(".png")
+      ? "image/png"
+      : lower.endsWith(".webp")
+        ? "image/webp"
+        : lower.endsWith(".gif")
+          ? "image/gif"
+          : lower.endsWith(".jpg") || lower.endsWith(".jpeg")
+            ? "image/jpeg"
+            : "application/octet-stream";
+    try {
+      const filePath = join(downloadsRoot, payload.m.slice(0, sep), basename(name));
+      const info = await stat(filePath);
+      if (!info.isFile()) throw new Error("not a file");
+      return reply
+        .header("cache-control", "private, max-age=86400")
+        .type(type)
+        .send(await readFile(filePath));
+    } catch {
+      return reply.code(404).send({ error: "image not found" });
+    }
+  });
 
   /* Downloads produced by a task (e.g. youtube.download), served to the user. */
   const downloadsRoot = process.env.BOTIFYR_DOWNLOADS_DIR ?? "/downloads";
@@ -3840,24 +4704,92 @@ export async function buildServer(options: ServerOptions) {
     },
   );
 
+  /* Upload a local file so it can be attached to a conversation. Stored in the
+     downloads volume under its own folder, then shared via the signed-link flow. */
+  app.post<{ Body: { name?: string; mime?: string; data?: string } }>(
+    "/v1/uploads",
+    { preHandler: requireAuth, bodyLimit: 25 * 1024 * 1024 },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const rawName = (request.body?.name ?? "").trim();
+      const data = request.body?.data ?? "";
+      if (!rawName || !data) return reply.code(400).send({ error: "name and data are required" });
+      const base64 = data.includes(",") ? data.slice(data.indexOf(",") + 1) : data;
+      const buffer = Buffer.from(base64, "base64");
+      if (buffer.length === 0) return reply.code(400).send({ error: "empty file" });
+      if (buffer.length > 15 * 1024 * 1024) {
+        return reply.code(413).send({ error: "file is too large (max 15MB)" });
+      }
+      const safeName =
+        basename(rawName)
+          .replace(/[^\w.\- ()]+/g, "_")
+          .slice(0, 120) || "file";
+      const uploadId = randomUUID();
+      const dir = join(downloadsRoot, uploadId);
+      await mkdir(dir, { recursive: true });
+      await writeFile(join(dir, safeName), buffer);
+      const now = new Date().toISOString();
+      const record = {
+        id: `${uploadId}:${safeName}`,
+        userId,
+        taskId: uploadId,
+        name: safeName,
+        size: buffer.length,
+        mime: (request.body?.mime ?? "").trim() || "application/octet-stream",
+        location: "server" as const,
+        createdAt: now,
+        updatedAt: now,
+      };
+      await store.upsertMedia(record);
+      return reply.code(201).send({
+        id: record.id,
+        taskId: record.taskId,
+        name: record.name,
+        size: record.size,
+        mime: record.mime,
+        location: record.location,
+        createdAt: record.createdAt,
+      });
+    },
+  );
+
+  /** Best-effort content type from a file name, so media previews render inline. */
+  const mimeForName = (name: string): string => {
+    const lower = name.toLowerCase();
+    if (lower.endsWith(".png")) return "image/png";
+    if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+    if (lower.endsWith(".webp")) return "image/webp";
+    if (lower.endsWith(".gif")) return "image/gif";
+    if (lower.endsWith(".svg")) return "image/svg+xml";
+    if (lower.endsWith(".mp4")) return "video/mp4";
+    if (lower.endsWith(".webm")) return "video/webm";
+    if (lower.endsWith(".mp3")) return "audio/mpeg";
+    if (lower.endsWith(".wav")) return "audio/wav";
+    if (lower.endsWith(".ogg")) return "audio/ogg";
+    if (lower.endsWith(".pdf")) return "application/pdf";
+    if (lower.endsWith(".txt")) return "text/plain; charset=utf-8";
+    return "application/octet-stream";
+  };
+
   app.get<{ Querystring: { share?: string } }>(
     "/v1/shared",
     { preHandler: requireAuth },
     async (request, reply) => {
       const userId = request.userId as string;
       const payload = verifyShare(request.query.share ?? "");
-      if (!payload || payload.r !== userId) {
-        return reply.code(403).send({ error: "invalid or expired share link" });
-      }
+      if (!payload) return reply.code(403).send({ error: "invalid or expired share link" });
       const safeName = basename(payload.n);
+      // The recipient can open it; so can the file's owner (their own preview).
+      if (payload.r !== userId) {
+        const owned = await store.getMedia(userId, `${payload.t}:${safeName}`).catch(() => null);
+        if (!owned) return reply.code(403).send({ error: "invalid or expired share link" });
+      }
       const filePath = join(downloadsRoot, payload.t, safeName);
-      const type = safeName.endsWith(".mp3")
-        ? "audio/mpeg"
-        : safeName.endsWith(".mp4")
-          ? "video/mp4"
-          : "application/octet-stream";
+      const type = mimeForName(safeName);
+      // Inline media so <img>/<video>/<audio> previews render; other files save.
+      const inline = type.startsWith("image/") || type.startsWith("video/") || type.startsWith("audio/");
       const asciiName = safeName.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "_");
-      const disposition = `attachment; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(safeName)}`;
+      const disposition = `${inline ? "inline" : "attachment"}; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(safeName)}`;
       try {
         const info = await stat(filePath);
         if (!info.isFile()) throw new Error("not a file");
@@ -3893,11 +4825,7 @@ export async function buildServer(options: ServerOptions) {
       if (!task) return reply.code(404).send({ error: "task not found" });
       const safeName = basename(request.params.name);
       const filePath = join(downloadsRoot, task.id, safeName);
-      const type = safeName.endsWith(".mp3")
-        ? "audio/mpeg"
-        : safeName.endsWith(".mp4")
-          ? "video/mp4"
-          : "application/octet-stream";
+      const type = mimeForName(safeName);
       // Inline by default so videos/audio play in the browser; ?download=1 saves.
       const disposition = request.query.download === "1" ? "attachment" : "inline";
       // HTTP headers must be ASCII: use an ASCII fallback plus RFC 5987 UTF-8.

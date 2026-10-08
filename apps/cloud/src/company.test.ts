@@ -3,8 +3,10 @@ import {
   analyzeSource,
   buildWeeklyReport,
   defaultCompany,
+  enrichWithTemplate,
   isBudgetExhausted,
   planCompany,
+  planCompanyDirections,
   sanitizeDNA,
   sanitizePlan,
   shouldRunSchedule,
@@ -118,6 +120,68 @@ describe("analyzeSource", () => {
     );
     expect(notes).toContain("Could not read the website; used the URL only.");
     expect(dna.industry.length).toBeGreaterThan(0);
+  });
+
+  it("derives the fallback industry from the source, not the company name", async () => {
+    const fail = {
+      fetchText: async () => {
+        throw new Error("blocked");
+      },
+      complete: async () => {
+        throw new Error("no key");
+      },
+    };
+    const url = await analyzeSource({ kind: "url", value: "https://acme.example/path" }, fail);
+    expect(url.dna.industry).toBe("Acme");
+
+    const idea = await analyzeSource({ kind: "idea", value: "cloud pos for restaurants" }, fail);
+    expect(idea.dna.industry).toBe("Cloud Pos For Restaurants");
+  });
+});
+
+describe("planCompanyDirections", () => {
+  it("returns directions plus the legacy hire-ready plan, creating nothing", async () => {
+    const complete = async () =>
+      JSON.stringify({ name: "Bean Co", members: [{ name: "Ro", title: "CEO", isChair: true }] });
+    const dna = defaultCompany({ kind: "idea", value: "cloud pos" }).dna!;
+    const result = await planCompanyDirections({ kind: "idea", value: "cloud pos" }, complete, dna, ["Read the source."]);
+
+    expect(result.name).toBe("Bean Co");
+    expect(result.directions).toHaveLength(3);
+    expect(result.directions[0]?.id).toBe("dir_product");
+    expect(result.notes).toContain("Read the source.");
+    expect(result.dna?.industry).toBe(dna.industry);
+  });
+});
+
+describe("enrichWithTemplate", () => {
+  const base = {
+    industry: "Cloud POS",
+    category: "B2B SaaS",
+    summary: "",
+    businessModel: "",
+    targetMarket: [] as string[],
+    targetCustomers: [] as string[],
+    product: { type: "cloud_pos", features: ["POS"], gaps: [] as string[] },
+    stage: "mvp" as const,
+    goal: "",
+    priorities: [] as string[],
+  };
+
+  it("adds the vertical's expected features as gaps", () => {
+    const enriched = enrichWithTemplate(base);
+    expect(enriched.product.gaps).toContain("Inventory");
+    expect(enriched.product.gaps).not.toContain("POS");
+  });
+
+  it("leaves an unrecognised vertical unchanged", () => {
+    const unknown = {
+      ...base,
+      industry: "Widgets",
+      category: "",
+      product: { type: "widget", features: ["Gadget"], gaps: [] as string[] },
+    };
+    expect(enrichWithTemplate(unknown).product.gaps).toEqual([]);
   });
 });
 

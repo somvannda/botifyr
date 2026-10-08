@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AuthError, BotifyrClient } from "@botifyr/client";
-import type { AdminAuditEvent, AdminSkill, AdminUser } from "@botifyr/client";
+import type { AdminAuditEvent, AdminReport, AdminSkill, AdminUser } from "@botifyr/client";
 import type { MediaRecipe, ModelPricingRecord, PlatformSettings } from "@botifyr/shared";
 import { BotLogo, LogoutIcon } from "@botifyr/ui";
 
@@ -26,23 +26,25 @@ export function Admin() {
   const [authorized, setAuthorized] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<"users" | "skills" | "audit" | "billing" | "recipes">("users");
+  const [tab, setTab] = useState<"users" | "skills" | "audit" | "reports" | "billing" | "recipes">("users");
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [skills, setSkills] = useState<AdminSkill[]>([]);
   const [audit, setAudit] = useState<AdminAuditEvent[]>([]);
   const [settings, setSettings] = useState<PlatformSettings | null>(null);
   const [pricing, setPricing] = useState<ModelPricingRecord[]>([]);
   const [recipes, setRecipes] = useState<MediaRecipe[]>([]);
+  const [reports, setReports] = useState<AdminReport[]>([]);
   const [openSkill, setOpenSkill] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const [userList, skillList, auditList, settingsData, pricingList, recipeList] = await Promise.all([
+    const [userList, skillList, auditList, settingsData, pricingList, recipeList, reportList] = await Promise.all([
       client.adminUsers(),
       client.adminSkills(),
       client.adminAudit(),
       client.adminSettings(),
       client.adminModelPricing(),
       client.adminMediaRecipes(),
+      client.adminReports(),
     ]);
     setUsers(userList);
     setSkills(skillList);
@@ -50,7 +52,17 @@ export function Admin() {
     setSettings(settingsData);
     setPricing(pricingList);
     setRecipes(recipeList);
+    setReports(reportList);
   }, [client]);
+
+  async function resolveReport(id: string, status: "reviewed" | "dismissed") {
+    try {
+      await client.adminResolveReport(id, status);
+      setReports((prev) => prev.map((report) => (report.id === id ? { ...report, status } : report)));
+    } catch (err) {
+      setError(messageOf(err));
+    }
+  }
 
   useEffect(() => {
     const stored = localStorage.getItem(TOKEN_KEY);
@@ -298,6 +310,16 @@ export function Admin() {
             Audit log
           </button>
           <button
+            className={`admin-tab ${tab === "reports" ? "active" : ""}`}
+            type="button"
+            onClick={() => setTab("reports")}
+          >
+            Reports
+            {reports.filter((report) => report.status === "pending").length > 0
+              ? ` (${reports.filter((report) => report.status === "pending").length})`
+              : ""}
+          </button>
+          <button
             className={`admin-tab ${tab === "billing" ? "active" : ""}`}
             type="button"
             onClick={() => setTab("billing")}
@@ -317,6 +339,53 @@ export function Admin() {
         </div>
 
         {error && <div className="error">{error}</div>}
+
+        {tab === "reports" && (
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>Post</th>
+                <th>Author</th>
+                <th>Reason</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {reports.length === 0 && (
+                <tr>
+                  <td colSpan={5}>No reports.</td>
+                </tr>
+              )}
+              {reports.map((report) => (
+                <tr key={report.id}>
+                  <td>{(report.postBody || "(deleted)").slice(0, 80)}</td>
+                  <td>{report.postAuthor ?? "—"}</td>
+                  <td>{report.reason ?? "—"}</td>
+                  <td>{report.status}</td>
+                  <td>
+                    <button
+                      className="ghost small"
+                      type="button"
+                      disabled={report.status === "reviewed"}
+                      onClick={() => void resolveReport(report.id, "reviewed")}
+                    >
+                      Resolve
+                    </button>
+                    <button
+                      className="ghost small"
+                      type="button"
+                      disabled={report.status === "dismissed"}
+                      onClick={() => void resolveReport(report.id, "dismissed")}
+                    >
+                      Dismiss
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
 
         {tab === "users" && (
           <table className="admin-table">

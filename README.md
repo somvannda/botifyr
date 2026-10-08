@@ -25,6 +25,7 @@ OpenRouter, DeepSeek, Groq, or a local model via environment variables.
 | [docs/botifyr-blueprint.md](docs/botifyr-blueprint.md) | The proposed architecture, capability map, tech stack, roadmap, and MVP definition for Botifyr. |
 | [docs/company-workspace.md](docs/company-workspace.md) | Company workspaces — run a virtual startup whose employees are AI bots. |
 | [docs/company-os.md](docs/company-os.md) | Company OS architecture — schema, employee model, catalog, orchestrator, tasks, permissions, memory, integrations, lifecycle, cost, security. |
+| [docs/company-quests.md](docs/company-quests.md) | Directed company flow — Charter → Directions → Assemble → Quest → Operate; agents propose, the CEO chooses. |
 | [docs/development.md](docs/development.md) | How to install, run, and test what's built; what is real vs. stubbed. |
 | [docs/cost-controls.md](docs/cost-controls.md) | Product runtime cost limits (rate limit, token caps, daily budget). |
 | [docs/deploy.md](docs/deploy.md) | Deploying the web site, cloud, and desktop app. |

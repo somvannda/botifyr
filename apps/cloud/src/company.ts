@@ -1,6 +1,7 @@
 import {
   DEPARTMENTS,
   type CompanyDNA,
+  type CompanyDirection,
   type CreateWorkspaceRequest,
   type Department,
   type OperatingHours,
@@ -8,7 +9,7 @@ import {
   type WorkItem,
   type WorkspaceBudget,
 } from "@botifyr/shared";
-import { recommendTeam, ROLE_BY_ID } from "./recommend.js";
+import { directionsFor, recommendTeam, ROLE_BY_ID } from "./recommend.js";
 import type { Store } from "./store/types.js";
 
 /**
@@ -246,13 +247,71 @@ export function sanitizeDNA(raw: unknown, fallback: CompanyDNA): CompanyDNA {
   };
 }
 
-/** Turn an idea or website into a Company DNA draft + notes. Never throws. */
-export async function analyzeSource(
-  input: SourceInput,
-  deps: AnalyzeDeps,
-): Promise<{ dna: CompanyDNA; notes: string[] }> {
-  const fallback = defaultCompany({ kind: input.kind, value: input.value }).dna ?? {
-    industry: input.value.slice(0, 60) || "New Company",
+/**
+ * Standard feature sets per vertical (docs/company-workspace.md §15.2). The
+ * detected features are diffed against these so the backlog covers the whole
+ * product, not just what the site happens to show.
+ */
+const PRODUCT_TEMPLATES: Array<{ id: string; keywords: string[]; features: string[] }> = [
+  {
+    id: "cloud_pos",
+    keywords: ["pos", "point of sale", "restaurant", "retail", "inventory", "merchant", "store"],
+    features: ["POS", "Inventory", "Customers", "Multi-store", "Payments", "Purchasing", "Staff & roles", "Reports"],
+  },
+  {
+    id: "ecommerce",
+    keywords: ["shop", "store", "ecommerce", "e-commerce", "marketplace", "goods", "dropship"],
+    features: ["Storefront", "Cart & checkout", "Payments", "Shipping", "Inventory", "Reviews", "Admin"],
+  },
+  {
+    id: "agency",
+    keywords: ["agency", "studio", "consult", "freelance", "service"],
+    features: ["Portfolio", "Lead capture", "Proposals", "Project tracking", "Invoicing"],
+  },
+  {
+    id: "ai",
+    keywords: ["ai", "llm", "model", "machine learning", "generator", "agent"],
+    features: ["Model access", "Prompt tools", "Usage metering", "Evaluation", "Billing"],
+  },
+  {
+    id: "saas",
+    keywords: ["saas", "app", "platform", "software", "tool", "dashboard", "subscription"],
+    features: ["Auth", "Subscription billing", "Dashboard", "Settings", "Admin"],
+  },
+];
+
+/** Diff detected features against the vertical template; add the missing ones as gaps. */
+export function enrichWithTemplate(dna: CompanyDNA): CompanyDNA {
+  const haystack = `${dna.industry} ${dna.category} ${dna.product.type} ${dna.summary}`.toLowerCase();
+  const template = PRODUCT_TEMPLATES.find((entry) =>
+    entry.keywords.some((keyword) => haystack.includes(keyword)),
+  );
+  if (!template) return dna;
+  const have = new Set(dna.product.features.map((feature) => feature.trim().toLowerCase()));
+  const missing = template.features.filter((feature) => !have.has(feature.toLowerCase()));
+  if (missing.length === 0) return dna;
+  const gaps = [...dna.product.gaps];
+  for (const feature of missing) {
+    if (!gaps.some((gap) => gap.toLowerCase() === feature.toLowerCase())) gaps.push(feature);
+  }
+  return { ...dna, product: { ...dna.product, gaps: gaps.slice(0, 20) } };
+}
+
+/** A neutral DNA when the model can't be reached — industry from the source, not the company name. */
+function fallbackDNA(input: SourceInput): CompanyDNA {
+  let industry = "";
+  if (input.kind === "url") {
+    try {
+      industry = titleCase(new URL(input.value).hostname.replace(/^www\./, "").split(".")[0] ?? "");
+    } catch {
+      industry = "";
+    }
+  }
+  if (!industry) {
+    industry = titleCase(input.value.trim().split(/\s+/).slice(0, 4).join(" ")) || "New company";
+  }
+  return {
+    industry,
     category: "startup",
     summary: "",
     businessModel: "",
@@ -263,6 +322,14 @@ export async function analyzeSource(
     goal: "",
     priorities: [],
   };
+}
+
+/** Turn an idea or website into a Company DNA draft + notes. Never throws. */
+export async function analyzeSource(
+  input: SourceInput,
+  deps: AnalyzeDeps,
+): Promise<{ dna: CompanyDNA; notes: string[] }> {
+  const fallback = fallbackDNA(input);
   const notes: string[] = [];
   try {
     let context = input.value;
@@ -282,9 +349,9 @@ export async function analyzeSource(
       '"goal":string,"priorities":string[]}';
     const user = `Business source (${input.kind}):\n${context.slice(0, 6000)}`;
     const text = await deps.complete({ system, user, maxTokens: 900 });
-    return { dna: sanitizeDNA(extractJson(text), fallback), notes };
+    return { dna: enrichWithTemplate(sanitizeDNA(extractJson(text), fallback)), notes };
   } catch {
-    return { dna: fallback, notes };
+    return { dna: enrichWithTemplate(fallback), notes };
   }
 }
 
@@ -457,4 +524,30 @@ export async function planCompany(
   } catch {
     return finish(defaultCompany(input));
   }
+}
+
+/** A planned company: the legacy hire-ready plan plus the direction options. */
+export interface CompanyPlanResult extends CompanyPlan {
+  notes: string[];
+  directions: CompanyDirection[];
+}
+
+/**
+ * Plan a company as a set of directions for the CEO to choose from
+ * (docs/company-quests.md §5.1). Returns the legacy hire-ready plan for
+ * back-compat, plus 2–3 `CompanyDirection` options. Creates nothing.
+ */
+export async function planCompanyDirections(
+  input: PlanInput,
+  complete: CompleteFn,
+  dna: CompanyDNA,
+  notes: string[] = [],
+): Promise<CompanyPlanResult> {
+  const plan = await planCompany(input, complete, dna);
+  const directions = directionsFor({
+    text: `${input.value} ${dna.industry} ${dna.category} ${dna.summary}`,
+    stage: dna.stage,
+    industry: dna.industry,
+  });
+  return { ...plan, dna, notes, directions };
 }

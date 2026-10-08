@@ -4,8 +4,9 @@ import { MemoryStore } from "./store/memory.js";
 import { buildServer } from "./server.js";
 
 /**
- * Signed share links are recipient-scoped: only the intended friend can open
- * them, only friends can be shared with, and a tampered token is refused.
+ * Signed share links are recipient-scoped: only the intended friend (or the
+ * file's owner, for their own preview) can open them, only friends can be
+ * shared with, and a tampered token is refused.
  */
 describe("file sharing", () => {
   async function setup() {
@@ -22,6 +23,7 @@ describe("file sharing", () => {
     };
     const alice = await signup("alice@example.com");
     const bob = await signup("bob@example.com");
+    const cara = await signup("cara@example.com");
     await store.upsertMedia({
       id: "t1:song.mp4",
       userId: alice.user.id,
@@ -33,13 +35,13 @@ describe("file sharing", () => {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
-    return { app, store, alice, bob };
+    return { app, store, alice, bob, cara };
   }
 
   const auth = (token: string) => ({ authorization: `Bearer ${token}` });
 
-  it("only shares with friends and only lets the recipient open it", async () => {
-    const { app, store, alice, bob } = await setup();
+  it("only shares with friends and only lets the recipient (or owner) open it", async () => {
+    const { app, store, alice, bob, cara } = await setup();
     const mediaId = encodeURIComponent("t1:song.mp4");
 
     // Not friends yet → refused.
@@ -62,13 +64,21 @@ describe("file sharing", () => {
     expect(shared.statusCode).toBe(200);
     const { token } = shared.json() as { token: string };
 
-    // The sender is not the recipient → refused.
-    const bySender = await app.inject({
+    // The owner may reopen their own file for preview → not refused.
+    const byOwner = await app.inject({
       method: "GET",
       url: `/v1/shared?share=${encodeURIComponent(token)}`,
       headers: auth(alice.token),
     });
-    expect(bySender.statusCode).toBe(403);
+    expect(byOwner.statusCode).not.toBe(403);
+
+    // A stranger (neither recipient nor owner) is refused.
+    const byStranger = await app.inject({
+      method: "GET",
+      url: `/v1/shared?share=${encodeURIComponent(token)}`,
+      headers: auth(cara.token),
+    });
+    expect(byStranger.statusCode).toBe(403);
 
     // The recipient passes the gate (file is absent from the volume → 404).
     const byRecipient = await app.inject({

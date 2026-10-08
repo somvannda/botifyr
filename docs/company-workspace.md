@@ -1,20 +1,31 @@
 # Botifyr — Company Workspaces (design)
 
-> Status: **living design — Part I is partly shipped.** Owner: product/eng.
+> Status: **living design — much of Parts I–IV is shipped.** Owner: product/eng.
 > Goal: turn Botifyr from "a bot you chat with" into **"a company you run"** —
 > point it at a website or an idea, and it scaffolds a virtual startup whose
 > employees are AI bots. You are the CEO; the bots do the work.
 >
-> **Shipped (Part I):** `Workspace` + `BotRole` (shared → store → API), the
-> planner (`POST /v1/workspaces/plan`), create (`POST /v1/workspaces`), client
-> methods, sidebar grouping + switcher + role pills + header badge, the
-> onboarding modal with an **editable** org, and rename/delete.
+> **Shipped:** `Workspace` + `BotRole` (shared → store → API), the planner
+> (`POST /v1/workspaces/plan`), create (`POST /v1/workspaces`), client methods,
+> sidebar grouping + switcher + role pills + header badge, the onboarding modal,
+> rename/delete; **Company DNA** + injection, the **role/capability catalog**,
+> blueprint **templates + recommendations**, **website intelligence**
+> (`analyzeSource`), the **conversational builder tools**, the **HQ view**
+> (Needs you · Team · Board · Budget · Standup · Plans · Changes · Office ·
+> Wiki), wiki + board seeding, per-workspace budget + capability grants, and the
+> supervised social/email/ads/design hands.
 >
-> **Design-only:** Parts II–V (Company DNA, the role/capability catalog,
-> website intelligence, the conversational builder, the HQ view, and the
-> marketing/sales hands — including the Part V transport/verification policy).
+> **Still design / partial:** market & competitor research (§15.1), product
+> templates → backlog (§15.2), scheduled delegation/standup automation, and full
+> per-role authorization enforcement.
 >
-> §46 is the **authoritative roadmap** (one build order across all parts).
+> **Directed flow (quests):** the Charter → Directions → Assemble → Quest →
+> Operate → Grow experience is specified and shipped as
+> [`company-quests.md`](company-quests.md) (Q0–Q5). Read it for how a company
+> starts and runs now.
+>
+> §46 is the **authoritative build order** across Parts I–V; for the quest flow
+> specifically, `company-quests.md` §12 is authoritative.
 >
 > **Architecture & full specs** — schema, employee model, the catalog,
 > orchestrator, work system, permissions, memory, integrations, lifecycle, cost
@@ -833,20 +844,25 @@ same items. Status: ✅ shipped · 🔜 next · ⏳ later.
 | 1 | `Workspace` + `BotRole` entity, store, API, tests | P0 (I) | ✅ |
 | 2 | Planner + create + onboarding UI (editable org) | P1–P2 (I) | ✅ |
 | 3 | Sidebar grouping · switcher · role pills · badge · rename/delete | — | ✅ |
-| 4 | **Company DNA** + **Role & capability catalog** | P5 (II) · F1 (IV) | 🔜 |
-| 5 | Blueprint templates + recommendation step | F2 (IV) | ⏳ |
-| 6 | Website intelligence (`analyzeSource`) | P6 (II) | ⏳ |
+| 4 | **Company DNA** + **Role & capability catalog** | P5 (II) · F1 (IV) | ✅ |
+| 5 | Blueprint templates + recommendation step | F2 (IV) | ✅ |
+| 6 | Website intelligence (`analyzeSource`) | P6 (II) | ✅ |
 | 6.1 | Market & competitor research | §15.1 | ⏳ |
-| 6.2 | Industry product templates → backlog | §15.2 | ⏳ |
-| 7 | Conversational builder tools (`company-tools.ts`) | P7 (II) | ⏳ |
-| 8 | Delegation + standups | P3 (I) | ⏳ |
-| 9 | Backlog seeding + Board view | P8 (II) | ⏳ |
-| 10 | Company HQ view (Needs you / Team / Board / Office) | P9 (II) | ⏳ |
-| 11 | Per-role authorization + per-workspace budget | P4 (I) · P10 (II) | ⏳ |
-| 12 | Social connectors (read · draft · publish) | P11 (III) | ⏳ |
-| 13 | Messaging (replies + DMs) | P12 (III) | ⏳ |
-| 14 | Ads (create/boost behind approval + cap) | P13 (III) | ⏳ |
-| 15 | Design pipeline (image gen / HTML→PNG) + brand kit | P14 (III) | ⏳ |
+| 6.2 | Industry product templates → backlog | §15.2 | ✅ |
+| 7 | Conversational builder tools (`company-tools.ts`) | P7 (II) | ✅ |
+| 8 | Delegation + standups | P3 (I) | 🟡 |
+| 9 | Backlog seeding + Board view | P8 (II) | ✅ |
+| 10 | Company HQ view (Needs you / Team / Board / Office) | P9 (II) | ✅ |
+| 11 | Per-role authorization + per-workspace budget | P4 (I) · P10 (II) | 🟡 |
+| 12 | Social connectors (read · draft · publish) | P11 (III) | 🟡 |
+| 13 | Messaging (replies + DMs) | P12 (III) | 🟡 |
+| 14 | Ads (create/boost behind approval + cap) | P13 (III) | 🟡 |
+| 15 | Design pipeline (image gen / HTML→PNG) + brand kit | P14 (III) | 🟡 |
+
+> **Status reconciled with shipped code.** ✅/🟡 reflect what is in the repo now
+> (see the status block at the top of this file); the **quest flow** that ties
+> it together is tracked separately in
+> [`company-quests.md`](company-quests.md) §12.
 
 > **Note on numbering.** Parts I–III label their phases **P0–P14**; Part IV uses
 > **F1/F2**. Items 4 and 11 merge overlapping labels. This table is what to build

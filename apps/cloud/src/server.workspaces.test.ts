@@ -75,18 +75,162 @@ describe("workspaces API", () => {
       expect.arrayContaining(["BRIEF.md", "OKRS.md", "BACKLOG.md"]),
     );
 
-    // The board is seeded with first work items.
+    // The board is seeded with ONE quest and its roadmap (docs/company-quests.md).
     const work = (
       await app.inject({ method: "GET", url: `/v1/workspaces/${ws.id}/work`, headers: auth })
-    ).json() as Array<{ title: string; phase: string }>;
+    ).json() as Array<{ title: string; questId?: string }>;
     expect(work.length).toBeGreaterThan(0);
-    expect(work.some((item) => item.title === "Build the marketing website")).toBe(true);
+    expect(work.every((item) => Boolean(item.questId))).toBe(true);
+
+    const quests = (
+      await app.inject({ method: "GET", url: `/v1/workspaces/${ws.id}/quests`, headers: auth })
+    ).json() as Array<{ id: string; status: string; workItemIds: string[] }>;
+    expect(quests).toHaveLength(1);
+    expect(quests[0]?.status).toBe("active");
+    expect(quests[0]?.workItemIds.length).toBeGreaterThan(0);
 
     // The company wiki is workspace-scoped (readable by any employee).
     const wiki = (
       await app.inject({ method: "GET", url: `/v1/workspaces/${ws.id}/wiki`, headers: auth })
     ).json() as Array<{ name: string }>;
     expect(wiki.map((file) => file.name)).toContain("BRIEF.md");
+    await app.close();
+  });
+
+  it("creates a company from a chosen direction with one quest", async () => {
+    const { app, signup } = await boot();
+    const auth = await signup("ws-direction@example.com");
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/v1/workspaces",
+      headers: auth,
+      payload: {
+        name: "Chmaba",
+        source: { kind: "url", value: "https://chmaba.example" },
+        directionId: "dir_product",
+        mission: "Cloud POS for Cambodia",
+        dna: {
+          industry: "Cloud POS",
+          category: "B2B SaaS",
+          summary: "POS for restaurants",
+          businessModel: "SaaS",
+          targetMarket: ["Cambodia"],
+          targetCustomers: ["restaurants"],
+          product: { type: "cloud_pos", features: ["POS", "inventory"], gaps: ["payments"] },
+          stage: "mvp",
+          goal: "Launch the cloud POS MVP",
+          priorities: ["product"],
+        },
+        quest: {
+          title: "Launch the cloud POS MVP",
+          objective: "A working POS for the first 10 restaurants",
+          acceptance: ["POS works", "10 restaurants onboarded"],
+          roadmap: [
+            { phase: "mvp", title: "Build the POS screen" },
+            { phase: "mvp", title: "Add inventory" },
+          ],
+        },
+        members: [{ name: "Sokha", emoji: "🧭", title: "CEO", department: "exec", isChair: true }],
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    const ws = created.json() as { id: string; directionId?: string; activeQuestId?: string };
+    expect(ws.directionId).toBe("dir_product");
+    // The seeded quest is recorded as the active mission (regression: a later
+    // stale workspace write used to wipe this).
+    expect(ws.activeQuestId).toBeTruthy();
+
+    const quests = (
+      await app.inject({ method: "GET", url: `/v1/workspaces/${ws.id}/quests`, headers: auth })
+    ).json() as Array<{
+      id: string;
+      title: string;
+      directionId?: string;
+      acceptance: string[];
+      workItemIds: string[];
+    }>;
+    expect(quests).toHaveLength(1);
+    expect(ws.activeQuestId).toBe(quests[0]?.id);
+    expect(quests[0]?.title).toBe("Launch the cloud POS MVP");
+    expect(quests[0]?.directionId).toBe("dir_product");
+    expect(quests[0]?.acceptance).toContain("POS works");
+
+    const work = (
+      await app.inject({ method: "GET", url: `/v1/workspaces/${ws.id}/work`, headers: auth })
+    ).json() as Array<{ title: string; questId?: string }>;
+    expect(work.map((item) => item.title)).toEqual(["Build the POS screen", "Add inventory"]);
+    expect(work.every((item) => item.questId === quests[0]?.id)).toBe(true);
+    await app.close();
+  });
+
+  it("proposes, activates and completes quests with one active at a time", async () => {
+    const { app, signup } = await boot();
+    const auth = await signup("ws-quests@example.com");
+    const ws = (
+      await app.inject({
+        method: "POST",
+        url: "/v1/workspaces",
+        headers: auth,
+        payload: {
+          name: "Quest Co",
+          members: [{ name: "Ada", title: "CEO", department: "exec", isChair: true }],
+        },
+      })
+    ).json() as { id: string };
+
+    // Company creation seeds one active quest.
+    const initial = (
+      await app.inject({ method: "GET", url: `/v1/workspaces/${ws.id}/quests`, headers: auth })
+    ).json() as Array<{ id: string; status: string }>;
+    expect(initial).toHaveLength(1);
+    expect(initial[0]?.status).toBe("active");
+
+    // A new quest is proposed, not activated.
+    const proposed = await app.inject({
+      method: "POST",
+      url: `/v1/workspaces/${ws.id}/quests`,
+      headers: auth,
+      payload: { title: "Improve onboarding", objective: "Cut time-to-value", acceptance: ["NPS up"] },
+    });
+    expect(proposed.statusCode).toBe(201);
+    const second = proposed.json() as { id: string; status: string };
+    expect(second.status).toBe("proposed");
+
+    // A second active quest is refused.
+    const conflict = await app.inject({
+      method: "POST",
+      url: `/v1/workspaces/${ws.id}/quests`,
+      headers: auth,
+      payload: { title: "Third", objective: "x", activate: true },
+    });
+    expect(conflict.statusCode).toBe(409);
+
+    // Complete the first, then activate the second.
+    const done = await app.inject({
+      method: "POST",
+      url: `/v1/workspaces/${ws.id}/quests/${initial[0]!.id}/complete`,
+      headers: auth,
+    });
+    expect(done.statusCode).toBe(200);
+    expect((done.json() as { status: string }).status).toBe("done");
+
+    const activated = await app.inject({
+      method: "PATCH",
+      url: `/v1/quests/${second.id}`,
+      headers: auth,
+      payload: { status: "active", trust: "supervised", budgetTokens: 100000 },
+    });
+    expect(activated.statusCode).toBe(200);
+    const active = activated.json() as { status: string; trust: string; budgetTokens?: number };
+    expect(active.status).toBe("active");
+    expect(active.trust).toBe("supervised");
+    expect(active.budgetTokens).toBe(100000);
+
+    const wsView = (
+      await app.inject({ method: "GET", url: `/v1/workspaces/${ws.id}`, headers: auth })
+    ).json() as { activeQuestId?: string };
+    expect(wsView.activeQuestId).toBe(second.id);
     await app.close();
   });
 
@@ -213,10 +357,17 @@ describe("workspaces API", () => {
       payload: { source: { kind: "idea", value: "a subscription box for house plants" } },
     });
     expect(planned.statusCode).toBe(200);
-    const plan = planned.json() as { name: string; members: Array<{ isChair?: boolean }> };
+    const plan = planned.json() as {
+      name: string;
+      members: Array<{ isChair?: boolean }>;
+      directions: Array<{ id: string; roles: string[] }>;
+    };
     expect(plan.name.length).toBeGreaterThan(0);
     expect(plan.members.length).toBeGreaterThan(0);
     expect(plan.members.filter((member) => member.isChair)).toHaveLength(1);
+    // The planner offers directions to choose from (docs/company-quests.md).
+    expect(plan.directions).toHaveLength(3);
+    expect(plan.directions[0]?.roles[0]).toBe("exec.ceo");
 
     const blank = await app.inject({
       method: "POST",

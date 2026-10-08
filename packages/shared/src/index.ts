@@ -56,6 +56,8 @@ export interface Task {
   error?: string;
   /** How many times an interrupted batch download was auto-resumed. */
   resumeCount?: number;
+  /** The company quest this task was run for, when one is active (docs/company-quests.md §10.1). */
+  questId?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -220,6 +222,10 @@ export interface Workspace {
   hours?: OperatingHours;
   /** The chair bot that reports to the CEO. */
   ceoBotId?: string;
+  /** The direction the CEO chose at setup; absent while still deciding (docs/company-quests.md). */
+  directionId?: string;
+  /** The current mission; at most one active quest at a time. */
+  activeQuestId?: string;
   avatarEmoji?: string;
   scheme?: number;
   /** Code repositories the engineering team may read (docs/codebase-access.md). */
@@ -259,6 +265,15 @@ export interface CreateWorkspaceRequest {
   scheme?: number;
   /** The bot to promote to CEO (the one that set the company up). */
   ceoBotId?: string;
+  /** The direction the CEO chose at setup (docs/company-quests.md). */
+  directionId?: string;
+  /** The first mission to seed; when present, exactly one quest is created. */
+  quest?: {
+    title: string;
+    objective: string;
+    acceptance?: string[];
+    roadmap?: Array<{ phase: WorkPhase; title: string }>;
+  };
   /** New employee bots to create inside the workspace. */
   members?: Array<{
     name: string;
@@ -341,10 +356,70 @@ export interface WorkItem {
   /** The employee (bot) it is assigned to, if any. */
   assigneeBotId?: string;
   department: Department;
+  /** The quest this work belongs to, when it is part of a mission (docs/company-quests.md). */
+  questId?: string;
   /** Who created it: a bot id or a user id. */
   createdBy?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * A strategic option the CEO chooses when starting a company
+ * (docs/company-quests.md §3.1). Agents propose 2–3 of these; the CEO picks one
+ * and nothing is created until then.
+ */
+export interface CompanyDirection {
+  /** Stable id, e.g. "dir_product". */
+  id: string;
+  /** "Ship the MVP", "Go to market", … */
+  title: string;
+  /** Why this direction, and why now (1–2 sentences). */
+  thesis: string;
+  stage: CompanyDNA["stage"];
+  /** The 90-day win, in one line. */
+  objective: string;
+  /** 1–5 each. Lower is cheaper/safer; higher is faster/riskier. */
+  tradeoffs: { speed: number; quality: number; cost: number; risk: number };
+  /** `RoleDefinition` ids this direction would hire. */
+  roles: string[];
+  /** The proposed first backlog for the direction. */
+  roadmap: Array<{ phase: WorkPhase; title: string }>;
+  /** Rough token budget, so the CEO can weigh cost before choosing. */
+  estimatedTokens: number;
+  /** "Why these roles" — shown on the card. */
+  rationale: string[];
+}
+
+export type QuestStatus = "proposed" | "active" | "blocked" | "done" | "abandoned";
+
+/**
+ * A mission: a thin goal layer above `WorkItem` (docs/company-quests.md §3.2).
+ * At most one `active` quest per workspace, so attention and cost stay bounded.
+ */
+export interface Quest {
+  id: string;
+  workspaceId: string;
+  directionId?: string;
+  /** "Launch the cloud POS MVP". */
+  title: string;
+  /** What "done" delivers. */
+  objective: string;
+  /** Checklist the chair verifies before marking the quest done. */
+  acceptance: string[];
+  status: QuestStatus;
+  stage: CompanyDNA["stage"];
+  /** The lead role (usually the chair, `exec.ceo`). */
+  ownerRoleId?: string;
+  /** The autonomy dial for this quest; defaults to the workspace setting. */
+  trust: WorkspaceAutonomy;
+  /** Per-quest token cap; 0/undefined = inherit the workspace cap. */
+  budgetTokens?: number;
+  /** Work items that belong to this quest. */
+  workItemIds: string[];
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
 }
 
 /** A company's token budget (0 limit = inherit the account cap). */
@@ -580,6 +655,10 @@ export type ServerEvent =
   | { type: "approval.resolved"; taskId: string; approval: Approval }
   | { type: "presence"; userId: string; online: boolean; toUserId: string }
   | { type: "friend.request"; requestId: string; fromUserId: string; toUserId: string }
+  | { type: "feed.post"; postId: string; authorId: string }
+  | { type: "feed.like"; postId: string; fromUserId: string; fromName?: string; toUserId: string }
+  | { type: "feed.comment"; postId: string; fromUserId: string; fromName?: string; toUserId: string }
+  | { type: "feed.share"; postId: string; fromUserId: string; fromName?: string; toUserId: string }
   | { type: "p2p.signal"; toUserId: string; to: string; from: string; data: unknown }
   | { type: "task.completed"; task: Task }
   | { type: "task.failed"; task: Task };

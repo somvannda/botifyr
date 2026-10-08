@@ -31,6 +31,7 @@ import { createEscalationTools } from "./escalation-tools.js";
 import { createHireTools } from "./hire-tools.js";
 import { createFireTools } from "./fire-tools.js";
 import { createPlanTools } from "./plan-tools.js";
+import { createQuestTools } from "./quest-tools.js";
 import { createCodeTools } from "./code-tools.js";
 import { removeDeniedTools } from "./tool-capabilities.js";
 import {
@@ -437,6 +438,29 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
       return;
     }
   }
+  // Attribute the run to the company's active quest, enforce the quest's own
+  // budget (docs/company-quests.md §10.1), and let the quest's trust dial decide
+  // the approval gate (§9). Quest caps fail only this task — the company keeps
+  // running until the workspace cap is hit.
+  let effectiveAutoApprove = deps.autoApprove === true;
+  if (company?.activeQuestId) {
+    if (!task.questId) task.questId = company.activeQuestId;
+    const quest = await store.getQuest(company.activeQuestId).catch(() => null);
+    if (quest) {
+      effectiveAutoApprove = quest.trust === "autonomous";
+      if (quest.budgetTokens && quest.budgetTokens > 0) {
+        const used = await store.usageTokensForQuest(quest.id).catch(() => 0);
+        if (used >= quest.budgetTokens) {
+          task.status = "failed";
+          task.error = `Quest budget reached for "${quest.title}" (${used.toLocaleString()} / ${quest.budgetTokens.toLocaleString()} tokens). Raise it in the Company HQ.`;
+          task.updatedAt = new Date().toISOString();
+          await store.updateTask(task);
+          emit({ type: "task.failed", task });
+          return;
+        }
+      }
+    }
+  }
   // Social + design hands for the right departments.
   if (company && authorBot) {
     const roles = await store.listBotRoles(company.id).catch(() => []);
@@ -524,6 +548,11 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
       tools.push(...createHireTools(store, userId, authorBot.id));
       tools.push(...createFireTools(store, userId, authorBot.id));
     }
+    // The chair owns the mission: it proposes the next quest for the CEO to start
+    // (docs/company-quests.md §6 — agents propose, the CEO disposes).
+    if (role?.isChair) {
+      tools.push(...createQuestTools(store, userId, authorBot.id));
+    }
 
     // Authorization: revoked capabilities block their tools (docs/company-os.md §8).
     const grants = await store.listCapabilityGrants(company.id).catch(() => []);
@@ -598,7 +627,7 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
         if (setting === "0") return undefined;
         return setting === "1" ? "On it — I'll do this now with my tools." : setting;
       })(),
-      autoApprove: deps.autoApprove === true,
+      autoApprove: effectiveAutoApprove,
       initialToolCall: deps.initialToolCall,
       initialToolOnly: deps.initialToolOnly === true,
       isCancelled: () => isTaskCancelled(task.id),
@@ -709,6 +738,7 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
           promptTokens: result.usage.promptTokens,
           completionTokens: result.usage.completionTokens,
           model,
+          questId: task.questId,
           createdAt: now,
         });
         // Per-workspace budget accounting (docs/company-os.md §15).
