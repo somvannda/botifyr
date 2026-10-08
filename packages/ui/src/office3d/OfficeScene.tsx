@@ -7,7 +7,7 @@
 import { Suspense, useEffect } from "react";
 import * as THREE from "three";
 import { Canvas, useThree } from "@react-three/fiber";
-import { ContactShadows, Environment, Html, Lightformer, OrbitControls } from "@react-three/drei";
+import { Billboard, ContactShadows, Environment, Lightformer, OrbitControls, Text } from "@react-three/drei";
 import {
   activityColor,
   type BenchLayout,
@@ -557,9 +557,18 @@ function Room({
       <RoomFurniture room={room} />
 
       {labels && (
-        <Html center distanceFactor={32} position={[0, height + 0.35, -halfD + 0.3]} className="office3d-room-label">
-          <span style={{ background: room.color }}>{room.label}</span>
-        </Html>
+        <Billboard position={[0, height + 0.35, -halfD + 0.3]}>
+          <Text
+            fontSize={0.42}
+            color="#ffffff"
+            anchorX="center"
+            anchorY="middle"
+            outlineWidth={0.02}
+            outlineColor="#000000"
+          >
+            {room.label}
+          </Text>
+        </Billboard>
       )}
     </group>
   );
@@ -681,24 +690,104 @@ function Desk({ desk, style, labels, onSelect }: { desk: DeskLayout; style: Offi
         <Person position={[0, 0, 1.15]} rotationY={Math.PI} agentId={desk.botId} />
       </Suspense>
       {labels && (
-        <Html
-          center
-          distanceFactor={28}
-          position={[0, 1.7, 0]}
-          className="office3d-desk-label"
-          style={{ pointerEvents: onSelect ? "auto" : "none" }}
-        >
-          <button type="button" onClick={() => onSelect?.(desk.botId)} title={desk.agent.title}>
-            <i style={{ background: status }} />
-            <span>
-              {desk.agent.emoji} {desk.agent.name}
-            </span>
-            <em>{desk.agent.title}</em>
-          </button>
-        </Html>
+        <Billboard position={[0, 1.7, 0]}>
+          <Text
+            fontSize={0.24}
+            color={status}
+            anchorX="center"
+            anchorY="middle"
+            outlineWidth={0.015}
+            outlineColor="#000000"
+            onClick={
+              onSelect
+                ? (event: { stopPropagation: () => void }) => {
+                    event.stopPropagation();
+                    onSelect(desk.botId);
+                  }
+                : undefined
+            }
+          >
+            {`${desk.agent.name} · ${desk.agent.title}`}
+          </Text>
+        </Billboard>
       )}
     </group>
   );
+}
+
+/** Arrow-key / WASD pan, Q/E rotate, +/- zoom — matches the mouse mapping. */
+function KeyboardNav({ span }: { span: number }) {
+  const controls = useThree((state) => state.controls) as unknown as OfficeControls | null;
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (!controls) return;
+      const step = span * 0.07;
+      const camera = controls.object.position;
+      const target = controls.target;
+      const pan = (dx: number, dz: number) => {
+        target.x += dx;
+        target.z += dz;
+        camera.set(camera.x + dx, camera.y, camera.z + dz);
+        controls.update();
+      };
+      const rotate = (angle: number) => {
+        const dx = camera.x - target.x;
+        const dz = camera.z - target.z;
+        camera.set(
+          target.x + dx * Math.cos(angle) - dz * Math.sin(angle),
+          target.y + (camera.y - target.y),
+          target.z + dx * Math.sin(angle) + dz * Math.cos(angle),
+        );
+        controls.update();
+      };
+      const zoom = (factor: number) => {
+        camera.set(
+          target.x + (camera.x - target.x) * factor,
+          target.y + (camera.y - target.y) * factor,
+          target.z + (camera.z - target.z) * factor,
+        );
+        controls.update();
+      };
+      switch (event.key.toLowerCase()) {
+        case "arrowleft":
+        case "a":
+          pan(-step, 0);
+          break;
+        case "arrowright":
+        case "d":
+          pan(step, 0);
+          break;
+        case "arrowup":
+        case "w":
+          pan(0, -step);
+          break;
+        case "arrowdown":
+        case "s":
+          pan(0, step);
+          break;
+        case "q":
+          rotate(-0.09);
+          break;
+        case "e":
+          rotate(0.09);
+          break;
+        case "+":
+        case "=":
+          zoom(0.9);
+          break;
+        case "-":
+        case "_":
+          zoom(1.1);
+          break;
+        default:
+          return;
+      }
+      event.preventDefault();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [controls, span]);
+  return null;
 }
 
 export interface OfficeControls {
@@ -792,6 +881,7 @@ export function OfficeScene({
         <Desk key={desk.botId} desk={desk} style={style} labels={labels} onSelect={onSelect} />
       ))}
 
+      <KeyboardNav span={span} />
       <OrbitControls
         makeDefault
         enableDamping
@@ -799,6 +889,12 @@ export function OfficeScene({
         ref={(instance) => {
           onControls?.(instance as unknown as OfficeControls | null);
         }}
+        mouseButtons={{
+          LEFT: THREE.MOUSE.PAN,
+          MIDDLE: THREE.MOUSE.DOLLY,
+          RIGHT: THREE.MOUSE.ROTATE,
+        }}
+        touches={{ ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE }}
         maxPolarAngle={Math.PI / 2.15}
         minDistance={14}
         maxDistance={span * 3}

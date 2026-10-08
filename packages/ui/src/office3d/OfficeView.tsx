@@ -137,7 +137,9 @@ export default function OfficeView({
                   ⌂
                 </button>
               </div>
-              <div className="office3d-hint">Drag to rotate · scroll to zoom · right-drag to pan</div>
+              <div className="office3d-hint">
+                Drag to move · right-drag to rotate · scroll to zoom · arrows/WASD pan · Q/E rotate
+              </div>
             </>
           ) : (
             <div className="office3d-fallback">
