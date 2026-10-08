@@ -861,6 +861,38 @@ body {
   cursor: default;
 }
 
+/* Company HQ opens as a full-window main area; "Float" shrinks it to a panel. */
+.hq-overlay-full {
+  padding: 0;
+  align-items: stretch;
+  justify-content: stretch;
+}
+
+.hq-overlay-full .hq-panel-full {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  border-radius: 0;
+  border: none;
+  box-shadow: none;
+  overflow: auto;
+}
+
+.hq-panel-floating {
+  cursor: default;
+}
+
+.hq-panel-floating .apps-head {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.hq-panel-floating .apps-head:active {
+  cursor: grabbing;
+}
+
 .hq-autonomy {
   align-self: center;
   padding: 3px 8px;

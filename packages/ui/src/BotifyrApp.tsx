@@ -4,6 +4,7 @@ import type {
   FormEvent,
   KeyboardEvent as ReactKeyboardEvent,
   MouseEvent as ReactMouseEvent,
+  PointerEvent as ReactPointerEvent,
   ReactNode,
   WheelEvent as ReactWheelEvent,
 } from "react";
@@ -404,6 +405,11 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [wizardBudget, setWizardBudget] = useState("");
   const [wizardActivate, setWizardActivate] = useState(false);
   const [boardWorkspace, setBoardWorkspace] = useState<{ id: string; name: string } | null>(null);
+  // The Company HQ opens as a full main area by default; "Float" turns it into a
+  // smaller, movable panel over the chat.
+  const [hqFloating, setHqFloating] = useState(false);
+  const [hqPos, setHqPos] = useState({ x: 0, y: 0 });
+  const hqDragRef = useRef<{ x: number; y: number; dx: number; dy: number } | null>(null);
   /** Company shown in the 3D office. Kept separate from the HQ dialog. */
   const [officeCompany, setOfficeCompany] = useState<{ id: string; name: string } | null>(null);
   const [showOffice3d, setShowOffice3d] = useState(false);
@@ -1579,6 +1585,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     setBoardTitle("");
     setBoardBusy(true);
     setHqTab("need");
+    setHqFloating(false);
+    setHqPos({ x: 0, y: 0 });
     setAddMemberBotId("");
     try {
       const [items, needs, budget, grants, reports] = await Promise.all([
@@ -1614,6 +1622,20 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     } finally {
       setBoardBusy(false);
     }
+  }
+
+  /** Drag the floated HQ panel by its header. */
+  function onHqHeaderDown(event: ReactPointerEvent) {
+    if (!hqFloating) return;
+    hqDragRef.current = { x: hqPos.x, y: hqPos.y, dx: event.clientX, dy: event.clientY };
+  }
+  function onHqHeaderMove(event: ReactPointerEvent) {
+    const drag = hqDragRef.current;
+    if (!drag) return;
+    setHqPos({ x: drag.x + (event.clientX - drag.dx), y: drag.y + (event.clientY - drag.dy) });
+  }
+  function onHqHeaderUp() {
+    hqDragRef.current = null;
   }
 
   function closeBoard() {
@@ -5288,10 +5310,36 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       )}
 
       {boardWorkspace && (
-        <div className="apps-overlay" onClick={closeBoard}>
-          <div className="apps-panel company-setup board-panel" onClick={(event) => event.stopPropagation()}>
-            <div className="apps-head">
+        <div
+          className={`apps-overlay hq-overlay${hqFloating ? " hq-overlay-floating" : " hq-overlay-full"}`}
+          onClick={closeBoard}
+        >
+          <div
+            className={`apps-panel company-setup board-panel${
+              hqFloating ? " hq-panel-floating" : " hq-panel-full"
+            }`}
+            style={hqFloating ? { transform: `translate(${hqPos.x}px, ${hqPos.y}px)` } : undefined}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div
+              className="apps-head"
+              onPointerDown={onHqHeaderDown}
+              onPointerMove={onHqHeaderMove}
+              onPointerUp={onHqHeaderUp}
+              onPointerLeave={onHqHeaderUp}
+            >
               <span className="apps-title">Company HQ — {boardWorkspace.name}</span>
+              <button
+                className="ghost small"
+                type="button"
+                onClick={() => {
+                  setHqFloating((value) => !value);
+                  setHqPos({ x: 0, y: 0 });
+                }}
+                title={hqFloating ? "Fill the window" : "Float as a movable panel"}
+              >
+                {hqFloating ? "⤢ Full" : "⤡ Float"}
+              </button>
               <button className="round small" type="button" onClick={closeBoard}>
                 ✕
               </button>

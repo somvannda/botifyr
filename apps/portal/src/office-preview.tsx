@@ -32,7 +32,9 @@ const layout = buildOfficeLayout(AGENTS);
 const ALL = Object.keys(OFFICE_STYLES) as OfficeStyleId[];
 
 function Preview() {
-  const requested = new URLSearchParams(window.location.search).get("style") as OfficeStyleId | null;
+  const params = new URLSearchParams(window.location.search);
+  const requested = params.get("style") as OfficeStyleId | null;
+  const labelsOn = params.get("labels") !== "0";
   const [style, setStyle] = useState<OfficeStyleId>(
     requested && ALL.includes(requested) ? requested : "nordic",
   );
@@ -78,7 +80,7 @@ function Preview() {
           </button>
         ))}
       </div>
-      <OfficeScene layout={layout} styleId={style} />
+      <OfficeScene layout={layout} styleId={style} labels={labelsOn} />
     </div>
   );
 }
