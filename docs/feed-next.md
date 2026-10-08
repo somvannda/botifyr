@@ -84,7 +84,12 @@ image/video files and posts render `<video controls>`.
 returns followers, post count, 30-day reactions/comments/shares, and top posts;
 the Page view shows an **Insights** panel.
 
-**Everything else** in this document (stories, groups, …) is **not started**.
+**Pinned posts (FR-19, partial) — done.** `pages.pinned_post_id` +
+`POST /v1/pages/:id/pin` (editor/admin; must be the page's own post); the Page
+timeline shows the pinned post first with a **📌 Pinned** label, and managers get
+a pin control. **Scheduled posts are still open.**
+
+**Everything else** in this document (scheduling, stories, groups, …) is **not started**.
 
 > **Reconciled with the product as of Oct 2026.** Facebook's reference section
 > (§1) reflects its 2026 behaviour; §2 and §5 note where Botifyr has already moved

@@ -10,7 +10,7 @@ Status legend: ✅ done · 🚧 in progress · ⬜ not started
 | # | Item | Type | Status |
 | --- | --- | --- | --- |
 | 1 | Model-status banner (credit/provider failures) | Improvement | ✅ |
-| 2 | Chat search (across chats + within a chat) | Feature | ⬜ |
+| 2 | Chat search (across chats + within a chat) | Feature | 🚧 |
 | 3 | Group management (rename, add/remove, leave) | Feature | ⬜ |
 | 4 | Read receipts + message reactions | Feature | ⬜ |
 | 5 | Light-theme audit of the new chat surfaces | Improvement | ⬜ |
@@ -36,10 +36,12 @@ the first failure.
 
 ## 2. Chat search
 
-- **Within a chat:** the composer already has a "Search this chat" find bar
-  (`findOpen`/`findQuery`). Extend it to highlight matches and jump between them.
-- **Across chats:** a global search over conversation titles + message text,
-  grouped results, jump-to-message.
+- ✅ **Across chats:** typing in the sidebar search scans every conversation's
+  messages and shows a **"Messages"** section of hits (title + snippet); clicking
+  a hit opens that conversation. (Verified: "hi" → 3 hits.)
+- ⬜ **Within a chat:** the composer's "Search this chat" find bar
+  (`findOpen`/`findQuery`) filters messages; still to add match highlighting and
+  next/previous navigation.
 
 ## 3. Group management
 

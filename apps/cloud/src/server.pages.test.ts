@@ -199,4 +199,46 @@ describe("pages", () => {
 
     await app.close();
   });
+
+  it("pins a post to the top of the Page timeline", async () => {
+    const { app, signUp, auth, createPage } = await setup();
+    const alice = await signUp("alice-pin@example.com");
+    const page = await createPage(alice.token, "Pins", "pins");
+    const createPagePost = async (pageId: string, body: string) =>
+      (
+        await app.inject({
+          method: "POST",
+          url: "/v1/posts",
+          headers: auth(alice.token),
+          payload: { body, pageId },
+        })
+      ).json() as { id: string };
+
+    const first = await createPagePost(page.id, "first");
+    await createPagePost(page.id, "second");
+
+    const pin = await app.inject({
+      method: "POST",
+      url: `/v1/pages/${page.id}/pin`,
+      headers: auth(alice.token),
+      payload: { postId: first.id },
+    });
+    expect(pin.statusCode).toBe(200);
+
+    const timeline = await app.inject({ method: "GET", url: "/v1/pages/pins/posts", headers: auth(alice.token) });
+    expect((timeline.json() as Array<{ id: string }>)[0]?.id).toBe(first.id);
+
+    // A post from a different Page can't be pinned here.
+    const other = await createPage(alice.token, "Other Page", "otherpage");
+    const otherPost = await createPagePost(other.id, "elsewhere");
+    const bad = await app.inject({
+      method: "POST",
+      url: `/v1/pages/${page.id}/pin`,
+      headers: auth(alice.token),
+      payload: { postId: otherPost.id },
+    });
+    expect(bad.statusCode).toBe(400);
+
+    await app.close();
+  });
 });

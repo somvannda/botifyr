@@ -542,6 +542,17 @@ function PageView({
     setEditing(true);
   }
 
+  async function pinPost(postId: string | null) {
+    if (!page) return;
+    try {
+      await client.pinPagePost(page.id, postId);
+      setPage({ ...page, pinnedPostId: postId ?? undefined });
+      setPosts(await client.listPagePosts(handle));
+    } catch {
+      // Leave the pin unchanged on failure.
+    }
+  }
+
   async function openInsights() {
     if (!page) return;
     setInsightsOpen(true);
@@ -660,6 +671,19 @@ function PageView({
               {canManage ? (
                 <div className="page-head-actions">
                   <span className="feed-bot-badge">{page.role}</span>
+                  <select
+                    className="page-pin-select"
+                    value={page.pinnedPostId ?? ""}
+                    onChange={(event) => void pinPost(event.target.value || null)}
+                    title="Pin a post to the top"
+                  >
+                    <option value="">📌 Pin…</option>
+                    {posts.map((post) => (
+                      <option key={post.id} value={post.id}>
+                        {(post.body || "(photo)").slice(0, 40)}
+                      </option>
+                    ))}
+                  </select>
                   <button type="button" className="feed-follow-btn" onClick={() => void openInsights()}>
                     Insights
                   </button>
@@ -827,18 +851,20 @@ function PageView({
           <div className="feed-state">No posts yet.</div>
         ) : (
           posts.map((post) => (
-            <PostCard
-              key={post.id}
-              post={post}
-              client={client}
-              cloudUrl={cloudUrl}
-              canDelete={canManage === true || (!post.pageId && post.author.id === viewerId)}
-              onChange={updatePost}
-              onDelete={removePost}
-              onBlock={(authorId) => setPosts((prev) => prev.filter((p) => p.author.id !== authorId))}
-              onOpenPage={onOpenPage}
-              onRepost={(next) => setPosts((prev) => [next, ...prev])}
-            />
+            <div key={post.id} className="feed-post-wrap">
+              {page?.pinnedPostId === post.id && <div className="feed-repost-label">📌 Pinned</div>}
+              <PostCard
+                post={post}
+                client={client}
+                cloudUrl={cloudUrl}
+                canDelete={canManage === true || (!post.pageId && post.author.id === viewerId)}
+                onChange={updatePost}
+                onDelete={removePost}
+                onBlock={(authorId) => setPosts((prev) => prev.filter((p) => p.author.id !== authorId))}
+                onOpenPage={onOpenPage}
+                onRepost={(next) => setPosts((prev) => [next, ...prev])}
+              />
+            </div>
           ))
         )}
       </div>

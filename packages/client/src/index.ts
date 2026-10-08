@@ -164,6 +164,8 @@ export interface Page {
   coverUrl?: string;
   cta?: string;
   verified: boolean;
+  /** Post pinned to the top of the Page timeline. */
+  pinnedPostId?: string;
   workspaceId?: string;
   botId?: string;
   followers: number;
@@ -866,7 +868,7 @@ export class BotifyrClient {
 
   setCapabilityGrant(
     workspaceId: string,
-    input: { subject: string; capability: string; granted: boolean },
+    input: { subject: string; capability: string; granted?: boolean; state?: CapabilityGrant["state"] },
   ): Promise<CapabilityGrant> {
     return this.request(`/v1/workspaces/${workspaceId}/grants`, {
       method: "PUT",
@@ -1255,6 +1257,11 @@ export class BotifyrClient {
 
   unfollowPage(id: string): Promise<void> {
     return this.request(`/v1/pages/${id}/follow`, { method: "DELETE" });
+  }
+
+  /** Pin or unpin (postId = null) a post on a Page timeline. */
+  pinPagePost(id: string, postId: string | null): Promise<{ ok: boolean }> {
+    return this.request(`/v1/pages/${id}/pin`, { method: "POST", json: true, body: JSON.stringify({ postId }) });
   }
 
   pageInsights(id: string): Promise<{

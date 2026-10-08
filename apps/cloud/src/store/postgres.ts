@@ -1235,8 +1235,8 @@ export class PostgresStore implements Store {
 
   async createPost(record: PostRecord): Promise<void> {
     await this.pool.query(
-      "INSERT INTO posts (id, author_id, body, media_id, page_id, repost_of, audience, created_at, updated_at) " +
-        "VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
+      "INSERT INTO posts (id, author_id, body, media_id, page_id, repost_of, audience, scheduled_at, created_at, updated_at) " +
+        "VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
       [
         record.id,
         record.authorId,
@@ -1245,6 +1245,7 @@ export class PostgresStore implements Store {
         record.pageId ?? null,
         record.repostOf ?? null,
         record.audience ?? "friends",
+        record.scheduledAt ?? null,
         record.createdAt,
         record.updatedAt,
       ],
@@ -1579,6 +1580,10 @@ export class PostgresStore implements Store {
     return (result.rowCount ?? 0) > 0;
   }
 
+  async setPagePinnedPost(pageId: string, postId: string | null): Promise<void> {
+    await this.pool.query("UPDATE pages SET pinned_post_id = $2, updated_at = now() WHERE id = $1", [pageId, postId]);
+  }
+
   async setPageRole(record: PageRoleRecord): Promise<void> {
     await this.pool.query(
       "INSERT INTO page_roles (page_id, user_id, role) VALUES ($1,$2,$3) ON CONFLICT (page_id, user_id) DO UPDATE SET role = EXCLUDED.role",
@@ -1813,6 +1818,7 @@ function toPost(row: any): PostRecord {
     pageId: row.page_id ?? undefined,
     repostOf: row.repost_of ?? undefined,
     audience: row.audience ?? "friends",
+    scheduledAt: row.scheduled_at ? new Date(row.scheduled_at).toISOString() : undefined,
     createdAt: new Date(row.created_at).toISOString(),
     updatedAt: new Date(row.updated_at).toISOString(),
   };
@@ -1844,6 +1850,7 @@ function toPage(row: any): PageRecord {
     coverUrl: row.cover_url ?? undefined,
     cta: row.cta ?? undefined,
     verified: row.verified === true,
+    pinnedPostId: row.pinned_post_id ?? undefined,
     createdAt: new Date(row.created_at).toISOString(),
     updatedAt: new Date(row.updated_at).toISOString(),
   };

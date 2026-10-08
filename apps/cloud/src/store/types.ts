@@ -83,6 +83,8 @@ export interface PostRecord {
   repostOf?: string;
   /** Who can see the post (docs/feed-next.md §FR-7). Defaults to friends. */
   audience?: "public" | "friends" | "only_me";
+  /** Future publish time; hidden from others until then (docs/feed-next.md §FR-19). */
+  scheduledAt?: string;
   createdAt: string;
   updatedAt: string;
 }

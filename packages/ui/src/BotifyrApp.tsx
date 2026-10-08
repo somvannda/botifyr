@@ -3485,6 +3485,36 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const filteredBots = query.trim()
     ? orderedBots.filter((bot) => bot.name.toLowerCase().includes(query.trim().toLowerCase()))
     : orderedBots;
+  // Cross-chat message search (Telegram-style): match message text across every
+  // conversation. Shown in the sidebar while the search box has a query.
+  const searchTerm = query.trim().toLowerCase();
+  const messageHits =
+    searchTerm.length >= 2
+      ? sessions
+          .flatMap((session) => {
+            const bot = bots.find((entry) => entry.sessionId === session.id);
+            const title =
+              bot?.name ??
+              (session.kind === "dm" || session.kind === "group" ? humanChatName(session) : session.title);
+            return session.messages
+              .map((message) => {
+                const text = displayText(decrypted, message.content, message.id).replace(/\s+/g, " ").trim();
+                const idx = text.toLowerCase().indexOf(searchTerm);
+                if (idx < 0) return null;
+                const snippet = text.slice(Math.max(0, idx - 30), idx + 60);
+                return {
+                  id: `${session.id}:${message.id}`,
+                  sessionId: session.id,
+                  title,
+                  snippet,
+                };
+              })
+              .filter((hit): hit is { id: string; sessionId: string; title: string; snippet: string } =>
+                Boolean(hit),
+              );
+          })
+          .slice(0, 30)
+      : [];
   // Companies: a bot belongs to a workspace through its role (authoritative) or,
   // for legacy rows, its `workspace` label. Grouping is keyed by workspace *id*,
   // so two companies that happen to share a name still render as separate
@@ -4354,6 +4384,31 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
         </div>
 
         <div className="task-list">
+          {messageHits.length > 0 && (
+            <div className="task-section">
+              <div className="task-section-head static" aria-hidden="true">
+                <span className="task-section-name">Messages</span>
+                <span className="task-section-count">{messageHits.length}</span>
+              </div>
+              <div className="task-section-list">
+                {messageHits.map((hit) => (
+                  <button
+                    key={hit.id}
+                    className="search-hit"
+                    type="button"
+                    onClick={() => {
+                      openSessionById(hit.sessionId);
+                      setQuery("");
+                      setSearchOpen(false);
+                    }}
+                  >
+                    <span className="search-hit-title">{hit.title}</span>
+                    <span className="search-hit-snippet">{hit.snippet}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {workspaceFiltered.length === 0 && personalChats.length === 0 && (
             <p className="empty">
               {activeWorkspaceFilter === "all"

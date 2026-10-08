@@ -4004,6 +4004,7 @@ export async function buildServer(options: ServerOptions) {
     pageId?: string;
     repostOf?: string;
     audience?: "public" | "friends" | "only_me";
+    scheduledAt?: string;
     hashtags?: string[];
     imageUrl?: string;
     createdAt: string;
@@ -4128,6 +4129,7 @@ export async function buildServer(options: ServerOptions) {
       pageId: record.pageId,
       repostOf: record.repostOf,
       audience: record.audience ?? "friends",
+      scheduledAt: record.scheduledAt,
       hashtags: await store.listPostTags(record.id),
       imageUrl: images[0],
       createdAt: record.createdAt,
@@ -4146,6 +4148,10 @@ export async function buildServer(options: ServerOptions) {
   /** Only the author can see an `only_me` post. */
   const canSeePost = (post: PostRecord, viewerId: string): boolean =>
     post.audience !== "only_me" || post.authorId === viewerId;
+
+  /** A scheduled post is hidden from others until its publish time. */
+  const isFutureScheduled = (post: PostRecord, nowIso: string): boolean =>
+    Boolean(post.scheduledAt && post.scheduledAt > nowIso);
 
   const feedCommentOf = async (
     record: PostCommentRecord,
@@ -4207,7 +4213,14 @@ export async function buildServer(options: ServerOptions) {
   );
 
   app.post<{
-    Body: { body?: string; mediaId?: string; mediaIds?: string[]; pageId?: string; audience?: string };
+    Body: {
+      body?: string;
+      mediaId?: string;
+      mediaIds?: string[];
+      pageId?: string;
+      audience?: string;
+      scheduledAt?: string;
+    };
   }>("/v1/posts", { preHandler: requireAuth }, async (request, reply) => {
     const userId = request.userId as string;
     const body = typeof request.body?.body === "string" ? request.body.body.trim() : "";
@@ -4574,6 +4587,7 @@ export async function buildServer(options: ServerOptions) {
     coverUrl: page.coverUrl,
     cta: page.cta,
     verified: page.verified,
+    pinnedPostId: page.pinnedPostId,
     workspaceId: page.workspaceId,
     botId: page.botId,
     followers: await store.countPageFollowers(page.id),
@@ -4701,7 +4715,11 @@ export async function buildServer(options: ServerOptions) {
     async (request, reply) => {
       const page = await store.getPageByHandle(request.params.handle);
       if (!page) return reply.code(404).send({ error: "page not found" });
-      const posts = await store.listPostsByAuthor(page.id, 20);
+      const all = await store.listPostsByAuthor(page.id, 20);
+      const pinned = page.pinnedPostId;
+      const posts = pinned
+        ? [...all.filter((post) => post.id === pinned), ...all.filter((post) => post.id !== pinned)]
+        : all;
       const cache = new Map<string, FeedAuthorDto>();
       const items = [];
       for (const record of posts) items.push(await feedPostOf(record, request.userId as string, cache));
@@ -4770,6 +4788,28 @@ export async function buildServer(options: ServerOptions) {
       }
       if (targetId === page.ownerId) return reply.code(400).send({ error: "the owner is always admin" });
       await store.setPageRole({ pageId: page.id, userId: targetId, role });
+      return { ok: true };
+    },
+  );
+
+  /* Pin / unpin a post on a Page timeline (docs/feed-next.md §FR-19). */
+  app.post<{ Params: { id: string }; Body: { postId?: string | null } }>(
+    "/v1/pages/:id/pin",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const page = await store.getPage(request.params.id);
+      if (!page) return reply.code(404).send({ error: "page not found" });
+      const role = page.ownerId === userId ? "admin" : (await store.getPageRole(page.id, userId))?.role;
+      if (role !== "admin" && role !== "editor") return reply.code(403).send({ error: "not allowed" });
+      const postId = typeof request.body?.postId === "string" ? request.body.postId.trim() : "";
+      if (postId) {
+        const post = await store.getPost(postId);
+        if (!post || post.pageId !== page.id) return reply.code(400).send({ error: "post is not on this page" });
+        await store.setPagePinnedPost(page.id, postId);
+      } else {
+        await store.setPagePinnedPost(page.id, null);
+      }
       return { ok: true };
     },
   );

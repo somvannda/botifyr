@@ -34,6 +34,7 @@ import { createPlanTools } from "./plan-tools.js";
 import { createQuestTools } from "./quest-tools.js";
 import { createCodeTools } from "./code-tools.js";
 import { capabilityForTool, removeDeniedTools } from "./tool-capabilities.js";
+import { applyCapabilityUse } from "./capability-ladder.js";
 import {
   clearComputerSandbox,
   clearTaskCancel,
@@ -611,12 +612,7 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
       (entry) => ladderSubjects.has(entry.subject) && entry.granted && entry.capability === capability,
     );
     if (!grant || (grant.state ?? "gated") === "gated") return;
-    const now = new Date().toISOString();
-    grant.successes = (grant.successes ?? 0) + (ok ? 1 : 0);
-    grant.failures = (grant.failures ?? 0) + (ok ? 0 : 1);
-    grant.lastUsedAt = now;
-    grant.updatedAt = now;
-    if (!ok) grant.state = grant.state === "trusted" ? "probation" : "gated";
+    applyCapabilityUse(grant, ok);
     await store.setCapabilityGrant(grant).catch(() => {});
   };
   const instructions =
