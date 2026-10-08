@@ -25,16 +25,18 @@ export const ASSET_BASE = "/office3d/";
 
 /** Set an entry to an asset to swap that prop from primitive to model. */
 export const OFFICE_ASSETS: Record<string, OfficeAsset | null> = {
-  chair: { url: `${ASSET_BASE}WoodenChair_01/WoodenChair_01_1k.gltf` },
-  chair2: { url: `${ASSET_BASE}painted_wooden_chair_01/painted_wooden_chair_01_1k.gltf` },
-  loungeChair: { url: `${ASSET_BASE}mid_century_lounge_chair/mid_century_lounge_chair_1k.gltf` },
-  desk: { url: `${ASSET_BASE}metal_office_desk/metal_office_desk_1k.gltf` },
-  coffeeTable: { url: `${ASSET_BASE}CoffeeTable_01/CoffeeTable_01_1k.gltf` },
-  sofa: { url: `${ASSET_BASE}Sofa_01/Sofa_01_1k.gltf` },
-  armChair: { url: `${ASSET_BASE}ArmChair_01/ArmChair_01_1k.gltf` },
-  shelf: { url: `${ASSET_BASE}Shelf_01/Shelf_01_1k.gltf` },
-  planterBox: { url: `${ASSET_BASE}planter_box_01/planter_box_01_1k.gltf` },
-  plant: { url: `${ASSET_BASE}periwinkle_plant/periwinkle_plant_1k.gltf` },
+  chair: { url: `${ASSET_BASE}WoodenChair_01.glb` },
+  chair2: { url: `${ASSET_BASE}painted_wooden_chair_01.glb` },
+  loungeChair: { url: `${ASSET_BASE}mid_century_lounge_chair.glb` },
+  stool: { url: `${ASSET_BASE}bar_chair_round_01.glb` },
+  armChair2: { url: `${ASSET_BASE}modern_arm_chair_01.glb` },
+  desk: { url: `${ASSET_BASE}metal_office_desk.glb` },
+  coffeeTable: { url: `${ASSET_BASE}CoffeeTable_01.glb` },
+  sofa: { url: `${ASSET_BASE}Sofa_01.glb` },
+  armChair: { url: `${ASSET_BASE}ArmChair_01.glb` },
+  shelf: { url: `${ASSET_BASE}Shelf_01.glb` },
+  planterBox: { url: `${ASSET_BASE}planter_box_01.glb` },
+  plant: { url: `${ASSET_BASE}periwinkle_plant.glb` },
 };
 
 /** True once any real model has been configured. */

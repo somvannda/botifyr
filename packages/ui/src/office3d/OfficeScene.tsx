@@ -237,6 +237,17 @@ function Kitchen({ width, depth }: { width: number; depth: number }) {
         <boxGeometry args={[0.9, 1.8, 0.7]} />
         <meshStandardMaterial color="#c9ccd4" metalness={0.4} roughness={0.3} />
       </mesh>
+      {/* Bar stools along the island. */}
+      {[-1.3, 0, 1.3].map((offset) => (
+        <Suspense key={offset} fallback={null}>
+          <Prop kind="stool" position={[offset, 0, 1.5]}>
+            <mesh castShadow position={[0, 0.5, 0]}>
+              <cylinderGeometry args={[0.2, 0.2, 0.1, 12]} />
+              <meshStandardMaterial color="#3a4152" roughness={0.7} />
+            </mesh>
+          </Prop>
+        </Suspense>
+      ))}
       <Plant position={[halfW - 0.7, 0, halfD - 0.7]} />
     </group>
   );
@@ -357,6 +368,11 @@ function RoomFurniture({ room }: { room: RoomLayout }) {
         </Suspense>
         <Suspense fallback={null}>
           <Prop kind="armChair" position={[-halfW + 1.6, 0, halfD - 1.8]} rotationY={Math.PI}>
+            <Plant />
+          </Prop>
+        </Suspense>
+        <Suspense fallback={null}>
+          <Prop kind="armChair2" position={[-halfW + 1.6, 0, halfD - 3.4]} rotationY={Math.PI}>
             <Plant />
           </Prop>
         </Suspense>

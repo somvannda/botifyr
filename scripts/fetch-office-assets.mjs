@@ -25,6 +25,8 @@ const MODELS = [
   "Shelf_01",
   "planter_box_01",
   "periwinkle_plant",
+  "bar_chair_round_01",
+  "modern_arm_chair_01",
 ];
 const CHARACTERS = [
   "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/gltf/Soldier.glb",
