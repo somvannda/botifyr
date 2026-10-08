@@ -101,9 +101,12 @@ Done:
   (`.contact-panel`): big avatar + name + status, action buttons (Search / Hide /
   Delete), info rows, and a media summary (Photos / Videos / Voice / Files).
 
+- ✅ **Shared media grid** — the contact-panel media rows (All / Photos / Videos /
+  Voice messages / Files) filter a thumbnail grid (`.contact-media-grid`); photos
+  and videos open in the media viewer.
+
 Next:
 1. **Transcription** — a "transcribe" action that shows text under the clip.
-2. **Shared media grid** — make the media summary rows open filtered views.
 
 ## 4. Server contract
 

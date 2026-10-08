@@ -78,6 +78,8 @@ export class MemoryStore implements Store {
   private postShares = new Set<string>();
   /** postId → ordered media ids (multi-image). */
   private postMedia = new Map<string, string[]>();
+  /** Keyed by `${commentId}:${userId}` → the viewer's reaction. */
+  private commentReactions = new Map<string, ReactionType>();
   /** Keyed by `${blockerId}:${blockedId}`. */
   private blocks = new Set<string>();
   private postReports = new Map<string, PostReportRecord>();
@@ -929,7 +931,18 @@ export class MemoryStore implements Store {
     if (!record || record.authorId !== authorId) return false;
     this.postComments.delete(id);
     // Cascade to replies (Postgres does this via the FK).
-    for (const [key, comment] of [...this.postComments]) if (comment.parentId === id) this.postComments.delete(key);
+    const removed = [id];
+    for (const [key, comment] of [...this.postComments]) {
+      if (comment.parentId === id) {
+        this.postComments.delete(key);
+        removed.push(key);
+      }
+    }
+    for (const commentId of removed) {
+      for (const reactionKey of [...this.commentReactions.keys()]) {
+        if (reactionKey.startsWith(`${commentId}:`)) this.commentReactions.delete(reactionKey);
+      }
+    }
     return true;
   }
 
@@ -961,6 +974,24 @@ export class MemoryStore implements Store {
       reactions,
       myReaction,
     };
+  }
+
+  async setCommentReaction(commentId: string, userId: string, reaction: ReactionType | null): Promise<void> {
+    const key = `${commentId}:${userId}`;
+    if (reaction) this.commentReactions.set(key, reaction);
+    else this.commentReactions.delete(key);
+  }
+
+  async getCommentStats(
+    commentId: string,
+    viewerId: string,
+  ): Promise<{ reactions: Record<ReactionType, number>; myReaction: ReactionType | null }> {
+    const reactions: Record<ReactionType, number> = { like: 0, love: 0, care: 0, haha: 0, wow: 0, sad: 0, angry: 0 };
+    for (const [key, reaction] of this.commentReactions) {
+      if (!key.startsWith(`${commentId}:`)) continue;
+      reactions[reaction] += 1;
+    }
+    return { reactions, myReaction: this.commentReactions.get(`${commentId}:${viewerId}`) ?? null };
   }
 
   async blockUser(blockerId: string, blockedId: string): Promise<void> {

@@ -37,8 +37,8 @@ recipe = {
 2. **Model reasoning (fallback).** The bot reads the page source / inline JSON and
    proposes a regex for the embedded `playUrl`.
 
-The proposed recipe becomes a **learned skill** (`status: pending`) → visible in
-**admin → Learned skills / Billing** for approval. Approved recipes are indexed by
+The proposed recipe is saved as a **media recipe** (`status: pending`) → visible in
+**admin → Recipes** for approval. Approved recipes are indexed by
 domain and **auto-applied**: the next download from that domain matches the pattern
 and downloads the stream with `ffmpeg`/`yt-dlp`, with the recorded headers.
 
@@ -72,14 +72,17 @@ download(domain) ──► yt-dlp ──ok──► done
 ## Phased plan
 
 1. ✅ **Generic sniffer hardening** (JSON-escaped URLs, more patterns) — done.
-2. **Recipe registry** — `media_recipes` store (`domain`, `pattern`, `headers`,
-   `status`, `createdBy`) + a `media.extract` tool that, on a yt-dlp miss, fetches
-   the page and matches an approved recipe (or the generic patterns), then downloads
-   via `ffmpeg`/`yt-dlp` with the headers.
-3. **Learning loop** — a `media.learn_recipe` tool the bot calls after sniffing;
-   saved `pending`, surfaced in admin moderation, auto-applied once approved.
-4. **Browser network sniffing** — expose the sandbox page's network log to the bot
-   so it can find the real media request without hand-held patterns.
+2. ✅ **Recipe registry** — `media_recipes` store (`domain`, `pattern`, `headers`,
+   `status`, `createdBy`, `note`) with recipe matching wired into
+   `youtube.download`: on a yt-dlp miss it fetches the page and matches an approved
+   recipe, then downloads via `ffmpeg`/`yt-dlp` with the recorded headers. Admin
+   CRUD at `GET/PUT/DELETE /admin/media-recipes`, surfaced in **admin → Recipes**.
+3. ✅ **Learning loop** — `media.learn_recipe` lets the bot propose a recipe (saved
+   `pending`), surfaced for moderation, auto-applied once approved (`runner.ts`
+   wires `getRecipe` / `proposeRecipe`).
+4. ✅ **Browser network sniffing** — `browser.sniff` (plus the `media.sniff` tool)
+   lists the page's media network requests; `runner.ts` uses it to find the real
+   stream URL for SPA players. `apps/cloud/scripts/sniff.mjs` is the CLI equivalent.
 
 ## Validated sites
 
@@ -116,10 +119,9 @@ not present in the initial HTML, so the generic HTML sniffer usually won't find 
 That's exactly what the recipe + network-sniffing approach is for: point the bot's
 browser at a show page, capture the media request, and store the pattern.
 
-**Next concrete step:** run one of these home URLs through the bot's browser sandbox
-with network capture (phase 4), distill the first media request into a recipe, and
-verify a download. `goodshort.com` and `netshort.com` are the best first targets
-(web-first, English).
+**Next concrete step:** run these home URLs through `browser.sniff` (now built),
+distill the first media request into a recipe, and verify a download.
+`goodshort.com` and `netshort.com` are the best first targets (web-first, English).
 
 ## Legal note
 

@@ -104,6 +104,9 @@ export interface FeedComment {
   /** Set for a reply to another comment (one level deep). */
   parentId?: string;
   createdAt: string;
+  /** Count per reaction type on the comment. */
+  reactions?: Record<string, number>;
+  myReaction?: string | null;
 }
 
 /** A post in the Feed. */
@@ -1117,6 +1120,18 @@ export class BotifyrClient {
 
   unreactPost(id: string): Promise<void> {
     return this.request(`/v1/posts/${id}/reaction`, { method: "DELETE" });
+  }
+
+  reactComment(id: string, reaction: string): Promise<void> {
+    return this.request(`/v1/comments/${id}/reaction?reaction=${encodeURIComponent(reaction)}`, {
+      method: "PUT",
+      json: true,
+      body: "{}",
+    });
+  }
+
+  unreactComment(id: string): Promise<void> {
+    return this.request(`/v1/comments/${id}/reaction`, { method: "DELETE" });
   }
 
   listComments(id: string): Promise<FeedComment[]> {

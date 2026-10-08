@@ -1348,6 +1348,41 @@ export class PostgresStore implements Store {
     }
   }
 
+  async setCommentReaction(commentId: string, userId: string, reaction: ReactionType | null): Promise<void> {
+    if (reaction) {
+      await this.pool.query(
+        "INSERT INTO comment_reactions (comment_id, user_id, reaction) VALUES ($1,$2,$3) " +
+          "ON CONFLICT (comment_id, user_id) DO UPDATE SET reaction = EXCLUDED.reaction",
+        [commentId, userId, reaction],
+      );
+    } else {
+      await this.pool.query("DELETE FROM comment_reactions WHERE comment_id = $1 AND user_id = $2", [
+        commentId,
+        userId,
+      ]);
+    }
+  }
+
+  async getCommentStats(
+    commentId: string,
+    viewerId: string,
+  ): Promise<{ reactions: Record<ReactionType, number>; myReaction: ReactionType | null }> {
+    const reactions: Record<ReactionType, number> = { like: 0, love: 0, care: 0, haha: 0, wow: 0, sad: 0, angry: 0 };
+    const { rows } = await this.pool.query(
+      "SELECT reaction, COUNT(*)::int AS n FROM comment_reactions WHERE comment_id = $1 GROUP BY reaction",
+      [commentId],
+    );
+    for (const row of rows) {
+      const reaction = row.reaction as ReactionType;
+      if (reaction in reactions) reactions[reaction] = Number(row.n);
+    }
+    const mine = await this.pool.query(
+      "SELECT reaction FROM comment_reactions WHERE comment_id = $1 AND user_id = $2",
+      [commentId, viewerId],
+    );
+    return { reactions, myReaction: (mine.rows[0]?.reaction as ReactionType) ?? null };
+  }
+
   async getPostStats(postId: string, viewerId: string): Promise<PostStatsRecord> {
     const reactions: Record<ReactionType, number> = { like: 0, love: 0, care: 0, haha: 0, wow: 0, sad: 0, angry: 0 };
     const grouped = await this.pool.query(

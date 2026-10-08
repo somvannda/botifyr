@@ -393,6 +393,14 @@ CREATE TABLE IF NOT EXISTS post_shares (
   PRIMARY KEY (post_id, user_id)
 );
 
+/* Comment reactions (docs/feed-next.md §FR-3). */
+CREATE TABLE IF NOT EXISTS comment_reactions (
+  comment_id TEXT NOT NULL REFERENCES post_comments(id) ON DELETE CASCADE,
+  user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  reaction   TEXT NOT NULL,
+  PRIMARY KEY (comment_id, user_id)
+);
+
 /* Multi-image posts (docs/feed-next.md §FR-5). */
 CREATE TABLE IF NOT EXISTS post_media (
   post_id  TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,

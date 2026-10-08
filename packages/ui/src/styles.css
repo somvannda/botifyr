@@ -5617,8 +5617,20 @@ body {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 9px 2px;
+  width: 100%;
+  padding: 9px 6px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
   font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.contact-media-row:hover,
+.contact-media-row.active {
+  background: var(--hover);
 }
 
 .contact-media-ico {
@@ -5630,6 +5642,31 @@ body {
 .contact-media-count {
   margin-left: auto;
   color: var(--muted);
+}
+
+.contact-media-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.contact-media-cell {
+  position: relative;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--panel-2);
+  cursor: pointer;
+  aspect-ratio: 1;
+}
+
+.contact-media-cell img,
+.contact-media-cell video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .bot-panel-addlabel,

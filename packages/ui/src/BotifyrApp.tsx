@@ -388,6 +388,9 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [notifOpen, setNotifOpen] = useState(false);
   const [attachOpen, setAttachOpen] = useState(false);
   const [recording, setRecording] = useState(false);
+  const [contactMediaFilter, setContactMediaFilter] = useState<"all" | "photo" | "video" | "voice" | "file">(
+    "all",
+  );
   const [lightbox, setLightbox] = useState<{
     items: { token: string; name: string }[];
     index: number;
@@ -3306,6 +3309,16 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     },
     { photo: 0, video: 0, voice: 0, file: 0 },
   );
+  const mediaCategory = (name: string): "photo" | "video" | "voice" | "file" => {
+    if (/^voice-/i.test(name)) return "voice";
+    if (/\.(png|jpe?g|webp|gif|svg)$/i.test(name)) return "photo";
+    if (/\.(mp4|webm)$/i.test(name)) return "video";
+    return "file";
+  };
+  const contactMedia =
+    contactMediaFilter === "all"
+      ? activeSharedFiles
+      : activeSharedFiles.filter((file) => mediaCategory(file.name) === contactMediaFilter);
 
   /** Signed, owner/recipient-scoped URL for a shared file. */
   function sharedUrl(shareToken: string): string {
@@ -5448,42 +5461,64 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
             </div>
 
             <div className="contact-media">
-              <div className="contact-media-row">
-                <span className="contact-media-ico">
-                  <PanelIcon size={18} />
-                </span>
-                Photos
-                <span className="contact-media-count">{sharedFileCounts.photo}</span>
-              </div>
-              <div className="contact-media-row">
-                <span className="contact-media-ico">
-                  <PlayIcon size={18} />
-                </span>
-                Videos
-                <span className="contact-media-count">{sharedFileCounts.video}</span>
-              </div>
-              <div className="contact-media-row">
-                <span className="contact-media-ico">
-                  <MicIcon size={18} />
-                </span>
-                Voice messages
-                <span className="contact-media-count">{sharedFileCounts.voice}</span>
-              </div>
-              <div className="contact-media-row">
-                <span className="contact-media-ico">
-                  <LockIcon size={18} />
-                </span>
-                Files
-                <span className="contact-media-count">{sharedFileCounts.file}</span>
-              </div>
+              {[
+                { id: "all", label: "All", icon: <PanelIcon size={18} />, count: activeSharedFiles.length },
+                {
+                  id: "photo",
+                  label: "Photos",
+                  icon: <CameraIcon size={18} />,
+                  count: sharedFileCounts.photo,
+                },
+                { id: "video", label: "Videos", icon: <PlayIcon size={18} />, count: sharedFileCounts.video },
+                {
+                  id: "voice",
+                  label: "Voice messages",
+                  icon: <MicIcon size={18} />,
+                  count: sharedFileCounts.voice,
+                },
+                { id: "file", label: "Files", icon: <LockIcon size={18} />, count: sharedFileCounts.file },
+              ].map((opt) => (
+                <button
+                  key={opt.id}
+                  className={`contact-media-row${contactMediaFilter === opt.id ? " active" : ""}`}
+                  type="button"
+                  onClick={() =>
+                    setContactMediaFilter(opt.id as "all" | "photo" | "video" | "voice" | "file")
+                  }
+                >
+                  <span className="contact-media-ico">{opt.icon}</span>
+                  {opt.label}
+                  <span className="contact-media-count">{opt.count}</span>
+                </button>
+              ))}
             </div>
 
-            <div className="bot-panel-section-head">Shared files</div>
-            {activeSharedFiles.length === 0 ? (
-              <div className="bot-panel-empty">No files shared yet.</div>
+            <div className="bot-panel-section-head">
+              {contactMediaFilter === "all" ? "Shared media" : "Shared files"}
+            </div>
+            {contactMedia.length === 0 ? (
+              <div className="bot-panel-empty">Nothing shared yet.</div>
+            ) : contactMediaFilter === "photo" || contactMediaFilter === "video" ? (
+              <div className="contact-media-grid">
+                {contactMedia.map((file) => (
+                  <button
+                    key={file.token}
+                    className="contact-media-cell"
+                    type="button"
+                    title={file.name}
+                    onClick={() => openLightbox(file)}
+                  >
+                    {mediaCategory(file.name) === "video" ? (
+                      <video src={sharedUrl(file.token)} preload="metadata" muted />
+                    ) : (
+                      <img src={sharedUrl(file.token)} alt={file.name} loading="lazy" />
+                    )}
+                  </button>
+                ))}
+              </div>
             ) : (
               <ul className="downloads-list">
-                {activeSharedFiles.map((file) => (
+                {contactMedia.map((file) => (
                   <li key={file.token} className="download-row">
                     <div className="download-main">
                       <div className="download-name">{file.name}</div>
@@ -5491,11 +5526,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                     <button
                       className="ghost small"
                       type="button"
-                      onClick={() =>
-                        void openExternal(
-                          `${CLOUD_URL}/v1/shared?share=${encodeURIComponent(file.token)}&token=${encodeURIComponent(token())}`,
-                        )
-                      }
+                      onClick={() => void openExternal(sharedUrl(file.token))}
                     >
                       Save
                     </button>

@@ -4116,13 +4116,18 @@ export async function buildServer(options: ServerOptions) {
   const canSeePost = (post: PostRecord, viewerId: string): boolean =>
     post.audience !== "only_me" || post.authorId === viewerId;
 
-  const feedCommentOf = async (record: PostCommentRecord, cache: Map<string, FeedAuthorDto>) => ({
-    id: record.id,
-    author: await feedAuthorOf(record.authorId, cache),
-    body: record.body,
-    parentId: record.parentId,
-    createdAt: record.createdAt,
-  });
+  const feedCommentOf = async (record: PostCommentRecord, viewerId: string, cache: Map<string, FeedAuthorDto>) => {
+    const stats = await store.getCommentStats(record.id, viewerId);
+    return {
+      id: record.id,
+      author: await feedAuthorOf(record.authorId, cache),
+      body: record.body,
+      parentId: record.parentId,
+      createdAt: record.createdAt,
+      reactions: stats.reactions,
+      myReaction: stats.myReaction,
+    };
+  };
 
   app.get<{ Querystring: { cursor?: string; limit?: string; tab?: string; sort?: string } }>(
     "/v1/feed",
@@ -4307,7 +4312,7 @@ export async function buildServer(options: ServerOptions) {
       const items = [];
       for (const record of comments) {
         if (blocked.has(record.authorId)) continue;
-        items.push(await feedCommentOf(record, cache));
+        items.push(await feedCommentOf(record, request.userId as string, cache));
       }
       return items;
     },
@@ -4354,7 +4359,7 @@ export async function buildServer(options: ServerOptions) {
           toUserId: post.authorId,
         });
       }
-      return reply.code(201).send(await feedCommentOf(record, new Map()));
+      return reply.code(201).send(await feedCommentOf(record, record.authorId, new Map()));
     },
   );
 
@@ -4365,6 +4370,28 @@ export async function buildServer(options: ServerOptions) {
       const ok = await store.deletePostComment(request.userId as string, request.params.id);
       if (!ok) return reply.code(404).send({ error: "comment not found" });
       return reply.code(204).send();
+    },
+  );
+
+  app.put<{ Params: { id: string }; Querystring: { reaction?: string } }>(
+    "/v1/comments/:id/reaction",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const comment = await store.getPostComment(request.params.id);
+      if (!comment) return reply.code(404).send({ error: "comment not found" });
+      const reaction = (request.query?.reaction ?? "").trim() as ReactionType;
+      if (!REACTIONS.has(reaction)) return reply.code(400).send({ error: "invalid reaction" });
+      await store.setCommentReaction(comment.id, request.userId as string, reaction);
+      return { ok: true };
+    },
+  );
+
+  app.delete<{ Params: { id: string } }>(
+    "/v1/comments/:id/reaction",
+    { preHandler: requireAuth },
+    async (request) => {
+      await store.setCommentReaction(request.params.id, request.userId as string, null);
+      return { ok: true };
     },
   );
 

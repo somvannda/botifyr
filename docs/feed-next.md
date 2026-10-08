@@ -59,7 +59,12 @@ only_me`, default friends), an audience control in the composer, `audience` on t
 feed DTO, and server-side enforcement on every read (feed, Wall, comments) and
 interaction (like/reaction/comment/share/repost) — `only_me` is author-only.
 
-**Everything else** in this document (comment reactions, ranking, stories,
+**Feed tabs + ranking (FR-8/FR-9) — done.** `GET /v1/feed?tab=all|friends|pages&
+sort=recent|top` — "all" mixes self + friends + followed Pages, "friends"/"pages"
+filter, and `sort=top` ranks by engagement over the last 30 days. The UI has
+**All / Friends / Pages** tabs and a **Top / Most recent** toggle.
+
+**Everything else** in this document (comment reactions, video, mentions, stories,
 groups, …) is **not started**.
 
 > **Reconciled with the product as of Oct 2026.** Facebook's reference section

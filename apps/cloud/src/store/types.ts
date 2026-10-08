@@ -405,6 +405,11 @@ export interface Store {
   listTrendingPosts(authorIds: string[], sinceIso: string, limit: number): Promise<PostRecord[]>;
   /** Set/replace the viewer's reaction, or clear it with `null`. */
   setPostReaction(postId: string, userId: string, reaction: ReactionType | null): Promise<void>;
+  setCommentReaction(commentId: string, userId: string, reaction: ReactionType | null): Promise<void>;
+  getCommentStats(
+    commentId: string,
+    viewerId: string,
+  ): Promise<{ reactions: Record<ReactionType, number>; myReaction: ReactionType | null }>;
   listPostComments(postId: string): Promise<PostCommentRecord[]>;
   getPostComment(id: string): Promise<PostCommentRecord | null>;
   createPostComment(record: PostCommentRecord): Promise<void>;

@@ -27,6 +27,7 @@ OpenRouter, DeepSeek, Groq, or a local model via environment variables.
 | [docs/company-workspace.md](docs/company-workspace.md) | Company workspaces — run a virtual startup whose employees are AI bots. |
 | [docs/company-os.md](docs/company-os.md) | Company OS architecture — schema, employee model, catalog, orchestrator, tasks, permissions, memory, integrations, lifecycle, cost, security. |
 | [docs/company-quests.md](docs/company-quests.md) | Directed company flow — Charter → Directions → Assemble → Quest → Operate; agents propose, the CEO chooses. |
+| [docs/product-plan.md](docs/product-plan.md) | The control-layer turn — positioning, the autonomy ladder, HQ briefing/inbox UX, feature sequencing, metrics. |
 | [docs/development.md](docs/development.md) | How to install, run, and test what's built; what is real vs. stubbed. |
 | [docs/cost-controls.md](docs/cost-controls.md) | Product runtime cost limits (rate limit, token caps, daily budget). |
 | [docs/deploy.md](docs/deploy.md) | Deploying the web site, cloud, and desktop app. |
