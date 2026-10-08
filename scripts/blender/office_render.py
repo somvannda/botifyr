@@ -74,12 +74,12 @@ def place_glb(name, location, rotation_z=0.0, scale=1.0):
     return True
 
 
+clear()
+
 WOOD = material("wood", (0.78, 0.68, 0.52), 0.6)
 TILE = material("tile", (0.78, 0.79, 0.81), 0.7)
 WALL = material("wall", (0.93, 0.94, 0.96), 0.85)
 GLASS = material("glass", (0.75, 0.85, 0.92), 0.05, 0.0, 0.25)
-
-clear()
 
 width = scene["width"]
 depth = scene["depth"]
@@ -164,13 +164,13 @@ sun_obj = bpy.data.objects.new("sun", sun)
 sun_obj.rotation_euler = (math.radians(50), math.radians(10), math.radians(30))
 bpy.context.scene.collection.objects.link(sun_obj)
 
-# Cycles settings.
+# Cycles settings (overridable for quick previews).
 prefs = bpy.context.scene
 prefs.render.engine = "CYCLES"
-prefs.cycles.samples = 256
+prefs.cycles.samples = int(os.environ.get("BOTIFYR_RENDER_SAMPLES", "128"))
 prefs.cycles.use_denoising = True
-prefs.render.resolution_x = 2400
-prefs.render.resolution_y = 1600
+prefs.render.resolution_x = int(os.environ.get("BOTIFYR_RENDER_X", "2000"))
+prefs.render.resolution_y = int(os.environ.get("BOTIFYR_RENDER_Y", "1400"))
 prefs.render.filepath = out_path
 bpy.ops.render.render(write_still=True)
 print(f"rendered {out_path}")

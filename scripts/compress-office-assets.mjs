@@ -42,7 +42,7 @@ for (const base of targets) {
     const out = join(base, `${id}.glb`);
     if (seen.has(out)) continue;
     seen.add(out);
-    execFileSync("npx", ["gltf-transform", "optimize", source, out], {
+    execFileSync("npx", ["gltf-transform", "optimize", source, out, "--compress", "false"], {
       stdio: "inherit",
       shell: true,
     });
