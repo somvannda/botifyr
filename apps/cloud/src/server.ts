@@ -2681,6 +2681,7 @@ export async function buildServer(options: ServerOptions) {
     Body: {
       title?: string;
       detail?: string;
+      result?: string;
       phase?: WorkItem["phase"];
       status?: WorkItem["status"];
       assigneeBotId?: string;
@@ -2700,6 +2701,7 @@ export async function buildServer(options: ServerOptions) {
       workspaceId: workspace.id,
       title,
       detail: request.body?.detail?.slice(0, 4000),
+      result: request.body?.result?.slice(0, 4000),
       phase: request.body?.phase ?? "ongoing",
       status: request.body?.status ?? "todo",
       assigneeBotId: request.body?.assigneeBotId,
@@ -2717,6 +2719,7 @@ export async function buildServer(options: ServerOptions) {
     Body: {
       title?: string;
       detail?: string;
+      result?: string | null;
       phase?: WorkItem["phase"];
       status?: WorkItem["status"];
       assigneeBotId?: string | null;
@@ -2733,6 +2736,8 @@ export async function buildServer(options: ServerOptions) {
       item.title = request.body.title.trim().slice(0, 200);
     }
     if (typeof request.body?.detail === "string") item.detail = request.body.detail.slice(0, 4000);
+    if (request.body?.result === null) item.result = undefined;
+    else if (typeof request.body?.result === "string") item.result = request.body.result.slice(0, 4000);
     if (request.body?.phase) item.phase = request.body.phase;
     if (request.body?.status) item.status = request.body.status;
     if (request.body?.assigneeBotId === null) item.assigneeBotId = undefined;
@@ -3979,6 +3984,7 @@ export async function buildServer(options: ServerOptions) {
     pageId?: string;
     repostOf?: string;
     audience?: "public" | "friends" | "only_me";
+    hashtags?: string[];
     imageUrl?: string;
     createdAt: string;
     updatedAt: string;
@@ -4098,6 +4104,7 @@ export async function buildServer(options: ServerOptions) {
       pageId: record.pageId,
       repostOf: record.repostOf,
       audience: record.audience ?? "friends",
+      hashtags: await store.listPostTags(record.id),
       imageUrl: images[0],
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
@@ -4116,7 +4123,11 @@ export async function buildServer(options: ServerOptions) {
   const canSeePost = (post: PostRecord, viewerId: string): boolean =>
     post.audience !== "only_me" || post.authorId === viewerId;
 
-  const feedCommentOf = async (record: PostCommentRecord, viewerId: string, cache: Map<string, FeedAuthorDto>) => {
+  const feedCommentOf = async (
+    record: PostCommentRecord,
+    viewerId: string,
+    cache: Map<string, FeedAuthorDto>,
+  ) => {
     const stats = await store.getCommentStats(record.id, viewerId);
     return {
       id: record.id,
@@ -4174,52 +4185,56 @@ export async function buildServer(options: ServerOptions) {
   app.post<{
     Body: { body?: string; mediaId?: string; mediaIds?: string[]; pageId?: string; audience?: string };
   }>("/v1/posts", { preHandler: requireAuth }, async (request, reply) => {
-      const userId = request.userId as string;
-      const body = typeof request.body?.body === "string" ? request.body.body.trim() : "";
-      const mediaId = typeof request.body?.mediaId === "string" ? request.body.mediaId.trim() : "";
-      const extra = Array.isArray(request.body?.mediaIds) ? request.body.mediaIds : [];
-      const provided = [mediaId, ...extra]
-        .map((id) => (typeof id === "string" ? id.trim() : ""))
-        .filter((id, index, all) => Boolean(id) && all.indexOf(id) === index)
-        .slice(0, 4);
-      if (!body && provided.length === 0) return reply.code(400).send({ error: "post needs text or an image" });
-      if (body.length > MAX_POST_BODY) return reply.code(413).send({ error: "post is too long" });
+    const userId = request.userId as string;
+    const body = typeof request.body?.body === "string" ? request.body.body.trim() : "";
+    const mediaId = typeof request.body?.mediaId === "string" ? request.body.mediaId.trim() : "";
+    const extra = Array.isArray(request.body?.mediaIds) ? request.body.mediaIds : [];
+    const provided = [mediaId, ...extra]
+      .map((id) => (typeof id === "string" ? id.trim() : ""))
+      .filter((id, index, all) => Boolean(id) && all.indexOf(id) === index)
+      .slice(0, 4);
+    if (!body && provided.length === 0) return reply.code(400).send({ error: "post needs text or an image" });
+    if (body.length > MAX_POST_BODY) return reply.code(413).send({ error: "post is too long" });
 
-      // Post as a Page when pageId is given (requires an editor/admin role).
-      const pageId = typeof request.body?.pageId === "string" ? request.body.pageId.trim() : "";
-      let authorId = userId;
-      let page: PageRecord | null = null;
-      if (pageId) {
-        page = await store.getPage(pageId);
-        if (!page) return reply.code(404).send({ error: "page not found" });
-        const role = page.ownerId === userId ? "admin" : (await store.getPageRole(pageId, userId))?.role;
-        if (role !== "admin" && role !== "editor") {
-          return reply.code(403).send({ error: "you can't post as this page" });
-        }
-        authorId = page.id;
+    // Post as a Page when pageId is given (requires an editor/admin role).
+    const pageId = typeof request.body?.pageId === "string" ? request.body.pageId.trim() : "";
+    let authorId = userId;
+    let page: PageRecord | null = null;
+    if (pageId) {
+      page = await store.getPage(pageId);
+      if (!page) return reply.code(404).send({ error: "page not found" });
+      const role = page.ownerId === userId ? "admin" : (await store.getPageRole(pageId, userId))?.role;
+      if (role !== "admin" && role !== "editor") {
+        return reply.code(403).send({ error: "you can't post as this page" });
       }
+      authorId = page.id;
+    }
 
-      const audience =
-        request.body?.audience === "public" || request.body?.audience === "only_me"
-          ? request.body.audience
-          : "friends";
-      const now = new Date().toISOString();
-      const record: PostRecord = {
-        id: randomUUID(),
-        authorId,
-        body,
-        mediaId: provided[0] || undefined,
-        pageId: page?.id,
-        audience,
-        createdAt: now,
-        updatedAt: now,
-      };
-      await store.createPost(record);
-      for (const [index, id] of provided.entries()) await store.addPostMedia(record.id, id, index);
-      emit({ type: "feed.post", postId: record.id, authorId });
-      return reply.code(201).send(await feedPostOf(record, userId, new Map()));
-    },
-  );
+    const audience =
+      request.body?.audience === "public" || request.body?.audience === "only_me"
+        ? request.body.audience
+        : "friends";
+    const now = new Date().toISOString();
+    const record: PostRecord = {
+      id: randomUUID(),
+      authorId,
+      body,
+      mediaId: provided[0] || undefined,
+      pageId: page?.id,
+      audience,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await store.createPost(record);
+    for (const [index, id] of provided.entries()) await store.addPostMedia(record.id, id, index);
+    for (const tag of new Set(
+      [...body.matchAll(/(?:^|\s)#([A-Za-z0-9_]{1,50})/g)].map((m) => m[1].toLowerCase()),
+    )) {
+      await store.addPostTag(record.id, tag);
+    }
+    emit({ type: "feed.post", postId: record.id, authorId });
+    return reply.code(201).send(await feedPostOf(record, userId, new Map()));
+  });
 
   app.delete<{ Params: { id: string } }>(
     "/v1/posts/:id",
@@ -4716,6 +4731,21 @@ export async function buildServer(options: ServerOptions) {
     },
   );
 
+  /* Posts carrying a hashtag (docs/feed-next.md §FR-11). */
+  app.get<{ Params: { tag: string } }>(
+    "/v1/tags/:tag/posts",
+    { preHandler: requireAuth },
+    async (request) => {
+      const userId = request.userId as string;
+      const tag = request.params.tag.replace(/^#/, "").toLowerCase();
+      const posts = (await store.listPostsByTag(tag, 50)).filter((post) => canSeePost(post, userId));
+      const cache = new Map<string, FeedAuthorDto>();
+      const items = [];
+      for (const record of posts) items.push(await feedPostOf(record, userId, cache));
+      return items;
+    },
+  );
+
   /* Serve a feed image by its short-lived signed token. No auth header: the
      token is the capability (see signImage). The token rides in a query param
      because it exceeds Fastify's path-parameter length limit. */
@@ -4984,6 +5014,72 @@ export async function buildServer(options: ServerOptions) {
     if (lower.endsWith(".txt")) return "text/plain; charset=utf-8";
     return "application/octet-stream";
   };
+
+  /* Server-side speech-to-text for a shared voice note. Needs an OpenAI-compatible
+     transcription key (BOTIFYR_TRANSCRIBE_KEY or OPENAI_API_KEY). */
+  app.post<{ Body: { share?: string } }>(
+    "/v1/transcribe",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const payload = verifyShare(request.body?.share ?? "");
+      if (!payload) return reply.code(403).send({ error: "invalid or expired share link" });
+      const safeName = basename(payload.n);
+      if (payload.r !== userId) {
+        const owned = await store.getMedia(userId, `${payload.t}:${safeName}`).catch(() => null);
+        if (!owned) return reply.code(403).send({ error: "invalid or expired share link" });
+      }
+      const key = process.env.BOTIFYR_TRANSCRIBE_KEY ?? process.env.OPENAI_API_KEY;
+      if (!key) return reply.code(501).send({ error: "transcription is not configured" });
+      const base = (process.env.BOTIFYR_TRANSCRIBE_BASE_URL ?? "https://api.openai.com/v1").replace(
+        /\/$/,
+        "",
+      );
+      const model = process.env.BOTIFYR_TRANSCRIBE_MODEL ?? "whisper-1";
+      const filePath = join(downloadsRoot, payload.t, safeName);
+      try {
+        const data = await readFile(filePath);
+        const form = new FormData();
+        form.append("file", new Blob([data], { type: "audio/webm" }), safeName);
+        form.append("model", model);
+        const upstream = await fetch(`${base}/audio/transcriptions`, {
+          method: "POST",
+          headers: { authorization: `Bearer ${key}` },
+          body: form,
+        });
+        if (!upstream.ok) {
+          return reply.code(502).send({ error: `transcription failed (${upstream.status})` });
+        }
+        const json = (await upstream.json()) as { text?: string };
+        return { text: (json.text ?? "").trim() };
+      } catch {
+        return reply.code(404).send({ error: "file not found" });
+      }
+    },
+  );
+
+  /* Per-chat translation: translate an incoming message into the viewer's chosen
+     language using the configured model. */
+  app.post<{ Body: { text?: string; to?: string } }>(
+    "/v1/translate",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const message = (request.body?.text ?? "").trim();
+      const to = (request.body?.to ?? "").trim();
+      if (!message) return reply.code(400).send({ error: "text is required" });
+      if (!to) return reply.code(400).send({ error: "to is required" });
+      try {
+        const text = await oneShot({
+          system: `You are a translation engine. Translate the user's message into ${to}. Reply with only the translation, with no notes or quotes.`,
+          user: message.slice(0, 4000),
+          maxTokens: 1000,
+        });
+        return { text: text.trim() };
+      } catch {
+        return reply.code(502).send({ error: "translation failed" });
+      }
+    },
+  );
 
   app.get<{ Querystring: { share?: string } }>(
     "/v1/shared",

@@ -64,7 +64,17 @@ sort=recent|top` — "all" mixes self + friends + followed Pages, "friends"/"pag
 filter, and `sort=top` ranks by engagement over the last 30 days. The UI has
 **All / Friends / Pages** tabs and a **Top / Most recent** toggle.
 
-**Everything else** in this document (comment reactions, video, mentions, stories,
+**Comment reactions (FR-3) — done.** A `comment_reactions` table,
+`setCommentReaction` / `getCommentStats`, `reactions` + `myReaction` on the comment
+DTO, `PUT`/`DELETE /v1/comments/:id/reaction`, `BotifyrClient.reactComment` /
+`unreactComment`, and a reaction picker + count on each comment in the UI.
+
+**Hashtags (FR-11, partial) — done.** A `post_hashtags` table; `#tags` are
+extracted from a post body on create, returned as `hashtags` on the feed DTO,
+listed via `GET /v1/tags/:tag/posts`, and rendered as clickable chips that open a
+tag view. **Mentions (`@handle`) are still open.**
+
+**Everything else** in this document (video, mentions, stories,
 groups, …) is **not started**.
 
 > **Reconciled with the product as of Oct 2026.** Facebook's reference section

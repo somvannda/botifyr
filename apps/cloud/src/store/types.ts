@@ -398,6 +398,11 @@ export interface Store {
   addPostMedia(postId: string, mediaId: string, position: number): Promise<void>;
   /** Media ids attached to a post, ordered by position. */
   listPostMedia(postId: string): Promise<string[]>;
+  /* Hashtags */
+  addPostTag(postId: string, tag: string): Promise<void>;
+  listPostTags(postId: string): Promise<string[]>;
+  /** Posts carrying a hashtag (lower-case, no `#`), newest first. */
+  listPostsByTag(tag: string, limit: number): Promise<PostRecord[]>;
   /** Newest-first posts by any of `authorIds`, paged by ISO `before` cursor. */
   listFeedPosts(authorIds: string[], limit: number, before?: string): Promise<PostRecord[]>;
   listPostsByAuthor(authorId: string, limit: number): Promise<PostRecord[]>;

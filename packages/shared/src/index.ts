@@ -351,6 +351,8 @@ export interface WorkItem {
   workspaceId: string;
   title: string;
   detail?: string;
+  /** What the work produced — the deliverable (a summary, file name, PR, report). */
+  result?: string;
   phase: WorkPhase;
   status: WorkStatus;
   /** The employee (bot) it is assigned to, if any. */
@@ -659,6 +661,7 @@ export type ServerEvent =
   | { type: "feed.like"; postId: string; fromUserId: string; fromName?: string; toUserId: string }
   | { type: "feed.comment"; postId: string; fromUserId: string; fromName?: string; toUserId: string }
   | { type: "feed.share"; postId: string; fromUserId: string; fromName?: string; toUserId: string }
+  | { type: "feed.mention"; postId: string; fromUserId: string; fromName?: string; toUserId: string }
   | { type: "p2p.signal"; toUserId: string; to: string; from: string; data: unknown }
   | { type: "task.completed"; task: Task }
   | { type: "task.failed"; task: Task };

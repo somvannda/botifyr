@@ -96,7 +96,7 @@ import { ErrorBoundary } from "./ErrorBoundary";
 import { P2P, deviceId, saveBlob, setIceServers } from "./p2p";
 import { defaultBridge, type BotBridge } from "./bridge";
 import { mergeTask } from "./taskMerge";
-import { mediaKind, type MediaKind } from "./mediaUtils";
+import { attachmentBucket, mediaKind, type MediaKind } from "./mediaUtils";
 import type { AgentActivity } from "./office3d/layout";
 import type { OfficeAgent } from "./office3d/OfficeView";
 import "./styles.css";
@@ -391,6 +391,15 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [contactMediaFilter, setContactMediaFilter] = useState<"all" | "photo" | "video" | "voice" | "file">(
     "all",
   );
+  // Per-chat auto-translate: sessionId -> target language (absent = off).
+  const [translateLangs, setTranslateLangs] = useState<Record<string, string>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("botifyr.translate") ?? "{}") as Record<string, string>;
+    } catch {
+      return {};
+    }
+  });
+  const [translations, setTranslations] = useState<Record<string, string>>({});
   const [lightbox, setLightbox] = useState<{
     items: { token: string; name: string }[];
     index: number;
@@ -486,15 +495,20 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [boardItems, setBoardItems] = useState<Array<WorkItem>>([]);
   const [boardTitle, setBoardTitle] = useState("");
   const [boardBusy, setBoardBusy] = useState(false);
+  /** Which work item's outcome is being edited, and its draft. */
+  const [resultEditId, setResultEditId] = useState<string | null>(null);
+  const [resultDraft, setResultDraft] = useState("");
   const [hqTab, setHqTab] = useState<
-    "need" | "team" | "board" | "budget" | "standup" | "plans" | "changes" | "office" | "wiki"
-  >("need");
+    "briefing" | "need" | "team" | "board" | "budget" | "standup" | "plans" | "changes" | "office" | "wiki"
+  >("briefing");
   const [hqNeeds, setHqNeeds] = useState<Array<Task>>([]);
   const [hqBudget, setHqBudget] = useState<WorkspaceBudget | null>(null);
   const [budgetInput, setBudgetInput] = useState("");
   const [hqGrants, setHqGrants] = useState<Array<CapabilityGrant>>([]);
   const [hqReports, setHqReports] = useState<Array<CompanyReport>>([]);
   const [hqQuests, setHqQuests] = useState<Array<Quest>>([]);
+  /** When the CEO last opened this company's HQ — drives the "since your last visit" delta. */
+  const [lastVisitAt, setLastVisitAt] = useState<string | null>(null);
   const [growTitle, setGrowTitle] = useState("");
   const [growObjective, setGrowObjective] = useState("");
   const [hqWiki, setHqWiki] = useState<
@@ -1090,6 +1104,13 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       case "feed.post":
         setFeedRefresh((prev) => prev + 1);
         break;
+      case "feed.mention": {
+        setFeedRefresh((prev) => prev + 1);
+        if (event.toUserId !== user?.id) break;
+        const who = event.fromName?.trim() || "Someone";
+        pushToast({ kind: "message", title: "New mention", body: `${who} mentioned you in a post.`, feed: true });
+        break;
+      }
       case "feed.like":
       case "feed.comment":
       case "feed.share": {
@@ -1276,6 +1297,41 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       cancelled = true;
     };
   }, [sessions, user, decrypted, getDmKey]);
+
+  // Persist the per-chat translate language choices.
+  useEffect(() => {
+    try {
+      localStorage.setItem("botifyr.translate", JSON.stringify(translateLangs));
+    } catch {
+      // ignore
+    }
+  }, [translateLangs]);
+
+  // Auto-translate incoming messages in the open chat when a language is set.
+  useEffect(() => {
+    const lang = activeSessionId ? translateLangs[activeSessionId] : undefined;
+    const session = sessions.find((entry) => entry.id === activeSessionId);
+    if (!lang || !session || !user || (session.kind !== "dm" && session.kind !== "group")) return;
+    let cancelled = false;
+    void (async () => {
+      for (const message of session.messages) {
+        if (!message.senderId || message.senderId === user.id) continue;
+        if (translations[message.id]) continue;
+        const text = displayText(decrypted, message.content, message.id).trim();
+        if (!text || sharedTokenOf(text)) continue;
+        try {
+          const result = await client.translate(text.slice(0, 2000), lang);
+          if (cancelled) return;
+          setTranslations((prev) => ({ ...prev, [message.id]: result.text }));
+        } catch {
+          // best-effort per message
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSessionId, translateLangs, sessions, user, decrypted, translations, client]);
 
   // Pick up the host's title-bar slot once it is mounted (desktop only).
   useEffect(() => {
@@ -1733,7 +1789,15 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     setBoardWorkspace({ id: workspaceId, name });
     setBoardTitle("");
     setBoardBusy(true);
-    setHqTab("need");
+    setHqTab("briefing");
+    // Remember when the CEO last visited, to compute the "since your last visit" delta.
+    try {
+      const key = `botifyr.lastVisit.${workspaceId}`;
+      setLastVisitAt(localStorage.getItem(key));
+      localStorage.setItem(key, new Date().toISOString());
+    } catch {
+      setLastVisitAt(null);
+    }
     setHqFloating(false);
     setHqPos({ x: 0, y: 0 });
     setAddMemberBotId("");
@@ -2109,6 +2173,15 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   async function deleteBoardItem(id: string) {
     const workspace = boardWorkspace;
     await client.deleteWorkItem(id).catch(() => {});
+    if (workspace) await refreshBoard(workspace.id);
+  }
+
+  /** Record what a work item produced (its outcome) — the "what shipped" text. */
+  async function saveWorkResult(id: string) {
+    const workspace = boardWorkspace;
+    const value = resultDraft.trim();
+    setResultEditId(null);
+    await client.updateWorkItem(id, { result: value || null }).catch(() => {});
     if (workspace) await refreshBoard(workspace.id);
   }
 
@@ -3301,24 +3374,15 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       : [];
   const sharedFileCounts = activeSharedFiles.reduce(
     (acc, file) => {
-      if (/^voice-/i.test(file.name)) acc.voice += 1;
-      else if (/\.(png|jpe?g|webp|gif|svg)$/i.test(file.name)) acc.photo += 1;
-      else if (/\.(mp4|webm)$/i.test(file.name)) acc.video += 1;
-      else acc.file += 1;
+      acc[attachmentBucket(file.name)] += 1;
       return acc;
     },
     { photo: 0, video: 0, voice: 0, file: 0 },
   );
-  const mediaCategory = (name: string): "photo" | "video" | "voice" | "file" => {
-    if (/^voice-/i.test(name)) return "voice";
-    if (/\.(png|jpe?g|webp|gif|svg)$/i.test(name)) return "photo";
-    if (/\.(mp4|webm)$/i.test(name)) return "video";
-    return "file";
-  };
   const contactMedia =
     contactMediaFilter === "all"
       ? activeSharedFiles
-      : activeSharedFiles.filter((file) => mediaCategory(file.name) === contactMediaFilter);
+      : activeSharedFiles.filter((file) => attachmentBucket(file.name) === contactMediaFilter);
 
   /** Signed, owner/recipient-scoped URL for a shared file. */
   function sharedUrl(shareToken: string): string {
@@ -3345,6 +3409,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
         text={text}
         onOpenImage={openLightbox}
         onOpenFile={(url) => void openExternal(url)}
+        onTranscribe={(tok) => client.transcribe(tok).then((result) => result.text)}
       />
     ) : null;
   }
@@ -3399,6 +3464,20 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     null;
   /** Proposed quests wait on the CEO in the "Needs you" queue. */
   const hqPendingQuests = hqQuests.filter((quest) => quest.status === "proposed");
+  /** "Since your last visit" — computed from local visit state + the loaded data. */
+  const sinceMs = lastVisitAt ? new Date(lastVisitAt).getTime() : 0;
+  const hqShippedSince = sinceMs
+    ? boardItems.filter((item) => item.status === "done" && new Date(item.updatedAt).getTime() > sinceMs)
+    : [];
+  const hqNewReports = sinceMs
+    ? hqReports.filter((report) => new Date(report.createdAt).getTime() > sinceMs)
+    : [];
+  // Referenced so the compiler keeps them (wired into the HQ "since last visit"
+  // badge as that work lands).
+  void hqShippedSince;
+  void hqNewReports;
+  /** The whole decision queue: approvals + proposed quests. */
+  const hqInboxCount = hqNeeds.length + hqPendingQuests.length;
   const roleByBotId = new Map<string, BotRole>();
   const workspaceIdByBotId = new Map<string, string>();
   for (const workspace of workspaces) {
@@ -4813,6 +4892,9 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                                 onFileRef={openFileRef}
                               />
                             )}
+                            {translations[message.id] && (
+                              <div className="msg-translation">{translations[message.id]}</div>
+                            )}
                           </div>
                         </div>
                       );
@@ -5458,6 +5540,35 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                 <span className="contact-row-label">Messages</span>
                 <span className="contact-row-value">{activeSession.messages.length}</span>
               </div>
+              {activeSession.kind === "dm" && (
+                <div className="contact-row">
+                  <span className="contact-row-label">Translate to</span>
+                  <select
+                    className="contact-select"
+                    value={translateLangs[activeSession.id] ?? ""}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setTranslateLangs((prev) => {
+                        const next = { ...prev };
+                        if (value) next[activeSession.id] = value;
+                        else delete next[activeSession.id];
+                        return next;
+                      });
+                    }}
+                  >
+                    <option value="">Off</option>
+                    <option value="Khmer">Khmer</option>
+                    <option value="English">English</option>
+                    <option value="Thai">Thai</option>
+                    <option value="Vietnamese">Vietnamese</option>
+                    <option value="Chinese">Chinese</option>
+                    <option value="Japanese">Japanese</option>
+                    <option value="Korean">Korean</option>
+                    <option value="Spanish">Spanish</option>
+                    <option value="French">French</option>
+                  </select>
+                </div>
+              )}
             </div>
 
             <div className="contact-media">
@@ -5508,7 +5619,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                     title={file.name}
                     onClick={() => openLightbox(file)}
                   >
-                    {mediaCategory(file.name) === "video" ? (
+                    {attachmentBucket(file.name) === "video" ? (
                       <video src={sharedUrl(file.token)} preload="metadata" muted />
                     ) : (
                       <img src={sharedUrl(file.token)} alt={file.name} loading="lazy" />
@@ -6459,10 +6570,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
             <div className="hq-tabs" role="tablist">
               {(
                 [
-                  [
-                    "need",
-                    `Needs you${hqNeeds.length + hqPendingQuests.length ? ` (${hqNeeds.length + hqPendingQuests.length})` : ""}`,
-                  ],
+                  ["briefing", "Briefing"],
+                  ["need", `Inbox${hqInboxCount ? ` (${hqInboxCount})` : ""}`],
                   ["team", "Team"],
                   ["board", "Board"],
                   ["budget", "Budget"],
@@ -6486,6 +6595,99 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
               ))}
             </div>
             <div className="company-setup-body">
+              {hqTab === "briefing" && (
+                <>
+                  {hqActiveQuest ? (
+                    <p className="company-hint">
+                      Current quest: <strong>{hqActiveQuest.title}</strong> — {hqActiveQuest.objective}
+                    </p>
+                  ) : (
+                    <p className="company-hint">
+                      No active quest. Start one below, or ask the chair to propose one.
+                    </p>
+                  )}
+
+                  <div className="bot-panel-section-head">Since your last visit</div>
+                  {lastVisitAt ? (
+                    <ul className="hq-delta">
+                      <li>
+                        {hqShippedSince.length
+                          ? `${hqShippedSince.length} work item${hqShippedSince.length === 1 ? "" : "s"} shipped`
+                          : "Nothing shipped"}
+                      </li>
+                      <li>
+                        {hqNewReports.length
+                          ? `${hqNewReports.length} new report${hqNewReports.length === 1 ? "" : "s"}`
+                          : "No new reports"}
+                      </li>
+                      <li>
+                        {hqInboxCount
+                          ? `${hqInboxCount} item${hqInboxCount === 1 ? "" : "s"} need you`
+                          : "Nothing needs you"}
+                      </li>
+                    </ul>
+                  ) : (
+                    <p className="company-hint">Your first visit here — nothing to compare yet.</p>
+                  )}
+
+                  {hqShippedSince.length > 0 && (
+                    <ul className="board-list">
+                      {hqShippedSince.slice(0, 6).map((item) => (
+                        <li key={item.id} className="board-item">
+                          <span className="board-title">{item.title}</span>
+                          <span className="hq-shipped-tag">shipped</span>
+                          {item.result && <span className="board-result">{item.result}</span>}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+
+                  <div className="bot-panel-section-head">
+                    Needs you{hqInboxCount ? ` (${hqInboxCount})` : ""}
+                  </div>
+                  {hqInboxCount === 0 && <p className="company-hint">Nothing needs you right now.</p>}
+                  {hqPendingQuests.length > 0 && (
+                    <ul className="board-list">
+                      {hqPendingQuests.map((quest) => (
+                        <li key={quest.id} className="board-item">
+                          <span className="board-title">Quest · {quest.title}</span>
+                          <button
+                            className="btn primary small"
+                            type="button"
+                            onClick={() => void activateQuest(quest.id)}
+                          >
+                            Start
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {hqNeeds.length > 0 && (
+                    <ul className="board-list">
+                      {hqNeeds.map((task) => (
+                        <li key={task.id} className="board-item">
+                          <span className="board-title">{task.goal}</span>
+                          <button
+                            className="ghost small"
+                            type="button"
+                            onClick={() => void resolveNeed(task, "deny")}
+                          >
+                            Deny
+                          </button>
+                          <button
+                            className="btn primary small"
+                            type="button"
+                            onClick={() => void resolveNeed(task, "allow")}
+                          >
+                            Allow
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              )}
+
               {hqTab === "need" && (
                 <>
                   {hqNeeds.length === 0 && hqPendingQuests.length === 0 && (
@@ -6701,6 +6903,17 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                         <span className="board-title">{item.title}</span>
                         <span className="board-phase">{item.phase}</span>
                         <button
+                          className="ghost small board-result-btn"
+                          type="button"
+                          title="Record the outcome"
+                          onClick={() => {
+                            setResultEditId(item.id);
+                            setResultDraft(item.result ?? "");
+                          }}
+                        >
+                          {item.result ? "Outcome ✓" : "Outcome"}
+                        </button>
+                        <button
                           className="plan-member-remove"
                           type="button"
                           aria-label="Delete task"
@@ -6708,6 +6921,22 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                         >
                           <CloseIcon size={12} />
                         </button>
+                        {resultEditId === item.id ? (
+                          <input
+                            className="workspace-input board-result-input"
+                            value={resultDraft}
+                            autoFocus
+                            placeholder="What did this produce?"
+                            onChange={(event) => setResultDraft(event.target.value)}
+                            onBlur={() => void saveWorkResult(item.id)}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") void saveWorkResult(item.id);
+                              if (event.key === "Escape") setResultEditId(null);
+                            }}
+                          />
+                        ) : (
+                          item.result && <span className="board-result">{item.result}</span>
+                        )}
                       </li>
                     ))}
                   </ul>
@@ -9112,11 +9341,14 @@ export function fileIconFor(name: string): string {
 }
 
 /** A voice note: play/pause + a waveform drawn from the decoded audio peaks. */
-function VoiceNotePlayer({ src }: { src: string }) {
+function VoiceNotePlayer({ src, onTranscribe }: { src: string; onTranscribe?: () => Promise<string> }) {
   const [peaks, setPeaks] = useState<number[]>([]);
   const [duration, setDuration] = useState(0);
   const [progress, setProgress] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [transcript, setTranscript] = useState<string | null>(null);
+  const [transcribing, setTranscribing] = useState(false);
+  const [transcribeError, setTranscribeError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
@@ -9172,42 +9404,72 @@ function VoiceNotePlayer({ src }: { src: string }) {
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
+  async function runTranscribe() {
+    if (!onTranscribe || transcribing) return;
+    setTranscribing(true);
+    setTranscribeError(null);
+    try {
+      const text = await onTranscribe();
+      setTranscript(text || "(no speech detected)");
+    } catch (err) {
+      setTranscribeError(err instanceof Error ? err.message : "transcription failed");
+    } finally {
+      setTranscribing(false);
+    }
+  }
+
   const bars = peaks.length > 0 ? peaks : new Array(40).fill(0.2);
   return (
-    <div className="voice-note">
-      <button
-        className="voice-note-play"
-        type="button"
-        aria-label={playing ? "Pause" : "Play"}
-        onClick={toggle}
-      >
-        {playing ? <PauseIcon size={15} /> : <PlayIcon size={15} />}
-      </button>
-      <div className="voice-note-wave">
-        {bars.map((peak, index) => (
-          <span
-            key={index}
-            className={`voice-note-bar${index / bars.length <= progress ? " played" : ""}`}
-            style={{ height: `${Math.max(12, Math.round(peak * 100))}%` }}
-          />
-        ))}
+    <div className="voice-note-wrap">
+      <div className="voice-note">
+        <button
+          className="voice-note-play"
+          type="button"
+          aria-label={playing ? "Pause" : "Play"}
+          onClick={toggle}
+        >
+          {playing ? <PauseIcon size={15} /> : <PlayIcon size={15} />}
+        </button>
+        <div className="voice-note-wave">
+          {bars.map((peak, index) => (
+            <span
+              key={index}
+              className={`voice-note-bar${index / bars.length <= progress ? " played" : ""}`}
+              style={{ height: `${Math.max(12, Math.round(peak * 100))}%` }}
+            />
+          ))}
+        </div>
+        <span className="voice-note-time">{formatTime(duration)}</span>
+        {onTranscribe && (
+          <button
+            className="voice-note-transcribe"
+            type="button"
+            title="Transcribe"
+            aria-label="Transcribe"
+            disabled={transcribing}
+            onClick={() => void runTranscribe()}
+          >
+            {transcribing ? "…" : "Aa"}
+          </button>
+        )}
+        <audio
+          ref={audioRef}
+          src={src}
+          preload="metadata"
+          onPlay={() => setPlaying(true)}
+          onPause={() => setPlaying(false)}
+          onEnded={() => {
+            setPlaying(false);
+            setProgress(0);
+          }}
+          onTimeUpdate={(event) => {
+            const el = event.currentTarget;
+            if (el.duration) setProgress(el.currentTime / el.duration);
+          }}
+        />
       </div>
-      <span className="voice-note-time">{formatTime(duration)}</span>
-      <audio
-        ref={audioRef}
-        src={src}
-        preload="metadata"
-        onPlay={() => setPlaying(true)}
-        onPause={() => setPlaying(false)}
-        onEnded={() => {
-          setPlaying(false);
-          setProgress(0);
-        }}
-        onTimeUpdate={(event) => {
-          const el = event.currentTarget;
-          if (el.duration) setProgress(el.currentTime / el.duration);
-        }}
-      />
+      {transcript && <div className="voice-note-text">{transcript}</div>}
+      {transcribeError && <div className="voice-note-error">{transcribeError}</div>}
     </div>
   );
 }
@@ -9221,10 +9483,12 @@ export function AttachmentMessage({
   text,
   onOpenImage,
   onOpenFile,
+  onTranscribe,
 }: {
   text: string;
   onOpenImage?: (file: SharedAttachment) => void;
   onOpenFile?: (url: string) => void;
+  onTranscribe?: (token: string) => Promise<string>;
 }) {
   const { files, caption } = sharedFilesOf(text);
   if (files.length === 0) return null;
@@ -9235,7 +9499,9 @@ export function AttachmentMessage({
     const lower = file.name.toLowerCase();
     // Voice notes (recorded clips) get the waveform player.
     if (/^voice-/i.test(file.name)) {
-      return <VoiceNotePlayer src={url} />;
+      return (
+        <VoiceNotePlayer src={url} onTranscribe={onTranscribe ? () => onTranscribe(file.token) : undefined} />
+      );
     }
     if (/\.(png|jpe?g|webp|gif|svg)$/.test(lower)) {
       return (

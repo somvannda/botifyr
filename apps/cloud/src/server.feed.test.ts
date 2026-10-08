@@ -492,6 +492,72 @@ describe("feed", () => {
     await app.close();
   });
 
+  it("extracts hashtags and serves a tag feed", async () => {
+    const { app, store, signUp, auth, createPost } = await setup();
+    const alice = await signUp("alice-tag@example.com");
+    const bob = await signUp("bob-tag@example.com");
+    await store.createFriendship(alice.user.id, bob.user.id);
+
+    const post = (await createPost(alice.token, "hello #LaunchDay and #launchday again")) as unknown as {
+      id: string;
+      hashtags?: string[];
+    };
+    expect(post.hashtags).toEqual(["launchday"]);
+
+    const tag = await app.inject({ method: "GET", url: "/v1/tags/launchday/posts", headers: auth(bob.token) });
+    expect(tag.statusCode).toBe(200);
+    expect((tag.json() as Array<{ id: string }>).map((entry) => entry.id)).toContain(post.id);
+
+    await app.close();
+  });
+
+  it("supports reactions on comments", async () => {
+    const { app, store, signUp, auth, createPost } = await setup();
+    const alice = await signUp("alice-creact@example.com");
+    const bob = await signUp("bob-creact@example.com");
+    await store.createFriendship(alice.user.id, bob.user.id);
+    const post = await createPost(alice.token, "comment react");
+    const comment = (
+      await app.inject({
+        method: "POST",
+        url: `/v1/posts/${post.id}/comments`,
+        headers: auth(alice.token),
+        payload: { body: "hello" },
+      })
+    ).json() as { id: string };
+
+    const put = await app.inject({
+      method: "PUT",
+      url: `/v1/comments/${comment.id}/reaction?reaction=love`,
+      headers: auth(bob.token),
+      payload: {},
+    });
+    expect(put.statusCode).toBe(200);
+
+    const listed = await app.inject({ method: "GET", url: `/v1/posts/${post.id}/comments`, headers: auth(alice.token) });
+    const c = (
+      listed.json() as Array<{ id: string; reactions?: Record<string, number>; myReaction?: string | null }>
+    ).find((entry) => entry.id === comment.id);
+    expect(c?.reactions?.love).toBe(1);
+    expect(c?.myReaction ?? null).toBeNull();
+
+    const asBob = await app.inject({ method: "GET", url: `/v1/posts/${post.id}/comments`, headers: auth(bob.token) });
+    const cb = (asBob.json() as Array<{ id: string; myReaction?: string | null }>).find(
+      (entry) => entry.id === comment.id,
+    );
+    expect(cb?.myReaction).toBe("love");
+
+    const bad = await app.inject({
+      method: "PUT",
+      url: `/v1/comments/${comment.id}/reaction?reaction=nope`,
+      headers: auth(bob.token),
+      payload: {},
+    });
+    expect(bad.statusCode).toBe(400);
+
+    await app.close();
+  });
+
   it("filters the feed by tab (all/friends/pages)", async () => {
     const { app, store, signUp, auth, createPost } = await setup();
     const alice = await signUp("alice-tabs@example.com");

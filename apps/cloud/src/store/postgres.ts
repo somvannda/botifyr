@@ -1253,6 +1253,28 @@ export class PostgresStore implements Store {
     return rows.map((row) => row.media_id as string);
   }
 
+  async addPostTag(postId: string, tag: string): Promise<void> {
+    await this.pool.query("INSERT INTO post_hashtags (post_id, tag) VALUES ($1,$2) ON CONFLICT DO NOTHING", [
+      postId,
+      tag.replace(/^#/, "").toLowerCase(),
+    ]);
+  }
+
+  async listPostTags(postId: string): Promise<string[]> {
+    const { rows } = await this.pool.query("SELECT tag FROM post_hashtags WHERE post_id = $1 ORDER BY tag", [postId]);
+    return rows.map((row) => row.tag as string);
+  }
+
+  async listPostsByTag(tag: string, limit: number): Promise<PostRecord[]> {
+    const capped = Math.max(1, Math.min(100, limit));
+    const { rows } = await this.pool.query(
+      "SELECT p.* FROM posts p JOIN post_hashtags t ON t.post_id = p.id " +
+        "WHERE t.tag = $1 ORDER BY p.created_at DESC LIMIT $2",
+      [tag.replace(/^#/, "").toLowerCase(), capped],
+    );
+    return rows.map(toPost);
+  }
+
   async deletePost(authorId: string, id: string): Promise<boolean> {
     const result = await this.pool.query("DELETE FROM posts WHERE id = $1 AND author_id = $2", [id, authorId]);
     return (result.rowCount ?? 0) > 0;

@@ -94,7 +94,37 @@ function AuthorLine({ author, when }: { author: FeedPost["author"]; when: string
   );
 }
 
-function CommentRow({ comment, onReply }: { comment: FeedComment; onReply?: () => void }) {
+function CommentRow({
+  comment,
+  client,
+  onChange,
+  onReply,
+}: {
+  comment: FeedComment;
+  client: BotifyrClient;
+  onChange?: (next: FeedComment) => void;
+  onReply?: () => void;
+}) {
+  const [pickOpen, setPickOpen] = useState(false);
+  const total = Object.values(comment.reactions ?? {}).reduce((sum, count) => sum + count, 0);
+
+  async function react(reaction: string) {
+    if (!onChange) return;
+    const next = comment.myReaction === reaction ? null : reaction;
+    const reactions = { ...(comment.reactions ?? {}) };
+    const prev = comment.myReaction ?? null;
+    if (prev) reactions[prev] = Math.max(0, (reactions[prev] ?? 1) - 1);
+    if (next) reactions[next] = (reactions[next] ?? 0) + 1;
+    onChange({ ...comment, reactions, myReaction: next });
+    setPickOpen(false);
+    try {
+      if (next) await client.reactComment(comment.id, next);
+      else await client.unreactComment(comment.id);
+    } catch {
+      onChange(comment);
+    }
+  }
+
   return (
     <div className="feed-comment">
       <Avatar emoji={authorEmoji(comment.author)} name={authorName(comment.author)} size={30} />
@@ -104,10 +134,36 @@ function CommentRow({ comment, onReply }: { comment: FeedComment; onReply?: () =
           <span className="feed-comment-when">{relativeTime(comment.createdAt)}</span>
         </span>
         <span className="feed-comment-body">{comment.body}</span>
-        {onReply && (
-          <button type="button" className="feed-comment-reply-btn" onClick={onReply}>
-            Reply
+        <div className="feed-comment-foot">
+          <button
+            type="button"
+            className="feed-comment-reply-btn"
+            onClick={() => setPickOpen((value) => !value)}
+            aria-label="React"
+          >
+            {comment.myReaction ? `${reactionEmoji(comment.myReaction)} ${total}` : "React"}
           </button>
+          {onReply && (
+            <button type="button" className="feed-comment-reply-btn" onClick={onReply}>
+              Reply
+            </button>
+          )}
+        </div>
+        {pickOpen && (
+          <div className="reaction-picker">
+            {REACTIONS.map((reaction) => (
+              <button
+                key={reaction.key}
+                type="button"
+                className={`reaction-btn${comment.myReaction === reaction.key ? " active" : ""}`}
+                title={reaction.label}
+                aria-label={reaction.label}
+                onClick={() => void react(reaction.key)}
+              >
+                {reaction.emoji}
+              </button>
+            ))}
+          </div>
         )}
       </div>
     </div>
@@ -124,6 +180,7 @@ interface PostCardProps {
   onBlock: (authorId: string) => void;
   onOpenPage?: (handle: string) => void;
   onRepost: (post: FeedPost) => void;
+  onOpenTag?: (tag: string) => void;
 }
 
 function PostCard({
@@ -136,6 +193,7 @@ function PostCard({
   onBlock,
   onOpenPage,
   onRepost,
+  onOpenTag,
 }: PostCardProps) {
   const [comments, setComments] = useState<FeedComment[] | null>(null);
   const [commentsOpen, setCommentsOpen] = useState(false);
@@ -144,6 +202,9 @@ function PostCard({
   const [busy, setBusy] = useState(false);
   const [pickOpen, setPickOpen] = useState(false);
   const [replyTo, setReplyTo] = useState<string | null>(null);
+
+  const updateComment = (next: FeedComment) =>
+    setComments((prev) => (prev ?? []).map((comment) => (comment.id === next.id ? next : comment)));
 
   async function react(reaction: string) {
     const next = post.myReaction === reaction ? null : reaction;
@@ -244,6 +305,16 @@ function PostCard({
       {post.audience === "only_me" && <div className="feed-audience-badge">🔒 Only me</div>}
       {post.repostOf && <div className="feed-repost-label">🔁 Shared a post</div>}
       {post.body && <p className="feed-body">{post.body}</p>}
+
+      {post.hashtags && post.hashtags.length > 0 && (
+        <div className="feed-tags">
+          {post.hashtags.map((tag) => (
+            <button key={tag} type="button" className="feed-tag" onClick={() => onOpenTag?.(tag)}>
+              #{tag}
+            </button>
+          ))}
+        </div>
+      )}
 
       {post.original ? (
         <div className="feed-repost">
@@ -350,12 +421,17 @@ function PostCard({
             .filter((comment) => !comment.parentId)
             .map((comment) => (
               <div key={comment.id} className="feed-comment-thread">
-                <CommentRow comment={comment} onReply={() => setReplyTo(comment.id)} />
+                <CommentRow
+                  comment={comment}
+                  client={client}
+                  onChange={updateComment}
+                  onReply={() => setReplyTo(comment.id)}
+                />
                 {(comments ?? [])
                   .filter((reply) => reply.parentId === comment.id)
                   .map((reply) => (
                     <div key={reply.id} className="feed-comment-reply">
-                      <CommentRow comment={reply} />
+                      <CommentRow comment={reply} client={client} onChange={updateComment} />
                     </div>
                   ))}
               </div>
@@ -701,6 +777,78 @@ function PageView({
   );
 }
 
+function TagView({
+  client,
+  cloudUrl,
+  viewerId,
+  tag,
+  onBack,
+  onOpenTag,
+}: {
+  client: BotifyrClient;
+  cloudUrl: string;
+  viewerId?: string;
+  tag: string;
+  onBack: () => void;
+  onOpenTag?: (tag: string) => void;
+}) {
+  const [posts, setPosts] = useState<FeedPost[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    client
+      .listTagPosts(tag)
+      .then((list) => {
+        if (active) setPosts(list);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [client, tag]);
+
+  const updatePost = (next: FeedPost) => setPosts((prev) => prev.map((p) => (p.id === next.id ? next : p)));
+  const removePost = (id: string) => setPosts((prev) => prev.filter((p) => p.id !== id));
+
+  return (
+    <div className="feed">
+      <div className="feed-topbar">
+        <button type="button" className="ghost small" onClick={onBack}>
+          ← Back
+        </button>
+        <span className="feed-topbar-title">#{tag}</span>
+      </div>
+      <div className="feed-scroll">
+        {loading ? (
+          <div className="feed-state">Loading…</div>
+        ) : posts.length === 0 ? (
+          <div className="feed-state">No posts with #{tag}.</div>
+        ) : (
+          posts.map((post) => (
+            <PostCard
+              key={post.id}
+              post={post}
+              client={client}
+              cloudUrl={cloudUrl}
+              canDelete={!post.pageId && post.author.id === viewerId}
+              onChange={updatePost}
+              onDelete={removePost}
+              onBlock={(authorId) => setPosts((prev) => prev.filter((p) => p.author.id !== authorId))}
+              onRepost={(next) => setPosts((prev) => [next, ...prev])}
+              onOpenTag={onOpenTag}
+            />
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function FeedView({
   client,
   viewerId,
@@ -729,6 +877,7 @@ export function FeedView({
   const [audience, setAudience] = useState<"public" | "friends" | "only_me">("friends");
   const [tab, setTab] = useState<"all" | "friends" | "pages">("all");
   const [sort, setSort] = useState<"recent" | "top">("recent");
+  const [openTag, setOpenTag] = useState<string | null>(null);
   const [pages, setPages] = useState<Page[]>([]);
   const [postAs, setPostAs] = useState("");
   const [creatingPage, setCreatingPage] = useState(false);
@@ -841,6 +990,19 @@ export function FeedView({
   /** After blocking, drop that author's posts from the local feed. */
   const removeAuthorPosts = (authorId: string) =>
     setPosts((prev) => prev.filter((p) => p.author.id !== authorId));
+
+  if (openTag) {
+    return (
+      <TagView
+        client={client}
+        cloudUrl={cloudUrl}
+        viewerId={viewerId}
+        tag={openTag}
+        onBack={() => setOpenTag(null)}
+        onOpenTag={(next) => setOpenTag(next)}
+      />
+    );
+  }
 
   if (pageHandle) {
     return (
@@ -1011,6 +1173,7 @@ export function FeedView({
               onBlock={removeAuthorPosts}
               onOpenPage={onOpenPage}
               onRepost={prependPost}
+              onOpenTag={setOpenTag}
             />
           ))
         )}

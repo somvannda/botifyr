@@ -104,9 +104,16 @@ Done:
 - ✅ **Shared media grid** — the contact-panel media rows (All / Photos / Videos /
   Voice messages / Files) filter a thumbnail grid (`.contact-media-grid`); photos
   and videos open in the media viewer.
+- ✅ **Transcription** — an "Aa" action on voice notes calls `/v1/transcribe`
+  (OpenAI-compatible STT; needs `BOTIFYR_TRANSCRIBE_KEY`/`OPENAI_API_KEY`) and
+  shows the text under the clip.
+- ✅ **Per-chat translation** — a "Translate to <language>" control in the contact
+  panel auto-translates incoming messages via `/v1/translate`; the translation
+  shows under the original (`.msg-translation`), persisted per chat in
+  `localStorage["botifyr.translate"]`.
 
 Next:
-1. **Transcription** — a "transcribe" action that shows text under the clip.
+1. **Cached transcripts** — persist transcription results on the message.
 
 ## 4. Server contract
 

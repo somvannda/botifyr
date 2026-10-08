@@ -13,3 +13,19 @@ export function mediaKind(name: string): MediaKind {
   if (["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg"].includes(ext)) return "image";
   return "file";
 }
+
+export type AttachmentBucket = "photo" | "video" | "voice" | "file";
+
+/**
+ * Telegram-style bucket for a shared attachment. Recorded voice notes
+ * (`voice-*.webm`, from the composer) are separated from real videos even
+ * though both use a `.webm` extension.
+ */
+export function attachmentBucket(name: string): AttachmentBucket {
+  if (/^voice-/i.test(name)) return "voice";
+  const kind = mediaKind(name);
+  if (kind === "image") return "photo";
+  if (kind === "video") return "video";
+  if (kind === "audio") return "voice";
+  return "file";
+}

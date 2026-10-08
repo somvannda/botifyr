@@ -393,6 +393,14 @@ CREATE TABLE IF NOT EXISTS post_shares (
   PRIMARY KEY (post_id, user_id)
 );
 
+/* Hashtags (docs/feed-next.md §FR-11). */
+CREATE TABLE IF NOT EXISTS post_hashtags (
+  post_id TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+  tag     TEXT NOT NULL,
+  PRIMARY KEY (post_id, tag)
+);
+CREATE INDEX IF NOT EXISTS post_hashtags_tag_idx ON post_hashtags (tag);
+
 /* Comment reactions (docs/feed-next.md §FR-3). */
 CREATE TABLE IF NOT EXISTS comment_reactions (
   comment_id TEXT NOT NULL REFERENCES post_comments(id) ON DELETE CASCADE,

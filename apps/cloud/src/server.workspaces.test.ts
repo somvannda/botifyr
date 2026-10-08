@@ -234,6 +234,49 @@ describe("workspaces API", () => {
     await app.close();
   });
 
+  it("records and clears a work item outcome", async () => {
+    const { app, signup } = await boot();
+    const auth = await signup("ws-result@example.com");
+    const ws = (
+      await app.inject({
+        method: "POST",
+        url: "/v1/workspaces",
+        headers: auth,
+        payload: {
+          name: "Result Co",
+          members: [{ name: "Ada", title: "CEO", department: "exec", isChair: true }],
+        },
+      })
+    ).json() as { id: string };
+
+    const created = await app.inject({
+      method: "POST",
+      url: `/v1/workspaces/${ws.id}/work`,
+      headers: auth,
+      payload: { title: "Write the spec", result: "spec.md shipped" },
+    });
+    expect(created.statusCode).toBe(201);
+    const item = created.json() as { id: string; result?: string };
+    expect(item.result).toBe("spec.md shipped");
+
+    const patched = await app.inject({
+      method: "PATCH",
+      url: `/v1/work/${item.id}`,
+      headers: auth,
+      payload: { result: "spec.md v2" },
+    });
+    expect((patched.json() as { result?: string }).result).toBe("spec.md v2");
+
+    const cleared = await app.inject({
+      method: "PATCH",
+      url: `/v1/work/${item.id}`,
+      headers: auth,
+      payload: { result: null },
+    });
+    expect((cleared.json() as { result?: string }).result).toBeUndefined();
+    await app.close();
+  });
+
   it("attaches existing bots and rejects a blank name", async () => {
     const { app, signup } = await boot();
     const auth = await signup("ws2@example.com");

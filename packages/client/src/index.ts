@@ -125,6 +125,8 @@ export interface FeedPost {
   repostOf?: string;
   /** Who can see the post: public | friends | only_me. */
   audience?: string;
+  /** Hashtags in the post (lower-case, no `#`). */
+  hashtags?: string[];
   /** The reposted original, embedded (one level deep). */
   original?: FeedPost;
   /** Short-lived signed path to the attached image, if any. */
@@ -625,6 +627,24 @@ export class BotifyrClient {
     });
   }
 
+  /** Transcribe a shared voice note (server-side speech-to-text). */
+  transcribe(share: string): Promise<{ text: string }> {
+    return this.request("/v1/transcribe", {
+      method: "POST",
+      json: true,
+      body: JSON.stringify({ share }),
+    });
+  }
+
+  /** Translate text into a target language (used for per-chat auto-translate). */
+  translate(text: string, to: string): Promise<{ text: string }> {
+    return this.request("/v1/translate", {
+      method: "POST",
+      json: true,
+      body: JSON.stringify({ text, to }),
+    });
+  }
+
   /* P2P: online devices of this user + a signaling relay for WebRTC. */
   listDevices(): Promise<Array<{ id: string; name: string; online: boolean }>> {
     return this.request("/v1/devices");
@@ -727,6 +747,7 @@ export class BotifyrClient {
     input: {
       title: string;
       detail?: string;
+      result?: string;
       phase?: WorkItem["phase"];
       status?: WorkItem["status"];
       assigneeBotId?: string;
@@ -745,6 +766,7 @@ export class BotifyrClient {
     input: {
       title?: string;
       detail?: string;
+      result?: string | null;
       phase?: WorkItem["phase"];
       status?: WorkItem["status"];
       assigneeBotId?: string | null;
@@ -1165,6 +1187,11 @@ export class BotifyrClient {
 
   listUserPosts(handle: string): Promise<FeedPost[]> {
     return this.request(`/v1/users/${encodeURIComponent(handle)}/posts`);
+  }
+
+  /** Posts carrying a hashtag (no leading `#` needed). */
+  listTagPosts(tag: string): Promise<FeedPost[]> {
+    return this.request(`/v1/tags/${encodeURIComponent(tag.replace(/^#/, ""))}/posts`);
   }
 
   /** Engagement-ranked posts from you and your friends (last 7 days). */

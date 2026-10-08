@@ -78,6 +78,8 @@ export class MemoryStore implements Store {
   private postShares = new Set<string>();
   /** postId → ordered media ids (multi-image). */
   private postMedia = new Map<string, string[]>();
+  /** postId → hashtags (lower-case, no `#`). */
+  private postTags = new Map<string, Set<string>>();
   /** Keyed by `${commentId}:${userId}` → the viewer's reaction. */
   private commentReactions = new Map<string, ReactionType>();
   /** Keyed by `${blockerId}:${blockedId}`. */
@@ -858,6 +860,7 @@ export class MemoryStore implements Store {
     for (const key of [...this.postReactions.keys()]) if (key.startsWith(`${id}:`)) this.postReactions.delete(key);
     for (const key of [...this.postShares]) if (key.startsWith(`${id}:`)) this.postShares.delete(key);
     this.postMedia.delete(id);
+    this.postTags.delete(id);
     return true;
   }
 
@@ -869,6 +872,27 @@ export class MemoryStore implements Store {
 
   async listPostMedia(postId: string): Promise<string[]> {
     return [...(this.postMedia.get(postId) ?? [])];
+  }
+
+  async addPostTag(postId: string, tag: string): Promise<void> {
+    const set = this.postTags.get(postId) ?? new Set<string>();
+    set.add(tag.replace(/^#/, "").toLowerCase());
+    this.postTags.set(postId, set);
+  }
+
+  async listPostTags(postId: string): Promise<string[]> {
+    return [...(this.postTags.get(postId) ?? [])];
+  }
+
+  async listPostsByTag(tag: string, limit: number): Promise<PostRecord[]> {
+    const wanted = tag.replace(/^#/, "").toLowerCase();
+    const ids = new Set<string>();
+    for (const [postId, tags] of this.postTags) if (tags.has(wanted)) ids.add(postId);
+    return [...this.posts.values()]
+      .filter((post) => ids.has(post.id))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, Math.max(1, Math.min(100, limit)))
+      .map((post) => ({ ...post }));
   }
 
   async listFeedPosts(authorIds: string[], limit: number, before?: string): Promise<PostRecord[]> {
