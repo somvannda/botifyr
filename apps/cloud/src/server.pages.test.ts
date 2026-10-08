@@ -175,4 +175,28 @@ describe("pages", () => {
 
     await app.close();
   });
+
+  it("exposes page insights to managers only", async () => {
+    const { app, signUp, auth, createPage } = await setup();
+    const alice = await signUp("alice-insights@example.com");
+    const bob = await signUp("bob-insights@example.com");
+    const page = await createPage(alice.token, "Insights Inc", "insightsinc");
+    await app.inject({
+      method: "POST",
+      url: "/v1/posts",
+      headers: auth(alice.token),
+      payload: { body: "hello from the page", pageId: page.id },
+    });
+
+    const denied = await app.inject({ method: "GET", url: `/v1/pages/${page.id}/insights`, headers: auth(bob.token) });
+    expect(denied.statusCode).toBe(403);
+
+    const ok = await app.inject({ method: "GET", url: `/v1/pages/${page.id}/insights`, headers: auth(alice.token) });
+    expect(ok.statusCode).toBe(200);
+    const data = ok.json() as { followers: number; posts: number; topPosts: unknown[] };
+    expect(data.posts).toBeGreaterThanOrEqual(1);
+    expect(Array.isArray(data.topPosts)).toBe(true);
+
+    await app.close();
+  });
 });

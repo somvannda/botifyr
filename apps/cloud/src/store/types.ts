@@ -150,6 +150,8 @@ export interface PageRecord {
   coverUrl?: string;
   cta?: string;
   verified: boolean;
+  /** Post pinned to the top of the Page timeline. */
+  pinnedPostId?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -446,6 +448,8 @@ export interface Store {
   listPages(ownerId: string): Promise<PageRecord[]>;
   updatePage(record: PageRecord): Promise<void>;
   deletePage(ownerId: string, id: string): Promise<boolean>;
+  /** Pin (or unpin with `null`) a post to the Page timeline. */
+  setPagePinnedPost(pageId: string, postId: string | null): Promise<void>;
   setPageRole(record: PageRoleRecord): Promise<void>;
   getPageRole(pageId: string, userId: string): Promise<PageRoleRecord | null>;
   listPageRoles(pageId: string): Promise<PageRoleRecord[]>;

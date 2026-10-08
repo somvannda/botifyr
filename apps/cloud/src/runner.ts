@@ -33,7 +33,7 @@ import { createFireTools } from "./fire-tools.js";
 import { createPlanTools } from "./plan-tools.js";
 import { createQuestTools } from "./quest-tools.js";
 import { createCodeTools } from "./code-tools.js";
-import { removeDeniedTools } from "./tool-capabilities.js";
+import { capabilityForTool, removeDeniedTools } from "./tool-capabilities.js";
 import {
   clearComputerSandbox,
   clearTaskCancel,
@@ -443,6 +443,14 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
   // the approval gate (§9). Quest caps fail only this task — the company keeps
   // running until the workspace cap is hit.
   let effectiveAutoApprove = deps.autoApprove === true;
+  // Per-capability trust ladder (docs/product-plan.md §3): built below once the
+  // company's grants are loaded; undefined = no ladder (gate as usual).
+  let shouldAutoApprove: ((toolName: string, args: Record<string, unknown>) => boolean) | undefined;
+  // Ladder bookkeeping: the company's grants + subjects, so we can record each
+  // use (success/failure) and persist promotions/demotions (docs/product-plan.md §3).
+  let ladderWorkspaceId: string | undefined;
+  let ladderSubjects = new Set<string>();
+  let ladderGrants: Awaited<ReturnType<Store["listCapabilityGrants"]>> = [];
   if (company?.activeQuestId) {
     if (!task.questId) task.questId = company.activeQuestId;
     const quest = await store.getQuest(company.activeQuestId).catch(() => null);
@@ -557,11 +565,31 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
     // Authorization: revoked capabilities block their tools (docs/company-os.md §8).
     const grants = await store.listCapabilityGrants(company.id).catch(() => []);
     const subjects = new Set([`bot:${authorBot.id}`, ...(role ? [`role:${role.title}`] : [])]);
+    ladderWorkspaceId = company.id;
+    ladderSubjects = subjects;
+    ladderGrants = grants;
     const denied = new Set(
       grants
         .filter((grant) => subjects.has(grant.subject) && !grant.granted)
         .map((grant) => grant.capability),
     );
+    // Trust ladder (docs/product-plan.md §3): when the company isn't `manual`, a
+    // capability at `probation` or `trusted` auto-approves its tools. `manual`
+    // forces everything gated, regardless of stored state.
+    if ((company.autonomy ?? "manual") !== "manual") {
+      const trustByCapability = new Map<string, string>();
+      for (const grant of grants) {
+        if (subjects.has(grant.subject) && grant.granted) {
+          trustByCapability.set(grant.capability, grant.state ?? "gated");
+        }
+      }
+      shouldAutoApprove = (toolName) => {
+        const capability = capabilityForTool(toolName);
+        if (!capability) return false;
+        const state = trustByCapability.get(capability) ?? "gated";
+        return state === "trusted" || state === "probation";
+      };
+    }
     const kept = removeDeniedTools(tools, denied);
     if (kept.length !== tools.length) {
       tools.length = 0;
@@ -572,6 +600,25 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
   if (authorBot && !company) {
     tools.push(...createCompanyMakerTools(store, userId, authorBot.id, oneShot, fetchText));
   }
+  // Record a capability use on the trust ladder: failures demote one step
+  // immediately; successes accumulate toward a promotion review
+  // (docs/product-plan.md §3). Best-effort — never breaks the task.
+  const recordCapabilityUse = async (toolName: string, ok: boolean): Promise<void> => {
+    if (!ladderWorkspaceId) return;
+    const capability = capabilityForTool(toolName);
+    if (!capability) return;
+    const grant = ladderGrants.find(
+      (entry) => ladderSubjects.has(entry.subject) && entry.granted && entry.capability === capability,
+    );
+    if (!grant || (grant.state ?? "gated") === "gated") return;
+    const now = new Date().toISOString();
+    grant.successes = (grant.successes ?? 0) + (ok ? 1 : 0);
+    grant.failures = (grant.failures ?? 0) + (ok ? 0 : 1);
+    grant.lastUsedAt = now;
+    grant.updatedAt = now;
+    if (!ok) grant.state = grant.state === "trusted" ? "probation" : "gated";
+    await store.setCapabilityGrant(grant).catch(() => {});
+  };
   const instructions =
     [companyBrief, deps.instructions, skillIndex, localInstruction].filter(Boolean).join("\n\n") || undefined;
   if (hasComputer) {
@@ -628,6 +675,7 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
         return setting === "1" ? "On it — I'll do this now with my tools." : setting;
       })(),
       autoApprove: effectiveAutoApprove,
+      shouldAutoApprove,
       initialToolCall: deps.initialToolCall,
       initialToolOnly: deps.initialToolOnly === true,
       isCancelled: () => isTaskCancelled(task.id),
@@ -656,8 +704,10 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
       onStep: (step) => {
         upsertStep(task, step);
         queue({ type: "task.updated", task });
-        if (step.status !== "running" && step.title.includes("."))
+        if (step.status !== "running" && step.title.includes(".")) {
           audit("tool", step.title, step.detail ?? "");
+          void recordCapabilityUse(step.title, step.status === "done");
+        }
       },
       onToken: (delta) => {
         emit({

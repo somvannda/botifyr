@@ -154,6 +154,11 @@ CREATE TABLE IF NOT EXISTS capability_grants (
   updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (workspace_id, subject, capability)
 );
+-- Capability trust ladder (docs/product-plan.md §3).
+ALTER TABLE capability_grants ADD COLUMN IF NOT EXISTS state TEXT;
+ALTER TABLE capability_grants ADD COLUMN IF NOT EXISTS successes INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE capability_grants ADD COLUMN IF NOT EXISTS failures INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE capability_grants ADD COLUMN IF NOT EXISTS last_used_at TIMESTAMPTZ;
 
 /* Company reports — standups etc. (docs/company-os.md §5). */
 CREATE TABLE IF NOT EXISTS company_reports (
@@ -465,6 +470,7 @@ CREATE TABLE IF NOT EXISTS pages (
   updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE UNIQUE INDEX IF NOT EXISTS pages_handle_idx ON pages (lower(handle));
+ALTER TABLE pages ADD COLUMN IF NOT EXISTS pinned_post_id TEXT;
 
 CREATE TABLE IF NOT EXISTS page_roles (
   page_id TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,

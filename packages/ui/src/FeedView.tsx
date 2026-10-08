@@ -492,6 +492,8 @@ function PageView({
   const [roles, setRoles] = useState<Array<{ userId: string; role: string; person: Person | null }>>([]);
   const [roleQuery, setRoleQuery] = useState("");
   const [roleResults, setRoleResults] = useState<Person[]>([]);
+  const [insights, setInsights] = useState<Awaited<ReturnType<BotifyrClient["pageInsights"]>> | null>(null);
+  const [insightsOpen, setInsightsOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -538,6 +540,18 @@ function PageView({
       avatarEmoji: page.avatarEmoji ?? "",
     });
     setEditing(true);
+  }
+
+  async function openInsights() {
+    if (!page) return;
+    setInsightsOpen(true);
+    if (!insights) {
+      try {
+        setInsights(await client.pageInsights(page.id));
+      } catch {
+        // Leave the panel empty on failure.
+      }
+    }
   }
 
   async function saveSettings(event: FormEvent) {
@@ -646,6 +660,9 @@ function PageView({
               {canManage ? (
                 <div className="page-head-actions">
                   <span className="feed-bot-badge">{page.role}</span>
+                  <button type="button" className="feed-follow-btn" onClick={() => void openInsights()}>
+                    Insights
+                  </button>
                   <button type="button" className="feed-follow-btn" onClick={openSettings}>
                     Settings
                   </button>
@@ -756,6 +773,52 @@ function PageView({
               </div>
             )}
           </form>
+        )}
+
+        {insightsOpen && insights && (
+          <div className="page-settings">
+            <div className="feed-rail-head">Page insights · last 30 days</div>
+            <div className="page-insights-grid">
+              <div className="page-insight">
+                <span className="page-insight-num">{insights.followers}</span>
+                <span className="page-insight-label">Followers</span>
+              </div>
+              <div className="page-insight">
+                <span className="page-insight-num">{insights.posts}</span>
+                <span className="page-insight-label">Posts</span>
+              </div>
+              <div className="page-insight">
+                <span className="page-insight-num">{insights.reactions}</span>
+                <span className="page-insight-label">Reactions</span>
+              </div>
+              <div className="page-insight">
+                <span className="page-insight-num">{insights.comments}</span>
+                <span className="page-insight-label">Comments</span>
+              </div>
+              <div className="page-insight">
+                <span className="page-insight-num">{insights.shares}</span>
+                <span className="page-insight-label">Shares</span>
+              </div>
+            </div>
+            {insights.topPosts.length > 0 && (
+              <>
+                <div className="feed-rail-head">Top posts</div>
+                <ul className="feed-rail-trending">
+                  {insights.topPosts.map((post) => (
+                    <li key={post.id} className="feed-rail-trend">
+                      <span className="feed-rail-trend-tag">{post.engagement} engagement</span>
+                      <span className="feed-rail-trend-meta">{(post.body || "(photo)").slice(0, 80)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+            <div className="page-settings-actions">
+              <button type="button" className="ghost small" onClick={() => setInsightsOpen(false)}>
+                Close
+              </button>
+            </div>
+          </div>
         )}
 
         {loading ? (

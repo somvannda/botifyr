@@ -1104,6 +1104,11 @@ export class MemoryStore implements Store {
     return true;
   }
 
+  async setPagePinnedPost(pageId: string, postId: string | null): Promise<void> {
+    const record = this.pages.get(pageId);
+    if (record) record.pinnedPostId = postId ?? undefined;
+  }
+
   async setPageRole(record: PageRoleRecord): Promise<void> {
     this.pageRoles.set(`${record.pageId}:${record.userId}`, { ...record });
   }

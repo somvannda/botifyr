@@ -207,6 +207,68 @@ describe("runAgent", () => {
     expect(result.ok).toBe(true);
   });
 
+  it("shouldAutoApprove lets a named tool bypass the gate", async () => {
+    let asked = false;
+    const risky: ToolDefinition = {
+      name: "danger_go",
+      description: "Risky action.",
+      parameters: { type: "object", properties: {} },
+      requiresApproval: true,
+      run: async () => ({ ok: true, output: "did it" }),
+    };
+    const provider = scriptedProvider([
+      { toolCalls: [{ id: "1", name: "danger_go", arguments: {} }] },
+      { text: "done", toolCalls: [] },
+    ]);
+
+    const result = await runAgent({
+      goal: "go",
+      provider,
+      tools: [risky],
+      workspaceDir: ".",
+      shouldAutoApprove: (name) => name === "danger_go",
+      requestApproval: async () => {
+        asked = true;
+        return false;
+      },
+      onStep: () => {},
+    });
+
+    expect(asked).toBe(false);
+    expect(result.ok).toBe(true);
+  });
+
+  it("shouldAutoApprove returning false still gates the tool", async () => {
+    let asked = false;
+    const risky: ToolDefinition = {
+      name: "danger_go",
+      description: "Risky action.",
+      parameters: { type: "object", properties: {} },
+      requiresApproval: true,
+      run: async () => ({ ok: true, output: "did it" }),
+    };
+    const provider = scriptedProvider([
+      { toolCalls: [{ id: "1", name: "danger_go", arguments: {} }] },
+      { text: "done", toolCalls: [] },
+    ]);
+
+    const result = await runAgent({
+      goal: "go",
+      provider,
+      tools: [risky],
+      workspaceDir: ".",
+      shouldAutoApprove: () => false,
+      requestApproval: async () => {
+        asked = true;
+        return true;
+      },
+      onStep: () => {},
+    });
+
+    expect(asked).toBe(true);
+    expect(result.ok).toBe(true);
+  });
+
   it("sends the prefill only on the first model call", async () => {
     const seen: string[][] = [];
     const provider: ModelProvider = {

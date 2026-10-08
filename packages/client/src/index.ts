@@ -1257,6 +1257,17 @@ export class BotifyrClient {
     return this.request(`/v1/pages/${id}/follow`, { method: "DELETE" });
   }
 
+  pageInsights(id: string): Promise<{
+    followers: number;
+    posts: number;
+    reactions: number;
+    comments: number;
+    shares: number;
+    topPosts: Array<{ id: string; body: string; createdAt: string; engagement: number }>;
+  }> {
+    return this.request(`/v1/pages/${id}/insights`);
+  }
+
   listPageRoles(id: string): Promise<Array<{ userId: string; role: string; person: Person | null }>> {
     return this.request(`/v1/pages/${id}/roles`);
   }

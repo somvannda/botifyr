@@ -475,6 +475,20 @@ describe("workspaces API", () => {
     expect(list).toHaveLength(1);
     expect(list[0]).toMatchObject({ capability: "deploy.production", granted: true });
 
+    // Promote the capability up the trust ladder (docs/product-plan.md §3).
+    const promoted = await app.inject({
+      method: "PUT",
+      url: `/v1/workspaces/${ws.id}/grants`,
+      headers: auth,
+      payload: { subject: "role:CTO", capability: "deploy.production", granted: true, state: "trusted" },
+    });
+    expect(promoted.statusCode).toBe(200);
+    expect((promoted.json() as { state?: string }).state).toBe("trusted");
+    const afterPromote = (
+      await app.inject({ method: "GET", url: `/v1/workspaces/${ws.id}/grants`, headers: auth })
+    ).json() as Array<{ capability: string; state?: string }>;
+    expect(afterPromote.find((entry) => entry.capability === "deploy.production")?.state).toBe("trusted");
+
     const bad = await app.inject({
       method: "PUT",
       url: `/v1/workspaces/${ws.id}/grants`,

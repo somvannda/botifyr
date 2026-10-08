@@ -80,6 +80,10 @@ classifies attachments into `images` / `videos`, and `GET /v1/feed/image?t=…`
 serves both with the right content-type (inline). The composer accepts
 image/video files and posts render `<video controls>`.
 
+**Page insights (FR-20) — done.** `GET /v1/pages/:id/insights` (managers only)
+returns followers, post count, 30-day reactions/comments/shares, and top posts;
+the Page view shows an **Insights** panel.
+
 **Everything else** in this document (stories, groups, …) is **not started**.
 
 > **Reconciled with the product as of Oct 2026.** Facebook's reference section

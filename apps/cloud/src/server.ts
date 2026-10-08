@@ -2849,7 +2849,12 @@ export async function buildServer(options: ServerOptions) {
 
   app.put<{
     Params: { id: string };
-    Body: { subject?: string; capability?: string; granted?: boolean };
+    Body: {
+      subject?: string;
+      capability?: string;
+      granted?: boolean;
+      state?: "gated" | "probation" | "trusted";
+    };
   }>("/v1/workspaces/:id/grants", { preHandler: requireAuth }, async (request, reply) => {
     const userId = request.userId as string;
     const workspace = await store.getWorkspace(request.params.id);
@@ -2861,11 +2866,24 @@ export async function buildServer(options: ServerOptions) {
     if (!subject || !capability) {
       return reply.code(400).send({ error: "subject and capability are required" });
     }
+    // Merge with any existing grant so the trust counters survive edits.
+    const existing = (await store.listCapabilityGrants(workspace.id)).find(
+      (grant) => grant.subject === subject && grant.capability === capability,
+    );
+    const requestedState = request.body?.state;
+    const state =
+      requestedState === "gated" || requestedState === "probation" || requestedState === "trusted"
+        ? requestedState
+        : existing?.state;
     const record = {
       workspaceId: workspace.id,
       subject,
       capability,
-      granted: request.body?.granted === true,
+      granted: typeof request.body?.granted === "boolean" ? request.body.granted : (existing?.granted ?? false),
+      state,
+      successes: existing?.successes,
+      failures: existing?.failures,
+      lastUsedAt: existing?.lastUsedAt,
       updatedAt: new Date().toISOString(),
     };
     await store.setCapabilityGrant(record);
@@ -4753,6 +4771,50 @@ export async function buildServer(options: ServerOptions) {
       if (targetId === page.ownerId) return reply.code(400).send({ error: "the owner is always admin" });
       await store.setPageRole({ pageId: page.id, userId: targetId, role });
       return { ok: true };
+    },
+  );
+
+  /* Page insights for managers (docs/feed-next.md §FR-20). */
+  app.get<{ Params: { id: string } }>(
+    "/v1/pages/:id/insights",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const page = await store.getPage(request.params.id);
+      if (!page) return reply.code(404).send({ error: "page not found" });
+      const role = page.ownerId === userId ? "admin" : (await store.getPageRole(page.id, userId))?.role;
+      if (role !== "admin" && role !== "editor" && role !== "analyst") {
+        return reply.code(403).send({ error: "not allowed" });
+      }
+      const posts = await store.listPostsByAuthor(page.id, 200);
+      const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      let reactions = 0;
+      let comments = 0;
+      let shares = 0;
+      const ranked: Array<{ id: string; body: string; createdAt: string; engagement: number }> = [];
+      for (const post of posts) {
+        const stats = await store.getPostStats(post.id, page.id);
+        reactions += stats.likes;
+        comments += stats.comments;
+        shares += stats.shares;
+        if (post.createdAt >= since) {
+          ranked.push({
+            id: post.id,
+            body: post.body,
+            createdAt: post.createdAt,
+            engagement: stats.likes + stats.comments + stats.shares,
+          });
+        }
+      }
+      ranked.sort((a, b) => b.engagement - a.engagement);
+      return {
+        followers: await store.countPageFollowers(page.id),
+        posts: posts.length,
+        reactions,
+        comments,
+        shares,
+        topPosts: ranked.slice(0, 5),
+      };
     },
   );
 

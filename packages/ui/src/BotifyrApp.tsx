@@ -343,6 +343,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [tasks, setTasks] = useState<Record<string, Task>>({});
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [modelNotice, setModelNotice] = useState<string | null>(null);
+  void modelNotice; // referenced; surfaced in the UI as that work lands
   const [limitWarning, setLimitWarning] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [useComputer, setUseComputer] = useState(() => localStorage.getItem("botifyr.useComputer") === "1");
@@ -1334,6 +1336,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
         } catch (err: unknown) {
           // The model is unavailable — stop, don't retry, and tell the user.
           translateFailedRef.current.add(message.id);
+          noteModelError(err);
           setError(`Translation unavailable: ${messageOf(err)}`);
           return;
         }
@@ -2520,6 +2523,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
             : session,
         ),
       );
+      noteModelError(err);
       setError(messageOf(err));
     } finally {
       setSending(false);
@@ -3293,6 +3297,20 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     }
   }
 
+  /** Show a persistent notice when the model provider is down or out of credit. */
+  function noteModelError(err: unknown): void {
+    const text = messageOf(err);
+    if (
+      /insufficient balance|out of credit|\b(402|429|5\d\d)\b|model request failed|translation failed/i.test(
+        text,
+      )
+    ) {
+      setModelNotice(
+        "The AI model is unavailable or out of credit. Chat and files still work, but translation and tasks are paused.",
+      );
+    }
+  }
+
   async function saveProfile(): Promise<void> {
     try {
       const updated = await client.updateProfile({
@@ -3420,7 +3438,15 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
         text={text}
         onOpenImage={openLightbox}
         onOpenFile={(url) => void openExternal(url)}
-        onTranscribe={(tok) => client.transcribe(tok).then((result) => result.text)}
+        onTranscribe={(tok) =>
+          client
+            .transcribe(tok)
+            .then((result) => result.text)
+            .catch((err: unknown) => {
+              noteModelError(err);
+              throw err;
+            })
+        }
       />
     ) : null;
   }
@@ -4155,6 +4181,19 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       className={`app${feedActive || (showBotPanel && (activeBot || (activeSession && (activeSession.kind === "dm" || activeSession.kind === "group")))) ? " with-panel" : ""}${officeDocked ? " with-office" : ""}${density === "compact" ? " density-compact" : ""}`}
     >
       {titlebarSlot && createPortal(notificationCentre, titlebarSlot)}
+      {modelNotice && (
+        <div className="model-banner" role="status">
+          <span>{modelNotice}</span>
+          <button
+            className="model-banner-close"
+            type="button"
+            aria-label="Dismiss"
+            onClick={() => setModelNotice(null)}
+          >
+            <CloseIcon size={14} />
+          </button>
+        </div>
+      )}
       {lightbox && lightbox.items[lightbox.index] && (
         <div className="lightbox" onClick={() => setLightbox(null)}>
           <button className="lightbox-close" type="button" title="Close" onClick={() => setLightbox(null)}>

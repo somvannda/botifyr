@@ -1,7 +1,11 @@
 # Botifyr — Product Plan (control-layer turn)
 
-> Status: **proposed.** Owner: product/eng. This is the plan that turns the
-> company-quests work ([`company-quests.md`](company-quests.md)) and the
+> Status: **adopted — Phase A shipped; Phase B in progress.** Owner: product/eng.
+> Phase A (Briefing landing, ranked Inbox, outcomes, agent `company.report`) and
+> Phase B's core (per-capability trust ladder: types, agent-core gate hook,
+> runner wiring, grants `state` + Postgres persistence) are live. Remaining:
+> recording uses, the promotion review, and the UI. This is the plan that turns
+> the company-quests work ([`company-quests.md`](company-quests.md)) and the
 > competitive read ([`ai-company-platforms.md`](ai-company-platforms.md)) into a
 > **positioning, a UX direction, and a sequenced build order.** It reuses the
 > existing product — it does not rebuild it.

@@ -515,7 +515,8 @@ export class PostgresStore implements Store {
 
   async listCapabilityGrants(workspaceId: string): Promise<CapabilityGrantRecord[]> {
     const { rows } = await this.pool.query(
-      "SELECT subject, capability, granted, updated_at FROM capability_grants WHERE workspace_id = $1",
+      "SELECT subject, capability, granted, state, successes, failures, last_used_at, updated_at " +
+        "FROM capability_grants WHERE workspace_id = $1",
       [workspaceId],
     );
     return rows.map((row) => ({
@@ -523,15 +524,32 @@ export class PostgresStore implements Store {
       subject: row.subject as string,
       capability: row.capability as string,
       granted: row.granted as boolean,
+      state: (row.state as CapabilityGrantRecord["state"] | null) ?? undefined,
+      successes: row.successes === null ? undefined : Number(row.successes),
+      failures: row.failures === null ? undefined : Number(row.failures),
+      lastUsedAt: row.last_used_at ? new Date(row.last_used_at as string).toISOString() : undefined,
       updatedAt: new Date(row.updated_at as string).toISOString(),
     }));
   }
 
   async setCapabilityGrant(record: CapabilityGrantRecord): Promise<void> {
     await this.pool.query(
-      "INSERT INTO capability_grants (workspace_id, subject, capability, granted, updated_at) VALUES ($1, $2, $3, $4, $5) " +
-        "ON CONFLICT (workspace_id, subject, capability) DO UPDATE SET granted = EXCLUDED.granted, updated_at = EXCLUDED.updated_at",
-      [record.workspaceId, record.subject, record.capability, record.granted, record.updatedAt],
+      "INSERT INTO capability_grants (workspace_id, subject, capability, granted, state, successes, failures, last_used_at, updated_at) " +
+        "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) " +
+        "ON CONFLICT (workspace_id, subject, capability) DO UPDATE SET granted = EXCLUDED.granted, " +
+        "state = EXCLUDED.state, successes = EXCLUDED.successes, failures = EXCLUDED.failures, " +
+        "last_used_at = EXCLUDED.last_used_at, updated_at = EXCLUDED.updated_at",
+      [
+        record.workspaceId,
+        record.subject,
+        record.capability,
+        record.granted,
+        record.state ?? null,
+        record.successes ?? 0,
+        record.failures ?? 0,
+        record.lastUsedAt ?? null,
+        record.updatedAt,
+      ],
     );
   }
 
