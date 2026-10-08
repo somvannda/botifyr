@@ -350,6 +350,79 @@ function Lounge({ width }: { width: number }) {
 }
 
 /** Corner and edge furniture for a room, kept clear of the desk area. */
+/** Engineering: a server rack with blinking status LEDs. */
+function ServerRack({ position }: { position: [number, number, number] }) {
+  return (
+    <group position={position}>
+      <mesh castShadow position={[0, 1, 0]}>
+        <boxGeometry args={[0.7, 2, 0.7]} />
+        <meshStandardMaterial color="#20242e" roughness={0.5} metalness={0.4} />
+      </mesh>
+      {[0.4, 0.9, 1.4, 1.8].map((y) => (
+        <mesh key={y} position={[0, y, 0.36]}>
+          <boxGeometry args={[0.5, 0.08, 0.02]} />
+          <meshStandardMaterial color="#39c85c" emissive="#39c85c" emissiveIntensity={0.7} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+/** Finance / legal / exec: a filing cabinet. */
+function FilingCabinet({ position, rotationY = 0 }: { position: [number, number, number]; rotationY?: number }) {
+  return (
+    <group position={position} rotation={[0, rotationY, 0]}>
+      <mesh castShadow position={[0, 0.6, 0]}>
+        <boxGeometry args={[0.6, 1.2, 0.6]} />
+        <meshStandardMaterial color="#8d97a8" metalness={0.3} roughness={0.5} />
+      </mesh>
+      {[0.35, 0.75, 1.05].map((y) => (
+        <mesh key={y} position={[0, y, 0.32]}>
+          <boxGeometry args={[0.4, 0.04, 0.04]} />
+          <meshStandardMaterial color="#cfd6e2" metalness={0.6} roughness={0.3} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+/** Reception: a slatted-wood feature wall. */
+function SlatWall({ position, width }: { position: [number, number, number]; width: number }) {
+  const count = Math.max(5, Math.round(width / 0.5));
+  return (
+    <group position={position}>
+      <mesh position={[0, 1.4, 0]}>
+        <boxGeometry args={[width, 2.8, 0.08]} />
+        <meshStandardMaterial color="#4a382a" roughness={0.9} />
+      </mesh>
+      {Array.from({ length: count }, (_, index) => (
+        <mesh key={index} position={[-width / 2 + (width / (count + 1)) * (index + 1), 1.4, 0.07]}>
+          <boxGeometry args={[0.12, 2.6, 0.06]} />
+          <meshStandardMaterial color="#8a6a4c" roughness={0.7} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+/** Design / product: an easel whiteboard. */
+function Easel({ position }: { position: [number, number, number] }) {
+  return (
+    <group position={position}>
+      <mesh castShadow position={[0, 0.9, 0]} rotation={[-0.15, 0, 0]}>
+        <boxGeometry args={[0.9, 1.2, 0.05]} />
+        <meshStandardMaterial color="#f2f4f8" roughness={0.8} />
+      </mesh>
+      {[-0.4, 0.4].map((x) => (
+        <mesh key={x} position={[x, 0.5, 0]}>
+          <boxGeometry args={[0.06, 1.2, 0.06]} />
+          <meshStandardMaterial color="#7a5c42" roughness={0.8} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
 function RoomFurniture({ room }: { room: RoomLayout }) {
   const halfW = room.width / 2;
   const halfD = room.depth / 2;
@@ -391,8 +464,9 @@ function RoomFurniture({ room }: { room: RoomLayout }) {
   if (room.kind === "lobby") {
     return (
       <group>
-        <ReceptionDesk position={[0, 0, -halfD + 0.9]} />
-        <Chair position={[0, 0, -halfD + 2]} />
+        <SlatWall position={[0, 0, -halfD + 0.15]} width={Math.min(room.width - 2, 5)} />
+        <ReceptionDesk position={[0, 0, -halfD + 1.3]} />
+        <Chair position={[0, 0, -halfD + 2.3]} />
         <Plant position={[halfW - 0.7, 0, halfD - 0.7]} />
         <Plant position={[-halfW + 0.7, 0, halfD - 0.7]} />
       </group>
@@ -421,6 +495,16 @@ function RoomFurniture({ room }: { room: RoomLayout }) {
         </Prop>
       </Suspense>
       <WaterCooler position={[-halfW + 0.5, 0, -halfD + 0.5]} />
+      {room.department === "engineering" && (
+        <ServerRack position={[-halfW + 0.9, 0, -halfD + 0.6]} />
+      )}
+      {(room.department === "design" || room.department === "product") && (
+        <Easel position={[-halfW + 0.9, 0, halfD - 1.2]} />
+      )}
+      {room.department !== null &&
+        ["exec", "finance", "legal", "people"].includes(room.department) && (
+          <FilingCabinet position={[-halfW + 0.6, 0, -halfD + 0.6]} rotationY={Math.PI / 2} />
+        )}
     </group>
   );
 }
