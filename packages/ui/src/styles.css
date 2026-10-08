@@ -4969,6 +4969,18 @@ body {
   text-align: center;
 }
 
+.bot-panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.bot-panel-details {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .bot-panel-name {
   font-size: 18px;
   font-weight: 600;
@@ -5265,6 +5277,16 @@ body {
   color: var(--muted);
   position: relative;
   z-index: 20;
+}
+
+.market-search {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
 }
 
 .market-dropdown {
