@@ -4000,10 +4000,9 @@ body {
   box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5);
 }
 
-/* Right-align the picker under a user bubble so it doesn't overlap the chat. */
+/* Keep the picker inline in a user's action row so it can't overlap the chat. */
 .msg-user .react-picker {
-  left: auto;
-  right: 0;
+  position: static;
 }
 
 .react-emoji {
