@@ -91,7 +91,7 @@ export async function openMessage(key: CryptoKey, sealed: SealedMessage): Promis
   const plaintext = await requireSubtle().decrypt(
     { name: "AES-GCM", iv: fromBase64(sealed.iv) },
     key,
-    fromBase64(sealed.ct),
+    fromBase64(sealed.ct) as BufferSource,
   );
   return new TextDecoder().decode(plaintext);
 }

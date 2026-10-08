@@ -42,6 +42,7 @@ import {
   ChevronIcon,
   CloseIcon,
   CopyIcon,
+  CubeIcon,
   DownloadIcon,
   ForwardIcon,
   GearIcon,
@@ -183,9 +184,7 @@ function HqButton({
   const on = pressed || flash;
   return (
     <button
-      className={`hq-icon-btn${primary ? " primary" : ""}${danger ? " danger" : ""}${
-        on ? " active" : ""
-      }`}
+      className={`hq-icon-btn${primary ? " primary" : ""}${danger ? " danger" : ""}${on ? " active" : ""}`}
       type="button"
       title={title}
       aria-label={title}
@@ -347,6 +346,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [wizardActivate, setWizardActivate] = useState(false);
   const [boardWorkspace, setBoardWorkspace] = useState<{ id: string; name: string } | null>(null);
   const [showOffice3d, setShowOffice3d] = useState(false);
+  const [office3dDock, setOffice3dDock] = useState(true);
   const [repoName, setRepoName] = useState("");
   const [repoPath, setRepoPath] = useState("");
   const [repoUrl, setRepoUrl] = useState("");
@@ -536,6 +536,27 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       ];
     });
   }, [boardWorkspace, workspaces, tasks, bots]);
+
+  /** The 3D office, rendered either as a docked side panel or a floating overlay. */
+  const renderOffice = (docked: boolean) => (
+    <LazyOfficeView
+      company={boardWorkspace?.name ?? ""}
+      agents={officeAgents}
+      paused={
+        (workspaces.find((entry) => entry.name === boardWorkspace?.name)?.status ?? "active") === "paused"
+      }
+      docked={docked}
+      onToggleDock={() => setOffice3dDock((value) => !value)}
+      onClose={() => setShowOffice3d(false)}
+      onSelect={(botId) => {
+        const bot = bots.find((entry) => entry.id === botId);
+        if (bot) {
+          setShowOffice3d(false);
+          openEmployee(bot);
+        }
+      }}
+    />
+  );
   const nodeStartedRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const cancelSigninRef = useRef(false);
@@ -3096,7 +3117,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
 
   return (
     <div
-      className={`app${showBotPanel && activeBot ? " with-panel" : ""}${density === "compact" ? " density-compact" : ""}`}
+      className={`app${showBotPanel && activeBot ? " with-panel" : ""}${showOffice3d && office3dDock ? " with-office" : ""}${density === "compact" ? " density-compact" : ""}`}
     >
       {toasts.length > 0 && (
         <div className="toast-stack">
@@ -3202,23 +3223,26 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
             const pending = group.workspace?.pending ?? 0;
             return (
               <div key={id} className="task-section">
-                <button
-                  className={`task-section-head${collapsed ? " collapsed" : ""}`}
-                  type="button"
-                  onClick={() => setCollapsedWorkspaces((prev) => ({ ...prev, [id]: !prev[id] }))}
-                  aria-expanded={!collapsed}
-                >
-                  <span className="task-caret">{collapsed ? "▸" : "▾"}</span>
-                  {group.workspace?.avatarEmoji && (
-                    <span className="task-section-emoji">{group.workspace.avatarEmoji}</span>
-                  )}
-                  <span className="task-section-name">{group.name}</span>
-                </button>
-                <div className="task-section-sub">
-                  <span className={`task-section-count${pending > 0 ? " has-needs" : ""}`}>
-                    {group.members.length} employee{group.members.length === 1 ? "" : "s"}
-                    {pending > 0 ? ` · ${pending} need you` : ""}
-                  </span>
+                <div className="task-section-headrow">
+                  <button
+                    className={`task-section-head${collapsed ? " collapsed" : ""}`}
+                    type="button"
+                    onClick={() => setCollapsedWorkspaces((prev) => ({ ...prev, [id]: !prev[id] }))}
+                    aria-expanded={!collapsed}
+                  >
+                    <span className="task-caret">{collapsed ? "▸" : "▾"}</span>
+                    {group.workspace?.avatarEmoji && (
+                      <span className="task-section-emoji">{group.workspace.avatarEmoji}</span>
+                    )}
+                    <span className="task-section-name">
+                      {group.name}
+                      <span className={`task-section-count${pending > 0 ? " has-needs" : ""}`}>
+                        {pending > 0
+                          ? ` (${group.members.length} · ${pending} need you)`
+                          : ` (${group.members.length})`}
+                      </span>
+                    </span>
+                  </button>
                   {group.workspace && (
                     <button
                       className="task-section-edit"
@@ -3230,7 +3254,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                         setCompanyEdit({ id: group.workspace!.id, name: group.name });
                       }}
                     >
-                      <GearIcon size={14} />
+                      <GearIcon size={16} />
                     </button>
                   )}
                   {group.workspace && (
@@ -3241,7 +3265,21 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                       aria-label="Company board"
                       onClick={() => void openBoard(group.workspace!.id, group.name)}
                     >
-                      <ChartIcon size={14} />
+                      <ChartIcon size={16} />
+                    </button>
+                  )}
+                  {group.workspace && (
+                    <button
+                      className="task-section-edit"
+                      type="button"
+                      title="3D Workspace — see the office live"
+                      aria-label="Open 3D workspace"
+                      onClick={() => {
+                        void openBoard(group.workspace!.id, group.name);
+                        setShowOffice3d(true);
+                      }}
+                    >
+                      <CubeIcon size={16} />
                     </button>
                   )}
                 </div>
@@ -4195,6 +4233,14 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
           </div>
         </form>
       </main>
+
+      {showOffice3d && office3dDock && boardWorkspace && (
+        <aside className="office3d-docked">
+          <Suspense fallback={<div className="office3d-loading">Building the office…</div>}>
+            {renderOffice(true)}
+          </Suspense>
+        </aside>
+      )}
 
       {showBotPanel && activeBot && (
         <aside className="bot-panel">
@@ -5262,16 +5308,10 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
               {hqTab === "office" && (
                 <>
                   <div className="board-add">
-                    <button
-                      className="btn primary small"
-                      type="button"
-                      onClick={() => setShowOffice3d(true)}
-                    >
+                    <button className="btn primary small" type="button" onClick={() => setShowOffice3d(true)}>
                       3D Workspace
                     </button>
-                    <span className="company-hint">
-                      See the office in 3D — every employee at their desk.
-                    </span>
+                    <span className="company-hint">See the office in 3D — every employee at their desk.</span>
                   </div>
                   <ul className="board-list">
                     {(workspaceByName.get(boardWorkspace.name)?.roles ?? []).map((role) => {
@@ -5399,13 +5439,9 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                         <li key={file.name} className="team-member">
                           <div
                             className="wiki-doc-name"
-                            onClick={() =>
-                              setOpenFile((prev) => (prev === file.name ? null : file.name))
-                            }
+                            onClick={() => setOpenFile((prev) => (prev === file.name ? null : file.name))}
                           >
-                            <span className="task-caret">
-                              {openFile === file.name ? "▾" : "▸"}
-                            </span>
+                            <span className="task-caret">{openFile === file.name ? "▾" : "▸"}</span>
                             {file.name}
                           </div>
                           {openFile === file.name && (
@@ -5474,14 +5510,10 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                                 <div
                                   className="wiki-doc-name"
                                   onClick={() =>
-                                    setOpenFile((prev) =>
-                                      prev === file.name ? null : file.name,
-                                    )
+                                    setOpenFile((prev) => (prev === file.name ? null : file.name))
                                   }
                                 >
-                                  <span className="task-caret">
-                                    {openFile === file.name ? "▾" : "▸"}
-                                  </span>
+                                  <span className="task-caret">{openFile === file.name ? "▾" : "▸"}</span>
                                   {file.name}
                                 </div>
                                 <select
@@ -5518,9 +5550,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                 const roles = workspaceByName.get(boardWorkspace.name)?.roles ?? [];
                 const allTrusted =
                   roles.length > 0 &&
-                  roles.every(
-                    (role) => bots.find((bot) => bot.id === role.botId)?.autoApprove === true,
-                  );
+                  roles.every((role) => bots.find((bot) => bot.id === role.botId)?.autoApprove === true);
                 return (
                   <>
                     <span className="hq-autonomy">{autonomy === "manual" ? "Manual" : autonomy}</span>
@@ -6047,7 +6077,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
         </div>
       )}
 
-      {showOffice3d && boardWorkspace && (
+      {showOffice3d && !office3dDock && boardWorkspace && (
         <Suspense
           fallback={
             <div className="office3d-overlay">
@@ -6055,22 +6085,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
             </div>
           }
         >
-          <LazyOfficeView
-            company={boardWorkspace.name}
-            agents={officeAgents}
-            paused={
-              (workspaces.find((entry) => entry.name === boardWorkspace.name)?.status ?? "active") ===
-              "paused"
-            }
-            onClose={() => setShowOffice3d(false)}
-            onSelect={(botId) => {
-              const bot = bots.find((entry) => entry.id === botId);
-              if (bot) {
-                setShowOffice3d(false);
-                openEmployee(bot);
-              }
-            }}
-          />
+          {renderOffice(false)}
         </Suspense>
       )}
 
@@ -6281,27 +6296,24 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
               </button>
             </div>
             <div className="settings-section-title">Your profile</div>
-            <div className="portal-row" style={{ gap: 8, marginBottom: 6 }}>
+            <div className="portal-row" style={{ marginBottom: 6 }}>
               <input
-                className="settings-input"
-                style={{ width: 56, textAlign: "center" }}
+                className="settings-input emoji-input"
                 value={profileEmoji}
                 maxLength={4}
                 aria-label="Avatar emoji"
                 onChange={(event) => setProfileEmoji(event.target.value)}
               />
               <input
-                className="settings-input"
-                style={{ flex: 1 }}
+                className="settings-input grow"
                 placeholder="Display name"
                 value={profileName}
                 onChange={(event) => setProfileName(event.target.value)}
               />
             </div>
-            <div className="portal-row" style={{ gap: 8, marginBottom: 10 }}>
+            <div className="portal-row" style={{ marginBottom: 10 }}>
               <input
-                className="settings-input"
-                style={{ flex: 1 }}
+                className="settings-input grow"
                 placeholder="@handle"
                 value={profileHandle}
                 onChange={(event) => setProfileHandle(event.target.value)}
@@ -6311,8 +6323,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
               </button>
             </div>
             <input
-              className="settings-input"
-              style={{ width: "100%", margin: "0 0 10px", boxSizing: "border-box" }}
+              className="settings-input field-full"
+              style={{ margin: "0 0 10px" }}
               placeholder="Search people by @handle or email"
               value={peopleQuery}
               onChange={(event) => void searchPeopleNow(event.target.value)}
@@ -6409,8 +6421,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
               <>
                 <div className="settings-section-title">New group</div>
                 <input
-                  className="settings-input"
-                  style={{ width: "100%", marginBottom: 6, boxSizing: "border-box" }}
+                  className="settings-input field-full"
+                  style={{ marginBottom: 6 }}
                   placeholder="Group name"
                   value={groupName}
                   onChange={(event) => setGroupName(event.target.value)}
@@ -6418,7 +6430,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                 <ul className="downloads-list">
                   {friends.map((person) => (
                     <li key={person.id} className="download-row">
-                      <label className="member-item" style={{ flex: 1 }}>
+                      <label className="member-item grow">
                         <input
                           type="checkbox"
                           checked={groupSelection.includes(person.id)}
