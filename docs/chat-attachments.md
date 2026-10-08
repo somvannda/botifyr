@@ -82,11 +82,13 @@ Done:
   message with all `📎 name` + `/shared/<token>` pairs and renders as a grid
   (`.dm-album`, `.dm-album-grid`, `.dm-album-cell`); one message = one notification.
 
+- ✅ **Video in the lightbox** — the media viewer spans images *and* videos;
+  videos render with playback controls (`<video controls autoPlay>`).
+
 Next:
 1. **File sizes** — add size to the share token payload (or match the media
    record) and show it on document rows.
 2. **Voice notes** — record in the composer and render a waveform player.
-3. **Video in the lightbox** — reuse the viewer for video with playback controls.
 
 ## 4. Server contract
 

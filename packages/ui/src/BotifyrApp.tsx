@@ -3249,15 +3249,17 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     return `${CLOUD_URL}/v1/shared?share=${encodeURIComponent(shareToken)}&token=${encodeURIComponent(token() ?? "")}`;
   }
 
-  /** Open the media viewer at the given image, across all images in the chat. */
+  /** Open the media viewer at the given item, across all media in the chat. */
   function openLightbox(file: { token: string; name: string }): void {
-    const images = activeSharedFiles.filter((entry) => /\.(png|jpe?g|webp|gif|svg)$/i.test(entry.name));
-    if (images.length === 0) return;
+    const media = activeSharedFiles.filter((entry) =>
+      /\.(png|jpe?g|webp|gif|svg|mp4|webm)$/i.test(entry.name),
+    );
+    if (media.length === 0) return;
     const index = Math.max(
       0,
-      images.findIndex((entry) => entry.token === file.token),
+      media.findIndex((entry) => entry.token === file.token),
     );
-    setLightbox({ items: images, index });
+    setLightbox({ items: media, index });
   }
 
   /** Render a message's attachment(s) if it has any, else null. */
@@ -4012,12 +4014,22 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
               ‹
             </button>
           )}
-          <img
-            className="lightbox-img"
-            src={sharedUrl(lightbox.items[lightbox.index].token)}
-            alt={lightbox.items[lightbox.index].name}
-            onClick={(event) => event.stopPropagation()}
-          />
+          {/\.(mp4|webm)$/i.test(lightbox.items[lightbox.index].name) ? (
+            <video
+              className="lightbox-img"
+              src={sharedUrl(lightbox.items[lightbox.index].token)}
+              controls
+              autoPlay
+              onClick={(event) => event.stopPropagation()}
+            />
+          ) : (
+            <img
+              className="lightbox-img"
+              src={sharedUrl(lightbox.items[lightbox.index].token)}
+              alt={lightbox.items[lightbox.index].name}
+              onClick={(event) => event.stopPropagation()}
+            />
+          )}
           {lightbox.items.length > 1 && (
             <button
               className="lightbox-nav next"

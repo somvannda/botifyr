@@ -38,9 +38,10 @@ Priority legend: **P0** = next release · **P1** = soon after · **P2** = later.
 `setPostReaction`, `PUT`/`DELETE /v1/posts/:id/reaction`, `reactions` +
 `myReaction` on the feed DTO, and a reaction picker in the post UI.
 
-**Comment threads (FR-2) — backend done.** One level of replies: a
-`post_comments.parent_id` column and `POST /v1/posts/:id/comments` accepting
-`parentId`. The **client (`addComment`) and the reply UI are not wired yet**.
+**Comment threads (FR-2) — done.** One level of replies: a
+`post_comments.parent_id` column, `parentId` on `POST /v1/posts/:id/comments`,
+`BotifyrClient.addComment(id, body, parentId?)`, and a reply UI (a **Reply**
+button per comment, a "Replying to a comment" indicator, and nested rendering).
 
 **Everything else** in this document (comment reactions, reposts, multi-image,
 audience, ranking, stories, groups, …) is **not started**.
@@ -137,7 +138,7 @@ discovery as **opt-in additions** (tabs/toggles) and keep the friends stream pur
 | Feed ordering | Ranked + Most recent | Newest-first only | Add ranking + toggle |
 | Feed tabs | Home / Friends / Pages / … | Single stream | Add tabs/filters |
 | Reactions | 7 reactions | **Post reactions shipped** | Comment reactions |
-| Comments | Threads, reactions, media | **Threads backend**; flat UI | Reply UI + comment reactions + media |
+| Comments | Threads, reactions, media | **Threads shipped** | Comment reactions + comment media |
 | Share | Multiple destinations + caption | Toggle count only | Real reposts |
 | Media | Multi-image, albums, video | 1 image | Multi-image + video |
 | Public entities | Pages (followers, roles, insights) | **Backend + UI shipped** — `/v1/pages*`, timeline, follow, post-as-Page, settings, roles | Page insights + community inbox (see §4) |
@@ -170,7 +171,7 @@ friendship and surface a public audience option — no separate entity required.
 - Acceptance: reacting updates optimistically; counts persist; feed shows the
   viewer's own reaction; only one reaction at a time.
 
-### FR-2 Comment threads (P0) — **backend shipped; client/UI pending**
+### FR-2 Comment threads (P0) — **shipped**
 - Comments may have a `parentId` forming one level of replies (Facebook-style).
 - Show top-level comments with reply count; expand to load replies.
 - Acceptance: reply nests under its parent; deleting a comment hides its replies
@@ -525,9 +526,9 @@ score = w_affinity * affinity(viewer, author)
 ## 10. Phasing
 
 - **Phase A (P0) — Post depth (partly done):** reactions (**done**), comment
-  threads (**backend done; client/UI pending**), real reposts, multi-image,
-  audience selector, Save/Hide. *Note: the Pages backend/UI also ship; remaining
-  Pages work is insights + community inbox (P1).*
+  threads (**done**), real reposts, multi-image, audience selector, Save/Hide.
+  *Note: the Pages backend/UI also ship; remaining Pages work is insights +
+  community inbox (P1).*
 - **Phase B (P1) — Discovery & community:** feed ranking + tabs (incl. a pure
   Friends tab), video, mentions/hashtags, Page **type (Business/Creator)**,
   scheduling/pin/insights, community inbox, search, comment reactions,
