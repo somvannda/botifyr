@@ -76,6 +76,8 @@ export class MemoryStore implements Store {
   private postReactions = new Map<string, ReactionType>();
   private postComments = new Map<string, PostCommentRecord>();
   private postShares = new Set<string>();
+  /** postId → ordered media ids (multi-image). */
+  private postMedia = new Map<string, string[]>();
   /** Keyed by `${blockerId}:${blockedId}`. */
   private blocks = new Set<string>();
   private postReports = new Map<string, PostReportRecord>();
@@ -853,7 +855,18 @@ export class MemoryStore implements Store {
     }
     for (const key of [...this.postReactions.keys()]) if (key.startsWith(`${id}:`)) this.postReactions.delete(key);
     for (const key of [...this.postShares]) if (key.startsWith(`${id}:`)) this.postShares.delete(key);
+    this.postMedia.delete(id);
     return true;
+  }
+
+  async addPostMedia(postId: string, mediaId: string, position: number): Promise<void> {
+    const list = this.postMedia.get(postId) ?? [];
+    if (!list.includes(mediaId)) list.push(mediaId);
+    this.postMedia.set(postId, list);
+  }
+
+  async listPostMedia(postId: string): Promise<string[]> {
+    return [...(this.postMedia.get(postId) ?? [])];
   }
 
   async listFeedPosts(authorIds: string[], limit: number, before?: string): Promise<PostRecord[]> {

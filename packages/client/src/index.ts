@@ -114,6 +114,10 @@ export interface FeedPost {
   mediaId?: string;
   /** Set when the post was authored by a Page. */
   pageId?: string;
+  /** Set when this post is a repost (share) of another post. */
+  repostOf?: string;
+  /** The reposted original, embedded (one level deep). */
+  original?: FeedPost;
   /** Short-lived signed path to the attached image, if any. */
   imageUrl?: string;
   createdAt: string;
@@ -1119,6 +1123,15 @@ export class BotifyrClient {
 
   sharePost(id: string, shared = true): Promise<void> {
     return this.request(`/v1/posts/${id}/share`, { method: shared ? "PUT" : "DELETE" });
+  }
+
+  /** Repost (share) a post, optionally with a caption. Returns the new post. */
+  repost(id: string, caption?: string): Promise<FeedPost> {
+    return this.request(`/v1/posts/${id}/repost`, {
+      method: "POST",
+      json: true,
+      body: JSON.stringify({ caption }),
+    });
   }
 
   listUserPosts(handle: string): Promise<FeedPost[]> {

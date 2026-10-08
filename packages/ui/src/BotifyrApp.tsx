@@ -8866,6 +8866,34 @@ function sharedTokenOf(text: string): string | null {
 export interface SharedAttachment {
   name: string;
   token: string;
+  size?: number;
+}
+
+/** Decode the (unverified) payload of a signed share token: name + size. */
+export function decodeShare(token: string): { n?: string; s?: number } | null {
+  try {
+    const body = token.split(".")[0];
+    if (!body) return null;
+    const b64 = body.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
+    return JSON.parse(atob(padded)) as { n?: string; s?: number };
+  } catch {
+    return null;
+  }
+}
+
+/** Human-readable byte size, e.g. "1.2 MB". */
+export function formatSize(bytes: number | undefined): string {
+  if (!bytes || bytes <= 0) return "";
+  const units = ["B", "KB", "MB", "GB"];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  const rounded = value >= 10 || unit === 0 ? Math.round(value) : Math.round(value * 10) / 10;
+  return `${rounded} ${units[unit]}`;
 }
 
 /** Parse every attachment (`📎 name` + `/shared/<token>` pairs) in a message. */
@@ -8879,7 +8907,9 @@ export function sharedFilesOf(text: string): { files: SharedAttachment[]; captio
     const prev = (lines[i - 1] ?? "").replace(/^📎\s*/, "").trim();
     // Guard against a bare `/shared/<token>` line becoming the display name.
     const name = prev && !prev.startsWith("/shared/") ? prev : "Shared file";
-    files.push({ name, token });
+    const decoded = decodeShare(token);
+    const size = typeof decoded?.s === "number" ? decoded.s : undefined;
+    files.push({ name, token, size });
     lastTokenLine = i;
   }
   // No attachments → nothing to report (don't treat the whole message as a caption).
@@ -8961,6 +8991,7 @@ export function AttachmentMessage({
       <button className="dm-file" type="button" onClick={() => onOpenFile?.(url)}>
         <span className="dm-file-ico">{fileIconFor(file.name)}</span>
         <span className="dm-file-name">{file.name}</span>
+        {file.size ? <span className="dm-file-size">{formatSize(file.size)}</span> : null}
         <span className="dm-file-save">Save</span>
       </button>
     );

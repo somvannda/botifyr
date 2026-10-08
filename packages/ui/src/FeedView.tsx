@@ -123,9 +123,20 @@ interface PostCardProps {
   onDelete: (id: string) => void;
   onBlock: (authorId: string) => void;
   onOpenPage?: (handle: string) => void;
+  onRepost: (post: FeedPost) => void;
 }
 
-function PostCard({ post, client, cloudUrl, canDelete, onChange, onDelete, onBlock, onOpenPage }: PostCardProps) {
+function PostCard({
+  post,
+  client,
+  cloudUrl,
+  canDelete,
+  onChange,
+  onDelete,
+  onBlock,
+  onOpenPage,
+  onRepost,
+}: PostCardProps) {
   const [comments, setComments] = useState<FeedComment[] | null>(null);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [commentsLoading, setCommentsLoading] = useState(false);
@@ -158,12 +169,12 @@ function PostCard({ post, client, cloudUrl, canDelete, onChange, onDelete, onBlo
   }
 
   async function share() {
-    const shared = !post.sharedByMe;
-    onChange({ ...post, sharedByMe: shared, shares: Math.max(0, post.shares + (shared ? 1 : -1)) });
     try {
-      await client.sharePost(post.id, shared);
+      const repost = await client.repost(post.id);
+      onRepost(repost);
+      onChange({ ...post, shares: post.shares + 1, sharedByMe: true });
     } catch {
-      onChange(post);
+      // Ignore a failed repost.
     }
   }
 
@@ -230,9 +241,23 @@ function PostCard({ post, client, cloudUrl, canDelete, onChange, onDelete, onBlo
     <article className="feed-post">
       <AuthorLine author={post.author} when={post.createdAt} />
 
+      {post.repostOf && <div className="feed-repost-label">🔁 Shared a post</div>}
       {post.body && <p className="feed-body">{post.body}</p>}
 
-      {post.imageUrl ? (
+      {post.original ? (
+        <div className="feed-repost">
+          <AuthorLine author={post.original.author} when={post.original.createdAt} />
+          {post.original.body && <p className="feed-body">{post.original.body}</p>}
+          {post.original.imageUrl && (
+            <img
+              className="feed-image-img"
+              src={`${cloudUrl}${post.original.imageUrl}`}
+              alt="Post attachment"
+              loading="lazy"
+            />
+          )}
+        </div>
+      ) : post.imageUrl ? (
         <img className="feed-image-img" src={`${cloudUrl}${post.imageUrl}`} alt="Post attachment" loading="lazy" />
       ) : post.mediaId ? (
         <div className="feed-image feed-image-placeholder">📷 Image</div>
@@ -660,6 +685,7 @@ function PageView({
               onDelete={removePost}
               onBlock={(authorId) => setPosts((prev) => prev.filter((p) => p.author.id !== authorId))}
               onOpenPage={onOpenPage}
+              onRepost={(next) => setPosts((prev) => [next, ...prev])}
             />
           ))
         )}
@@ -797,6 +823,8 @@ export function FeedView({
 
   const updatePost = (next: FeedPost) => setPosts((prev) => prev.map((p) => (p.id === next.id ? next : p)));
   const removePost = (id: string) => setPosts((prev) => prev.filter((p) => p.id !== id));
+  /** A repost arrives as a new post at the top of the feed. */
+  const prependPost = (next: FeedPost) => setPosts((prev) => [next, ...prev]);
   /** After blocking, drop that author's posts from the local feed. */
   const removeAuthorPosts = (authorId: string) =>
     setPosts((prev) => prev.filter((p) => p.author.id !== authorId));
@@ -917,6 +945,7 @@ export function FeedView({
               onDelete={removePost}
               onBlock={removeAuthorPosts}
               onOpenPage={onOpenPage}
+              onRepost={prependPost}
             />
           ))
         )}

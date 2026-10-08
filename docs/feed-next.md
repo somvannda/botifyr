@@ -43,8 +43,14 @@ Priority legend: **P0** = next release · **P1** = soon after · **P2** = later.
 `BotifyrClient.addComment(id, body, parentId?)`, and a reply UI (a **Reply**
 button per comment, a "Replying to a comment" indicator, and nested rendering).
 
-**Everything else** in this document (comment reactions, reposts, multi-image,
-audience, ranking, stories, groups, …) is **not started**.
+**Reposts (FR-4) — done.** `posts.repost_of` + `PostRecord.repostOf`, a
+`POST /v1/posts/:id/repost` (with optional caption) that links back to the
+original and bumps its share count, `BotifyrClient.repost(id, caption?)`, a
+one-level embedded `original` in the feed DTO, and a **"Shared a post"** card in
+the UI (the Share action now creates a repost).
+
+**Everything else** in this document (comment reactions, multi-image, audience,
+ranking, stories, groups, …) is **not started**.
 
 > **Reconciled with the product as of Oct 2026.** Facebook's reference section
 > (§1) reflects its 2026 behaviour; §2 and §5 note where Botifyr has already moved
@@ -139,7 +145,7 @@ discovery as **opt-in additions** (tabs/toggles) and keep the friends stream pur
 | Feed tabs | Home / Friends / Pages / … | Single stream | Add tabs/filters |
 | Reactions | 7 reactions | **Post reactions shipped** | Comment reactions |
 | Comments | Threads, reactions, media | **Threads shipped** | Comment reactions + comment media |
-| Share | Multiple destinations + caption | Toggle count only | Real reposts |
+| Share | Multiple destinations + caption | **Repost scaffold** (storage + feed embed); share is a toggle | Create endpoint + UI + destinations |
 | Media | Multi-image, albums, video | 1 image | Multi-image + video |
 | Public entities | Pages (followers, roles, insights) | **Backend + UI shipped** — `/v1/pages*`, timeline, follow, post-as-Page, settings, roles | Page insights + community inbox (see §4) |
 | Page type | Business vs Creator | None | Page type field (P1) |
@@ -183,7 +189,7 @@ friendship and surface a public audience option — no separate entity required.
 - Acceptance: reaction counts render; image renders via the same signed-URL
   mechanism as posts.
 
-### FR-4 Real sharing / reposts (P0)
+### FR-4 Real sharing / reposts (P0) — **scaffolded**
 - Share creates a `repost` record (optionally with a caption) that appears on the
   sharer's timeline/Wall and in followers' feeds.
 - Share destinations (P1): own timeline, a Page (if the sharer manages one), a
@@ -526,7 +532,8 @@ score = w_affinity * affinity(viewer, author)
 ## 10. Phasing
 
 - **Phase A (P0) — Post depth (partly done):** reactions (**done**), comment
-  threads (**done**), real reposts, multi-image, audience selector, Save/Hide.
+  threads (**done**), real reposts (**scaffolded**), multi-image, audience
+  selector, Save/Hide.
   *Note: the Pages backend/UI also ship; remaining Pages work is insights +
   community inbox (P1).*
 - **Phase B (P1) — Discovery & community:** feed ranking + tabs (incl. a pure

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
-import { fileIconFor, previewText, sharedFileOf, sharedFilesOf } from "./BotifyrApp";
+import { decodeShare, fileIconFor, formatSize, previewText, sharedFileOf, sharedFilesOf } from "./BotifyrApp";
 
 describe("sharedFileOf", () => {
   it("parses an attachment message into name + token", () => {
@@ -62,6 +62,32 @@ describe("sharedFilesOf", () => {
 
   it("returns nothing for a plain message", () => {
     expect(sharedFilesOf("hello there")).toEqual({ files: [], caption: "" });
+  });
+});
+
+describe("formatSize", () => {
+  it("formats byte counts", () => {
+    expect(formatSize(0)).toBe("");
+    expect(formatSize(512)).toBe("512 B");
+    expect(formatSize(1536)).toBe("1.5 KB");
+    expect(formatSize(1048576)).toBe("1 MB");
+  });
+});
+
+describe("decodeShare", () => {
+  it("decodes the payload name + size", () => {
+    const payload = Buffer.from(JSON.stringify({ n: "a.png", s: 2048 })).toString("base64url");
+    expect(decodeShare(`${payload}.sig`)).toMatchObject({ n: "a.png", s: 2048 });
+  });
+
+  it("returns null for a malformed token", () => {
+    expect(decodeShare("not-a-token")).toBeNull();
+  });
+
+  it("surfaces the size on a parsed attachment", () => {
+    const payload = Buffer.from(JSON.stringify({ n: "a.png", s: 2048 })).toString("base64url");
+    const { files } = sharedFilesOf(`📎 a.png\n/shared/${payload}.sig`);
+    expect(files[0].size).toBe(2048);
   });
 });
 

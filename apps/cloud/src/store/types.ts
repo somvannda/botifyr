@@ -79,6 +79,8 @@ export interface PostRecord {
   mediaId?: string;
   /** Set when the post is authored by a Page (authorId = the Page id). */
   pageId?: string;
+  /** Set when this post is a repost (share) of another post. */
+  repostOf?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -390,6 +392,10 @@ export interface Store {
   getPost(id: string): Promise<PostRecord | null>;
   /** Only the author may delete; cascades likes/comments/shares. */
   deletePost(authorId: string, id: string): Promise<boolean>;
+  /** Attach an image to a post (multi-image; position orders the grid). */
+  addPostMedia(postId: string, mediaId: string, position: number): Promise<void>;
+  /** Media ids attached to a post, ordered by position. */
+  listPostMedia(postId: string): Promise<string[]>;
   /** Newest-first posts by any of `authorIds`, paged by ISO `before` cursor. */
   listFeedPosts(authorIds: string[], limit: number, before?: string): Promise<PostRecord[]>;
   listPostsByAuthor(authorId: string, limit: number): Promise<PostRecord[]>;

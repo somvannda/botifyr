@@ -417,6 +417,38 @@ describe("feed", () => {
     await app.close();
   });
 
+  it("creates a repost that links back to the original", async () => {
+    const { app, store, signUp, auth, createPost } = await setup();
+    const alice = await signUp("alice-repost@example.com");
+    const bob = await signUp("bob-repost@example.com");
+    await store.createFriendship(alice.user.id, bob.user.id);
+    const post = await createPost(alice.token, "original content");
+
+    const repost = await app.inject({
+      method: "POST",
+      url: `/v1/posts/${post.id}/repost`,
+      headers: auth(bob.token),
+      payload: { caption: "worth sharing" },
+    });
+    expect(repost.statusCode).toBe(201);
+    const dto = repost.json() as {
+      id: string;
+      repostOf?: string;
+      body: string;
+      original?: { id: string; body: string };
+    };
+    expect(dto.repostOf).toBe(post.id);
+    expect(dto.body).toBe("worth sharing");
+    expect(dto.original?.id).toBe(post.id);
+    expect(dto.original?.body).toBe("original content");
+
+    const feed = await app.inject({ method: "GET", url: "/v1/feed", headers: auth(bob.token) });
+    const items = (feed.json() as { items: Array<{ id: string; shares?: number }> }).items;
+    expect(items.find((entry) => entry.id === post.id)?.shares).toBe(1);
+
+    await app.close();
+  });
+
   it("supports threaded replies", async () => {
     const { app, store, signUp, auth, createPost } = await setup();
     const alice = await signUp("alice-thread@example.com");

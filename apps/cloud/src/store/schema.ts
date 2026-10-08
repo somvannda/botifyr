@@ -393,6 +393,15 @@ CREATE TABLE IF NOT EXISTS post_shares (
   PRIMARY KEY (post_id, user_id)
 );
 
+/* Multi-image posts (docs/feed-next.md §FR-5). */
+CREATE TABLE IF NOT EXISTS post_media (
+  post_id  TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+  media_id TEXT NOT NULL,
+  position INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (post_id, media_id)
+);
+CREATE INDEX IF NOT EXISTS post_media_post_idx ON post_media (post_id, position);
+
 /* Reactions (superset of likes). One per user per post. */
 CREATE TABLE IF NOT EXISTS post_reactions (
   post_id    TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
@@ -457,6 +466,8 @@ CREATE TABLE IF NOT EXISTS page_followers (
 
 /* Posts may be authored by a Page. */
 ALTER TABLE posts ADD COLUMN IF NOT EXISTS page_id TEXT REFERENCES pages(id) ON DELETE CASCADE;
+/* Reposts (shares) link back to the original post. */
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS repost_of TEXT REFERENCES posts(id) ON DELETE SET NULL;
 
 -- Seed the default policy and a starter model price (editable in admin).
 INSERT INTO platform_settings (id, data) VALUES ('global', '{"plans":{"proPriceCents":500,"businessPriceCents":1900,"proPeriodDays":30,"includedTokens":{"pro":5000000,"business":50000000},"currency":"USD"},"freeMonthlyTokens":500000,"lowBalanceCents":100,"graceDays":7,"reminderDays":[7,3,1],"reminderChannels":{"os":true,"email":true,"telegram":true},"onDemand":{"enabled":true,"markupPercent":15,"minTopUpCents":100,"allowPro":false,"onEmpty":"block"},"fallbackPlan":"free"}')

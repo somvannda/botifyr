@@ -1217,13 +1217,15 @@ export class PostgresStore implements Store {
 
   async createPost(record: PostRecord): Promise<void> {
     await this.pool.query(
-      "INSERT INTO posts (id, author_id, body, media_id, page_id, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7)",
+      "INSERT INTO posts (id, author_id, body, media_id, page_id, repost_of, created_at, updated_at) " +
+        "VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
       [
         record.id,
         record.authorId,
         record.body,
         record.mediaId ?? null,
         record.pageId ?? null,
+        record.repostOf ?? null,
         record.createdAt,
         record.updatedAt,
       ],
@@ -1233,6 +1235,21 @@ export class PostgresStore implements Store {
   async getPost(id: string): Promise<PostRecord | null> {
     const { rows } = await this.pool.query("SELECT * FROM posts WHERE id = $1", [id]);
     return rows[0] ? toPost(rows[0]) : null;
+  }
+
+  async addPostMedia(postId: string, mediaId: string, position: number): Promise<void> {
+    await this.pool.query(
+      "INSERT INTO post_media (post_id, media_id, position) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING",
+      [postId, mediaId, position],
+    );
+  }
+
+  async listPostMedia(postId: string): Promise<string[]> {
+    const { rows } = await this.pool.query(
+      "SELECT media_id FROM post_media WHERE post_id = $1 ORDER BY position ASC",
+      [postId],
+    );
+    return rows.map((row) => row.media_id as string);
   }
 
   async deletePost(authorId: string, id: string): Promise<boolean> {
@@ -1718,6 +1735,7 @@ function toPost(row: any): PostRecord {
     body: row.body ?? "",
     mediaId: row.media_id ?? undefined,
     pageId: row.page_id ?? undefined,
+    repostOf: row.repost_of ?? undefined,
     createdAt: new Date(row.created_at).toISOString(),
     updatedAt: new Date(row.updated_at).toISOString(),
   };

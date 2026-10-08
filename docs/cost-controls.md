@@ -11,6 +11,7 @@ tasks. They are part of the **shipped product**, not the development process
 | `packages/agent-core/src/agent.ts` | Aggregates usage across all model calls in a run. |
 | `apps/cloud/src/runner.ts` | Caps output tokens; records usage per task. |
 | `apps/cloud/src/server.ts` | Per-user rate limit; daily-budget **warning**; history trimming; exposes `limits` + `usage` on `/v1/config`. |
+| `packages/agent-core/src/providers/cache.ts` | Exact-match response cache (hash of provider + messages + tools + `maxTokens`); hits spend zero tokens. |
 | `apps/cloud/src/store/{types,memory,postgres}.ts` + `schema.ts` | `usage_events` table and `usageSince()` totals. |
 
 ## Environment variables
@@ -32,7 +33,9 @@ tasks. They are part of the **shipped product**, not the development process
 - **Daily budget** → non-blocking by default: the API returns a `warning` field
   and the app shows an amber notice. With `BOTIFYR_ENFORCE_BUDGET=1` it becomes a
   hard cap and over-budget requests return **HTTP 429** instead.
-- **Usage** is visible in the app: **Settings → Usage today** (tokens / requests / budget).
+- **Usage & billing** lives in **Settings → Usage & Billing** (plan, monthly token
+  usage, credits). The **daily budget** surfaces as a warning banner in the app
+  when reached.
 - **Provider timeouts**: streaming reads are chunked; a slow provider yields a clean error.
 
 ## Notes / possible future work

@@ -3968,6 +3968,29 @@ export async function buildServer(options: ServerOptions) {
   const MAX_POST_BODY = 4000;
   type FeedAuthorDto = ReturnType<typeof personOf> & { page?: boolean };
 
+  interface FeedPostDto {
+    id: string;
+    author: FeedAuthorDto;
+    body: string;
+    mediaId?: string;
+    mediaIds?: string[];
+    /** Short-lived signed paths to all attached images. */
+    images?: string[];
+    pageId?: string;
+    repostOf?: string;
+    imageUrl?: string;
+    createdAt: string;
+    updatedAt: string;
+    likes: number;
+    comments: number;
+    shares: number;
+    likedByMe: boolean;
+    sharedByMe: boolean;
+    reactions: Record<ReactionType, number>;
+    myReaction: ReactionType | null;
+    original?: FeedPostDto;
+  }
+
   /* Feed images are served without an auth header (an <img> can't send one), so
      the URL itself carries a short-lived HMAC token — the same possession model
      as the signed file-share links. */
@@ -4045,16 +4068,35 @@ export async function buildServer(options: ServerOptions) {
     return author;
   };
 
-  const feedPostOf = async (record: PostRecord, viewerId: string, cache: Map<string, FeedAuthorDto>) => {
-    const author = record.pageId ? await pageAuthorOf(record.pageId, cache) : await feedAuthorOf(record.authorId, cache);
+  async function feedPostOf(
+    record: PostRecord,
+    viewerId: string,
+    cache: Map<string, FeedAuthorDto>,
+    depth = 0,
+  ): Promise<FeedPostDto> {
+    const author = record.pageId
+      ? await pageAuthorOf(record.pageId, cache)
+      : await feedAuthorOf(record.authorId, cache);
     const stats = await store.getPostStats(record.id, viewerId);
+    const attached = await store.listPostMedia(record.id);
+    const mediaIds = attached.length > 0 ? attached : record.mediaId ? [record.mediaId] : [];
+    const images = mediaIds.map((id) => `/v1/feed/image?t=${signImage(id)}`);
+    // Embed the reposted original (one level deep).
+    let original: FeedPostDto | undefined;
+    if (record.repostOf && depth < 1) {
+      const parent = await store.getPost(record.repostOf);
+      if (parent) original = await feedPostOf(parent, viewerId, cache, depth + 1);
+    }
     return {
       id: record.id,
       author,
       body: record.body,
       mediaId: record.mediaId,
+      mediaIds,
+      images,
       pageId: record.pageId,
-      imageUrl: record.mediaId ? `/v1/feed/image?t=${signImage(record.mediaId)}` : undefined,
+      repostOf: record.repostOf,
+      imageUrl: images[0],
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
       likes: stats.likes,
@@ -4064,8 +4106,9 @@ export async function buildServer(options: ServerOptions) {
       sharedByMe: stats.sharedByMe,
       reactions: stats.reactions,
       myReaction: stats.myReaction,
+      original,
     };
-  };
+  }
 
   const feedCommentOf = async (record: PostCommentRecord, cache: Map<string, FeedAuthorDto>) => ({
     id: record.id,
@@ -4095,14 +4138,19 @@ export async function buildServer(options: ServerOptions) {
     },
   );
 
-  app.post<{ Body: { body?: string; mediaId?: string; pageId?: string } }>(
+  app.post<{ Body: { body?: string; mediaId?: string; mediaIds?: string[]; pageId?: string } }>(
     "/v1/posts",
     { preHandler: requireAuth },
     async (request, reply) => {
       const userId = request.userId as string;
       const body = typeof request.body?.body === "string" ? request.body.body.trim() : "";
       const mediaId = typeof request.body?.mediaId === "string" ? request.body.mediaId.trim() : "";
-      if (!body && !mediaId) return reply.code(400).send({ error: "post needs text or an image" });
+      const extra = Array.isArray(request.body?.mediaIds) ? request.body.mediaIds : [];
+      const provided = [mediaId, ...extra]
+        .map((id) => (typeof id === "string" ? id.trim() : ""))
+        .filter((id, index, all) => Boolean(id) && all.indexOf(id) === index)
+        .slice(0, 4);
+      if (!body && provided.length === 0) return reply.code(400).send({ error: "post needs text or an image" });
       if (body.length > MAX_POST_BODY) return reply.code(413).send({ error: "post is too long" });
 
       // Post as a Page when pageId is given (requires an editor/admin role).
@@ -4124,12 +4172,13 @@ export async function buildServer(options: ServerOptions) {
         id: randomUUID(),
         authorId,
         body,
-        mediaId: mediaId || undefined,
+        mediaId: provided[0] || undefined,
         pageId: page?.id,
         createdAt: now,
         updatedAt: now,
       };
       await store.createPost(record);
+      for (const [index, id] of provided.entries()) await store.addPostMedia(record.id, id, index);
       emit({ type: "feed.post", postId: record.id, authorId });
       return reply.code(201).send(await feedPostOf(record, userId, new Map()));
     },
@@ -4313,6 +4362,46 @@ export async function buildServer(options: ServerOptions) {
     });
   }
 
+  /* Repost (share) with an optional caption. Creates a new post that links back
+     to the original and bumps the original's share count. */
+  app.post<{ Params: { id: string }; Body: { caption?: string } }>(
+    "/v1/posts/:id/repost",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const original = await store.getPost(request.params.id);
+      if (!original) return reply.code(404).send({ error: "post not found" });
+      if (await store.isBlockedEither(userId, original.authorId)) {
+        return reply.code(403).send({ error: "not allowed" });
+      }
+      const caption = typeof request.body?.caption === "string" ? request.body.caption.trim() : "";
+      if (caption.length > MAX_POST_BODY) return reply.code(413).send({ error: "caption is too long" });
+      const now = new Date().toISOString();
+      const record: PostRecord = {
+        id: randomUUID(),
+        authorId: userId,
+        body: caption,
+        repostOf: original.id,
+        createdAt: now,
+        updatedAt: now,
+      };
+      await store.createPost(record);
+      await store.setPostShare(original.id, userId, true);
+      emit({ type: "feed.post", postId: record.id, authorId: userId });
+      if (original.authorId !== userId) {
+        const actor = await store.getUserById(userId);
+        emit({
+          type: "feed.share",
+          postId: original.id,
+          fromUserId: userId,
+          fromName: actor?.displayName ?? actor?.handle,
+          toUserId: original.authorId,
+        });
+      }
+      return reply.code(201).send(await feedPostOf(record, userId, new Map()));
+    },
+  );
+
   app.get<{ Params: { handle: string } }>(
     "/v1/users/:handle/posts",
     { preHandler: requireAuth },
@@ -4408,8 +4497,10 @@ export async function buildServer(options: ServerOptions) {
       category: request.body?.category?.trim().slice(0, 40) || undefined,
       about: request.body?.about?.trim().slice(0, 500) || undefined,
       avatarEmoji: request.body?.avatarEmoji?.trim().slice(0, 8) || undefined,
-      avatarUrl: typeof request.body?.avatarUrl === "string" ? request.body.avatarUrl.trim() || undefined : undefined,
-      coverUrl: typeof request.body?.coverUrl === "string" ? request.body.coverUrl.trim() || undefined : undefined,
+      avatarUrl:
+        typeof request.body?.avatarUrl === "string" ? request.body.avatarUrl.trim() || undefined : undefined,
+      coverUrl:
+        typeof request.body?.coverUrl === "string" ? request.body.coverUrl.trim() || undefined : undefined,
       cta: request.body?.cta?.trim().slice(0, 40) || undefined,
       verified: false,
       createdAt: now,
@@ -4448,7 +4539,8 @@ export async function buildServer(options: ServerOptions) {
     if (!page) return reply.code(404).send({ error: "page not found" });
     const role = page.ownerId === userId ? "admin" : (await store.getPageRole(page.id, userId))?.role;
     if (role !== "admin" && role !== "editor") return reply.code(403).send({ error: "not allowed" });
-    if (typeof request.body?.name === "string") page.name = request.body.name.trim().slice(0, 60) || page.name;
+    if (typeof request.body?.name === "string")
+      page.name = request.body.name.trim().slice(0, 60) || page.name;
     if (typeof request.body?.handle === "string") {
       const handle = slugify(request.body.handle);
       if (handle.length < 3) return reply.code(400).send({ error: "handle must be at least 3 characters" });
@@ -4458,10 +4550,12 @@ export async function buildServer(options: ServerOptions) {
     }
     if (typeof request.body?.category === "string")
       page.category = request.body.category.trim().slice(0, 40) || undefined;
-    if (typeof request.body?.about === "string") page.about = request.body.about.trim().slice(0, 500) || undefined;
+    if (typeof request.body?.about === "string")
+      page.about = request.body.about.trim().slice(0, 500) || undefined;
     if (typeof request.body?.avatarEmoji === "string")
       page.avatarEmoji = request.body.avatarEmoji.trim().slice(0, 8) || undefined;
-    if (typeof request.body?.avatarUrl === "string") page.avatarUrl = request.body.avatarUrl.trim() || undefined;
+    if (typeof request.body?.avatarUrl === "string")
+      page.avatarUrl = request.body.avatarUrl.trim() || undefined;
     if (typeof request.body?.coverUrl === "string") page.coverUrl = request.body.coverUrl.trim() || undefined;
     if (typeof request.body?.cta === "string") page.cta = request.body.cta.trim().slice(0, 40) || undefined;
     page.updatedAt = new Date().toISOString();
@@ -4749,7 +4843,13 @@ export async function buildServer(options: ServerOptions) {
         return reply.code(403).send({ error: "you can only share with friends" });
       }
       const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-      const token = signShare({ t: record.taskId, n: record.name, r: toUserId, e: Date.parse(expiresAt) });
+      const token = signShare({
+        t: record.taskId,
+        n: record.name,
+        r: toUserId,
+        e: Date.parse(expiresAt),
+        s: record.size,
+      });
       return { token, expiresAt };
     },
   );

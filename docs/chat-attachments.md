@@ -84,11 +84,12 @@ Done:
 
 - ✅ **Video in the lightbox** — the media viewer spans images *and* videos;
   videos render with playback controls (`<video controls autoPlay>`).
+- ✅ **File sizes** — the size rides in the share-token payload (`s`), is decoded
+  client-side (`decodeShare`) and shown on document rows (`formatSize`,
+  `.dm-file-size`).
 
 Next:
-1. **File sizes** — add size to the share token payload (or match the media
-   record) and show it on document rows.
-2. **Voice notes** — record in the composer and render a waveform player.
+1. **Voice notes** — record in the composer and render a waveform player.
 
 ## 4. Server contract
 
