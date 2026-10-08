@@ -4124,23 +4124,43 @@ export async function buildServer(options: ServerOptions) {
     createdAt: record.createdAt,
   });
 
-  app.get<{ Querystring: { cursor?: string; limit?: string } }>(
+  app.get<{ Querystring: { cursor?: string; limit?: string; tab?: string; sort?: string } }>(
     "/v1/feed",
     { preHandler: requireAuth },
     async (request) => {
       const userId = request.userId as string;
       const cursor = request.query?.cursor?.trim() || undefined;
       const limit = Math.max(1, Math.min(50, Number(request.query?.limit ?? 20) || 20));
+      const tab = request.query?.tab?.trim() || "all";
+      const sort = request.query?.sort?.trim() === "top" ? "top" : "recent";
       const blocked = new Set(await store.listBlockedEither(userId));
       const friendIds = (await store.listFriends(userId)).filter((id) => !blocked.has(id));
       const followedPages = (await store.listFollowedPageIds(userId)).filter((id) => !blocked.has(id));
-      const posts = (await store.listFeedPosts([userId, ...friendIds, ...followedPages], limit + 1, cursor)).filter(
-        (post) => canSeePost(post, userId),
+      const authorIds =
+        tab === "friends"
+          ? [userId, ...friendIds]
+          : tab === "pages"
+            ? followedPages
+            : [userId, ...friendIds, ...followedPages];
+
+      const cache = new Map<string, FeedAuthorDto>();
+      const items = [];
+
+      // "Top": engagement-ranked over the last 30 days (no cursor).
+      if (sort === "top") {
+        const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+        const ranked = (await store.listTrendingPosts(authorIds, since, limit)).filter((post) =>
+          canSeePost(post, userId),
+        );
+        for (const record of ranked) items.push(await feedPostOf(record, userId, cache));
+        return { items, nextCursor: null };
+      }
+
+      const posts = (await store.listFeedPosts(authorIds, limit + 1, cursor)).filter((post) =>
+        canSeePost(post, userId),
       );
       const hasMore = posts.length > limit;
       const page = hasMore ? posts.slice(0, limit) : posts;
-      const cache = new Map<string, FeedAuthorDto>();
-      const items = [];
       for (const record of page) items.push(await feedPostOf(record, userId, cache));
       return { items, nextCursor: hasMore ? (page[page.length - 1]?.createdAt ?? null) : null };
     },
@@ -4218,7 +4238,7 @@ export async function buildServer(options: ServerOptions) {
         const post = await store.getPost(request.params.id);
         if (!post) return reply.code(404).send({ error: "post not found" });
         const userId = request.userId as string;
-        if (await store.isBlockedEither(userId, post.authorId)) {
+        if (!canSeePost(post, userId) || (await store.isBlockedEither(userId, post.authorId))) {
           return reply.code(403).send({ error: "not allowed" });
         }
         await store.setPostReaction(post.id, userId, liked ? "like" : null);
@@ -4246,7 +4266,7 @@ export async function buildServer(options: ServerOptions) {
       const post = await store.getPost(request.params.id);
       if (!post) return reply.code(404).send({ error: "post not found" });
       const userId = request.userId as string;
-      if (await store.isBlockedEither(userId, post.authorId)) {
+      if (!canSeePost(post, userId) || (await store.isBlockedEither(userId, post.authorId))) {
         return reply.code(403).send({ error: "not allowed" });
       }
       const reaction = (request.query?.reaction ?? "").trim() as ReactionType;
@@ -4279,6 +4299,8 @@ export async function buildServer(options: ServerOptions) {
     "/v1/posts/:id/comments",
     { preHandler: requireAuth },
     async (request) => {
+      const post = await store.getPost(request.params.id);
+      if (post && !canSeePost(post, request.userId as string)) return [];
       const blocked = new Set(await store.listBlockedEither(request.userId as string));
       const comments = await store.listPostComments(request.params.id);
       const cache = new Map<string, FeedAuthorDto>();
@@ -4297,7 +4319,10 @@ export async function buildServer(options: ServerOptions) {
     async (request, reply) => {
       const post = await store.getPost(request.params.id);
       if (!post) return reply.code(404).send({ error: "post not found" });
-      if (await store.isBlockedEither(request.userId as string, post.authorId)) {
+      if (
+        !canSeePost(post, request.userId as string) ||
+        (await store.isBlockedEither(request.userId as string, post.authorId))
+      ) {
         return reply.code(403).send({ error: "not allowed" });
       }
       const body = typeof request.body?.body === "string" ? request.body.body.trim() : "";
@@ -4355,7 +4380,7 @@ export async function buildServer(options: ServerOptions) {
         const post = await store.getPost(request.params.id);
         if (!post) return reply.code(404).send({ error: "post not found" });
         const userId = request.userId as string;
-        if (await store.isBlockedEither(userId, post.authorId)) {
+        if (!canSeePost(post, userId) || (await store.isBlockedEither(userId, post.authorId))) {
           return reply.code(403).send({ error: "not allowed" });
         }
         await store.setPostShare(post.id, userId, shared);
@@ -4383,7 +4408,7 @@ export async function buildServer(options: ServerOptions) {
       const userId = request.userId as string;
       const original = await store.getPost(request.params.id);
       if (!original) return reply.code(404).send({ error: "post not found" });
-      if (await store.isBlockedEither(userId, original.authorId)) {
+      if (!canSeePost(original, userId) || (await store.isBlockedEither(userId, original.authorId))) {
         return reply.code(403).send({ error: "not allowed" });
       }
       const caption = typeof request.body?.caption === "string" ? request.body.caption.trim() : "";
@@ -4424,7 +4449,7 @@ export async function buildServer(options: ServerOptions) {
       if (user.id !== viewerId && !(await store.areFriends(viewerId, user.id))) {
         return reply.code(403).send({ error: "not allowed" });
       }
-      const posts = await store.listPostsByAuthor(user.id, 20);
+      const posts = (await store.listPostsByAuthor(user.id, 20)).filter((post) => canSeePost(post, viewerId));
       const cache = new Map<string, FeedAuthorDto>();
       const items = [];
       for (const record of posts) items.push(await feedPostOf(record, viewerId, cache));

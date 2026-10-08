@@ -56,17 +56,20 @@ Botifyr's chat is intentionally simpler and reuses one primitive:
 | --- | --- |
 | **Image** (`png/jpg/jpeg/webp/gif/svg`) | Inline `<img>` (`dm-preview-img`), max ~320×240, rounded. Click opens the file. **No file chip.** |
 | **Video** (`mp4/webm`) | Inline `<video controls>` (`dm-preview-video`). |
-| **Audio** (`mp3/wav/ogg`) | Inline `<audio controls>` (`dm-preview-audio`). |
+| **Audio** (`mp3/wav/ogg`) | Inline `<audio controls>` (`dm-preview-audio`); **voice notes** use a waveform player (`VoiceNotePlayer`, `.voice-note`). |
 | **Other** | A **document row** (`dm-file`): type icon + name + **Save**. |
 | **Sidebar / notification preview** | One line: `📎 <name>` (never the raw token). |
 
-Helpers: `sharedTokenOf`, `sharedFileOf`, `previewText`, and the `dmFileCard`
-renderer in `BotifyrApp.tsx`.
+Helpers: `sharedTokenOf`, `sharedFileOf`, `sharedFilesOf` (albums), `decodeShare`,
+`formatSize`, `fileIconFor`, `previewText`, and the `dmFileCard` renderer in
+`BotifyrApp.tsx`.
 
-### Deliberate differences from Telegram
-- No media viewer / albums yet — images open in the OS/browser.
-- No caption field on attachments (the `📎 name` line is the only text).
-- No waveform for audio (native `<audio>` controls).
+### Differences from Telegram
+- Voice notes carry a waveform (`.voice-note`); other audio uses native
+  `<audio>` controls.
+- Voice-note **transcription** is not built yet (see §3).
+- Attachments are stored as text (`📎 name` + `/shared/<token>`), not a binary
+  media model.
 
 ## 3. Roadmap / next steps
 
@@ -91,9 +94,16 @@ Done:
   captures the clip, uploads it via `/v1/uploads`, and it renders as an inline
   audio player (`<audio controls>`).
 
+- ✅ **Waveform** — voice notes render with a real waveform from decoded audio
+  peaks (`VoiceNotePlayer`, `.voice-note`, `.voice-note-wave`, `.voice-note-bar`),
+  with play/pause and a progress bar.
+- ✅ **Contact panel** — individual chats have a Telegram-style right panel
+  (`.contact-panel`): big avatar + name + status, action buttons (Search / Hide /
+  Delete), info rows, and a media summary (Photos / Videos / Voice / Files).
+
 Next:
-1. **Waveform** — visualise voice notes (currently the native `<audio>` player).
-2. **Transcription** — a "transcribe" action that shows text under the clip.
+1. **Transcription** — a "transcribe" action that shows text under the clip.
+2. **Shared media grid** — make the media summary rows open filtered views.
 
 ## 4. Server contract
 

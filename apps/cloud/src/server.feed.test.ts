@@ -492,6 +492,86 @@ describe("feed", () => {
     await app.close();
   });
 
+  it("filters the feed by tab (all/friends/pages)", async () => {
+    const { app, store, signUp, auth, createPost } = await setup();
+    const alice = await signUp("alice-tabs@example.com");
+    const bob = await signUp("bob-tabs@example.com");
+    await store.createFriendship(alice.user.id, bob.user.id);
+    const page = (
+      await app.inject({
+        method: "POST",
+        url: "/v1/pages",
+        headers: auth(alice.token),
+        payload: { name: "Tabbers", handle: "tabbers" },
+      })
+    ).json() as { id: string };
+
+    const friendPost = await createPost(bob.token, "friend post");
+    const pagePost = (
+      await app.inject({
+        method: "POST",
+        url: "/v1/posts",
+        headers: auth(alice.token),
+        payload: { body: "page post", pageId: page.id },
+      })
+    ).json() as { id: string };
+    await app.inject({ method: "POST", url: `/v1/pages/${page.id}/follow`, headers: auth(bob.token), payload: {} });
+
+    const ids = async (url: string) =>
+      ((await app.inject({ method: "GET", url, headers: auth(bob.token) })).json() as {
+        items: Array<{ id: string }>;
+      }).items.map((entry) => entry.id);
+
+    expect(await ids("/v1/feed?tab=all")).toEqual(expect.arrayContaining([friendPost.id, pagePost.id]));
+    const friends = await ids("/v1/feed?tab=friends");
+    expect(friends).toContain(friendPost.id);
+    expect(friends).not.toContain(pagePost.id);
+    const pages = await ids("/v1/feed?tab=pages");
+    expect(pages).toContain(pagePost.id);
+    expect(pages).not.toContain(friendPost.id);
+
+    const top = await app.inject({ method: "GET", url: "/v1/feed?sort=top", headers: auth(bob.token) });
+    expect(top.statusCode).toBe(200);
+
+    await app.close();
+  });
+
+  it("enforces the only_me audience (author-only)", async () => {
+    const { app, store, signUp, auth, feed } = await setup();
+    const alice = await signUp("alice-aud@example.com");
+    const bob = await signUp("bob-aud@example.com");
+    await store.createFriendship(alice.user.id, bob.user.id);
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/v1/posts",
+      headers: auth(alice.token),
+      payload: { body: "secret", audience: "only_me" },
+    });
+    expect(created.statusCode).toBe(201);
+    const dto = created.json() as { id: string; audience?: string };
+    expect(dto.audience).toBe("only_me");
+
+    // A friend can't see it; the author can.
+    expect((await feed(bob.token)).items.map((entry) => entry.id)).not.toContain(dto.id);
+    expect((await feed(alice.token)).items.map((entry) => entry.id)).toContain(dto.id);
+
+    // A friend can't interact with it.
+    const like = await app.inject({ method: "PUT", url: `/v1/posts/${dto.id}/like`, headers: auth(bob.token) });
+    expect(like.statusCode).toBe(403);
+    const comment = await app.inject({
+      method: "POST",
+      url: `/v1/posts/${dto.id}/comments`,
+      headers: auth(bob.token),
+      payload: { body: "hi" },
+    });
+    expect(comment.statusCode).toBe(403);
+    const comments = await app.inject({ method: "GET", url: `/v1/posts/${dto.id}/comments`, headers: auth(bob.token) });
+    expect(comments.json()).toEqual([]);
+
+    await app.close();
+  });
+
   it("supports threaded replies", async () => {
     const { app, store, signUp, auth, createPost } = await setup();
     const alice = await signUp("alice-thread@example.com");

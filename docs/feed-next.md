@@ -54,8 +54,13 @@ the UI (the Share action now creates a repost).
 `images[]` on the feed DTO, plus a multi-image composer (pick up to 4, thumbnails)
 and a post image grid in the UI.
 
-**Everything else** in this document (comment reactions, audience, ranking,
-stories, groups, …) is **not started**.
+**Audience selector (FR-7) — done.** `posts.audience` (`public | friends |
+only_me`, default friends), an audience control in the composer, `audience` on the
+feed DTO, and server-side enforcement on every read (feed, Wall, comments) and
+interaction (like/reaction/comment/share/repost) — `only_me` is author-only.
+
+**Everything else** in this document (comment reactions, ranking, stories,
+groups, …) is **not started**.
 
 > **Reconciled with the product as of Oct 2026.** Facebook's reference section
 > (§1) reflects its 2026 behaviour; §2 and §5 note where Botifyr has already moved

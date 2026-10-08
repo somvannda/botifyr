@@ -22,6 +22,7 @@ OpenRouter, DeepSeek, Groq, or a local model via environment variables.
 | Doc | What's inside |
 | --- | --- |
 | [docs/competitive-analysis.md](docs/competitive-analysis.md) | What Grok Bot, OpenClaw, and Muse actually are, a feature matrix, and a SWOT for each. |
+| [docs/ai-company-platforms.md](docs/ai-company-platforms.md) | The AI-company / virtual-employee category — NanoCorp, Polsia, AGEMS, SIMI, Syzygia, OrgZero — setup, UI/UX, pricing, and SWOT. |
 | [docs/botifyr-blueprint.md](docs/botifyr-blueprint.md) | The proposed architecture, capability map, tech stack, roadmap, and MVP definition for Botifyr. |
 | [docs/company-workspace.md](docs/company-workspace.md) | Company workspaces — run a virtual startup whose employees are AI bots. |
 | [docs/company-os.md](docs/company-os.md) | Company OS architecture — schema, employee model, catalog, orchestrator, tasks, permissions, memory, integrations, lifecycle, cost, security. |

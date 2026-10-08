@@ -3296,6 +3296,16 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
           (message) => sharedFilesOf(displayText(decrypted, message.content, message.id)).files,
         )
       : [];
+  const sharedFileCounts = activeSharedFiles.reduce(
+    (acc, file) => {
+      if (/^voice-/i.test(file.name)) acc.voice += 1;
+      else if (/\.(png|jpe?g|webp|gif|svg)$/i.test(file.name)) acc.photo += 1;
+      else if (/\.(mp4|webm)$/i.test(file.name)) acc.video += 1;
+      else acc.file += 1;
+      return acc;
+    },
+    { photo: 0, video: 0, voice: 0, file: 0 },
+  );
 
   /** Signed, owner/recipient-scoped URL for a shared file. */
   function sharedUrl(shareToken: string): string {
@@ -5366,81 +5376,133 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
         !activeBot &&
         activeSession &&
         (activeSession.kind === "dm" || activeSession.kind === "group") && (
-          <aside className="bot-panel">
-            <div className="bot-panel-head">
+          <aside className="bot-panel contact-panel">
+            <div className="contact-head">
               {activePeer ? (
-                <PersonAvatar person={activePeer} size={72} />
+                <PersonAvatar person={activePeer} size={96} />
               ) : (
-                <span className="person-avatar emoji" style={{ width: 72, height: 72, fontSize: 34 }}>
+                <span className="person-avatar emoji" style={{ width: 96, height: 96, fontSize: 44 }}>
                   {activeSession.kind === "group" ? "👥" : "💬"}
                 </span>
               )}
-              <div className="bot-panel-name">{humanChatName(activeSession)}</div>
-              <div className="bot-panel-sub">
+              <div className="contact-name">{humanChatName(activeSession)}</div>
+              <div className="contact-status">
                 {activeSession.kind === "group"
                   ? `${activeSession.participants?.length ?? 0} members`
-                  : activePeer?.handle
-                    ? `@${activePeer.handle}`
-                    : activePeer?.online
-                      ? "Online"
-                      : "Offline"}
+                  : activePeer?.online
+                    ? "Online"
+                    : "Offline"}
               </div>
             </div>
 
-            <div className="bot-panel-body">
-              <div className="bot-panel-details">
-                {activePeer && (
-                  <>
-                    <div className="bot-panel-kv">
-                      <span>Name</span>
-                      <span>
-                        {activePeer.displayName || (activePeer.handle ? `@${activePeer.handle}` : "Friend")}
-                      </span>
-                    </div>
-                    <div className="bot-panel-kv">
-                      <span>Status</span>
-                      <span>{activePeer.online ? "Online" : "Offline"}</span>
-                    </div>
-                  </>
-                )}
-                {activeSession.kind === "group" && (
-                  <div className="bot-panel-kv">
-                    <span>Members</span>
-                    <span>{activeSession.participants?.length ?? 0}</span>
-                  </div>
-                )}
-                <div className="bot-panel-kv">
-                  <span>Messages</span>
-                  <span>{activeSession.messages.length}</span>
+            <div className="contact-actions">
+              <button className="contact-action" type="button" onClick={() => setFindOpen(true)}>
+                <span className="contact-action-ico">
+                  <SearchIcon size={18} />
+                </span>
+                Search
+              </button>
+              <button className="contact-action" type="button" onClick={() => setShowBotPanel(false)}>
+                <span className="contact-action-ico">
+                  <PanelIcon size={18} />
+                </span>
+                Hide
+              </button>
+              <button
+                className="contact-action danger"
+                type="button"
+                onClick={() => void removeChat(activeSession)}
+              >
+                <span className="contact-action-ico">
+                  <CloseIcon size={18} />
+                </span>
+                Delete
+              </button>
+            </div>
+
+            <div className="contact-info">
+              {activePeer && (
+                <div className="contact-row">
+                  <span className="contact-row-label">Username</span>
+                  <span className="contact-row-value">
+                    {activePeer.handle ? `@${activePeer.handle}` : "—"}
+                  </span>
                 </div>
-              </div>
-
-              <div className="bot-panel-section-head">Shared files</div>
-              {activeSharedFiles.length === 0 ? (
-                <div className="bot-panel-empty">No files shared yet.</div>
-              ) : (
-                <ul className="downloads-list">
-                  {activeSharedFiles.map((file) => (
-                    <li key={file.token} className="download-row">
-                      <div className="download-main">
-                        <div className="download-name">{file.name}</div>
-                      </div>
-                      <button
-                        className="ghost small"
-                        type="button"
-                        onClick={() =>
-                          void openExternal(
-                            `${CLOUD_URL}/v1/shared?share=${encodeURIComponent(file.token)}&token=${encodeURIComponent(token())}`,
-                          )
-                        }
-                      >
-                        Save
-                      </button>
-                    </li>
-                  ))}
-                </ul>
               )}
+              {activeSession.kind === "group" && (
+                <div className="contact-row">
+                  <span className="contact-row-label">Members</span>
+                  <span className="contact-row-value">{activeSession.participants?.length ?? 0}</span>
+                </div>
+              )}
+              <div className="contact-row">
+                <span className="contact-row-label">Status</span>
+                <span className="contact-row-value">
+                  {activePeer ? (activePeer.online ? "Online" : "Offline") : "—"}
+                </span>
+              </div>
+              <div className="contact-row">
+                <span className="contact-row-label">Messages</span>
+                <span className="contact-row-value">{activeSession.messages.length}</span>
+              </div>
             </div>
+
+            <div className="contact-media">
+              <div className="contact-media-row">
+                <span className="contact-media-ico">
+                  <PanelIcon size={18} />
+                </span>
+                Photos
+                <span className="contact-media-count">{sharedFileCounts.photo}</span>
+              </div>
+              <div className="contact-media-row">
+                <span className="contact-media-ico">
+                  <PlayIcon size={18} />
+                </span>
+                Videos
+                <span className="contact-media-count">{sharedFileCounts.video}</span>
+              </div>
+              <div className="contact-media-row">
+                <span className="contact-media-ico">
+                  <MicIcon size={18} />
+                </span>
+                Voice messages
+                <span className="contact-media-count">{sharedFileCounts.voice}</span>
+              </div>
+              <div className="contact-media-row">
+                <span className="contact-media-ico">
+                  <LockIcon size={18} />
+                </span>
+                Files
+                <span className="contact-media-count">{sharedFileCounts.file}</span>
+              </div>
+            </div>
+
+            <div className="bot-panel-section-head">Shared files</div>
+            {activeSharedFiles.length === 0 ? (
+              <div className="bot-panel-empty">No files shared yet.</div>
+            ) : (
+              <ul className="downloads-list">
+                {activeSharedFiles.map((file) => (
+                  <li key={file.token} className="download-row">
+                    <div className="download-main">
+                      <div className="download-name">{file.name}</div>
+                    </div>
+                    <button
+                      className="ghost small"
+                      type="button"
+                      onClick={() =>
+                        void openExternal(
+                          `${CLOUD_URL}/v1/shared?share=${encodeURIComponent(file.token)}&token=${encodeURIComponent(token())}`,
+                        )
+                      }
+                    >
+                      Save
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </aside>
         )}
 
@@ -9018,6 +9080,107 @@ export function fileIconFor(name: string): string {
   return "📎";
 }
 
+/** A voice note: play/pause + a waveform drawn from the decoded audio peaks. */
+function VoiceNotePlayer({ src }: { src: string }) {
+  const [peaks, setPeaks] = useState<number[]>([]);
+  const [duration, setDuration] = useState(0);
+  const [progress, setProgress] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(src);
+        const buf = await res.arrayBuffer();
+        const Ctor =
+          typeof AudioContext !== "undefined"
+            ? AudioContext
+            : (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        if (!Ctor) return;
+        const ctx = new Ctor();
+        const audio = await ctx.decodeAudioData(buf);
+        const data = audio.getChannelData(0);
+        const buckets = 40;
+        const size = Math.max(1, Math.floor(data.length / buckets));
+        const out: number[] = [];
+        for (let i = 0; i < buckets; i += 1) {
+          let peak = 0;
+          for (let j = 0; j < size; j += 1) {
+            const value = Math.abs(data[i * size + j] ?? 0);
+            if (value > peak) peak = value;
+          }
+          out.push(peak);
+        }
+        void ctx.close();
+        if (!cancelled) {
+          setPeaks(out.some((p) => p > 0) ? out : new Array(buckets).fill(0.2));
+          setDuration(audio.duration);
+        }
+      } catch {
+        if (!cancelled) setPeaks(new Array(40).fill(0.2));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [src]);
+
+  function toggle() {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (playing) audio.pause();
+    else void audio.play();
+  }
+
+  const formatTime = (seconds: number): string => {
+    if (!Number.isFinite(seconds) || seconds <= 0) return "0:00";
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  const bars = peaks.length > 0 ? peaks : new Array(40).fill(0.2);
+  return (
+    <div className="voice-note">
+      <button
+        className="voice-note-play"
+        type="button"
+        aria-label={playing ? "Pause" : "Play"}
+        onClick={toggle}
+      >
+        {playing ? <PauseIcon size={15} /> : <PlayIcon size={15} />}
+      </button>
+      <div className="voice-note-wave">
+        {bars.map((peak, index) => (
+          <span
+            key={index}
+            className={`voice-note-bar${index / bars.length <= progress ? " played" : ""}`}
+            style={{ height: `${Math.max(12, Math.round(peak * 100))}%` }}
+          />
+        ))}
+      </div>
+      <span className="voice-note-time">{formatTime(duration)}</span>
+      <audio
+        ref={audioRef}
+        src={src}
+        preload="metadata"
+        onPlay={() => setPlaying(true)}
+        onPause={() => setPlaying(false)}
+        onEnded={() => {
+          setPlaying(false);
+          setProgress(0);
+        }}
+        onTimeUpdate={(event) => {
+          const el = event.currentTarget;
+          if (el.duration) setProgress(el.currentTime / el.duration);
+        }}
+      />
+    </div>
+  );
+}
+
 /**
  * Render a message's attachment(s): inline media, a file chip, or an album grid
  * (multiple `📎 name` + `/shared/<token>` pairs), with an optional caption.
@@ -9039,6 +9202,10 @@ export function AttachmentMessage({
   const media = (file: SharedAttachment) => {
     const url = urlFor(file.token);
     const lower = file.name.toLowerCase();
+    // Voice notes (recorded clips) get the waveform player.
+    if (/^voice-/i.test(file.name)) {
+      return <VoiceNotePlayer src={url} />;
+    }
     if (/\.(png|jpe?g|webp|gif|svg)$/.test(lower)) {
       return (
         <img

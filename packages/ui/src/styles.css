@@ -3793,6 +3793,62 @@ body {
   color: var(--muted);
 }
 
+.voice-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel-2);
+  max-width: 320px;
+}
+
+.voice-note-play {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.voice-note-wave {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 28px;
+  min-width: 0;
+}
+
+.voice-note-bar {
+  flex: 1;
+  background: var(--muted);
+  border-radius: 2px;
+  opacity: 0.5;
+}
+
+.voice-note-bar.played {
+  background: var(--accent);
+  opacity: 1;
+}
+
+.voice-note-time {
+  flex: none;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.voice-note audio {
+  display: none;
+}
+
 .lightbox {
   position: fixed;
   inset: 0;
@@ -5472,6 +5528,110 @@ body {
   letter-spacing: 0.04em;
 }
 
+/* Telegram-style contact panel (individual chats) ------------------------- */
+.contact-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.contact-name {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.contact-status {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.contact-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.contact-action {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 10px 6px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.contact-action:hover {
+  background: var(--hover);
+}
+
+.contact-action-ico {
+  color: var(--accent);
+  display: grid;
+  place-items: center;
+}
+
+.contact-action.danger,
+.contact-action.danger .contact-action-ico {
+  color: var(--danger, #e5484d);
+}
+
+.contact-info {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border);
+}
+
+.contact-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 2px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.contact-row-label {
+  color: var(--muted);
+}
+
+.contact-row-value {
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contact-media {
+  display: flex;
+  flex-direction: column;
+}
+
+.contact-media-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 2px;
+  font-size: 13px;
+}
+
+.contact-media-ico {
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+}
+
+.contact-media-count {
+  margin-left: auto;
+  color: var(--muted);
+}
+
 .bot-panel-addlabel,
 .bot-panel-label {
   border: none;
@@ -6521,6 +6681,33 @@ body {
   color: var(--muted);
 }
 
+.feed-tabs {
+  display: flex;
+  gap: 4px;
+}
+
+.feed-tab {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.feed-tab:hover {
+  color: var(--text);
+  background: var(--hover);
+}
+
+.feed-tab.active {
+  color: var(--accent);
+  background: rgba(109, 139, 255, 0.14);
+}
+
 .feed-scroll {
   flex: 1;
   min-height: 0;
@@ -6672,6 +6859,12 @@ body {
 }
 
 .feed-repost-label {
+  margin-top: 10px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.feed-audience-badge {
   margin-top: 10px;
   font-size: 11.5px;
   color: var(--muted);

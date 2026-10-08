@@ -4,6 +4,13 @@ Living checklist. We work top to bottom, one item per change, and tick boxes as
 they land. Keep entries short; link code paths instead of explaining them.
 
 ## Pending (requested, not finished)
+- [ ] **AI-company positioning** — the "AI workforce" category is real (NanoCorp,
+      Polsia, AGEMS, SIMI, Syzygia, OrgZero). Research + SWOT:
+      [`docs/ai-company-platforms.md`](ai-company-platforms.md). **Finding:** every
+      competitor's weakest point is the **CEO experience** ("what needs me / what
+      moved") — the same gap we felt. **Plan:** win on the decision inbox +
+      "since last visit" briefing, honest human-gating, and real hands — not on
+      "most autonomous" or "most features".
 - [ ] **Video translation (dub + subtitles + lip-sync)** — translate a video/movie/
       series: transcribe, translate, TTS dub (optional voice clone), optional
       lip-sync, render with correct timing — background pipeline, **no editor**.

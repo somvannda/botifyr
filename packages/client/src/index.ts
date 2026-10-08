@@ -120,6 +120,8 @@ export interface FeedPost {
   pageId?: string;
   /** Set when this post is a repost (share) of another post. */
   repostOf?: string;
+  /** Who can see the post: public | friends | only_me. */
+  audience?: string;
   /** The reposted original, embedded (one level deep). */
   original?: FeedPost;
   /** Short-lived signed path to the attached image, if any. */
@@ -1077,14 +1079,22 @@ export class BotifyrClient {
   }
 
   /* Feed (social posts). */
-  listFeed(cursor?: string, limit = 20): Promise<FeedPage> {
+  listFeed(cursor?: string, limit = 20, opts?: { tab?: string; sort?: string }): Promise<FeedPage> {
     const params = new URLSearchParams();
     if (cursor) params.set("cursor", cursor);
     params.set("limit", String(limit));
+    if (opts?.tab) params.set("tab", opts.tab);
+    if (opts?.sort) params.set("sort", opts.sort);
     return this.request(`/v1/feed?${params.toString()}`);
   }
 
-  createPost(input: { body: string; mediaId?: string; mediaIds?: string[]; pageId?: string }): Promise<FeedPost> {
+  createPost(input: {
+    body: string;
+    mediaId?: string;
+    mediaIds?: string[];
+    pageId?: string;
+    audience?: "public" | "friends" | "only_me";
+  }): Promise<FeedPost> {
     return this.request("/v1/posts", { method: "POST", json: true, body: JSON.stringify(input) });
   }
 

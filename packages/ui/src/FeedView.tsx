@@ -241,6 +241,7 @@ function PostCard({
     <article className="feed-post">
       <AuthorLine author={post.author} when={post.createdAt} />
 
+      {post.audience === "only_me" && <div className="feed-audience-badge">🔒 Only me</div>}
       {post.repostOf && <div className="feed-repost-label">🔁 Shared a post</div>}
       {post.body && <p className="feed-body">{post.body}</p>}
 
@@ -725,6 +726,9 @@ export function FeedView({
   const [draft, setDraft] = useState("");
   const [posting, setPosting] = useState(false);
   const [attachments, setAttachments] = useState<Array<{ name: string; mime: string; data: string }>>([]);
+  const [audience, setAudience] = useState<"public" | "friends" | "only_me">("friends");
+  const [tab, setTab] = useState<"all" | "friends" | "pages">("all");
+  const [sort, setSort] = useState<"recent" | "top">("recent");
   const [pages, setPages] = useState<Page[]>([]);
   const [postAs, setPostAs] = useState("");
   const [creatingPage, setCreatingPage] = useState(false);
@@ -760,7 +764,7 @@ export function FeedView({
       else setLoadingMore(true);
       setError(null);
       try {
-        const page = await client.listFeed(mode === "reset" ? undefined : (cursor ?? undefined), 20);
+        const page = await client.listFeed(mode === "reset" ? undefined : (cursor ?? undefined), 20, { tab, sort });
         setPosts((prev) => (mode === "reset" ? page.items : [...prev, ...page.items]));
         setCursor(page.nextCursor);
       } catch (err) {
@@ -770,15 +774,15 @@ export function FeedView({
         else setLoadingMore(false);
       }
     },
-    [client, cursor],
+    [client, cursor, tab, sort],
   );
 
   useEffect(() => {
-    // Load on mount and whenever the host signals a feed event (realtime).
-    // "load more" is user-driven.
+    // Load on mount, on tab/sort change, and whenever the host signals a feed
+    // event (realtime). "load more" is user-driven.
     void load("reset");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [client, refreshKey]);
+  }, [client, refreshKey, tab, sort]);
 
   useEffect(() => {
     let active = true;
@@ -819,7 +823,7 @@ export function FeedView({
         const media = await client.uploadFile({ name: file.name, mime: file.mime, data: file.data });
         mediaIds.push(media.id);
       }
-      const post = await client.createPost({ body, mediaIds, pageId: postAs || undefined });
+      const post = await client.createPost({ body, mediaIds, pageId: postAs || undefined, audience });
       setPosts((prev) => [post, ...prev]);
       setDraft("");
       setAttachments([]);
@@ -855,7 +859,37 @@ export function FeedView({
     <div className="feed">
       <div className="feed-topbar">
         <span className="feed-topbar-title">Feed</span>
-        <span className="feed-topbar-sub">From you and your friends</span>
+        <div className="feed-tabs">
+          <button
+            type="button"
+            className={`feed-tab${tab === "all" ? " active" : ""}`}
+            onClick={() => setTab("all")}
+          >
+            All
+          </button>
+          <button
+            type="button"
+            className={`feed-tab${tab === "friends" ? " active" : ""}`}
+            onClick={() => setTab("friends")}
+          >
+            Friends
+          </button>
+          <button
+            type="button"
+            className={`feed-tab${tab === "pages" ? " active" : ""}`}
+            onClick={() => setTab("pages")}
+          >
+            Pages
+          </button>
+        </div>
+        <span className="feed-stats-spacer" />
+        <button
+          type="button"
+          className="feed-composer-tool"
+          onClick={() => setSort((value) => (value === "top" ? "recent" : "top"))}
+        >
+          {sort === "top" ? "Top" : "Most recent"}
+        </button>
       </div>
 
       <div className="feed-scroll">
@@ -921,6 +955,17 @@ export function FeedView({
                 + New Page
               </button>
             )}
+          </div>
+          <div className="feed-composer-as">
+            <span>Audience</span>
+            <select
+              value={audience}
+              onChange={(event) => setAudience(event.target.value as "public" | "friends" | "only_me")}
+            >
+              <option value="public">Public</option>
+              <option value="friends">Friends</option>
+              <option value="only_me">Only me</option>
+            </select>
           </div>
           <div className="feed-composer-actions">
             <button type="button" className="feed-composer-tool" onClick={() => fileRef.current?.click()}>

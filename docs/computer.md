@@ -77,7 +77,7 @@ recording — a video is evidence; a *trace* is what's replayable.)
 | `BOTIFYR_DESKTOP_IMAGE` | `botifyr/desktop-sandbox:1` | Sandbox image. |
 | `BOTIFYR_COMPUTER_IDLE_MINUTES` | `10` | Auto-stop an idle session desktop. |
 | `SCREEN_WIDTH` / `SCREEN_HEIGHT` (sandbox) | `1280` / `800` | Desktop size; the UI maps clicks against this. |
-| `BOTIFYR_SANDBOX_NETWORK` | `botifyr-net` | Network the sandbox joins so the cloud can reach it. |
+| `BOTIFYR_SANDBOX_NETWORK` | `botifyr-net` (set in `docker-compose.yml`) | Network the sandbox joins so the cloud can reach it. Unset → the sandbox publishes a random host port instead. |
 
 ## 7. Notes
 
