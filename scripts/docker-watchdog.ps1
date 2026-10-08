@@ -93,19 +93,43 @@ function Start-Stack {
   }
 }
 
+$EngineDownMarker = Join-Path $env:TEMP "botifyr-engine-down-since"
+
 # Poke the engine on every run: a cheap `docker info` keeps an idle Docker
 # engine from stopping itself and tells us whether a restart is needed.
 $cloudUp = Test-Cloud
 $engineUp = Test-Engine
+
 if ($cloudUp -and $engineUp) {
+  Remove-Item $EngineDownMarker -Force -ErrorAction SilentlyContinue
   Write-Log "ok - cloud healthy"
   exit 0
 }
 
 Write-Log "cloud is DOWN ($HealthUrl)"
+
 if (-not $engineUp) {
+  # Debounce: only restart Docker once the engine has been unresponsive across
+  # two runs, so a momentary `docker info` blip can't trigger a needless restart.
+  $since = $null
+  if (Test-Path $EngineDownMarker) {
+    try { $since = [datetime]::Parse((Get-Content $EngineDownMarker -Raw).Trim()) } catch {}
+  }
+  if (-not $since) {
+    Set-Content -Path $EngineDownMarker -Value (Get-Date -Format "o")
+    Write-Log "engine unresponsive - waiting one cycle before restarting"
+    exit 1
+  }
+  $downSeconds = [int]((Get-Date) - $since).TotalSeconds
+  if ($downSeconds -lt 100) {
+    Write-Log "engine still unresponsive (${downSeconds}s) - waiting before restarting"
+    exit 1
+  }
+  Write-Log "engine unresponsive for ${downSeconds}s - restarting Docker Desktop"
+  Remove-Item $EngineDownMarker -Force -ErrorAction SilentlyContinue
   if (-not (Restart-DockerDesktop)) { exit 1 }
 }
+
 Start-Stack
 
 for ($i = 0; $i -lt 12; $i++) {
