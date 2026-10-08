@@ -4000,6 +4000,12 @@ body {
   box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5);
 }
 
+/* Right-align the picker under a user bubble so it doesn't overlap the chat. */
+.msg-user .react-picker {
+  left: auto;
+  right: 0;
+}
+
 .react-emoji {
   border: none;
   background: transparent;
