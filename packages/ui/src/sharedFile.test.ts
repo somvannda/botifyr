@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
-import { fileIconFor, previewText, sharedFileOf } from "./BotifyrApp";
+import { fileIconFor, previewText, sharedFileOf, sharedFilesOf } from "./BotifyrApp";
 
 describe("sharedFileOf", () => {
   it("parses an attachment message into name + token", () => {
@@ -39,6 +39,29 @@ describe("previewText", () => {
 
   it("collapses whitespace for normal messages", () => {
     expect(previewText("  hi   there \n")).toBe("hi there");
+  });
+});
+
+describe("sharedFilesOf", () => {
+  it("parses a single attachment", () => {
+    expect(sharedFilesOf("📎 a.png\n/shared/t1")).toEqual({
+      files: [{ name: "a.png", token: "t1" }],
+      caption: "",
+    });
+  });
+
+  it("parses an album with a caption", () => {
+    expect(sharedFilesOf("📎 a.png\n/shared/t1\n📎 b.jpg\n/shared/t2\nHoliday!")).toEqual({
+      files: [
+        { name: "a.png", token: "t1" },
+        { name: "b.jpg", token: "t2" },
+      ],
+      caption: "Holiday!",
+    });
+  });
+
+  it("returns nothing for a plain message", () => {
+    expect(sharedFilesOf("hello there")).toEqual({ files: [], caption: "" });
   });
 });
 

@@ -197,3 +197,12 @@ DB/API work. The only model-spend risk is **bots auto-posting** (agent-authored
 statuses). If that is ever added, it must go through the existing
 `docs/cost-controls.md` limits (per-workspace budget, per-task caps) and use the
 cheapest adequate model — never an unbounded auto-post loop.
+
+## Where this is going
+
+This document is the **shipped history**. The next improvements — reactions,
+comment threads, real reposts, multi-image, audience, ranking, and **Pages**
+(public followable entities) — are specified in
+[`docs/feed-next.md`](feed-next.md). As of Oct 2026 the **Pages backend and UI**
+(public Page timeline, one-way follow, post-as-Page, settings, roles) have shipped;
+that document carries the remaining Facebook-parity work.

@@ -133,4 +133,46 @@ describe("pages", () => {
 
     await app.close();
   });
+
+  it("lets an admin grant a role and enforces who may post as the Page", async () => {
+    const { app, signUp, auth, createPage } = await setup();
+    const alice = await signUp("alice-roles@example.com");
+    const bob = await signUp("bob-roles@example.com");
+    const page = await createPage(alice.token, "Roles Inc", "rolesinc");
+
+    // Bob can't manage roles.
+    const denied = await app.inject({
+      method: "PUT",
+      url: `/v1/pages/${page.id}/roles`,
+      headers: auth(bob.token),
+      payload: { userId: bob.user.id, role: "editor" },
+    });
+    expect(denied.statusCode).toBe(403);
+
+    // The owner (admin) grants Bob editor.
+    const granted = await app.inject({
+      method: "PUT",
+      url: `/v1/pages/${page.id}/roles`,
+      headers: auth(alice.token),
+      payload: { userId: bob.user.id, role: "editor" },
+    });
+    expect(granted.statusCode).toBe(200);
+
+    // Bob can now post as the Page.
+    const post = await app.inject({
+      method: "POST",
+      url: "/v1/posts",
+      headers: auth(bob.token),
+      payload: { body: "editor post", pageId: page.id },
+    });
+    expect(post.statusCode).toBe(201);
+
+    // The roles list (admin only) shows Bob as editor.
+    const roles = await app.inject({ method: "GET", url: `/v1/pages/${page.id}/roles`, headers: auth(alice.token) });
+    expect(roles.statusCode).toBe(200);
+    const list = roles.json() as Array<{ userId: string; role: string }>;
+    expect(list.find((entry) => entry.userId === bob.user.id)?.role).toBe("editor");
+
+    await app.close();
+  });
 });

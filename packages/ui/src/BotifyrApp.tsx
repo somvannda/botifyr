@@ -3094,9 +3094,10 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     }
   }
 
-  /** Attach a downloaded file to the open conversation via a signed share link. */
-  async function attachFile(item: MediaItem): Promise<void> {
+  /** Attach one or more files to the open conversation (sent as an album). */
+  async function attachFiles(items: MediaItem[]): Promise<void> {
     setAttachOpen(false);
+    if (items.length === 0) return;
     const session = activeSession;
     if (!session || (session.kind !== "dm" && session.kind !== "group")) {
       setError("Files can be attached in personal chats (direct messages and groups).");
@@ -3107,12 +3108,16 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       setError("There is no one to share with in this chat.");
       return;
     }
-    // Any text already typed in the composer becomes the attachment's caption.
+    // Any text already typed in the composer becomes the album's caption.
     const caption = text.trim();
     try {
       for (const recipient of recipients) {
-        const { token: shareToken } = await client.shareMedia(item.id, recipient);
-        const body = `📎 ${item.name}\n/shared/${shareToken}${caption ? `\n${caption}` : ""}`;
+        const parts: string[] = [];
+        for (const item of items) {
+          const { token: shareToken } = await client.shareMedia(item.id, recipient);
+          parts.push(`📎 ${item.name}\n/shared/${shareToken}`);
+        }
+        const body = `${parts.join("\n")}${caption ? `\n${caption}` : ""}`;
         const result = await client.sendDm(session.id, body);
         setSessions((prev) => prev.map((entry) => (entry.id === result.session.id ? result.session : entry)));
       }
@@ -3122,22 +3127,27 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     }
   }
 
-  /** Upload a local file from this device, then attach it to the open chat. */
-  async function uploadAndAttach(file: File): Promise<void> {
+  /** Upload one or more local files, then attach them as an album. */
+  async function uploadAndAttach(files: File[]): Promise<void> {
     setAttachOpen(false);
-    if (file.size > 15 * 1024 * 1024) {
-      setError("That file is too large — the limit is 15MB.");
+    if (files.length === 0) return;
+    const tooBig = files.find((file) => file.size > 15 * 1024 * 1024);
+    if (tooBig) {
+      setError(`"${tooBig.name}" is too large — the limit is 15MB.`);
       return;
     }
     try {
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result ?? ""));
-        reader.onerror = () => reject(new Error("could not read the file"));
-        reader.readAsDataURL(file);
-      });
-      const item = await client.uploadFile({ name: file.name, mime: file.type, data: dataUrl });
-      await attachFile(item);
+      const items: MediaItem[] = [];
+      for (const file of files) {
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result ?? ""));
+          reader.onerror = () => reject(new Error("could not read the file"));
+          reader.readAsDataURL(file);
+        });
+        items.push(await client.uploadFile({ name: file.name, mime: file.type, data: dataUrl }));
+      }
+      await attachFiles(items);
     } catch (err: unknown) {
       setError(messageOf(err));
     }
@@ -3229,19 +3239,9 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   // Files shared in the open human conversation (📎 name … /shared/<token>).
   const activeSharedFiles =
     activeSession && (activeSession.kind === "dm" || activeSession.kind === "group")
-      ? activeSession.messages
-          .map((message) => {
-            const text = displayText(decrypted, message.content, message.id);
-            const shareToken = sharedTokenOf(text);
-            if (!shareToken) return null;
-            const name =
-              text
-                .split("\n")[0]
-                .replace(/^📎\s*/, "")
-                .trim() || "Shared file";
-            return { token: shareToken, name };
-          })
-          .filter((file): file is { token: string; name: string } => Boolean(file))
+      ? activeSession.messages.flatMap(
+          (message) => sharedFilesOf(displayText(decrypted, message.content, message.id)).files,
+        )
       : [];
 
   /** Signed, owner/recipient-scoped URL for a shared file. */
@@ -3260,58 +3260,15 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     setLightbox({ items: images, index });
   }
 
-  /** Render a shared-file attachment: inline preview for media, else a chip. */
+  /** Render a message's attachment(s) if it has any, else null. */
   function dmFileCard(text: string) {
-    const file = sharedFileOf(text);
-    if (!file) return null;
-    const url = sharedUrl(file.token);
-    const lower = file.name.toLowerCase();
-    const isImage = /\.(png|jpe?g|webp|gif|svg)$/.test(lower);
-    const isVideo = /\.(mp4|webm)$/.test(lower);
-    const isAudio = /\.(mp3|wav|ogg)$/.test(lower);
-    // Media shows as the media itself (click an image to open it); other files
-    // show as a file chip. An optional caption sits under the media.
-    const caption = file.caption ? <div className="dm-caption">{file.caption}</div> : null;
-    if (isImage) {
-      return (
-        <div className="dm-media-wrap">
-          <img
-            className="dm-preview-img"
-            src={url}
-            alt={file.name}
-            loading="lazy"
-            onClick={() => openLightbox(file)}
-          />
-          {caption}
-        </div>
-      );
-    }
-    if (isVideo) {
-      return (
-        <div className="dm-media-wrap">
-          <video className="dm-preview-video" src={url} controls preload="metadata" />
-          {caption}
-        </div>
-      );
-    }
-    if (isAudio) {
-      return (
-        <div className="dm-media-wrap">
-          <audio className="dm-preview-audio" src={url} controls preload="metadata" />
-          {caption}
-        </div>
-      );
-    }
-    return (
-      <div className="dm-media-wrap">
-        <button className="dm-file" type="button" onClick={() => void openExternal(url)}>
-          <span className="dm-file-ico">{fileIconFor(file.name)}</span>
-          <span className="dm-file-name">{file.name}</span>
-          <span className="dm-file-save">Save</span>
-        </button>
-        {caption}
-      </div>
-    );
+    return sharedFilesOf(text).files.length > 0 ? (
+      <AttachmentMessage
+        text={text}
+        onOpenImage={openLightbox}
+        onOpenFile={(url) => void openExternal(url)}
+      />
+    ) : null;
   }
 
   const botLabel = activeBotId ? (labels[activeBotId] ?? "") : "";
@@ -5194,7 +5151,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                             <button
                               className="attach-item"
                               type="button"
-                              onClick={() => void attachFile(item)}
+                              onClick={() => void attachFiles([item])}
                             >
                               {prettyFileName(item.name)}
                             </button>
@@ -5205,11 +5162,12 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                   <input
                     ref={uploadInputRef}
                     type="file"
+                    multiple
                     hidden
                     onChange={(event) => {
-                      const file = event.target.files?.[0];
+                      const files = [...(event.target.files ?? [])];
                       event.target.value = "";
-                      if (file) void uploadAndAttach(file);
+                      if (files.length > 0) void uploadAndAttach(files);
                     }}
                   />
                 </div>
@@ -8893,20 +8851,39 @@ function sharedTokenOf(text: string): string | null {
 }
 
 /** Split an attachment message (`📎 name\n/shared/<token>`) into name + token. */
-export function sharedFileOf(text: string): { name: string; token: string; caption: string } | null {
-  const shareToken = sharedTokenOf(text);
-  if (!shareToken) return null;
+export interface SharedAttachment {
+  name: string;
+  token: string;
+}
+
+/** Parse every attachment (`📎 name` + `/shared/<token>` pairs) in a message. */
+export function sharedFilesOf(text: string): { files: SharedAttachment[]; caption: string } {
   const lines = text.split("\n");
-  const tokenLine = lines.findIndex((line) => line.includes("/shared/"));
-  const firstLine = (lines[0] ?? "").replace(/^📎\s*/, "").trim();
-  // Guard against a bare `/shared/<token>` line becoming the display name.
-  const name = firstLine && !firstLine.startsWith("/shared/") ? firstLine : "Shared file";
-  // Anything after the `/shared/<token>` line is the caption (Telegram-style).
+  const files: SharedAttachment[] = [];
+  let lastTokenLine = -1;
+  for (let i = 0; i < lines.length; i += 1) {
+    const token = sharedTokenOf(lines[i]);
+    if (!token) continue;
+    const prev = (lines[i - 1] ?? "").replace(/^📎\s*/, "").trim();
+    // Guard against a bare `/shared/<token>` line becoming the display name.
+    const name = prev && !prev.startsWith("/shared/") ? prev : "Shared file";
+    files.push({ name, token });
+    lastTokenLine = i;
+  }
+  // No attachments → nothing to report (don't treat the whole message as a caption).
+  if (files.length === 0) return { files, caption: "" };
+  // Anything after the last token line is the caption (Telegram-style).
   const caption = lines
-    .slice(tokenLine + 1)
+    .slice(lastTokenLine + 1)
     .join("\n")
     .trim();
-  return { name, token: shareToken, caption };
+  return { files, caption };
+}
+
+export function sharedFileOf(text: string): { name: string; token: string; caption: string } | null {
+  const { files, caption } = sharedFilesOf(text);
+  if (files.length === 0) return null;
+  return { name: files[0].name, token: files[0].token, caption };
 }
 
 /** One-line preview text for a message: shows the file name, never the raw token. */
@@ -8928,6 +8905,75 @@ export function fileIconFor(name: string): string {
   if (ext === "json" || ext === "xml" || ext === "yml" || ext === "yaml") return "🧾";
   if (ext === "html" || ext === "htm" || ext === "css" || ext === "js" || ext === "ts") return "🧩";
   return "📎";
+}
+
+/**
+ * Render a message's attachment(s): inline media, a file chip, or an album grid
+ * (multiple `📎 name` + `/shared/<token>` pairs), with an optional caption.
+ * Pure presentational component so it can be unit-tested without the whole app.
+ */
+export function AttachmentMessage({
+  text,
+  onOpenImage,
+  onOpenFile,
+}: {
+  text: string;
+  onOpenImage?: (file: SharedAttachment) => void;
+  onOpenFile?: (url: string) => void;
+}) {
+  const { files, caption } = sharedFilesOf(text);
+  if (files.length === 0) return null;
+  const urlFor = (shareToken: string): string =>
+    `${CLOUD_URL}/v1/shared?share=${encodeURIComponent(shareToken)}&token=${encodeURIComponent(token() ?? "")}`;
+  const media = (file: SharedAttachment) => {
+    const url = urlFor(file.token);
+    const lower = file.name.toLowerCase();
+    if (/\.(png|jpe?g|webp|gif|svg)$/.test(lower)) {
+      return (
+        <img
+          className="dm-preview-img"
+          src={url}
+          alt={file.name}
+          loading="lazy"
+          onClick={() => onOpenImage?.(file)}
+        />
+      );
+    }
+    if (/\.(mp4|webm)$/.test(lower)) {
+      return <video className="dm-preview-video" src={url} controls preload="metadata" />;
+    }
+    if (/\.(mp3|wav|ogg)$/.test(lower)) {
+      return <audio className="dm-preview-audio" src={url} controls preload="metadata" />;
+    }
+    return (
+      <button className="dm-file" type="button" onClick={() => onOpenFile?.(url)}>
+        <span className="dm-file-ico">{fileIconFor(file.name)}</span>
+        <span className="dm-file-name">{file.name}</span>
+        <span className="dm-file-save">Save</span>
+      </button>
+    );
+  };
+  const captionNode = caption ? <div className="dm-caption">{caption}</div> : null;
+  if (files.length === 1) {
+    return (
+      <div className="dm-media-wrap">
+        {media(files[0])}
+        {captionNode}
+      </div>
+    );
+  }
+  return (
+    <div className="dm-album">
+      <div className="dm-album-grid">
+        {files.map((file) => (
+          <div key={file.token} className="dm-album-cell">
+            {media(file)}
+          </div>
+        ))}
+      </div>
+      {captionNode}
+    </div>
+  );
 }
 
 /** Library category tabs (id matches `mediaKind`, plus "all"). */

@@ -101,6 +101,8 @@ export interface FeedComment {
   id: string;
   author: FeedAuthor;
   body: string;
+  /** Set for a reply to another comment (one level deep). */
+  parentId?: string;
   createdAt: string;
 }
 
@@ -121,6 +123,10 @@ export interface FeedPost {
   shares: number;
   likedByMe: boolean;
   sharedByMe: boolean;
+  /** Count per reaction type (like/love/care/haha/wow/sad/angry). */
+  reactions?: Record<string, number>;
+  /** The viewer's own reaction, if any. */
+  myReaction?: string | null;
 }
 
 /** One page of the feed (newest first). */
@@ -1082,15 +1088,28 @@ export class BotifyrClient {
     return this.request(`/v1/posts/${id}/like`, { method: liked ? "PUT" : "DELETE" });
   }
 
+  /** Set a specific reaction (like|love|care|haha|wow|sad|angry). */
+  reactPost(id: string, reaction: string): Promise<void> {
+    return this.request(`/v1/posts/${id}/reaction?reaction=${encodeURIComponent(reaction)}`, {
+      method: "PUT",
+      json: true,
+      body: "{}",
+    });
+  }
+
+  unreactPost(id: string): Promise<void> {
+    return this.request(`/v1/posts/${id}/reaction`, { method: "DELETE" });
+  }
+
   listComments(id: string): Promise<FeedComment[]> {
     return this.request(`/v1/posts/${id}/comments`);
   }
 
-  addComment(id: string, body: string): Promise<FeedComment> {
+  addComment(id: string, body: string, parentId?: string): Promise<FeedComment> {
     return this.request(`/v1/posts/${id}/comments`, {
       method: "POST",
       json: true,
-      body: JSON.stringify({ body }),
+      body: JSON.stringify({ body, parentId }),
     });
   }
 

@@ -86,6 +86,7 @@ import type {
   Plan,
   PostCommentRecord,
   PostRecord,
+  ReactionType,
 } from "./store/types.js";
 
 declare module "fastify" {
@@ -4061,6 +4062,8 @@ export async function buildServer(options: ServerOptions) {
       shares: stats.shares,
       likedByMe: stats.likedByMe,
       sharedByMe: stats.sharedByMe,
+      reactions: stats.reactions,
+      myReaction: stats.myReaction,
     };
   };
 
@@ -4068,6 +4071,7 @@ export async function buildServer(options: ServerOptions) {
     id: record.id,
     author: await feedAuthorOf(record.authorId, cache),
     body: record.body,
+    parentId: record.parentId,
     createdAt: record.createdAt,
   });
 
@@ -4156,7 +4160,7 @@ export async function buildServer(options: ServerOptions) {
         if (await store.isBlockedEither(userId, post.authorId)) {
           return reply.code(403).send({ error: "not allowed" });
         }
-        await store.setPostLike(post.id, userId, liked);
+        await store.setPostReaction(post.id, userId, liked ? "like" : null);
         if (liked && post.authorId !== userId) {
           const actor = await store.getUserById(userId);
           emit({
@@ -4171,6 +4175,44 @@ export async function buildServer(options: ServerOptions) {
       },
     });
   }
+
+  const REACTIONS = new Set<ReactionType>(["like", "love", "care", "haha", "wow", "sad", "angry"]);
+
+  app.put<{ Params: { id: string }; Querystring: { reaction?: string } }>(
+    "/v1/posts/:id/reaction",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const post = await store.getPost(request.params.id);
+      if (!post) return reply.code(404).send({ error: "post not found" });
+      const userId = request.userId as string;
+      if (await store.isBlockedEither(userId, post.authorId)) {
+        return reply.code(403).send({ error: "not allowed" });
+      }
+      const reaction = (request.query?.reaction ?? "").trim() as ReactionType;
+      if (!REACTIONS.has(reaction)) return reply.code(400).send({ error: "invalid reaction" });
+      await store.setPostReaction(post.id, userId, reaction);
+      if (reaction === "like" && post.authorId !== userId) {
+        const actor = await store.getUserById(userId);
+        emit({
+          type: "feed.like",
+          postId: post.id,
+          fromUserId: userId,
+          fromName: actor?.displayName ?? actor?.handle,
+          toUserId: post.authorId,
+        });
+      }
+      return { ok: true };
+    },
+  );
+
+  app.delete<{ Params: { id: string } }>(
+    "/v1/posts/:id/reaction",
+    { preHandler: requireAuth },
+    async (request) => {
+      await store.setPostReaction(request.params.id, request.userId as string, null);
+      return { ok: true };
+    },
+  );
 
   app.get<{ Params: { id: string } }>(
     "/v1/posts/:id/comments",
@@ -4188,7 +4230,7 @@ export async function buildServer(options: ServerOptions) {
     },
   );
 
-  app.post<{ Params: { id: string }; Body: { body?: string } }>(
+  app.post<{ Params: { id: string }; Body: { body?: string; parentId?: string } }>(
     "/v1/posts/:id/comments",
     { preHandler: requireAuth },
     async (request, reply) => {
@@ -4200,11 +4242,19 @@ export async function buildServer(options: ServerOptions) {
       const body = typeof request.body?.body === "string" ? request.body.body.trim() : "";
       if (!body) return reply.code(400).send({ error: "comment can't be empty" });
       if (body.length > MAX_POST_BODY) return reply.code(413).send({ error: "comment is too long" });
+      const parentId = typeof request.body?.parentId === "string" ? request.body.parentId.trim() : "";
+      if (parentId) {
+        const parent = await store.getPostComment(parentId);
+        if (!parent || parent.postId !== post.id) {
+          return reply.code(400).send({ error: "invalid parent comment" });
+        }
+      }
       const record: PostCommentRecord = {
         id: randomUUID(),
         postId: post.id,
         authorId: request.userId as string,
         body,
+        parentId: parentId || undefined,
         createdAt: new Date().toISOString(),
       };
       await store.createPostComment(record);

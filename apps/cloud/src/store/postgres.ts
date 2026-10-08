@@ -29,6 +29,7 @@ import type {
   ProviderRole,
   ProviderRoleConfig,
   QuestRecord,
+  ReactionType,
   SecretRecord,
   SessionRecord,
   Store,
@@ -1268,7 +1269,7 @@ export class PostgresStore implements Store {
     const capped = Math.max(1, Math.min(50, limit));
     const { rows } = await this.pool.query(
       "SELECT p.*, " +
-        "(SELECT COUNT(*) FROM post_likes WHERE post_id = p.id) + " +
+        "(SELECT COUNT(*) FROM post_reactions WHERE post_id = p.id) + " +
         "(SELECT COUNT(*) FROM post_comments WHERE post_id = p.id) + " +
         "(SELECT COUNT(*) FROM post_shares WHERE post_id = p.id) AS score " +
         "FROM posts p WHERE p.author_id = ANY($1) AND p.created_at >= $2 " +
@@ -1278,14 +1279,15 @@ export class PostgresStore implements Store {
     return rows.map(toPost);
   }
 
-  async setPostLike(postId: string, userId: string, liked: boolean): Promise<void> {
-    if (liked) {
-      await this.pool.query("INSERT INTO post_likes (post_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING", [
-        postId,
-        userId,
-      ]);
+  async setPostReaction(postId: string, userId: string, reaction: ReactionType | null): Promise<void> {
+    if (reaction) {
+      await this.pool.query(
+        "INSERT INTO post_reactions (post_id, user_id, reaction) VALUES ($1,$2,$3) " +
+          "ON CONFLICT (post_id, user_id) DO UPDATE SET reaction = EXCLUDED.reaction",
+        [postId, userId, reaction],
+      );
     } else {
-      await this.pool.query("DELETE FROM post_likes WHERE post_id = $1 AND user_id = $2", [postId, userId]);
+      await this.pool.query("DELETE FROM post_reactions WHERE post_id = $1 AND user_id = $2", [postId, userId]);
     }
   }
 
@@ -1304,8 +1306,8 @@ export class PostgresStore implements Store {
 
   async createPostComment(record: PostCommentRecord): Promise<void> {
     await this.pool.query(
-      "INSERT INTO post_comments (id, post_id, author_id, body, created_at) VALUES ($1,$2,$3,$4,$5)",
-      [record.id, record.postId, record.authorId, record.body, record.createdAt],
+      "INSERT INTO post_comments (id, post_id, author_id, body, parent_id, created_at) VALUES ($1,$2,$3,$4,$5,$6)",
+      [record.id, record.postId, record.authorId, record.body, record.parentId ?? null, record.createdAt],
     );
   }
 
@@ -1329,22 +1331,35 @@ export class PostgresStore implements Store {
   }
 
   async getPostStats(postId: string, viewerId: string): Promise<PostStatsRecord> {
+    const reactions: Record<ReactionType, number> = { like: 0, love: 0, care: 0, haha: 0, wow: 0, sad: 0, angry: 0 };
+    const grouped = await this.pool.query(
+      "SELECT reaction, COUNT(*)::int AS n FROM post_reactions WHERE post_id = $1 GROUP BY reaction",
+      [postId],
+    );
+    let likes = 0;
+    for (const row of grouped.rows) {
+      const reaction = row.reaction as ReactionType;
+      if (reaction in reactions) reactions[reaction] = Number(row.n);
+      likes += Number(row.n);
+    }
     const { rows } = await this.pool.query(
       "SELECT " +
-        "(SELECT COUNT(*) FROM post_likes WHERE post_id = $1) AS likes, " +
-        "(SELECT COUNT(*) FROM post_comments WHERE post_id = $1) AS comments, " +
-        "(SELECT COUNT(*) FROM post_shares WHERE post_id = $1) AS shares, " +
-        "EXISTS (SELECT 1 FROM post_likes WHERE post_id = $1 AND user_id = $2) AS liked, " +
-        "EXISTS (SELECT 1 FROM post_shares WHERE post_id = $1 AND user_id = $2) AS shared",
+        "(SELECT COUNT(*)::int FROM post_comments WHERE post_id = $1) AS comments, " +
+        "(SELECT COUNT(*)::int FROM post_shares WHERE post_id = $1) AS shares, " +
+        "EXISTS (SELECT 1 FROM post_reactions WHERE post_id = $1 AND user_id = $2) AS liked, " +
+        "EXISTS (SELECT 1 FROM post_shares WHERE post_id = $1 AND user_id = $2) AS shared, " +
+        "(SELECT reaction FROM post_reactions WHERE post_id = $1 AND user_id = $2) AS mine",
       [postId, viewerId],
     );
     const row = rows[0] ?? {};
     return {
-      likes: Number(row.likes ?? 0),
+      likes,
       comments: Number(row.comments ?? 0),
       shares: Number(row.shares ?? 0),
       likedByMe: row.liked === true,
       sharedByMe: row.shared === true,
+      reactions,
+      myReaction: (row.mine as ReactionType) ?? null,
     };
   }
 
@@ -1714,6 +1729,7 @@ function toPostComment(row: any): PostCommentRecord {
     postId: row.post_id,
     authorId: row.author_id,
     body: row.body,
+    parentId: row.parent_id ?? undefined,
     createdAt: new Date(row.created_at).toISOString(),
   };
 }

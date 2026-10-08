@@ -51,6 +51,20 @@ function HeartIcon({ size = 18, filled = false }: { size?: number; filled?: bool
   );
 }
 
+const REACTIONS: Array<{ key: string; emoji: string; label: string }> = [
+  { key: "like", emoji: "👍", label: "Like" },
+  { key: "love", emoji: "❤️", label: "Love" },
+  { key: "care", emoji: "🤗", label: "Care" },
+  { key: "haha", emoji: "😂", label: "Haha" },
+  { key: "wow", emoji: "😮", label: "Wow" },
+  { key: "sad", emoji: "😢", label: "Sad" },
+  { key: "angry", emoji: "😡", label: "Angry" },
+];
+
+function reactionEmoji(key: string | null | undefined): string {
+  return REACTIONS.find((entry) => entry.key === key)?.emoji ?? "👍";
+}
+
 function Avatar({ emoji, name, size = 40 }: { emoji?: string; name?: string; size?: number }) {
   const glyph = emoji?.trim() || name?.trim().charAt(0).toUpperCase() || "🙂";
   return (
@@ -80,6 +94,26 @@ function AuthorLine({ author, when }: { author: FeedPost["author"]; when: string
   );
 }
 
+function CommentRow({ comment, onReply }: { comment: FeedComment; onReply?: () => void }) {
+  return (
+    <div className="feed-comment">
+      <Avatar emoji={authorEmoji(comment.author)} name={authorName(comment.author)} size={30} />
+      <div className="feed-comment-main">
+        <span className="feed-comment-head">
+          {authorName(comment.author)}
+          <span className="feed-comment-when">{relativeTime(comment.createdAt)}</span>
+        </span>
+        <span className="feed-comment-body">{comment.body}</span>
+        {onReply && (
+          <button type="button" className="feed-comment-reply-btn" onClick={onReply}>
+            Reply
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 interface PostCardProps {
   post: FeedPost;
   client: BotifyrClient;
@@ -97,12 +131,27 @@ function PostCard({ post, client, cloudUrl, canDelete, onChange, onDelete, onBlo
   const [commentsLoading, setCommentsLoading] = useState(false);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
+  const [pickOpen, setPickOpen] = useState(false);
+  const [replyTo, setReplyTo] = useState<string | null>(null);
 
-  async function toggleLike() {
-    const liked = !post.likedByMe;
-    onChange({ ...post, likedByMe: liked, likes: Math.max(0, post.likes + (liked ? 1 : -1)) });
+  async function react(reaction: string) {
+    const next = post.myReaction === reaction ? null : reaction;
+    const reactions = { ...(post.reactions ?? {}) };
+    const prev = post.myReaction ?? null;
+    let likes = post.likes;
+    if (prev) {
+      reactions[prev] = Math.max(0, (reactions[prev] ?? 1) - 1);
+      likes = Math.max(0, likes - 1);
+    }
+    if (next) {
+      reactions[next] = (reactions[next] ?? 0) + 1;
+      likes += 1;
+    }
+    onChange({ ...post, reactions, likes, myReaction: next, likedByMe: next !== null });
+    setPickOpen(false);
     try {
-      await client.likePost(post.id, liked);
+      if (next) await client.reactPost(post.id, next);
+      else await client.unreactPost(post.id);
     } catch {
       onChange(post);
     }
@@ -139,10 +188,11 @@ function PostCard({ post, client, cloudUrl, canDelete, onChange, onDelete, onBlo
     if (!body || busy) return;
     setBusy(true);
     try {
-      const comment = await client.addComment(post.id, body);
+      const comment = await client.addComment(post.id, body, replyTo ?? undefined);
       setComments((prev) => [...(prev ?? []), comment]);
       onChange({ ...post, comments: post.comments + 1 });
       setDraft("");
+      setReplyTo(null);
     } catch {
       // Leave the draft so the user can retry.
     } finally {
@@ -189,7 +239,11 @@ function PostCard({ post, client, cloudUrl, canDelete, onChange, onDelete, onBlo
       ) : null}
 
       <div className="feed-stats">
-        {post.likes > 0 && <span>👍 {post.likes}</span>}
+        {post.likes > 0 && (
+          <span>
+            {reactionEmoji(Object.entries(post.reactions ?? {}).find(([, count]) => count > 0)?.[0])} {post.likes}
+          </span>
+        )}
         <span className="feed-stats-spacer" />
         {post.comments > 0 && (
           <button type="button" className="feed-stats-btn" onClick={() => void toggleComments()}>
@@ -199,14 +253,35 @@ function PostCard({ post, client, cloudUrl, canDelete, onChange, onDelete, onBlo
         {post.shares > 0 && <span>{post.shares} share{post.shares === 1 ? "" : "s"}</span>}
       </div>
 
+      {pickOpen && (
+        <div className="reaction-picker">
+          {REACTIONS.map((reaction) => (
+            <button
+              key={reaction.key}
+              type="button"
+              className={`reaction-btn${post.myReaction === reaction.key ? " active" : ""}`}
+              title={reaction.label}
+              aria-label={reaction.label}
+              onClick={() => void react(reaction.key)}
+            >
+              {reaction.emoji}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="feed-actions">
         <button
           type="button"
-          className={`feed-action${post.likedByMe ? " active" : ""}`}
-          onClick={() => void toggleLike()}
-          aria-pressed={post.likedByMe}
+          className={`feed-action${post.myReaction ? " active" : ""}`}
+          onClick={() => setPickOpen((value) => !value)}
+          aria-pressed={post.myReaction !== null}
         >
-          <HeartIcon size={17} filled={post.likedByMe} /> Like
+          {post.myReaction ? (
+            <span className="feed-action-emoji">{reactionEmoji(post.myReaction)}</span>
+          ) : (
+            <HeartIcon size={17} />
+          )}
+          {post.myReaction ? (REACTIONS.find((entry) => entry.key === post.myReaction)?.label ?? "Like") : "Like"}
         </button>
         <button type="button" className="feed-action" onClick={() => void toggleComments()} aria-expanded={commentsOpen}>
           <MessageIcon size={17} /> Comment
@@ -239,22 +314,32 @@ function PostCard({ post, client, cloudUrl, canDelete, onChange, onDelete, onBlo
       {commentsOpen && (
         <div className="feed-comments">
           {commentsLoading && <div className="feed-state">Loading comments…</div>}
-          {comments?.map((comment) => (
-            <div key={comment.id} className="feed-comment">
-              <Avatar emoji={authorEmoji(comment.author)} name={authorName(comment.author)} size={30} />
-              <div className="feed-comment-main">
-                <span className="feed-comment-head">
-                  {authorName(comment.author)}
-                  <span className="feed-comment-when">{relativeTime(comment.createdAt)}</span>
-                </span>
-                <span className="feed-comment-body">{comment.body}</span>
+          {(comments ?? [])
+            .filter((comment) => !comment.parentId)
+            .map((comment) => (
+              <div key={comment.id} className="feed-comment-thread">
+                <CommentRow comment={comment} onReply={() => setReplyTo(comment.id)} />
+                {(comments ?? [])
+                  .filter((reply) => reply.parentId === comment.id)
+                  .map((reply) => (
+                    <div key={reply.id} className="feed-comment-reply">
+                      <CommentRow comment={reply} />
+                    </div>
+                  ))}
               </div>
+            ))}
+          {replyTo && (
+            <div className="feed-comment-replying">
+              <span>Replying to a comment</span>
+              <button type="button" className="ghost small" onClick={() => setReplyTo(null)}>
+                Cancel
+              </button>
             </div>
-          ))}
+          )}
           <form className="feed-comment-form" onSubmit={addComment}>
             <input
               className="feed-comment-input"
-              placeholder="Write a comment…"
+              placeholder={replyTo ? "Write a reply…" : "Write a comment…"}
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
             />

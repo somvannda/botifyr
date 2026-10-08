@@ -23,6 +23,8 @@ interface FeedPostDto {
   shares: number;
   likedByMe: boolean;
   sharedByMe: boolean;
+  reactions?: Record<string, number>;
+  myReaction?: string | null;
 }
 
 interface FeedCommentDto {
@@ -362,6 +364,101 @@ describe("feed", () => {
       unsubscribe();
       await app.close();
     }
+  });
+
+  it("supports multiple reactions, one per viewer", async () => {
+    const { app, store, signUp, auth, createPost, feed } = await setup();
+    const alice = await signUp("alice-react@example.com");
+    const bob = await signUp("bob-react@example.com");
+    await store.createFriendship(alice.user.id, bob.user.id);
+    const post = await createPost(alice.token, "react to me");
+
+    const love = await app.inject({
+      method: "PUT",
+      url: `/v1/posts/${post.id}/reaction?reaction=love`,
+      headers: auth(bob.token),
+      payload: {},
+    });
+    expect(love.statusCode).toBe(200);
+
+    const asBob = (await feed(bob.token)).items.find((entry) => entry.id === post.id);
+    expect(asBob?.likes).toBe(1);
+    expect(asBob?.myReaction).toBe("love");
+    expect(asBob?.reactions?.love).toBe(1);
+
+    // Switching replaces (still one reaction total).
+    await app.inject({
+      method: "PUT",
+      url: `/v1/posts/${post.id}/reaction?reaction=angry`,
+      headers: auth(bob.token),
+      payload: {},
+    });
+    const switched = (await feed(bob.token)).items.find((entry) => entry.id === post.id);
+    expect(switched?.likes).toBe(1);
+    expect(switched?.myReaction).toBe("angry");
+    expect(switched?.reactions?.angry).toBe(1);
+    expect(switched?.reactions?.love).toBe(0);
+
+    // Clearing removes it.
+    await app.inject({ method: "DELETE", url: `/v1/posts/${post.id}/reaction`, headers: auth(bob.token) });
+    const cleared = (await feed(bob.token)).items.find((entry) => entry.id === post.id);
+    expect(cleared?.likes).toBe(0);
+    expect(cleared?.myReaction).toBeNull();
+
+    // Unknown reactions are rejected.
+    const bad = await app.inject({
+      method: "PUT",
+      url: `/v1/posts/${post.id}/reaction?reaction=strange`,
+      headers: auth(bob.token),
+      payload: {},
+    });
+    expect(bad.statusCode).toBe(400);
+
+    await app.close();
+  });
+
+  it("supports threaded replies", async () => {
+    const { app, store, signUp, auth, createPost } = await setup();
+    const alice = await signUp("alice-thread@example.com");
+    const bob = await signUp("bob-thread@example.com");
+    await store.createFriendship(alice.user.id, bob.user.id);
+    const post = await createPost(alice.token, "thread me");
+
+    const top = await app.inject({
+      method: "POST",
+      url: `/v1/posts/${post.id}/comments`,
+      headers: auth(bob.token),
+      payload: { body: "top" },
+    });
+    expect(top.statusCode).toBe(201);
+    const topId = (top.json() as { id: string }).id;
+
+    const reply = await app.inject({
+      method: "POST",
+      url: `/v1/posts/${post.id}/comments`,
+      headers: auth(alice.token),
+      payload: { body: "reply", parentId: topId },
+    });
+    expect(reply.statusCode).toBe(201);
+    expect((reply.json() as { parentId?: string }).parentId).toBe(topId);
+
+    const listed = await app.inject({ method: "GET", url: `/v1/posts/${post.id}/comments`, headers: auth(alice.token) });
+    const comments = listed.json() as Array<{ id: string; parentId?: string }>;
+    expect(comments).toHaveLength(2);
+    expect(comments.find((entry) => entry.id === topId)?.parentId).toBeUndefined();
+    expect(comments.filter((entry) => entry.parentId === topId)).toHaveLength(1);
+
+    // A reply pointing at a comment on another post is rejected.
+    const other = await createPost(alice.token, "other post");
+    const bad = await app.inject({
+      method: "POST",
+      url: `/v1/posts/${other.id}/comments`,
+      headers: auth(bob.token),
+      payload: { body: "x", parentId: topId },
+    });
+    expect(bad.statusCode).toBe(400);
+
+    await app.close();
   });
 
   it("ranks recent posts by engagement for your network", async () => {

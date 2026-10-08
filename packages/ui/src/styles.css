@@ -3677,6 +3677,39 @@ body {
   word-break: break-word;
 }
 
+.dm-album {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+  max-width: 100%;
+}
+
+.dm-album-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  max-width: 320px;
+}
+
+.dm-album-cell {
+  position: relative;
+  overflow: hidden;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+}
+
+.dm-album-cell .dm-preview-img,
+.dm-album-cell .dm-preview-video {
+  width: 100%;
+  height: 140px;
+  max-width: none;
+  max-height: none;
+  object-fit: cover;
+  border: none;
+  border-radius: 0;
+}
+
 .dm-preview-img {
   display: block;
   max-width: min(320px, 100%);
@@ -6709,6 +6742,46 @@ body {
   color: #f0556b;
 }
 
+.feed-action-emoji {
+  font-size: 15px;
+  line-height: 1;
+}
+
+/* Reaction picker (docs/feed-next.md §FR-1) */
+.reaction-picker {
+  display: flex;
+  gap: 4px;
+  margin-top: 10px;
+  padding: 6px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  width: fit-content;
+}
+
+.reaction-btn {
+  border: none;
+  background: transparent;
+  font-size: 18px;
+  line-height: 1;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  cursor: pointer;
+  transition:
+    transform 100ms ease,
+    background 100ms ease;
+}
+
+.reaction-btn:hover {
+  transform: scale(1.2);
+  background: var(--hover);
+}
+
+.reaction-btn.active {
+  background: rgba(109, 139, 255, 0.18);
+}
+
 .feed-comments {
   display: flex;
   flex-direction: column;
@@ -6752,6 +6825,43 @@ body {
   font-size: 12.5px;
   line-height: 1.45;
   color: var(--text);
+}
+
+.feed-comment-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.feed-comment-reply {
+  margin-left: 39px;
+}
+
+.feed-comment-reply-btn {
+  align-self: flex-start;
+  margin-top: 4px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+
+.feed-comment-reply-btn:hover {
+  color: var(--text);
+  text-decoration: underline;
+}
+
+.feed-comment-replying {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
 }
 
 .feed-comment-form {

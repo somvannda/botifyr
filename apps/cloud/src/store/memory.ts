@@ -28,6 +28,7 @@ import type {
   ProviderRole,
   ProviderRoleConfig,
   QuestRecord,
+  ReactionType,
   SecretRecord,
   SessionRecord,
   Store,
@@ -71,8 +72,8 @@ export class MemoryStore implements Store {
   private friendRequests = new Map<string, FriendRequestRecord>();
   private friendships = new Set<string>();
   private posts = new Map<string, PostRecord>();
-  /** Keyed by `${postId}:${userId}`. */
-  private postLikes = new Set<string>();
+  /** Keyed by `${postId}:${userId}` → the viewer's reaction. */
+  private postReactions = new Map<string, ReactionType>();
   private postComments = new Map<string, PostCommentRecord>();
   private postShares = new Set<string>();
   /** Keyed by `${blockerId}:${blockedId}`. */
@@ -850,7 +851,7 @@ export class MemoryStore implements Store {
     for (const [key, comment] of [...this.postComments]) {
       if (comment.postId === id) this.postComments.delete(key);
     }
-    for (const key of [...this.postLikes]) if (key.startsWith(`${id}:`)) this.postLikes.delete(key);
+    for (const key of [...this.postReactions.keys()]) if (key.startsWith(`${id}:`)) this.postReactions.delete(key);
     for (const key of [...this.postShares]) if (key.startsWith(`${id}:`)) this.postShares.delete(key);
     return true;
   }
@@ -876,7 +877,7 @@ export class MemoryStore implements Store {
     const authors = new Set(authorIds);
     const score = (postId: string): number => {
       let total = 0;
-      for (const key of this.postLikes) if (key.startsWith(`${postId}:`)) total += 1;
+      for (const key of this.postReactions.keys()) if (key.startsWith(`${postId}:`)) total += 1;
       for (const key of this.postShares) if (key.startsWith(`${postId}:`)) total += 1;
       for (const comment of this.postComments.values()) if (comment.postId === postId) total += 1;
       return total;
@@ -888,10 +889,10 @@ export class MemoryStore implements Store {
       .map((record) => ({ ...record }));
   }
 
-  async setPostLike(postId: string, userId: string, liked: boolean): Promise<void> {
+  async setPostReaction(postId: string, userId: string, reaction: ReactionType | null): Promise<void> {
     const key = `${postId}:${userId}`;
-    if (liked) this.postLikes.add(key);
-    else this.postLikes.delete(key);
+    if (reaction) this.postReactions.set(key, reaction);
+    else this.postReactions.delete(key);
   }
 
   async listPostComments(postId: string): Promise<PostCommentRecord[]> {
@@ -913,7 +914,10 @@ export class MemoryStore implements Store {
   async deletePostComment(authorId: string, id: string): Promise<boolean> {
     const record = this.postComments.get(id);
     if (!record || record.authorId !== authorId) return false;
-    return this.postComments.delete(id);
+    this.postComments.delete(id);
+    // Cascade to replies (Postgres does this via the FK).
+    for (const [key, comment] of [...this.postComments]) if (comment.parentId === id) this.postComments.delete(key);
+    return true;
   }
 
   async setPostShare(postId: string, userId: string, shared: boolean): Promise<void> {
@@ -923,18 +927,26 @@ export class MemoryStore implements Store {
   }
 
   async getPostStats(postId: string, viewerId: string): Promise<PostStatsRecord> {
+    const reactions: Record<ReactionType, number> = { like: 0, love: 0, care: 0, haha: 0, wow: 0, sad: 0, angry: 0 };
     let likes = 0;
-    for (const key of this.postLikes) if (key.startsWith(`${postId}:`)) likes += 1;
+    for (const [key, reaction] of this.postReactions) {
+      if (!key.startsWith(`${postId}:`)) continue;
+      reactions[reaction] += 1;
+      likes += 1;
+    }
     let shares = 0;
     for (const key of this.postShares) if (key.startsWith(`${postId}:`)) shares += 1;
     let comments = 0;
     for (const record of this.postComments.values()) if (record.postId === postId) comments += 1;
+    const myReaction = this.postReactions.get(`${postId}:${viewerId}`) ?? null;
     return {
       likes,
       comments,
       shares,
-      likedByMe: this.postLikes.has(`${postId}:${viewerId}`),
+      likedByMe: myReaction !== null,
       sharedByMe: this.postShares.has(`${postId}:${viewerId}`),
+      reactions,
+      myReaction,
     };
   }
 

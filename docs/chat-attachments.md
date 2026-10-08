@@ -78,13 +78,15 @@ Done:
 - ✅ **Captions** — text typed in the composer rides along with the attachment
   (`📎 name\n/shared/<token>\n<caption>`) and renders under the media
   (`.dm-caption`); the sidebar/notification preview shows the caption.
+- ✅ **Albums** — attaching multiple files (multi-select in the composer) sends one
+  message with all `📎 name` + `/shared/<token>` pairs and renders as a grid
+  (`.dm-album`, `.dm-album-grid`, `.dm-album-cell`); one message = one notification.
 
 Next:
-1. **Albums** — group N attachments sent together into one grid + one notification.
-2. **File sizes** — add size to the share token payload (or match the media
+1. **File sizes** — add size to the share token payload (or match the media
    record) and show it on document rows.
-3. **Voice notes** — record in the composer and render a waveform player.
-4. **Video in the lightbox** — reuse the viewer for video with playback controls.
+2. **Voice notes** — record in the composer and render a waveform player.
+3. **Video in the lightbox** — reuse the viewer for video with playback controls.
 
 ## 4. Server contract
 

@@ -5,11 +5,12 @@ Reference model: **Facebook Feed** (the ranked stream) and **Facebook Pages**
 what Botifyr ships today and specifies the next improvements in detail.
 
 - **Shipped today:** friends-only Feed (see [`docs/feed.md`](feed.md)) — posts with
-  a single image, likes, comments, shares, a per-user Wall, notifications,
+  a single image, post reactions, comments, shares, a per-user Wall, notifications,
   "Who to follow", realtime, report/block, admin review, Top posts.
-- **Pages:** the backend (tables, `Store`, `/v1/pages*` API, post-as-Page,
-  followed-Pages-in-feed) is **done** and covered by `server.pages.test.ts`; only
-  the **UI** remains. See *Implementation status* below.
+- **Pages:** backend (tables, `Store`, `/v1/pages*`, post-as-Page,
+  followed-Pages-in-feed) and UI (timeline, follow, composer "Post as",
+  "Your Pages" rail, settings, roles) are **done**; only insights / community
+  inbox / discovery / scheduling remain. See *Implementation status* below.
 - **This document:** what to build next, with requirements, data model, API, UI,
   priorities, and phases.
 
@@ -23,15 +24,25 @@ Priority legend: **P0** = next release · **P1** = soon after · **P2** = later.
   `posts.page_id`), `Store` methods, API (`/v1/pages…`), post-as-Page, and
   followed-Pages-in-feed are implemented and covered by `server.pages.test.ts`.
   A Page maps to a company workspace / bot / user (FR-14 default).
-- **UI — done (core).** In `packages/ui/src/FeedView.tsx`: `PageView` (page
-  timeline, cover/avatar/follower count, Follow/Unfollow, manager role badge),
-  the composer **"Post as"** switcher (You / managed Pages) with an inline
-  **New Page** creator, a **"Your Pages"** rail section linking to each timeline,
-  and a **View page** action on page-authored posts.
-  **Remaining:** Page settings / role management / insights / community-inbox
-  screens, and a "Pages to follow" discovery surface for other people's Pages.
+- **UI — done.** In `packages/ui/src/FeedView.tsx`: `PageView` (page timeline,
+  cover/avatar/follower count, Follow/Unfollow, manager role badge), the composer
+  **"Post as"** switcher (You / managed Pages) with an inline **New Page**
+  creator, a **"Your Pages"** rail section linking to each timeline, a **View
+  page** action on page-authored posts, and a **Page settings** panel (edit
+  identity) with **role management** (assign Editor/Moderator/Analyst, remove).
+  **Remaining:** Page **insights** and **community-inbox** screens, a "Pages to
+  follow" discovery surface, and scheduled/pinned posts.
 
-**Everything else** in this document (reactions, threads, reposts, multi-image,
+**Reactions (FR-1) — done.** Likes are now a full reaction set
+(`like/love/care/haha/wow/sad/angry`): `post_reactions` table +
+`setPostReaction`, `PUT`/`DELETE /v1/posts/:id/reaction`, `reactions` +
+`myReaction` on the feed DTO, and a reaction picker in the post UI.
+
+**Comment threads (FR-2) — backend done.** One level of replies: a
+`post_comments.parent_id` column and `POST /v1/posts/:id/comments` accepting
+`parentId`. The **client (`addComment`) and the reply UI are not wired yet**.
+
+**Everything else** in this document (comment reactions, reposts, multi-image,
 audience, ranking, stories, groups, …) is **not started**.
 
 > **Reconciled with the product as of Oct 2026.** Facebook's reference section
@@ -125,11 +136,11 @@ discovery as **opt-in additions** (tabs/toggles) and keep the friends stream pur
 | --- | --- | --- | --- |
 | Feed ordering | Ranked + Most recent | Newest-first only | Add ranking + toggle |
 | Feed tabs | Home / Friends / Pages / … | Single stream | Add tabs/filters |
-| Reactions | 7 reactions | Like only | Multiple reactions |
-| Comments | Threads, reactions, media | Flat text | Replies + reactions + media |
+| Reactions | 7 reactions | **Post reactions shipped** | Comment reactions |
+| Comments | Threads, reactions, media | **Threads backend**; flat UI | Reply UI + comment reactions + media |
 | Share | Multiple destinations + caption | Toggle count only | Real reposts |
 | Media | Multi-image, albums, video | 1 image | Multi-image + video |
-| Public entities | Pages (followers, roles, insights) | **Backend shipped** — tables, store, `/v1/pages*`; **no UI** | **Pages UI** (see §4) |
+| Public entities | Pages (followers, roles, insights) | **Backend + UI shipped** — `/v1/pages*`, timeline, follow, post-as-Page, settings, roles | Page insights + community inbox (see §4) |
 | Page type | Business vs Creator | None | Page type field (P1) |
 | Follow graph | One-way follow | Mutual friends only | Follow model |
 | Audience | Public/Friends/Only me/Custom | Friends-only | Audience selector + public |
@@ -151,7 +162,7 @@ friendship and surface a public audience option — no separate entity required.
 
 ## 3. Functional requirements — Feed
 
-### FR-1 Reactions (P0)
+### FR-1 Reactions (P0) — **shipped**
 - Support a reaction set: `like`, `love`, `care`, `haha`, `wow`, `sad`, `angry`.
 - One reaction per user per post/comment; tapping the current reaction removes it;
   a different reaction replaces it.
@@ -159,7 +170,7 @@ friendship and surface a public audience option — no separate entity required.
 - Acceptance: reacting updates optimistically; counts persist; feed shows the
   viewer's own reaction; only one reaction at a time.
 
-### FR-2 Comment threads (P0)
+### FR-2 Comment threads (P0) — **backend shipped; client/UI pending**
 - Comments may have a `parentId` forming one level of replies (Facebook-style).
 - Show top-level comments with reply count; expand to load replies.
 - Acceptance: reply nests under its parent; deleting a comment hides its replies
@@ -458,8 +469,8 @@ Events to emit: `feed.reaction`, `feed.repost`, `page.post`, `page.followed`,
 ## 7. UI changes
 
 ### 7.1 Composer
-- Entity switcher: post **as** Me or a managed Page. *(State + API exist; the
-  selector is not rendered yet.)*
+- Entity switcher: post **as** Me or a managed Page — **shipped** (composer
+  "Post as" select + inline "New Page" creator).
 - **Audience selector** (Public / Friends / Only me / Custom).
 - **Attach:** photo(s) up to N (grid preview), video (P1), poll (P2), location,
   feeling/activity, tag people/Page.
@@ -472,10 +483,10 @@ Events to emit: `feed.reaction`, `feed.repost`, `page.post`, `page.followed`,
 - Rail: **Pages to follow**, keep Who to follow / Top posts / Blocked.
 
 ### 7.3 Page experience
-- **Page timeline** (public), cover + avatar + CTA + follower count + Follow button —
-  **shipped** (`PageView`). Remaining: CTA-button rendering and management screens.
-- **Page management** (admins): identity/settings, roles, scheduled/pinned posts,
-  insights, community inbox — **not started**.
+- **Page timeline** (public), cover + avatar + follower count + Follow button, and a
+  **View page** action — **shipped** (`PageView`). Remaining: CTA-button rendering.
+- **Page management** (admins): **settings** and **roles** rails are shipped;
+  scheduled/pinned posts, insights, and community inbox — **not started**.
 
 ### 7.4 Post/author menus
 - Save, Hide, Snooze 30 days, Unfollow, Report, Block, "Why am I seeing this?".
@@ -513,10 +524,10 @@ score = w_affinity * affinity(viewer, author)
 
 ## 10. Phasing
 
-- **Phase A (P0) — Post depth:** multiple reactions, comment threads, real reposts,
-  multi-image, audience selector, Save/Hide, and the **remaining Pages UI** (composer
-  entity switcher, Pages-to-follow rail, roles/insights settings). *Note: the Pages
-  backend and the Page timeline/follow/create UI already ship.*
+- **Phase A (P0) — Post depth (partly done):** reactions (**done**), comment
+  threads (**backend done; client/UI pending**), real reposts, multi-image,
+  audience selector, Save/Hide. *Note: the Pages backend/UI also ship; remaining
+  Pages work is insights + community inbox (P1).*
 - **Phase B (P1) — Discovery & community:** feed ranking + tabs (incl. a pure
   Friends tab), video, mentions/hashtags, Page **type (Business/Creator)**,
   scheduling/pin/insights, community inbox, search, comment reactions,

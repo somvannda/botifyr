@@ -382,10 +382,22 @@ CREATE TABLE IF NOT EXISTS post_comments (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS post_comments_post_idx ON post_comments (post_id, created_at);
+/* Replies: one level. Deleting a parent removes its replies. */
+ALTER TABLE post_comments ADD COLUMN IF NOT EXISTS parent_id TEXT REFERENCES post_comments(id) ON DELETE CASCADE;
+CREATE INDEX IF NOT EXISTS post_comments_parent_idx ON post_comments (parent_id);
 
 CREATE TABLE IF NOT EXISTS post_shares (
   post_id    TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
   user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (post_id, user_id)
+);
+
+/* Reactions (superset of likes). One per user per post. */
+CREATE TABLE IF NOT EXISTS post_reactions (
+  post_id    TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+  user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  reaction   TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (post_id, user_id)
 );

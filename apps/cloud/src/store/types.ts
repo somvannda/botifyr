@@ -89,16 +89,26 @@ export interface PostCommentRecord {
   postId: string;
   authorId: string;
   body: string;
+  /** Set for a reply to another comment (one level deep). */
+  parentId?: string;
   createdAt: string;
 }
 
+/** The reaction set (Facebook-style, docs/feed-next.md §FR-1). */
+export type ReactionType = "like" | "love" | "care" | "haha" | "wow" | "sad" | "angry";
+
 /** Per-viewer counters for one post. */
 export interface PostStatsRecord {
+  /** Total reactions (kept as `likes` for wire compatibility). */
   likes: number;
   comments: number;
   shares: number;
   likedByMe: boolean;
   sharedByMe: boolean;
+  /** Count per reaction type. */
+  reactions: Record<ReactionType, number>;
+  /** The viewer's own reaction, if any. */
+  myReaction: ReactionType | null;
 }
 
 /** A moderation report against a post. */
@@ -385,7 +395,8 @@ export interface Store {
   listPostsByAuthor(authorId: string, limit: number): Promise<PostRecord[]>;
   /** Posts by `authorIds` since `sinceIso`, ranked by engagement. */
   listTrendingPosts(authorIds: string[], sinceIso: string, limit: number): Promise<PostRecord[]>;
-  setPostLike(postId: string, userId: string, liked: boolean): Promise<void>;
+  /** Set/replace the viewer's reaction, or clear it with `null`. */
+  setPostReaction(postId: string, userId: string, reaction: ReactionType | null): Promise<void>;
   listPostComments(postId: string): Promise<PostCommentRecord[]>;
   getPostComment(id: string): Promise<PostCommentRecord | null>;
   createPostComment(record: PostCommentRecord): Promise<void>;
