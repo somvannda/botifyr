@@ -1,3 +1,4 @@
+/* @refresh reset */
 /**
  * Lazy entry point for the 3D office overlay.
  *
@@ -9,6 +10,7 @@
 import { useMemo, useRef, useState } from "react";
 import { buildOfficeLayout, type LayoutAgent } from "./layout";
 import { OfficeScene, type OfficeControls } from "./OfficeScene";
+import type { OfficeStyleId } from "./theme";
 
 export type OfficeAgent = LayoutAgent;
 
@@ -21,6 +23,8 @@ export interface OfficeViewProps {
   paused?: boolean;
   /** Render as a docked side panel (default) or a floating full-screen overlay. */
   docked?: boolean;
+  /** Which art direction to render (see theme.ts OFFICE_STYLES). */
+  style?: OfficeStyleId;
   /** Switch between docked and floating. The button shows only when provided. */
   onToggleDock?: () => void;
   onClose: () => void;
@@ -56,6 +60,7 @@ export default function OfficeView({
   agents,
   paused,
   docked = false,
+  style,
   onToggleDock,
   onClose,
   onSelect,
@@ -111,6 +116,7 @@ export default function OfficeView({
             <>
               <OfficeScene
                 layout={layout}
+                styleId={style}
                 onSelect={onSelect}
                 onControls={(instance) => {
                   controlsRef.current = instance;

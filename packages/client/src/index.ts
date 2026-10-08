@@ -9,6 +9,7 @@ import type {
   ConnectionInfo,
   CreateWorkspaceRequest,
   Department,
+  DeviceKey,
   LearnedSkill,
   MediaRecipe,
   ModelPricingRecord,
@@ -72,6 +73,8 @@ export interface Person {
   displayName?: string;
   avatarEmoji?: string;
   avatarScheme?: number;
+  /** Uploaded profile photo (small base64 data URL). */
+  avatarUrl?: string;
   online: boolean;
   friend?: boolean;
   requested?: boolean;
@@ -820,6 +823,19 @@ export class BotifyrClient {
   }
 
   /* Direct messages with friends. */
+  /* DM E2E: publish this device's public key; fetch a peer's published keys. */
+  registerDeviceKey(deviceId: string, publicKey: JsonWebKey): Promise<void> {
+    return this.request("/v1/device-keys", {
+      method: "POST",
+      json: true,
+      body: JSON.stringify({ deviceId, publicKey }),
+    });
+  }
+
+  listDeviceKeys(userId: string): Promise<DeviceKey[]> {
+    return this.request(`/v1/users/${encodeURIComponent(userId)}/device-keys`);
+  }
+
   listConversations(): Promise<Conversation[]> {
     return this.request("/v1/conversations");
   }
@@ -882,6 +898,8 @@ export class BotifyrClient {
     displayName?: string;
     avatarEmoji?: string;
     avatarScheme?: number;
+    /** null removes the uploaded photo. */
+    avatarUrl?: string | null;
   }): Promise<User> {
     return this.request("/v1/profile", { method: "PATCH", json: true, body: JSON.stringify(input) });
   }

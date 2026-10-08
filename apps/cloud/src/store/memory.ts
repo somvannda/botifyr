@@ -7,6 +7,7 @@ import type {
   CapabilityGrantRecord,
   CompanyReportRecord,
   ConnectionRecord,
+  DeviceKey,
   FileRecord,
   FriendRequestRecord,
   InvoiceRecord,
@@ -48,6 +49,7 @@ export class MemoryStore implements Store {
   private grants = new Map<string, CapabilityGrantRecord>();
   private reports = new Map<string, CompanyReportRecord>();
   private providerRoles = new Map<ProviderRole, ProviderRoleConfig>();
+  private deviceKeys = new Map<string, DeviceKey>();
   private tasks = new Map<string, Task>();
   private audit: AuditRecord[] = [];
   private secrets = new Map<string, SecretRecord>();
@@ -123,7 +125,13 @@ export class MemoryStore implements Store {
 
   async updateUserProfile(
     id: string,
-    profile: { handle?: string; displayName?: string; avatarEmoji?: string; avatarScheme?: number },
+    profile: {
+      handle?: string;
+      displayName?: string;
+      avatarEmoji?: string;
+      avatarScheme?: number;
+      avatarUrl?: string | null;
+    },
   ): Promise<void> {
     const record = this.users.get(id);
     if (!record) return;
@@ -131,6 +139,7 @@ export class MemoryStore implements Store {
     if (profile.displayName !== undefined) record.displayName = profile.displayName;
     if (profile.avatarEmoji !== undefined) record.avatarEmoji = profile.avatarEmoji;
     if (profile.avatarScheme !== undefined) record.avatarScheme = profile.avatarScheme;
+    if (profile.avatarUrl !== undefined) record.avatarUrl = profile.avatarUrl ?? undefined;
   }
 
   private friendKey(a: string, b: string): string {
@@ -753,6 +762,21 @@ export class MemoryStore implements Store {
 
   async deleteMediaRecipe(domain: string): Promise<boolean> {
     return this.mediaRecipes.delete(domain.toLowerCase());
+  }
+
+  async saveDeviceKey(record: DeviceKey): Promise<void> {
+    this.deviceKeys.set(`${record.userId}:${record.deviceId}`, { ...record });
+  }
+
+  async listDeviceKeys(userId: string): Promise<DeviceKey[]> {
+    return [...this.deviceKeys.values()]
+      .filter((record) => record.userId === userId)
+      .map((record) => ({ ...record }));
+  }
+
+  async getDeviceKey(userId: string, deviceId: string): Promise<DeviceKey | null> {
+    const record = this.deviceKeys.get(`${userId}:${deviceId}`);
+    return record ? { ...record } : null;
   }
 }
 

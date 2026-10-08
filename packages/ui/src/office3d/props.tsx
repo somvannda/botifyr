@@ -160,3 +160,70 @@ export function ReceptionDesk({ position, rotation }: PropProps) {
     </group>
   );
 }
+
+/** Framed wall art. Faces +Z by default. */
+export function Picture({
+  position,
+  rotation,
+  color = "#5b7fd6",
+  width = 0.9,
+  height = 0.68,
+}: PropProps & { color?: string; width?: number; height?: number }) {
+  return (
+    <group position={position} rotation={rotation}>
+      <mesh castShadow>
+        <boxGeometry args={[width, height, 0.05]} />
+        <meshStandardMaterial color="#3a4152" roughness={0.5} metalness={0.2} />
+      </mesh>
+      <mesh position={[0, 0, 0.04]}>
+        <boxGeometry args={[width - 0.12, height - 0.12, 0.02]} />
+        <meshStandardMaterial color={color} roughness={0.85} />
+      </mesh>
+    </group>
+  );
+}
+
+export function CoffeeMachine({ position, rotation }: PropProps) {
+  return (
+    <group position={position} rotation={rotation}>
+      <mesh castShadow position={[0, 0.45, 0]}>
+        <boxGeometry args={[0.6, 0.9, 0.5]} />
+        <meshStandardMaterial color="#4a5163" roughness={0.5} metalness={0.3} />
+      </mesh>
+      <mesh position={[0, 0.52, 0.27]}>
+        <boxGeometry args={[0.3, 0.3, 0.06]} />
+        <meshStandardMaterial color="#8fd3ff" emissive="#2a6d94" emissiveIntensity={0.5} roughness={0.3} />
+      </mesh>
+      <mesh position={[0, 0.14, 0.3]}>
+        <boxGeometry args={[0.24, 0.1, 0.12]} />
+        <meshStandardMaterial color="#2a2f3d" roughness={0.6} />
+      </mesh>
+    </group>
+  );
+}
+
+/** A small desk lamp; sits on the desk surface (y = 0.77). */
+export function DeskLamp({ position }: PropProps) {
+  return (
+    <group position={position}>
+      <mesh position={[0, 0.03, 0]}>
+        <cylinderGeometry args={[0.1, 0.12, 0.06, 10]} />
+        <meshStandardMaterial color="#2f3546" metalness={0.4} roughness={0.4} />
+      </mesh>
+      <mesh position={[0, 0.22, 0]}>
+        <cylinderGeometry args={[0.02, 0.02, 0.4, 8]} />
+        <meshStandardMaterial color="#2f3546" metalness={0.4} roughness={0.4} />
+      </mesh>
+      <mesh castShadow position={[0.08, 0.44, 0]} rotation={[0, 0, -0.5]}>
+        <coneGeometry args={[0.12, 0.16, 12]} />
+        <meshStandardMaterial
+          color="#3a4152"
+          emissive="#ffd9a0"
+          emissiveIntensity={0.35}
+          metalness={0.4}
+          roughness={0.4}
+        />
+      </mesh>
+    </group>
+  );
+}

@@ -14,6 +14,7 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS handle TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_emoji TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_scheme INTEGER;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS users_handle_idx ON users (lower(handle)) WHERE handle IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS friendships (
@@ -236,6 +237,18 @@ CREATE TABLE IF NOT EXISTS media_recipes (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS media_recipes_status_idx ON media_recipes (status);
+
+/* DM end-to-end encryption: each device publishes its public identity key. */
+CREATE TABLE IF NOT EXISTS device_keys (
+  id         TEXT PRIMARY KEY,
+  user_id    TEXT NOT NULL,
+  device_id  TEXT NOT NULL,
+  public_key JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (user_id, device_id)
+);
+CREATE INDEX IF NOT EXISTS device_keys_user_idx ON device_keys (user_id);
 
 /* --- Billing (prepaid plans + on-demand credits via ChmabaPay) ------------- */
 ALTER TABLE users ADD COLUMN IF NOT EXISTS billing_mode TEXT NOT NULL DEFAULT 'free';

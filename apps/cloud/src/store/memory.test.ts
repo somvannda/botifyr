@@ -257,4 +257,48 @@ describe("MemoryStore", () => {
     const mine = await store.listTasksForUser("u1");
     expect(mine.map((entry) => entry.id)).toEqual(["t1"]);
   });
+
+  it("stores device keys per user+device", async () => {
+    const store = new MemoryStore();
+    await store.saveDeviceKey({
+      id: "k1",
+      userId: "u1",
+      deviceId: "d1",
+      publicKey: { kty: "EC" },
+      createdAt: now,
+      updatedAt: now,
+    });
+    await store.saveDeviceKey({
+      id: "k2",
+      userId: "u1",
+      deviceId: "d2",
+      publicKey: { kty: "EC" },
+      createdAt: now,
+      updatedAt: now,
+    });
+    await store.saveDeviceKey({
+      id: "k3",
+      userId: "u2",
+      deviceId: "d1",
+      publicKey: { kty: "EC" },
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    expect((await store.listDeviceKeys("u1")).map((entry) => entry.deviceId).sort()).toEqual(["d1", "d2"]);
+    expect((await store.getDeviceKey("u1", "d1"))?.id).toBe("k1");
+    expect(await store.getDeviceKey("u1", "zzz")).toBeNull();
+
+    // Upsert replaces the key for the same user+device.
+    await store.saveDeviceKey({
+      id: "k1b",
+      userId: "u1",
+      deviceId: "d1",
+      publicKey: { kty: "EC", crv: "P-256" },
+      createdAt: now,
+      updatedAt: now,
+    });
+    expect((await store.getDeviceKey("u1", "d1"))?.publicKey).toEqual({ kty: "EC", crv: "P-256" });
+    expect((await store.listDeviceKeys("u1")).length).toBe(2);
+  });
 });

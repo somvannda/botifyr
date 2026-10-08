@@ -30,4 +30,13 @@ describe("UI parity (one shared app, two hosts)", () => {
     expect(app).not.toContain("apps/desktop");
     expect(app).not.toContain("apps/portal");
   });
+
+  it("the desktop title bar stays thin and exposes the shared slot", () => {
+    const titlebar = readFileSync("apps/desktop/src/TitleBar.tsx", "utf8");
+    // Host chrome reuses the shared app's slot contract instead of forking the UI.
+    expect(titlebar).toContain("TITLEBAR_SLOT_ID");
+    expect(titlebar).toContain("titlebar-slot");
+    // A title bar is just the OS chrome: brands, a slot and window controls.
+    expect(titlebar.length).toBeLessThan(2500);
+  });
 });

@@ -599,6 +599,7 @@ export async function buildServer(options: ServerOptions) {
     displayName?: string;
     avatarEmoji?: string;
     avatarScheme?: number;
+    avatarUrl?: string;
   }): User => ({
     id: record.id,
     email: record.email,
@@ -609,6 +610,7 @@ export async function buildServer(options: ServerOptions) {
     displayName: record.displayName,
     avatarEmoji: record.avatarEmoji,
     avatarScheme: record.avatarScheme,
+    avatarUrl: record.avatarUrl,
   });
 
   const slugify = (value: string): string =>
@@ -3493,21 +3495,34 @@ export async function buildServer(options: ServerOptions) {
     displayName?: string;
     avatarEmoji?: string;
     avatarScheme?: number;
+    avatarUrl?: string;
   }) => ({
     id: record.id,
     handle: record.handle,
     displayName: record.displayName,
     avatarEmoji: record.avatarEmoji,
     avatarScheme: record.avatarScheme,
+    avatarUrl: record.avatarUrl,
     online: isOnline(record.id),
   });
 
   app.patch<{
-    Body: { handle?: string; displayName?: string; avatarEmoji?: string; avatarScheme?: number };
+    Body: {
+      handle?: string;
+      displayName?: string;
+      avatarEmoji?: string;
+      avatarScheme?: number;
+      avatarUrl?: string | null;
+    };
   }>("/v1/profile", { preHandler: requireAuth }, async (request, reply) => {
     const userId = request.userId as string;
-    const profile: { handle?: string; displayName?: string; avatarEmoji?: string; avatarScheme?: number } =
-      {};
+    const profile: {
+      handle?: string;
+      displayName?: string;
+      avatarEmoji?: string;
+      avatarScheme?: number;
+      avatarUrl?: string | null;
+    } = {};
     if (typeof request.body?.handle === "string") {
       const handle = slugify(request.body.handle);
       if (handle.length < 3) return reply.code(400).send({ error: "handle must be at least 3 characters" });
@@ -3521,6 +3536,15 @@ export async function buildServer(options: ServerOptions) {
       profile.avatarEmoji = request.body.avatarEmoji.trim().slice(0, 8);
     if (Number.isInteger(request.body?.avatarScheme))
       profile.avatarScheme = Number(request.body?.avatarScheme);
+    if (request.body?.avatarUrl === null) {
+      profile.avatarUrl = null;
+    } else if (typeof request.body?.avatarUrl === "string") {
+      const value = request.body.avatarUrl.trim();
+      if (value && !/^data:image\/(png|jpe?g|webp|gif);base64,/i.test(value))
+        return reply.code(400).send({ error: "avatar must be a base64 image data URL" });
+      if (value.length > 500_000) return reply.code(413).send({ error: "avatar image is too large" });
+      profile.avatarUrl = value || null;
+    }
     await store.updateUserProfile(userId, profile);
     const record = await store.getUserById(userId);
     return record ? toUser(record) : reply.code(404).send({ error: "not found" });
@@ -4428,6 +4452,40 @@ export async function buildServer(options: ServerOptions) {
       online: true,
     }));
   });
+
+  /* DM E2E: devices publish their public identity key so peers can encrypt to them. */
+  app.post<{ Body: { deviceId?: string; publicKey?: unknown } }>(
+    "/v1/device-keys",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const deviceId = String(request.body?.deviceId ?? "")
+        .trim()
+        .slice(0, 120);
+      const publicKey = request.body?.publicKey;
+      if (!deviceId || !publicKey || typeof publicKey !== "object" || Array.isArray(publicKey)) {
+        return reply.code(400).send({ error: "deviceId and publicKey are required" });
+      }
+      const now = new Date().toISOString();
+      const existing = await store.getDeviceKey(userId, deviceId);
+      await store.saveDeviceKey({
+        id: existing?.id ?? randomUUID(),
+        userId,
+        deviceId,
+        publicKey: publicKey as Record<string, unknown>,
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+      });
+      return reply.code(204).send();
+    },
+  );
+
+  /* A user's published device keys (used to encrypt DMs to their devices). */
+  app.get<{ Params: { id: string } }>(
+    "/v1/users/:id/device-keys",
+    { preHandler: requireAuth },
+    async (request) => store.listDeviceKeys(request.params.id),
+  );
 
   /* WebRTC signaling relay: delivered to the user's own devices. */
   app.post<{ Body: { to?: string; from?: string; data?: unknown } }>(

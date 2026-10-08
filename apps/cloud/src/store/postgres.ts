@@ -8,6 +8,7 @@ import type {
   CapabilityGrantRecord,
   CompanyReportRecord,
   ConnectionRecord,
+  DeviceKey,
   FileRecord,
   FriendRequestRecord,
   InvoiceRecord,
@@ -67,8 +68,8 @@ export class PostgresStore implements Store {
 
   async createUser(record: UserRecord): Promise<void> {
     await this.pool.query(
-      "INSERT INTO users (id, email, password_hash, role, plan, handle, display_name, avatar_emoji, avatar_scheme, created_at) " +
-        "VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
+      "INSERT INTO users (id, email, password_hash, role, plan, handle, display_name, avatar_emoji, avatar_scheme, avatar_url, created_at) " +
+        "VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
       [
         record.id,
         record.email,
@@ -79,6 +80,7 @@ export class PostgresStore implements Store {
         record.displayName ?? null,
         record.avatarEmoji ?? null,
         record.avatarScheme ?? null,
+        record.avatarUrl ?? null,
         record.createdAt,
       ],
     );
@@ -113,16 +115,25 @@ export class PostgresStore implements Store {
 
   async updateUserProfile(
     id: string,
-    profile: { handle?: string; displayName?: string; avatarEmoji?: string; avatarScheme?: number },
+    profile: {
+      handle?: string;
+      displayName?: string;
+      avatarEmoji?: string;
+      avatarScheme?: number;
+      avatarUrl?: string | null;
+    },
   ): Promise<void> {
     await this.pool.query(
       "UPDATE users SET handle = COALESCE($1, handle), display_name = COALESCE($2, display_name), " +
-        "avatar_emoji = COALESCE($3, avatar_emoji), avatar_scheme = COALESCE($4, avatar_scheme) WHERE id = $5",
+        "avatar_emoji = COALESCE($3, avatar_emoji), avatar_scheme = COALESCE($4, avatar_scheme), " +
+        "avatar_url = CASE WHEN $6 THEN $5 ELSE avatar_url END WHERE id = $7",
       [
         profile.handle ?? null,
         profile.displayName ?? null,
         profile.avatarEmoji ?? null,
         profile.avatarScheme ?? null,
+        profile.avatarUrl ?? null,
+        profile.avatarUrl !== undefined,
         id,
       ],
     );
@@ -1127,6 +1138,32 @@ export class PostgresStore implements Store {
     ]);
     return (result.rowCount ?? 0) > 0;
   }
+
+  async listDeviceKeys(userId: string): Promise<DeviceKey[]> {
+    const { rows } = await this.pool.query(
+      "SELECT * FROM device_keys WHERE user_id = $1 ORDER BY updated_at DESC",
+      [userId],
+    );
+    return rows.map(toDeviceKey);
+  }
+
+  async getDeviceKey(userId: string, deviceId: string): Promise<DeviceKey | null> {
+    const { rows } = await this.pool.query(
+      "SELECT * FROM device_keys WHERE user_id = $1 AND device_id = $2",
+      [userId, deviceId],
+    );
+    return rows[0] ? toDeviceKey(rows[0]) : null;
+  }
+
+  async saveDeviceKey(record: DeviceKey): Promise<void> {
+    await this.pool.query(
+      "INSERT INTO device_keys (id, user_id, device_id, public_key, created_at, updated_at) " +
+        "VALUES ($1,$2,$3,$4,$5,$6) " +
+        "ON CONFLICT (user_id, device_id) DO UPDATE SET public_key = EXCLUDED.public_key, " +
+        "updated_at = EXCLUDED.updated_at",
+      [record.id, record.userId, record.deviceId, record.publicKey, record.createdAt, record.updatedAt],
+    );
+  }
 }
 
 function toMedia(row: any): MediaRecord {
@@ -1139,6 +1176,17 @@ function toMedia(row: any): MediaRecord {
     mime: row.mime ?? "application/octet-stream",
     location: row.location === "device" ? "device" : "server",
     device: row.device ?? undefined,
+    createdAt: row.created_at.toISOString(),
+    updatedAt: row.updated_at.toISOString(),
+  };
+}
+
+function toDeviceKey(row: any): DeviceKey {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    deviceId: row.device_id,
+    publicKey: row.public_key,
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
   };
@@ -1180,6 +1228,7 @@ function toUser(row: any): UserRecord {
     displayName: row.display_name ?? undefined,
     avatarEmoji: row.avatar_emoji ?? undefined,
     avatarScheme: row.avatar_scheme ?? undefined,
+    avatarUrl: row.avatar_url ?? undefined,
     billingMode: row.billing_mode ?? undefined,
     periodStart: row.period_start ? new Date(row.period_start).toISOString() : undefined,
     periodEnd: row.period_end ? new Date(row.period_end).toISOString() : undefined,

@@ -1,4 +1,5 @@
 import { Fragment, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type {
   FormEvent,
   KeyboardEvent as ReactKeyboardEvent,
@@ -31,12 +32,26 @@ import type {
   WorkspaceWithRoles,
 } from "@botifyr/shared";
 import { DEPARTMENTS, ROLE_CATALOG } from "@botifyr/shared";
-import { AuthError, BotifyrClient, type Conversation, type MediaItem, type Person } from "@botifyr/client";
+import {
+  AuthError,
+  BotifyrClient,
+  deriveSharedKey,
+  isSealedMessage,
+  loadOrCreateDeviceKeys,
+  openMessage,
+  sealMessage,
+  type Conversation,
+  type DeviceKeyPair,
+  type MediaItem,
+  type Person,
+  type SealedMessage,
+} from "@botifyr/client";
 import { CalendarIcon, DriveIcon, GmailIcon } from "./AppIcons";
 import { GithubBrand, NotionBrand, SlackBrand, TelegramBrand } from "./BrandIcons";
 import { BOT_SCHEMES, BotLogo } from "./BotLogo";
 import {
   BellIcon,
+  CameraIcon,
   ChartIcon,
   CheckIcon,
   ChevronIcon,
@@ -49,12 +64,14 @@ import {
   HelpIcon,
   LockIcon,
   LogoutIcon,
+  MessageIcon,
   MicIcon,
   MobileIcon,
   MonitorIcon,
   MoreIcon,
   PanelIcon,
   PauseIcon,
+  PhoneIcon,
   PlayIcon,
   PowerIcon,
   PlusIcon,
@@ -66,10 +83,12 @@ import {
   ShieldIcon,
   SmileyIcon,
   StopIcon,
+  UserIcon,
   UserPlusIcon,
   UsersIcon,
 } from "./Icons";
 import { Markdown } from "./Markdown";
+import { ErrorBoundary } from "./ErrorBoundary";
 import { P2P, deviceId, saveBlob, setIceServers } from "./p2p";
 import { defaultBridge, type BotBridge } from "./bridge";
 import { mergeTask } from "./taskMerge";
@@ -141,10 +160,36 @@ interface AppNotification extends Toast {
   read: boolean;
 }
 
+/**
+ * DOM id of the optional OS title-bar slot. Hosts that render a custom title
+ * bar (the desktop app) expose this element so the shared app can teleport the
+ * notification centre into it; hosts without a title bar leave it absent and
+ * the bell stays in the chat topbar. See AGENTS.md §7.
+ */
+export const TITLEBAR_SLOT_ID = "botifyr-titlebar-slot";
+
 const NOTIFICATIONS_KEY = "botifyr.notifications";
 const SEEN_MESSAGES_KEY = "botifyr.seenMessages";
 
+/** Marker prefix for an end-to-end encrypted DM body (E2E1:<sealed json>). */
+const E2E_PREFIX = "E2E1:";
+
+function encodeSealed(sealed: SealedMessage): string {
+  return `${E2E_PREFIX}${JSON.stringify(sealed)}`;
+}
+
+function parseSealed(content: string): SealedMessage | null {
+  if (!content.startsWith(E2E_PREFIX)) return null;
+  try {
+    const parsed: unknown = JSON.parse(content.slice(E2E_PREFIX.length));
+    return isSealedMessage(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 const SETTINGS_TABS = [
+  { id: "profile", label: "Profile", icon: <UserIcon size={16} /> },
   { id: "general", label: "General", icon: <GearIcon size={16} /> },
   { id: "computer", label: "Computer", icon: <MonitorIcon size={16} /> },
   { id: "usage", label: "Usage & Billing", icon: <ChartIcon size={16} /> },
@@ -256,6 +301,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [showNewChat, setShowNewChat] = useState(false);
+  const [newChatTab, setNewChatTab] = useState<"contacts" | "chats" | "calls">("chats");
+  const [newChatQuery, setNewChatQuery] = useState("");
   const [showConnectApps, setShowConnectApps] = useState(false);
   const [connections, setConnections] = useState<ConnectionInfo[]>([]);
   const [connectingApp, setConnectingApp] = useState<string | null>(null);
@@ -304,6 +351,12 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const bootAtRef = useRef<number>(Date.now());
   const hasConnectedRef = useRef(false);
   const notifWrapRef = useRef<HTMLDivElement | null>(null);
+  const dmKeysRef = useRef<Map<string, CryptoKey>>(new Map());
+  const myKeysRef = useRef<DeviceKeyPair | null>(null);
+  const [decrypted, setDecrypted] = useState<Record<string, string>>({});
+  // When the host renders an OS title bar with a slot, the notification centre
+  // is teleported there; otherwise it renders inline in the chat topbar.
+  const [titlebarSlot, setTitlebarSlot] = useState<HTMLElement | null>(null);
   const [reactions, setReactions] = useState<Record<string, string>>(() => {
     try {
       return JSON.parse(localStorage.getItem("botifyr.reactions") ?? "{}") as Record<string, string>;
@@ -409,11 +462,14 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [peopleQuery, setPeopleQuery] = useState("");
   const [peopleResults, setPeopleResults] = useState<Person[]>([]);
   const [showPeople, setShowPeople] = useState(false);
+  const [peopleTab, setPeopleTab] = useState<"contacts" | "chats" | "calls">("contacts");
   const [groupName, setGroupName] = useState("");
   const [groupSelection, setGroupSelection] = useState<string[]>([]);
   const [profileName, setProfileName] = useState("");
   const [profileHandle, setProfileHandle] = useState("");
   const [profileEmoji, setProfileEmoji] = useState("🙂");
+  const [profileAvatarUrl, setProfileAvatarUrl] = useState<string | undefined>(undefined);
+  const avatarInputRef = useRef<HTMLInputElement | null>(null);
   const [activityCollapsed, setActivityCollapsed] = useState(false);
   const [downloadsExpanded, setDownloadsExpanded] = useState(false);
   const [devices, setDevices] = useState<Array<{ id: string; name: string; online: boolean }>>([]);
@@ -541,23 +597,46 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
 
   /** The 3D office, rendered either as a docked side panel or a floating overlay. */
   const renderOffice = (docked: boolean) => (
-    <LazyOfficeView
-      company={officeCompany?.name ?? ""}
-      agents={officeAgents}
-      paused={
-        (workspaces.find((entry) => entry.name === officeCompany?.name)?.status ?? "active") === "paused"
+    <ErrorBoundary
+      fallback={
+        <div className={docked ? "office3d-dock-root" : "office3d-overlay"} role="presentation">
+          <div className="office3d-panel">
+            <div className="office3d-head">
+              <span className="office3d-title">3D office unavailable</span>
+              <button
+                className="round small"
+                type="button"
+                onClick={() => setShowOffice3d(false)}
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="company-hint">
+              The 3D office failed to render. The Office tab still lists every employee.
+            </p>
+          </div>
+        </div>
       }
-      docked={docked}
-      onToggleDock={() => setOffice3dDock((value) => !value)}
-      onClose={() => setShowOffice3d(false)}
-      onSelect={(botId) => {
-        const bot = bots.find((entry) => entry.id === botId);
-        if (bot) {
-          setShowOffice3d(false);
-          openEmployee(bot);
+    >
+      <LazyOfficeView
+        company={officeCompany?.name ?? ""}
+        agents={officeAgents}
+        paused={
+          (workspaces.find((entry) => entry.name === officeCompany?.name)?.status ?? "active") === "paused"
         }
-      }}
-    />
+        docked={docked}
+        onToggleDock={() => setOffice3dDock((value) => !value)}
+        onClose={() => setShowOffice3d(false)}
+        onSelect={(botId) => {
+          const bot = bots.find((entry) => entry.id === botId);
+          if (bot) {
+            setShowOffice3d(false);
+            openEmployee(bot);
+          }
+        }}
+      />
+    </ErrorBoundary>
   );
 
   /**
@@ -767,6 +846,16 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       .listSecrets()
       .then((list) => mounted && setSecrets(list))
       .catch(() => {});
+
+    // Publish this device's public E2E key so peers can encrypt DMs to us.
+    void (async () => {
+      try {
+        const keys = await loadOrCreateDeviceKeys(localStorage);
+        await client.registerDeviceKey(myDeviceId, keys.publicKey);
+      } catch {
+        // DM encryption is best-effort; never block the app.
+      }
+    })();
 
     return () => {
       mounted = false;
@@ -1008,6 +1097,63 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
   }, [notifOpen]);
+
+  const getDmKey = useCallback(
+    async (session: { id: string; participants?: string[] }): Promise<CryptoKey | null> => {
+      const cached = dmKeysRef.current.get(session.id);
+      if (cached) return cached;
+      const peerId = (session.participants ?? []).find((id) => id !== user?.id);
+      if (!peerId) return null;
+      const keys = await client.listDeviceKeys(peerId).catch(() => []);
+      const peer = keys[0]?.publicKey;
+      if (!peer) return null;
+      if (!myKeysRef.current) myKeysRef.current = await loadOrCreateDeviceKeys(localStorage);
+      const key = await deriveSharedKey(myKeysRef.current.privateKey, peer as JsonWebKey);
+      dmKeysRef.current.set(session.id, key);
+      return key;
+    },
+    [client, user?.id],
+  );
+
+  // Decrypt end-to-end encrypted DM bodies for the open conversation.
+  useEffect(() => {
+    if (!user) return;
+    const session = sessions.find((entry) => entry.id === activeSessionId);
+    if (!session || session.kind !== "dm") return;
+    const sealed = session.messages.filter((message) => parseSealed(message.content));
+    if (sealed.length === 0) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const key = await getDmKey(session);
+        if (!key) return;
+        const entries: Record<string, string> = {};
+        for (const message of sealed) {
+          const envelope = parseSealed(message.content);
+          if (!envelope) continue;
+          try {
+            entries[message.id] = await openMessage(key, envelope);
+          } catch {
+            // wrong key / tampered — leave the ciphertext as-is
+          }
+        }
+        if (!cancelled && Object.keys(entries).length > 0) {
+          setDecrypted((prev) => ({ ...prev, ...entries }));
+        }
+      } catch {
+        // DM encryption is best-effort.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [sessions, activeSessionId, user, getDmKey]);
+
+  // Pick up the host's title-bar slot once it is mounted (desktop only).
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    setTitlebarSlot(document.getElementById(TITLEBAR_SLOT_ID));
+  }, []);
 
   async function openExternal(url: string) {
     await bridge.openExternal(url);
@@ -2008,14 +2154,25 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     setSending(true);
     setError(null);
     try {
-      const activeKind = sessions.find((entry) => entry.id === sessionId)?.kind;
+      const session = sessions.find((entry) => entry.id === sessionId);
+      const activeKind = session?.kind;
+      let outgoing = payload;
+      // Encrypt direct messages end-to-end when the peer has published a key.
+      if (activeKind === "dm" && session) {
+        try {
+          const key = await getDmKey(session);
+          if (key) outgoing = encodeSealed(await sealMessage(key, payload));
+        } catch {
+          // fall back to plaintext
+        }
+      }
       const result =
         activeKind === "dm" || activeKind === "group"
-          ? await client.sendDm(sessionId, payload)
+          ? await client.sendDm(sessionId, outgoing)
           : await client.sendMessage(sessionId, payload, useComputer);
-      const session = result.session;
+      const updated = result.session;
       const warning = (result as { warning?: string }).warning;
-      setSessions((prev) => prev.map((s) => (s.id === session.id ? session : s)));
+      setSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
       setLimitWarning(warning ?? null);
     } catch (err: unknown) {
       setSessions((prev) =>
@@ -2643,6 +2800,20 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     }
   }
 
+  /** Open an existing human conversation from the Chats list. */
+  function openChat(session: Session): void {
+    setActiveBotId(null);
+    setActiveSessionId(session.id);
+    setShowPeople(false);
+  }
+
+  /** Open the "start a chat" panel fresh (clear search, reset to Chats). */
+  function openNewChat(): void {
+    setNewChatQuery("");
+    setNewChatTab("chats");
+    setShowNewChat(true);
+  }
+
   /** Share a downloaded file with a friend via a signed, recipient-scoped link. */
   async function shareWith(person: Person): Promise<void> {
     const item = shareItem;
@@ -2666,9 +2837,27 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
         displayName: profileName.trim(),
         handle: profileHandle.trim().replace(/^@/, ""),
         avatarEmoji: profileEmoji.trim() || "🙂",
+        avatarUrl: profileAvatarUrl ?? null,
       });
       setUser(updated);
       setCheckNote("Profile saved.");
+    } catch (err: unknown) {
+      setError(messageOf(err));
+    }
+  }
+
+  /** Downscale a chosen image to a small square data URL we can store on the profile. */
+  async function chooseAvatar(file: File): Promise<void> {
+    if (!file.type.startsWith("image/")) {
+      setError("Please choose an image file.");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setError("That image is too large (max 10 MB).");
+      return;
+    }
+    try {
+      setProfileAvatarUrl(await downscaleImage(file, 256));
     } catch (err: unknown) {
       setError(messageOf(err));
     }
@@ -2693,9 +2882,22 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   }
   const activeBot = bots.find((bot) => bot.id === activeBotId) ?? null;
   const activeScheme = BOT_SCHEMES[(activeBot?.scheme ?? 0) % BOT_SCHEMES.length];
-  // A group is a container of bots, not a bot itself — keep them separate.
-  const standaloneBots = bots.filter((bot) => !(bot.memberIds && bot.memberIds.length > 0));
-  const groupBots = bots.filter((bot) => bot.memberIds && bot.memberIds.length > 0);
+  // Human conversations (DMs and friend groups), most recently active first.
+  const chatActivity = (session: Session): string =>
+    session.messages[session.messages.length - 1]?.createdAt ?? session.createdAt;
+  const humanChats = sessions
+    .filter((session) => session.kind === "dm" || session.kind === "group")
+    .sort((a, b) => chatActivity(b).localeCompare(chatActivity(a)));
+  // One search box serves every tab of the "start a chat" panel.
+  const newChatQ = newChatQuery.trim().toLowerCase();
+  const matchingBots = newChatQ ? bots.filter((bot) => bot.name.toLowerCase().includes(newChatQ)) : bots;
+  const matchingFriends = newChatQ
+    ? friends.filter(
+        (person) =>
+          (person.displayName ?? "").toLowerCase().includes(newChatQ) ||
+          (person.handle ?? "").toLowerCase().includes(newChatQ),
+      )
+    : friends;
   const activeBotName = activeBot?.name ?? "Botifyr";
   const botLabel = activeBotId ? (labels[activeBotId] ?? "") : "";
   const groupMemberBots: Bot[] = activeBot?.memberIds
@@ -2992,6 +3194,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     setProfileName(user.displayName ?? "");
     setProfileHandle(user.handle ?? "");
     setProfileEmoji(user.avatarEmoji ?? "🙂");
+    setProfileAvatarUrl(user.avatarUrl);
   }, [user]);
 
   if (!authChecked) return <div className="center">Loading…</div>;
@@ -3137,10 +3340,70 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     );
   };
 
+  /** The bell + dropdown; teleported into the OS title bar when the host provides a slot. */
+  const notificationCentre = (
+    <div className="notif-wrap" ref={notifWrapRef}>
+      <button className="bot-menu-btn" type="button" title="Notifications" onClick={toggleNotifications}>
+        <BellIcon size={16} />
+        {notifications.some((entry) => !entry.read) && (
+          <span className="notif-dot">{notifications.filter((entry) => !entry.read).length}</span>
+        )}
+      </button>
+      {notifOpen && (
+        <div className="notif-panel">
+          <div className="notif-head">
+            <span>Notifications</span>
+            {notifications.length > 0 && (
+              <button className="link" type="button" onClick={clearNotifications}>
+                Clear
+              </button>
+            )}
+          </div>
+          {notifications.length === 0 ? (
+            <div className="notif-empty">Nothing yet.</div>
+          ) : (
+            <ul className="notif-list">
+              {notifications.map((entry) => (
+                <li key={entry.id} className="notif-row">
+                  <button
+                    className={`notif-item${entry.read ? "" : " unread"}`}
+                    type="button"
+                    onClick={() => {
+                      if (entry.sessionId) openSessionById(entry.sessionId);
+                      setNotifOpen(false);
+                    }}
+                  >
+                    <span className="notif-title">{entry.title}</span>
+                    <span className="notif-body">{entry.body}</span>
+                    <span className="notif-time">
+                      {new Date(entry.at).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
+                  </button>
+                  <button
+                    className="notif-x"
+                    type="button"
+                    title="Dismiss"
+                    onClick={() => dismissNotification(entry.id)}
+                  >
+                    <CloseIcon size={13} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div
       className={`app${showBotPanel && activeBot ? " with-panel" : ""}${officeDocked ? " with-office" : ""}${density === "compact" ? " density-compact" : ""}`}
     >
+      {titlebarSlot && createPortal(notificationCentre, titlebarSlot)}
       {toasts.length > 0 && (
         <div className="toast-stack">
           {toasts.map((toast) => (
@@ -3173,7 +3436,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
           <button className="round" type="button" title="Search" onClick={() => setSearchOpen((v) => !v)}>
             <SearchIcon size={16} />
           </button>
-          <button className="round" type="button" title="New chat" onClick={() => setShowNewChat(true)}>
+          <button className="round" type="button" title="New chat" onClick={openNewChat}>
             <PlusIcon size={18} />
           </button>
         </div>
@@ -3259,7 +3522,10 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                     )}
                     <span className="task-section-name">
                       {group.name}
-                      <span className={`task-section-count${pending > 0 ? " has-needs" : ""}`} aria-hidden="true">
+                      <span
+                        className={`task-section-count${pending > 0 ? " has-needs" : ""}`}
+                        aria-hidden="true"
+                      >
                         {pending > 0
                           ? ` (${group.members.length} · ${pending} need you)`
                           : ` (${group.members.length})`}
@@ -3323,7 +3589,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
             title={`${user.email} · ${connection === "online" ? "Connected" : connection === "connecting" ? "Connecting…" : "Offline"}`}
             onClick={() => setShowAccountMenu((value) => !value)}
           >
-            <span className="user-avatar">{initials(user.email)}</span>
+            <SelfAvatar user={user} email={user.email} className="user-avatar" />
             <span className="sidebar-account-email">{user.email}</span>
           </button>
           <button
@@ -3359,6 +3625,21 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
 
         {showAccountMenu && (
           <div className="account-menu">
+            <button
+              className="account-item"
+              type="button"
+              onClick={() => {
+                setSettingsTab("profile");
+                setShowSettings(true);
+                setShowAccountMenu(false);
+              }}
+            >
+              <span className="account-ico">
+                <UserIcon size={16} />
+              </span>
+              <span className="account-label">Profile</span>
+              <span className="account-chev">›</span>
+            </button>
             <button
               className="account-item"
               type="button"
@@ -3479,72 +3760,141 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
           <div className="newchat-overlay" onClick={() => setShowNewChat(false)}>
             <span className="newchat-title">To: Start a chat with…</span>
             <div className="newchat-panel" onClick={(event) => event.stopPropagation()}>
-              <button className="newchat-item" type="button" onClick={() => openCreateBot("bot")}>
-                <span className="newchat-ico">
-                  <PlusIcon size={16} />
-                </span>
-                Create new Bot
-              </button>
+              <div className="newchat-actions">
+                <button className="newchat-item" type="button" onClick={() => openCreateBot("bot")}>
+                  <span className="newchat-ico">
+                    <PlusIcon size={16} />
+                  </span>
+                  Create new Bot
+                </button>
+                <button className="newchat-item" type="button" onClick={() => openCreateBot("group")}>
+                  <span className="newchat-ico">
+                    <UsersIcon size={16} />
+                  </span>
+                  Create group chat
+                </button>
+                <button className="newchat-item" type="button" onClick={openCompanySetup}>
+                  <span className="newchat-ico">
+                    <BotLogo size={16} />
+                  </span>
+                  Start a company
+                </button>
+              </div>
 
-              <button className="newchat-item" type="button" onClick={() => openCreateBot("group")}>
-                <span className="newchat-ico">
-                  <UsersIcon size={16} />
-                </span>
-                Create group chat
-              </button>
+              <div className="newchat-search">
+                <SearchIcon size={15} />
+                <input
+                  placeholder="Search bots, groups, and people"
+                  value={newChatQuery}
+                  autoFocus
+                  onChange={(event) => setNewChatQuery(event.target.value)}
+                />
+              </div>
 
-              <button className="newchat-item" type="button" onClick={openCompanySetup}>
-                <span className="newchat-ico">
-                  <BotLogo size={16} />
-                </span>
-                Start a company
-              </button>
+              <nav className="people-tabs" role="tablist">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={newChatTab === "contacts"}
+                  className={`people-tab ${newChatTab === "contacts" ? "active" : ""}`}
+                  onClick={() => setNewChatTab("contacts")}
+                >
+                  <UserIcon size={15} />
+                  Contacts
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={newChatTab === "chats"}
+                  className={`people-tab ${newChatTab === "chats" ? "active" : ""}`}
+                  onClick={() => setNewChatTab("chats")}
+                >
+                  <MessageIcon size={15} />
+                  Chats
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={newChatTab === "calls"}
+                  className={`people-tab ${newChatTab === "calls" ? "active" : ""}`}
+                  onClick={() => setNewChatTab("calls")}
+                >
+                  <PhoneIcon size={15} />
+                  Calls
+                </button>
+              </nav>
 
-              {bots.length > 0 && <div className="newchat-sep" />}
-
-              {standaloneBots.length > 0 && (
-                <>
-                  <div className="newchat-section">Bots</div>
-                  {standaloneBots.map((bot) => (
-                    <button
-                      key={bot.id}
-                      className={`newchat-item ${bot.id === activeBotId ? "active" : ""}`}
-                      type="button"
-                      onClick={() => selectBot(bot)}
-                    >
-                      <span className="conv-avatar">
-                        <BotLogo size={26} scheme={BOT_SCHEMES[bot.scheme % BOT_SCHEMES.length]} />
-                      </span>
-                      <span className="newchat-name">
-                        <span className="newchat-emoji">{cleanEmoji(bot.emoji, false)}</span>
-                        {bot.name}
-                      </span>
-                    </button>
-                  ))}
-                </>
+              {newChatTab === "contacts" && (
+                <div className="newchat-list">
+                  {matchingFriends.length === 0 ? (
+                    <div className="newchat-empty">
+                      {friends.length === 0
+                        ? "No contacts yet — add friends from People."
+                        : "No contacts match your search."}
+                    </div>
+                  ) : (
+                    matchingFriends.map((person) => (
+                      <button
+                        key={person.id}
+                        className="newchat-item"
+                        type="button"
+                        onClick={() => {
+                          setShowNewChat(false);
+                          void openDmWith(person);
+                        }}
+                      >
+                        <PersonAvatar person={person} size={30} />
+                        <span className="newchat-name">
+                          {person.displayName || (person.handle ? `@${person.handle}` : "Friend")}
+                        </span>
+                        <span className="newchat-meta">{person.online ? "online" : "offline"}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
               )}
 
-              {groupBots.length > 0 && (
-                <>
-                  <div className="newchat-section">Groups</div>
-                  {groupBots.map((bot) => (
-                    <button
-                      key={bot.id}
-                      className={`newchat-item ${bot.id === activeBotId ? "active" : ""}`}
-                      type="button"
-                      onClick={() => selectBot(bot)}
-                    >
-                      <span className="conv-avatar">
-                        <BotLogo size={26} scheme={BOT_SCHEMES[bot.scheme % BOT_SCHEMES.length]} />
-                      </span>
-                      <span className="newchat-name">
-                        <span className="newchat-emoji">{cleanEmoji(bot.emoji, true)}</span>
-                        {bot.name}
-                      </span>
-                      <span className="newchat-meta">{bot.memberIds?.length ?? 0} bots</span>
-                    </button>
-                  ))}
-                </>
+              {newChatTab === "chats" && (
+                <div className="newchat-list">
+                  {matchingBots.length === 0 ? (
+                    <div className="newchat-empty">
+                      {bots.length === 0 ? "No chats yet — create a bot." : "No chats match your search."}
+                    </div>
+                  ) : (
+                    matchingBots.map((bot) => {
+                      const isGroup = Boolean(bot.memberIds && bot.memberIds.length > 0);
+                      return (
+                        <button
+                          key={bot.id}
+                          className={`newchat-item ${bot.id === activeBotId ? "active" : ""}`}
+                          type="button"
+                          onClick={() => selectBot(bot)}
+                        >
+                          <span className="conv-avatar">
+                            <BotLogo size={26} scheme={BOT_SCHEMES[bot.scheme % BOT_SCHEMES.length]} />
+                          </span>
+                          <span className="newchat-name">
+                            <span className="newchat-emoji">{cleanEmoji(bot.emoji, isGroup)}</span>
+                            {bot.name}
+                          </span>
+                          {isGroup && <span className="newchat-meta">{bot.memberIds?.length ?? 0} bots</span>}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+
+              {newChatTab === "calls" && (
+                <div className="newchat-list">
+                  <div className="people-empty">
+                    <span className="people-empty-ico">
+                      <PhoneIcon size={26} />
+                    </span>
+                    <div className="people-empty-title">Calls are coming soon</div>
+                    <div className="people-empty-sub">Voice and video calls aren't available yet.</div>
+                  </div>
+                </div>
               )}
             </div>
           </div>
@@ -3592,66 +3942,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
               </span>
             )}
             <div className="topbar-right">
-              <div className="notif-wrap" ref={notifWrapRef}>
-                <button
-                  className="bot-menu-btn"
-                  type="button"
-                  title="Notifications"
-                  onClick={toggleNotifications}
-                >
-                  <BellIcon size={16} />
-                  {notifications.some((entry) => !entry.read) && (
-                    <span className="notif-dot">{notifications.filter((entry) => !entry.read).length}</span>
-                  )}
-                </button>
-                {notifOpen && (
-                  <div className="notif-panel">
-                    <div className="notif-head">
-                      <span>Notifications</span>
-                      {notifications.length > 0 && (
-                        <button className="link" type="button" onClick={clearNotifications}>
-                          Clear
-                        </button>
-                      )}
-                    </div>
-                    {notifications.length === 0 ? (
-                      <div className="notif-empty">Nothing yet.</div>
-                    ) : (
-                      <ul className="notif-list">
-                        {notifications.map((entry) => (
-                          <li key={entry.id} className="notif-row">
-                            <button
-                              className={`notif-item${entry.read ? "" : " unread"}`}
-                              type="button"
-                              onClick={() => {
-                                if (entry.sessionId) openSessionById(entry.sessionId);
-                                setNotifOpen(false);
-                              }}
-                            >
-                              <span className="notif-title">{entry.title}</span>
-                              <span className="notif-body">{entry.body}</span>
-                              <span className="notif-time">
-                                {new Date(entry.at).toLocaleTimeString([], {
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })}
-                              </span>
-                            </button>
-                            <button
-                              className="notif-x"
-                              type="button"
-                              title="Dismiss"
-                              onClick={() => dismissNotification(entry.id)}
-                            >
-                              <CloseIcon size={13} />
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                )}
-              </div>
+              {!titlebarSlot && notificationCentre}
               {activeSession && (
                 <button
                   className="bot-menu-btn"
@@ -3736,24 +4027,33 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                   if (mine) {
                     return (
                       <div key={message.id} className="msg-user">
-                        <div className="msg-user-bubble">{message.content}</div>
-                        <span className="msg-user-avatar">{initials(user.email)}</span>
+                        <div className="msg-user-bubble">{decrypted[message.id] ?? message.content}</div>
+                        <SelfAvatar user={user} email={user.email} className="msg-user-avatar" />
                       </div>
                     );
                   }
                   return (
                     <div key={message.id} className="msg-assistant">
-                      <BotLogo
-                        size={26}
-                        scheme={BOT_SCHEMES[(person?.avatarScheme ?? 0) % BOT_SCHEMES.length]}
-                        className="msg-bot-logo"
-                      />
+                      {person?.avatarUrl ? (
+                        <img
+                          className="msg-bot-logo person-avatar"
+                          src={person.avatarUrl}
+                          alt=""
+                          style={{ width: 26, height: 26 }}
+                        />
+                      ) : (
+                        <BotLogo
+                          size={26}
+                          scheme={BOT_SCHEMES[(person?.avatarScheme ?? 0) % BOT_SCHEMES.length]}
+                          className="msg-bot-logo"
+                        />
+                      )}
                       <div className="msg-body">
                         <div className="msg-author">
                           <span className="msg-author-emoji">{person?.avatarEmoji ?? "🙂"}</span>
                           {label}
                         </div>
-                        <Markdown text={message.content} onFileRef={openFileRef} />
+                        <Markdown text={decrypted[message.id] ?? message.content} onFileRef={openFileRef} />
                         {sharedTokenOf(message.content) && (
                           <button
                             className="ghost small"
@@ -3778,10 +4078,10 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                     <div key={message.id} className="msg-user">
                       {actionsFor(message, "You")}
                       <div className="msg-user-bubble">
-                        {message.content}
+                        {decrypted[message.id] ?? message.content}
                         {reactions[message.id] && <span className="reaction">{reactions[message.id]}</span>}
                       </div>
-                      <span className="msg-user-avatar">{initials(user.email)}</span>
+                      <SelfAvatar user={user} email={user.email} className="msg-user-avatar" />
                     </div>
                   );
                 }
@@ -4163,7 +4463,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
             </div>
           )}
           <div className="composer-bar">
-            <button className="round" type="button" title="New chat" onClick={() => setShowNewChat(true)}>
+            <button className="round" type="button" title="New chat" onClick={openNewChat}>
               <PlusIcon size={18} />
             </button>
             <textarea
@@ -5328,7 +5628,11 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
               {hqTab === "office" && (
                 <>
                   <div className="board-add">
-                    <button className="btn primary small" type="button" onClick={() => boardWorkspace && openOffice(boardWorkspace)}>
+                    <button
+                      className="btn primary small"
+                      type="button"
+                      onClick={() => boardWorkspace && openOffice(boardWorkspace)}
+                    >
                       3D Workspace
                     </button>
                     <span className="company-hint">See the office in 3D — every employee at their desk.</span>
@@ -6308,169 +6612,259 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
 
       {showPeople && (
         <div className="apps-overlay" onClick={() => setShowPeople(false)}>
-          <div className="apps-panel" onClick={(event) => event.stopPropagation()}>
+          <div className="apps-panel people-panel" onClick={(event) => event.stopPropagation()}>
             <div className="apps-head">
               <span className="apps-title">People</span>
               <button className="icon-btn sm" type="button" onClick={() => setShowPeople(false)}>
                 <CloseIcon size={13} />
               </button>
             </div>
-            <div className="settings-section-title">Your profile</div>
-            <div className="portal-row" style={{ marginBottom: 6 }}>
-              <input
-                className="settings-input emoji-input"
-                value={profileEmoji}
-                maxLength={4}
-                aria-label="Avatar emoji"
-                onChange={(event) => setProfileEmoji(event.target.value)}
-              />
-              <input
-                className="settings-input grow"
-                placeholder="Display name"
-                value={profileName}
-                onChange={(event) => setProfileName(event.target.value)}
-              />
-            </div>
-            <div className="portal-row" style={{ marginBottom: 10 }}>
-              <input
-                className="settings-input grow"
-                placeholder="@handle"
-                value={profileHandle}
-                onChange={(event) => setProfileHandle(event.target.value)}
-              />
-              <button className="ghost small" type="button" onClick={() => void saveProfile()}>
-                Save
-              </button>
-            </div>
-            <input
-              className="settings-input field-full"
-              style={{ margin: "0 0 10px" }}
-              placeholder="Search people by @handle or email"
-              value={peopleQuery}
-              onChange={(event) => void searchPeopleNow(event.target.value)}
-            />
 
-            {peopleResults.length > 0 && (
-              <>
-                <div className="settings-section-title">Results</div>
+            <nav className="people-tabs" role="tablist">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={peopleTab === "contacts"}
+                className={`people-tab ${peopleTab === "contacts" ? "active" : ""}`}
+                onClick={() => setPeopleTab("contacts")}
+              >
+                <UsersIcon size={15} />
+                Contacts
+                {friendRequests.filter((request) => request.direction === "incoming").length > 0 && (
+                  <span className="people-tab-badge">
+                    {friendRequests.filter((request) => request.direction === "incoming").length}
+                  </span>
+                )}
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={peopleTab === "chats"}
+                className={`people-tab ${peopleTab === "chats" ? "active" : ""}`}
+                onClick={() => {
+                  setPeopleTab("chats");
+                  void resyncConversations();
+                }}
+              >
+                <MessageIcon size={15} />
+                Chats
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={peopleTab === "calls"}
+                className={`people-tab ${peopleTab === "calls" ? "active" : ""}`}
+                onClick={() => setPeopleTab("calls")}
+              >
+                <PhoneIcon size={15} />
+                Calls
+              </button>
+            </nav>
+
+            {peopleTab === "contacts" && (
+              <div className="people-pane">
+                <input
+                  className="settings-input field-full"
+                  style={{ marginBottom: 12 }}
+                  placeholder="Search people by @handle or email"
+                  value={peopleQuery}
+                  onChange={(event) => void searchPeopleNow(event.target.value)}
+                />
+
+                {peopleResults.length > 0 && (
+                  <>
+                    <div className="settings-section-title">Results</div>
+                    <ul className="downloads-list">
+                      {peopleResults.map((person) => (
+                        <li key={person.id} className="download-row">
+                          <PersonAvatar person={person} />
+                          <div className="download-main">
+                            <div className="download-name">
+                              {person.displayName ||
+                                (person.handle ? `@${person.handle}` : person.id.slice(0, 8))}
+                            </div>
+                            <div className="download-size">{person.online ? "online" : "offline"}</div>
+                          </div>
+                          {person.friend ? (
+                            <button
+                              className="ghost small"
+                              type="button"
+                              onClick={() => void openDmWith(person)}
+                            >
+                              Message
+                            </button>
+                          ) : person.requested ? (
+                            <span className="settings-note">Requested</span>
+                          ) : (
+                            <button
+                              className="ghost small"
+                              type="button"
+                              onClick={() => void addFriend(person)}
+                            >
+                              {person.incoming ? "Accept" : "Add friend"}
+                            </button>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+
+                {friendRequests.filter((request) => request.direction === "incoming").length > 0 && (
+                  <>
+                    <div className="settings-section-title">Friend requests</div>
+                    <ul className="downloads-list">
+                      {friendRequests
+                        .filter((request) => request.direction === "incoming")
+                        .map((request) => (
+                          <li key={request.id} className="download-row">
+                            <PersonAvatar person={request.person} />
+                            <div className="download-main">
+                              <div className="download-name">
+                                {request.person.displayName ||
+                                  (request.person.handle ? `@${request.person.handle}` : "Friend")}
+                              </div>
+                            </div>
+                            <button
+                              className="ghost small"
+                              type="button"
+                              onClick={() => void respondRequest(request.id, "accept")}
+                            >
+                              Accept
+                            </button>
+                            <button
+                              className="ghost small"
+                              type="button"
+                              onClick={() => void respondRequest(request.id, "decline")}
+                            >
+                              Decline
+                            </button>
+                          </li>
+                        ))}
+                    </ul>
+                  </>
+                )}
+
+                <div className="settings-section-title">Friends ({friends.length})</div>
                 <ul className="downloads-list">
-                  {peopleResults.map((person) => (
+                  {friends.length === 0 && (
+                    <li className="muted">No friends yet — search above to add someone.</li>
+                  )}
+                  {friends.map((person) => (
                     <li key={person.id} className="download-row">
-                      <span className="download-ico">{person.avatarEmoji ?? "🙂"}</span>
+                      <PersonAvatar person={person} />
                       <div className="download-main">
                         <div className="download-name">
-                          {person.displayName ||
-                            (person.handle ? `@${person.handle}` : person.id.slice(0, 8))}
+                          {person.displayName || (person.handle ? `@${person.handle}` : "Friend")}
                         </div>
                         <div className="download-size">{person.online ? "online" : "offline"}</div>
                       </div>
-                      {person.friend ? (
-                        <button className="ghost small" type="button" onClick={() => void openDmWith(person)}>
-                          Message
-                        </button>
-                      ) : person.requested ? (
-                        <span className="settings-note">Requested</span>
-                      ) : (
-                        <button className="ghost small" type="button" onClick={() => void addFriend(person)}>
-                          {person.incoming ? "Accept" : "Add friend"}
-                        </button>
-                      )}
+                      <button className="ghost small" type="button" onClick={() => void openDmWith(person)}>
+                        Message
+                      </button>
                     </li>
                   ))}
                 </ul>
-              </>
+
+                {friends.length >= 2 && (
+                  <>
+                    <div className="settings-section-title">New group</div>
+                    <input
+                      className="settings-input field-full"
+                      style={{ marginBottom: 6 }}
+                      placeholder="Group name"
+                      value={groupName}
+                      onChange={(event) => setGroupName(event.target.value)}
+                    />
+                    <ul className="downloads-list">
+                      {friends.map((person) => (
+                        <li key={person.id} className="download-row">
+                          <label className="member-item grow">
+                            <input
+                              type="checkbox"
+                              checked={groupSelection.includes(person.id)}
+                              onChange={(event) =>
+                                setGroupSelection((prev) =>
+                                  event.target.checked
+                                    ? [...prev, person.id]
+                                    : prev.filter((id) => id !== person.id),
+                                )
+                              }
+                            />
+                            <span>
+                              {person.displayName || (person.handle ? `@${person.handle}` : "Friend")}
+                            </span>
+                          </label>
+                        </li>
+                      ))}
+                    </ul>
+                    <button className="btn primary" type="button" onClick={() => void createFriendGroup()}>
+                      Create group
+                    </button>
+                  </>
+                )}
+              </div>
             )}
 
-            {friendRequests.filter((request) => request.direction === "incoming").length > 0 && (
-              <>
-                <div className="settings-section-title">Friend requests</div>
-                <ul className="downloads-list">
-                  {friendRequests
-                    .filter((request) => request.direction === "incoming")
-                    .map((request) => (
-                      <li key={request.id} className="download-row">
-                        <span className="download-ico">🙂</span>
-                        <div className="download-main">
-                          <div className="download-name">
-                            {request.person.displayName ||
-                              (request.person.handle ? `@${request.person.handle}` : "Friend")}
-                          </div>
-                        </div>
-                        <button
-                          className="ghost small"
-                          type="button"
-                          onClick={() => void respondRequest(request.id, "accept")}
-                        >
-                          Accept
-                        </button>
-                        <button
-                          className="ghost small"
-                          type="button"
-                          onClick={() => void respondRequest(request.id, "decline")}
-                        >
-                          Decline
-                        </button>
-                      </li>
-                    ))}
-                </ul>
-              </>
-            )}
-
-            <div className="settings-section-title">Friends ({friends.length})</div>
-            <ul className="downloads-list">
-              {friends.length === 0 && (
-                <li className="muted">No friends yet — search above to add someone.</li>
-              )}
-              {friends.map((person) => (
-                <li key={person.id} className="download-row">
-                  <span className="download-ico">{person.online ? "●" : "○"}</span>
-                  <div className="download-main">
-                    <div className="download-name">
-                      {person.displayName || (person.handle ? `@${person.handle}` : "Friend")}
-                    </div>
-                    <div className="download-size">{person.online ? "online" : "offline"}</div>
+            {peopleTab === "chats" && (
+              <div className="people-pane">
+                {humanChats.length === 0 ? (
+                  <div className="people-empty">
+                    <span className="people-empty-ico">
+                      <MessageIcon size={26} />
+                    </span>
+                    <div className="people-empty-title">No conversations yet</div>
+                    <div className="people-empty-sub">Start a chat from Contacts.</div>
                   </div>
-                  <button className="ghost small" type="button" onClick={() => void openDmWith(person)}>
-                    Message
-                  </button>
-                </li>
-              ))}
-            </ul>
-
-            {friends.length >= 2 && (
-              <>
-                <div className="settings-section-title">New group</div>
-                <input
-                  className="settings-input field-full"
-                  style={{ marginBottom: 6 }}
-                  placeholder="Group name"
-                  value={groupName}
-                  onChange={(event) => setGroupName(event.target.value)}
-                />
-                <ul className="downloads-list">
-                  {friends.map((person) => (
-                    <li key={person.id} className="download-row">
-                      <label className="member-item grow">
-                        <input
-                          type="checkbox"
-                          checked={groupSelection.includes(person.id)}
-                          onChange={(event) =>
-                            setGroupSelection((prev) =>
-                              event.target.checked
-                                ? [...prev, person.id]
-                                : prev.filter((id) => id !== person.id),
+                ) : (
+                  <ul className="downloads-list">
+                    {humanChats.map((chat) => {
+                      const last = chat.messages[chat.messages.length - 1];
+                      const peer =
+                        chat.kind === "dm"
+                          ? friends.find(
+                              (person) => person.id === chat.participants?.find((id) => id !== user?.id),
                             )
-                          }
-                        />
-                        <span>{person.displayName || (person.handle ? `@${person.handle}` : "Friend")}</span>
-                      </label>
-                    </li>
-                  ))}
-                </ul>
-                <button className="btn primary" type="button" onClick={() => void createFriendGroup()}>
-                  Create group
-                </button>
-              </>
+                          : undefined;
+                      return (
+                        <li key={chat.id} className="download-row">
+                          {peer ? (
+                            <PersonAvatar person={peer} size={30} />
+                          ) : (
+                            <span
+                              className="person-avatar emoji"
+                              style={{ width: 30, height: 30, fontSize: 15 }}
+                            >
+                              {chat.kind === "group" ? "👥" : "💬"}
+                            </span>
+                          )}
+                          <div className="download-main">
+                            <div className="download-name">{chat.title || "Conversation"}</div>
+                            <div className="download-size">
+                              {last ? last.content.replace(/\s+/g, " ").slice(0, 60) : "No messages yet"}
+                            </div>
+                          </div>
+                          <button className="ghost small" type="button" onClick={() => openChat(chat)}>
+                            Open
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            )}
+
+            {peopleTab === "calls" && (
+              <div className="people-pane">
+                <div className="people-empty">
+                  <span className="people-empty-ico">
+                    <PhoneIcon size={26} />
+                  </span>
+                  <div className="people-empty-title">Calls are coming soon</div>
+                  <div className="people-empty-sub">Voice and video calls aren't available yet.</div>
+                </div>
+              </div>
             )}
           </div>
         </div>
@@ -6501,11 +6895,118 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                 </button>
               </div>
 
+              {settingsTab === "profile" && (
+                <div className="settings-sections">
+                  <div className="profile-pane">
+                    <div className="profile-photo-row">
+                      <button
+                        type="button"
+                        className="avatar-upload"
+                        title="Upload a profile photo"
+                        onClick={() => avatarInputRef.current?.click()}
+                      >
+                        {profileAvatarUrl ? (
+                          <img src={profileAvatarUrl} alt="Your profile" />
+                        ) : (
+                          <span className="avatar-upload-emoji">{profileEmoji || "🙂"}</span>
+                        )}
+                        <span className="avatar-upload-edit">
+                          <CameraIcon size={13} />
+                        </span>
+                      </button>
+                      <div className="profile-photo-info">
+                        <div className="profile-photo-name">{profileName.trim() || "Your profile"}</div>
+                        <div className="profile-photo-hint">
+                          {profileAvatarUrl
+                            ? "JPG or PNG — resized automatically."
+                            : "Add a photo so people can recognise you."}
+                        </div>
+                        <div className="profile-photo-actions">
+                          <button
+                            className="ghost small"
+                            type="button"
+                            onClick={() => avatarInputRef.current?.click()}
+                          >
+                            {profileAvatarUrl ? "Change photo" : "Upload photo"}
+                          </button>
+                          {profileAvatarUrl && (
+                            <button
+                              className="link"
+                              type="button"
+                              onClick={() => setProfileAvatarUrl(undefined)}
+                            >
+                              Remove
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <input
+                        ref={avatarInputRef}
+                        type="file"
+                        accept="image/*"
+                        hidden
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          event.target.value = "";
+                          if (file) void chooseAvatar(file);
+                        }}
+                      />
+                    </div>
+
+                    <label className="profile-field">
+                      <span className="profile-field-label">Display name</span>
+                      <input
+                        className="settings-input field-full"
+                        placeholder="e.g. Somvannda"
+                        maxLength={40}
+                        value={profileName}
+                        onChange={(event) => setProfileName(event.target.value)}
+                      />
+                    </label>
+
+                    <label className="profile-field">
+                      <span className="profile-field-label">Handle</span>
+                      <div className="profile-handle-wrap">
+                        <span className="profile-handle-at">@</span>
+                        <input
+                          className="settings-input field-full"
+                          placeholder="yourhandle"
+                          value={profileHandle}
+                          onChange={(event) =>
+                            setProfileHandle(event.target.value.replace(/[^a-zA-Z0-9._-]/g, ""))
+                          }
+                        />
+                      </div>
+                    </label>
+
+                    <label className="profile-field">
+                      <span className="profile-field-label">Avatar emoji</span>
+                      <div className="profile-emoji-row">
+                        <input
+                          className="settings-input emoji-input"
+                          value={profileEmoji}
+                          maxLength={4}
+                          aria-label="Avatar emoji"
+                          onChange={(event) => setProfileEmoji(event.target.value)}
+                        />
+                        <span className="profile-emoji-hint">Shown when you have no photo.</span>
+                      </div>
+                    </label>
+
+                    <div className="people-actions">
+                      <button className="btn primary" type="button" onClick={() => void saveProfile()}>
+                        Save profile
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {settingsTab === "general" && (
                 <div className="settings-sections">
                   <div className="settings-section-title">Account</div>
                   <div className="settings-row">
-                    <span className="user-avatar">{initials(user.email)}</span>
+                    <SelfAvatar user={user} email={user.email} className="user-avatar" />
                     <span className="settings-row-main">
                       <span className="settings-row-name">{user.email.split("@")[0]}</span>
                       <span className="settings-row-sub">{user.email}</span>
@@ -7190,6 +7691,50 @@ const MARKETPLACE: MarketApp[] = [
     icon: <span className="market-emoji">𝕏</span>,
   },
 ];
+
+/** Resize an image file to a small JPEG data URL (longest edge = size). */
+async function downscaleImage(file: File, size: number): Promise<string> {
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, size / Math.max(bitmap.width, bitmap.height));
+  const width = Math.max(1, Math.round(bitmap.width * scale));
+  const height = Math.max(1, Math.round(bitmap.height * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Could not read that image.");
+  ctx.drawImage(bitmap, 0, 0, width, height);
+  bitmap.close?.();
+  return canvas.toDataURL("image/jpeg", 0.85);
+}
+
+/** A person's avatar: their uploaded photo, else their emoji. */
+function PersonAvatar({ person, size = 26 }: { person: Person; size?: number }) {
+  if (person.avatarUrl) {
+    return (
+      <img className="person-avatar" src={person.avatarUrl} alt="" style={{ width: size, height: size }} />
+    );
+  }
+  return (
+    <span className="person-avatar emoji" style={{ width: size, height: size, fontSize: size * 0.55 }}>
+      {person.avatarEmoji ?? "🙂"}
+    </span>
+  );
+}
+
+/** The signed-in user's avatar inside an existing avatar class. */
+function SelfAvatar({
+  user,
+  email,
+  className,
+}: {
+  user: { avatarUrl?: string; avatarEmoji?: string };
+  email: string;
+  className: string;
+}) {
+  if (user.avatarUrl) return <img className={`${className} photo`} src={user.avatarUrl} alt="" />;
+  return <span className={className}>{user.avatarEmoji ?? initials(email)}</span>;
+}
 
 function initials(email: string): string {
   const name = email.split("@")[0] ?? "?";

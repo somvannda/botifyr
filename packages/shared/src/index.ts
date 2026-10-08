@@ -391,6 +391,8 @@ export interface User {
   displayName?: string;
   avatarEmoji?: string;
   avatarScheme?: number;
+  /** Uploaded profile photo (small base64 data URL). */
+  avatarUrl?: string;
 }
 
 export interface AuthResponse {
@@ -526,6 +528,20 @@ export interface ProviderRoleConfig {
   isDefault: boolean;
   /** Per-media-minute price in cents, used for billing. */
   pricing?: { perMinuteCents: number };
+  updatedAt: string;
+}
+
+/**
+ * A device's public identity key, published so peers can derive a shared key and
+ * encrypt DMs to it. The private key never leaves the device.
+ */
+export interface DeviceKey {
+  id: string;
+  userId: string;
+  deviceId: string;
+  /** JWK of the device's public ECDH key. */
+  publicKey: Record<string, unknown>;
+  createdAt: string;
   updatedAt: string;
 }
 

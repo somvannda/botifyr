@@ -145,6 +145,34 @@ body {
   height: 100%;
 }
 
+/* Host slot where the shared app teleports its notification centre. */
+.titlebar-slot {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  margin-left: auto;
+  padding-right: 4px;
+  /* The title bar disables selection for drag UX; the notification panel lives
+     here, so re-enable it for the panel's text. */
+  user-select: text;
+}
+
+.titlebar-slot .bot-menu-btn {
+  width: 30px;
+  height: 30px;
+  border-color: transparent;
+  background: transparent;
+}
+
+.titlebar-slot .bot-menu-btn:hover {
+  background: var(--hover);
+}
+
+.titlebar-slot .notif-dot {
+  top: -1px;
+  right: -1px;
+}
+
 .win-btn {
   width: 44px;
   border: none;
@@ -2755,12 +2783,60 @@ body {
   width: 560px;
   max-width: calc(100% - 40px);
   max-height: calc(100% - 120px);
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 8px;
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
+}
+
+.newchat-actions {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 6px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.newchat-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  background: #0e0e10;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  color: var(--muted);
+}
+
+.newchat-search input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.newchat-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0 -2px;
+  padding: 0 2px;
+}
+
+.newchat-empty {
+  color: var(--muted);
+  font-size: 12.5px;
+  padding: 30px 12px;
+  text-align: center;
 }
 
 .newchat-item {
@@ -4550,6 +4626,263 @@ body {
   background: rgba(63, 209, 139, 0.14);
   border-radius: 999px;
   padding: 4px 10px;
+}
+
+/* ---- People & profile dialog ---- */
+.people-panel {
+  width: 520px;
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 90px);
+}
+
+.people-tabs {
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  margin-bottom: 14px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+}
+
+.people-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.people-tab:hover {
+  color: var(--text);
+}
+
+.people-tab.active {
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.people-tab-badge {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+}
+
+.people-pane,
+.profile-pane {
+  overflow-y: auto;
+  min-height: 0;
+  padding-right: 2px;
+}
+
+.profile-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.profile-photo-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 4px 0 6px;
+}
+
+.avatar-upload {
+  position: relative;
+  width: 84px;
+  height: 84px;
+  flex: none;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  cursor: pointer;
+  padding: 0;
+  display: grid;
+  place-items: center;
+}
+
+.avatar-upload > img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+}
+
+.avatar-upload-emoji {
+  font-size: 36px;
+  line-height: 1;
+}
+
+.avatar-upload-edit {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--panel);
+}
+
+.avatar-upload:hover .avatar-upload-edit {
+  background: var(--accent-2);
+}
+
+.profile-photo-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.profile-photo-name {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.profile-photo-hint {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 3px 0 9px;
+}
+
+.profile-photo-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.profile-photo-actions .link {
+  font-size: 12px;
+}
+
+.profile-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.profile-field-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.profile-field .settings-input {
+  max-width: none;
+}
+
+.profile-handle-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.profile-handle-at {
+  position: absolute;
+  left: 11px;
+  color: var(--muted);
+  font-size: 12.5px;
+  pointer-events: none;
+}
+
+.profile-handle-wrap .settings-input {
+  padding-left: 24px;
+}
+
+.profile-emoji-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.profile-emoji-hint {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.people-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 4px;
+}
+
+.people-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 42px 20px;
+  text-align: center;
+}
+
+.people-empty-ico {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.people-empty-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.people-empty-sub {
+  font-size: 12.5px;
+  color: var(--muted);
+  max-width: 280px;
+}
+
+/* Avatars: uploaded photo, or an emoji fallback. */
+.person-avatar {
+  flex: none;
+  box-sizing: border-box;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+}
+
+.person-avatar.emoji {
+  display: grid;
+  place-items: center;
+  line-height: 1;
+}
+
+.user-avatar.photo,
+.msg-user-avatar.photo {
+  padding: 0;
+  object-fit: cover;
 }
 
 .trial-card {

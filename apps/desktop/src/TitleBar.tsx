@@ -1,5 +1,4 @@
-import { BotLogo } from "@botifyr/ui";
-import { CloseIcon, MaximizeIcon, MinimizeIcon } from "@botifyr/ui";
+import { BotLogo, CloseIcon, MaximizeIcon, MinimizeIcon, TITLEBAR_SLOT_ID } from "@botifyr/ui";
 
 async function withWindow(run: (window: any) => Promise<unknown>): Promise<void> {
   try {
@@ -18,6 +17,7 @@ export function TitleBar() {
         <BotLogo size={16} className="titlebar-logo" />
         <span>Botifyr</span>
       </div>
+      <div className="titlebar-slot" id={TITLEBAR_SLOT_ID} />
       <div className="titlebar-controls">
         <button
           className="win-btn"

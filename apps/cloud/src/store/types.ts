@@ -6,6 +6,7 @@ import type {
   CompanyDNA,
   CompanyReport,
   Department,
+  DeviceKey,
   MediaRecipe,
   ModelPricingRecord,
   OperatingHours,
@@ -18,6 +19,7 @@ import type {
 } from "@botifyr/shared";
 
 export type {
+  DeviceKey,
   MediaRecipe,
   ModelPricingRecord,
   PlatformSettings,
@@ -41,6 +43,8 @@ export interface UserRecord {
   displayName?: string;
   avatarEmoji?: string;
   avatarScheme?: number;
+  /** Uploaded profile photo, stored as a small data URL (client-downscaled). */
+  avatarUrl?: string;
   /** Billing: free | plan | payg. */
   billingMode?: "free" | "plan" | "payg";
   /** Current paid period (prepaid plans). */
@@ -259,7 +263,14 @@ export interface Store {
   searchUsers(query: string, excludeId: string, limit: number): Promise<UserRecord[]>;
   updateUserProfile(
     id: string,
-    profile: { handle?: string; displayName?: string; avatarEmoji?: string; avatarScheme?: number },
+    profile: {
+      handle?: string;
+      displayName?: string;
+      avatarEmoji?: string;
+      avatarScheme?: number;
+      /** null clears the uploaded photo; undefined leaves it unchanged. */
+      avatarUrl?: string | null;
+    },
   ): Promise<void>;
   listUsers(): Promise<UserRecord[]>;
   setUserRole(id: string, role: "user" | "admin"): Promise<void>;
@@ -393,6 +404,10 @@ export interface Store {
   listProviderRoles(): Promise<ProviderRoleConfig[]>;
   getProviderRole(role: ProviderRole): Promise<ProviderRoleConfig | null>;
   saveProviderRole(config: ProviderRoleConfig): Promise<void>;
+  /* DM end-to-end encryption: devices publish their public identity key. */
+  saveDeviceKey(record: DeviceKey): Promise<void>;
+  listDeviceKeys(userId: string): Promise<DeviceKey[]>;
+  getDeviceKey(userId: string, deviceId: string): Promise<DeviceKey | null>;
   createInvoice(record: InvoiceRecord): Promise<void>;
   updateInvoice(record: InvoiceRecord): Promise<void>;
   getInvoice(id: string): Promise<InvoiceRecord | null>;
