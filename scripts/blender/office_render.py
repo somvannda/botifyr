@@ -83,6 +83,7 @@ GLASS = material("glass", (0.75, 0.85, 0.92), 0.05, 0.0, 0.25)
 MONITOR = material("monitor", (0.05, 0.06, 0.08), 0.3, 0.2)
 PING = material("pingpong", (0.12, 0.37, 0.62), 0.4)
 GREY = material("grey", (0.55, 0.58, 0.63), 0.6)
+CAP = material("cap", (0.28, 0.30, 0.34), 0.5, 0.3)
 
 width = scene["width"]
 depth = scene["depth"]
@@ -96,6 +97,7 @@ for (sx, sy, lx, ly) in [
     (0.1, depth, width / 2, 0),
 ]:
     box("curtain", (sx, sy, 2.9), (lx, ly, 1.45), GLASS)
+    box("curtain-cap", (sx, sy, 0.08), (lx, ly, 2.94), CAP)
 
 # Rooms: wood floor + three walls.
 for room in scene["rooms"]:
@@ -106,6 +108,7 @@ for room in scene["rooms"]:
         (room["width"] / 2, 0, 0.12, room["depth"]),
     ]:
         box(f"wall:{room['key']}", (w, d, 2.6), (room["x"] + dx, room["z"] + dz, 1.3), WALL)
+        box(f"cap:{room['key']}", (w + 0.03, d + 0.03, 0.08), (room["x"] + dx, room["z"] + dz, 2.64), CAP)
 
 # Desks + chairs + people (real GLBs with primitive fallback).
 for desk in scene["desks"]:
@@ -139,7 +142,7 @@ cam_data = bpy.data.cameras.new("cam")
 cam_data.type = "ORTHO"
 cam_data.ortho_scale = max(width, depth) * 1.35
 cam = bpy.data.objects.new("cam", cam_data)
-cam.location = (0, -depth * 0.85, width * 0.85)
+cam.location = (0, -depth * 1.3, width * 0.62)
 bpy.context.scene.collection.objects.link(cam)
 bpy.context.scene.camera = cam
 
@@ -157,7 +160,7 @@ bpy.context.scene.world = world
 world.use_nodes = True
 nodes = world.node_tree
 bg = nodes.nodes["Background"]
-bg.inputs[1].default_value = 1.0
+bg.inputs[1].default_value = 0.5
 hdri_candidates = [
     os.path.join(assets, "studio_small_08.hdr"),
     os.path.normpath(
@@ -179,8 +182,9 @@ else:
 
 # A soft key light on top of the HDRI.
 sun = bpy.data.lights.new("sun", type="SUN")
-sun.energy = 2.5
-sun.angle = math.radians(8)
+sun.energy = 3.5
+sun.color = (1.0, 0.95, 0.86)
+sun.angle = math.radians(6)
 sun_obj = bpy.data.objects.new("sun", sun)
 sun_obj.rotation_euler = (math.radians(50), math.radians(10), math.radians(30))
 bpy.context.scene.collection.objects.link(sun_obj)
