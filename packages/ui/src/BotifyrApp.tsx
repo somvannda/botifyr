@@ -188,6 +188,12 @@ function parseSealed(content: string): SealedMessage | null {
   }
 }
 
+/** Human-readable body: decrypted plaintext when available, else a placeholder. */
+function displayText(decryptedContent: Record<string, string>, content: string, id: string): string {
+  const value = decryptedContent[id] ?? content;
+  return parseSealed(value) ? "🔒 Encrypted message" : value;
+}
+
 const SETTINGS_TABS = [
   { id: "profile", label: "Profile", icon: <UserIcon size={16} /> },
   { id: "general", label: "General", icon: <GearIcon size={16} /> },
@@ -3147,7 +3153,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
           session.kind === "dm" || session.kind === "group"
             ? Boolean(message.senderId && message.senderId !== user.id)
             : message.role === "assistant";
-        const body = message.content.replace(/\s+/g, " ").trim();
+        const body = displayText(decrypted, message.content, message.id).replace(/\s+/g, " ").trim();
         if (!incoming || !body) continue;
         // Never replay history on startup: only notify for messages that
         // arrived after this session of the app began.
@@ -3304,7 +3310,10 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
             <span className="conv-name">{bot.name}</span>
             {roleByBotId.get(bot.id) && <span className="conv-role">{roleByBotId.get(bot.id)?.title}</span>}
             <span className="conv-preview">
-              {last?.content?.slice(0, 42) || "No messages yet — say hello"}
+              {last
+                ? displayText(decrypted, last.content ?? "", last.id).slice(0, 42) ||
+                  "No messages yet — say hello"
+                : "No messages yet — say hello"}
             </span>
           </span>
         </button>
@@ -4027,7 +4036,9 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                   if (mine) {
                     return (
                       <div key={message.id} className="msg-user">
-                        <div className="msg-user-bubble">{decrypted[message.id] ?? message.content}</div>
+                        <div className="msg-user-bubble">
+                          {displayText(decrypted, message.content, message.id)}
+                        </div>
                         <SelfAvatar user={user} email={user.email} className="msg-user-avatar" />
                       </div>
                     );
@@ -4053,7 +4064,10 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                           <span className="msg-author-emoji">{person?.avatarEmoji ?? "🙂"}</span>
                           {label}
                         </div>
-                        <Markdown text={decrypted[message.id] ?? message.content} onFileRef={openFileRef} />
+                        <Markdown
+                          text={displayText(decrypted, message.content, message.id)}
+                          onFileRef={openFileRef}
+                        />
                         {sharedTokenOf(message.content) && (
                           <button
                             className="ghost small"
@@ -4078,7 +4092,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                     <div key={message.id} className="msg-user">
                       {actionsFor(message, "You")}
                       <div className="msg-user-bubble">
-                        {decrypted[message.id] ?? message.content}
+                        {displayText(decrypted, message.content, message.id)}
                         {reactions[message.id] && <span className="reaction">{reactions[message.id]}</span>}
                       </div>
                       <SelfAvatar user={user} email={user.email} className="msg-user-avatar" />
