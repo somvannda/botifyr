@@ -329,6 +329,12 @@ function PostCard({
             />
           )}
         </div>
+      ) : post.videos && post.videos.length > 0 ? (
+        <div className="feed-videos">
+          {post.videos.map((src) => (
+            <video key={src} className="feed-video" src={`${cloudUrl}${src}`} controls preload="metadata" />
+          ))}
+        </div>
       ) : post.images && post.images.length > 1 ? (
         <div className={`feed-image-grid feed-image-grid-${Math.min(post.images.length, 4)}`}>
           {post.images.map((src) => (
@@ -888,12 +894,13 @@ export function FeedView({
     const files = Array.from(event.target.files ?? []);
     event.target.value = "";
     for (const file of files) {
-      if (!file.type.startsWith("image/")) {
-        setError("Only image files can be attached");
+      const isVideo = file.type.startsWith("video/");
+      if (!file.type.startsWith("image/") && !isVideo) {
+        setError("Only image or video files can be attached");
         continue;
       }
-      if (file.size > 12 * 1024 * 1024) {
-        setError("Image is too large (max 12MB)");
+      if (file.size > (isVideo ? 25 : 12) * 1024 * 1024) {
+        setError(`File is too large (max ${isVideo ? 25 : 12}MB)`);
         continue;
       }
       const reader = new FileReader();
@@ -1070,7 +1077,11 @@ export function FeedView({
             <div className="feed-composer-grid">
               {attachments.map((file, index) => (
                 <div key={index} className="feed-composer-thumb">
-                  <img src={file.data} alt="Attachment preview" />
+                  {file.mime.startsWith("video/") ? (
+                    <video src={file.data} muted preload="metadata" />
+                  ) : (
+                    <img src={file.data} alt="Attachment preview" />
+                  )}
                   <button
                     type="button"
                     className="feed-attachment-remove"
@@ -1147,7 +1158,7 @@ export function FeedView({
           <input
             ref={fileRef}
             type="file"
-            accept="image/*"
+            accept="image/*,video/*"
             multiple
             style={{ display: "none" }}
             onChange={pickImages}

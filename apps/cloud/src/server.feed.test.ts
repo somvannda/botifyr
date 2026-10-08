@@ -492,6 +492,85 @@ describe("feed", () => {
     await app.close();
   });
 
+  it("attaches a video and serves it with a video content-type", async () => {
+    const previous = process.env.BOTIFYR_DOWNLOADS_DIR;
+    const dir = join(tmpdir(), `botifyr-feed-${randomUUID()}`);
+    process.env.BOTIFYR_DOWNLOADS_DIR = dir;
+    const { app, signUp, auth } = await setup();
+    try {
+      const alice = await signUp("alice-video@example.com");
+      const data = `data:video/mp4;base64,${Buffer.from("fakevideo-bytes").toString("base64")}`;
+      const upload = await app.inject({
+        method: "POST",
+        url: "/v1/uploads",
+        headers: auth(alice.token),
+        payload: { name: "clip.mp4", mime: "video/mp4", data },
+      });
+      expect(upload.statusCode).toBe(201);
+      const id = (upload.json() as { id: string }).id;
+
+      const created = await app.inject({
+        method: "POST",
+        url: "/v1/posts",
+        headers: auth(alice.token),
+        payload: { body: "watch this", mediaIds: [id] },
+      });
+      const dto = created.json() as { videos?: string[]; images?: string[] };
+      expect(dto.videos?.length).toBe(1);
+      expect(dto.images?.length ?? 0).toBe(0);
+
+      const media = await app.inject({ method: "GET", url: dto.videos?.[0] as string });
+      expect(media.statusCode).toBe(200);
+      expect(media.headers["content-type"]).toContain("video/mp4");
+    } finally {
+      await app.close();
+      if (previous === undefined) delete process.env.BOTIFYR_DOWNLOADS_DIR;
+      else process.env.BOTIFYR_DOWNLOADS_DIR = previous;
+      await rm(dir, { recursive: true, force: true }).catch(() => {});
+    }
+  });
+
+  it("emits a mention event for a mentioned @handle (never self)", async () => {
+    const { app, signUp, auth } = await setup();
+    const alice = await signUp("alice-mention@example.com");
+    const bob = await signUp("bob-mention@example.com");
+    await app.inject({
+      method: "PATCH",
+      url: "/v1/profile",
+      headers: auth(alice.token),
+      payload: { handle: "alicehandle" },
+    });
+    await app.inject({
+      method: "PATCH",
+      url: "/v1/profile",
+      headers: auth(bob.token),
+      payload: { handle: "bobhandle" },
+    });
+
+    const seen: string[] = [];
+    const unsubscribe = subscribe((event) => {
+      if (event.type === "feed.mention") seen.push(`${event.fromUserId}->${event.toUserId}`);
+    });
+    try {
+      await app.inject({
+        method: "POST",
+        url: "/v1/posts",
+        headers: auth(alice.token),
+        payload: { body: "hey @bobhandle take a look" },
+      });
+      await app.inject({
+        method: "POST",
+        url: "/v1/posts",
+        headers: auth(alice.token),
+        payload: { body: "talking to myself @alicehandle" },
+      });
+      expect(seen).toEqual([`${alice.user.id}->${bob.user.id}`]);
+    } finally {
+      unsubscribe();
+      await app.close();
+    }
+  });
+
   it("extracts hashtags and serves a tag feed", async () => {
     const { app, store, signUp, auth, createPost } = await setup();
     const alice = await signUp("alice-tag@example.com");

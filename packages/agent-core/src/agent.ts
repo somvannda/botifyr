@@ -54,6 +54,12 @@ export interface RunAgentOptions {
   /** When true, skip the approval gate and run consequential tools directly. */
   autoApprove?: boolean;
   /**
+   * Per-tool override for the approval gate — e.g. a capability trust ladder
+   * (docs/product-plan.md §3). Return true to auto-approve this specific call.
+   * Default: false (fall back to the normal gate).
+   */
+  shouldAutoApprove?: (toolName: string, args: Record<string, unknown>) => boolean;
+  /**
    * A tool the runtime invokes before asking the model anything. Used to make
    * mechanical steps (e.g. downloading pasted links) deterministic, so they
    * can't be refused.
@@ -305,7 +311,11 @@ export async function runAgent(options: RunAgentOptions): Promise<AgentResult> {
         typeof tool.requiresApproval === "function"
           ? tool.requiresApproval(call.arguments)
           : tool.requiresApproval === true;
-      if (needsApproval && !options.autoApprove) {
+      if (
+        needsApproval &&
+        !options.autoApprove &&
+        !options.shouldAutoApprove?.(call.name, call.arguments)
+      ) {
         const allowed = await options.requestApproval(
           `Approve: ${call.name}`,
           `The agent wants to run "${call.name}" with ${detail}.`,

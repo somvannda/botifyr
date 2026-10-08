@@ -439,8 +439,18 @@ export interface CapabilityGrant {
   subject: string;
   capability: string;
   granted: boolean;
+  /** How far up the trust ladder this capability is (docs/product-plan.md §3). */
+  state?: CapabilityTrust;
+  /** Successful uses in the recent window (drives promotion). */
+  successes?: number;
+  /** Failed uses; any failure demotes the capability one step. */
+  failures?: number;
+  lastUsedAt?: string;
   updatedAt: string;
 }
+
+/** The trust ladder for a capability: approve every time → auto but watched → auto. */
+export type CapabilityTrust = "gated" | "probation" | "trusted";
 
 /** A report the company produces — e.g. a standup (docs/company-os.md §5). */
 export type ReportKind = "standup" | "weekly" | "incident";

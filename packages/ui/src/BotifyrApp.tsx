@@ -425,6 +425,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const myKeysRef = useRef<DeviceKeyPair | null>(null);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
+  /** Message ids that already failed to translate (don't retry — avoids hammering). */
+  const translateFailedRef = useRef<Set<string>>(new Set());
   const [decrypted, setDecrypted] = useState<Record<string, string>>({});
   // When the host renders an OS title bar with a slot, the notification centre
   // is teleported there; otherwise it renders inline in the chat topbar.
@@ -1108,7 +1110,12 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
         setFeedRefresh((prev) => prev + 1);
         if (event.toUserId !== user?.id) break;
         const who = event.fromName?.trim() || "Someone";
-        pushToast({ kind: "message", title: "New mention", body: `${who} mentioned you in a post.`, feed: true });
+        pushToast({
+          kind: "message",
+          title: "New mention",
+          body: `${who} mentioned you in a post.`,
+          feed: true,
+        });
         break;
       }
       case "feed.like":
@@ -1317,14 +1324,18 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       for (const message of session.messages) {
         if (!message.senderId || message.senderId === user.id) continue;
         if (translations[message.id]) continue;
+        if (translateFailedRef.current.has(message.id)) continue;
         const text = displayText(decrypted, message.content, message.id).trim();
         if (!text || sharedTokenOf(text)) continue;
         try {
           const result = await client.translate(text.slice(0, 2000), lang);
           if (cancelled) return;
           setTranslations((prev) => ({ ...prev, [message.id]: result.text }));
-        } catch {
-          // best-effort per message
+        } catch (err: unknown) {
+          // The model is unavailable — stop, don't retry, and tell the user.
+          translateFailedRef.current.add(message.id);
+          setError(`Translation unavailable: ${messageOf(err)}`);
+          return;
         }
       }
     })();

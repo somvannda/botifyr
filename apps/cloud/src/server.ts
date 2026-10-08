@@ -3065,7 +3065,7 @@ export async function buildServer(options: ServerOptions) {
           bot.schedule = {
             prompt: role.isChair
               ? "Run the daily standup. If the company has no PLAN.md yet, write one now with company.plan (goal, approach, who, channels, metrics); if the team lacks the roles or capacity to execute it, hire them with company.hire. If no quest is active, propose the next one with company.propose (title + objective + acceptance). Otherwise summarise the board, flag blockers, and delegate the next steps."
-              : "Review your board tasks and do the next one. If you're blocked, escalate; if the plan is unclear, ask the CEO.",
+              : "Review your board tasks and do the next one. When you finish one, record the outcome with company.report (what it produced). If you're blocked, escalate; if the plan is unclear, ask the CEO.",
             everyMinutes,
             enabled: true,
             nextRunAt: new Date(now.getTime() + everyMinutes * 60_000).toISOString(),
@@ -3981,6 +3981,8 @@ export async function buildServer(options: ServerOptions) {
     mediaIds?: string[];
     /** Short-lived signed paths to all attached images. */
     images?: string[];
+    /** Short-lived signed paths to attached videos. */
+    videos?: string[];
     pageId?: string;
     repostOf?: string;
     audience?: "public" | "friends" | "only_me";
@@ -4087,7 +4089,10 @@ export async function buildServer(options: ServerOptions) {
     const stats = await store.getPostStats(record.id, viewerId);
     const attached = await store.listPostMedia(record.id);
     const mediaIds = attached.length > 0 ? attached : record.mediaId ? [record.mediaId] : [];
-    const images = mediaIds.map((id) => `/v1/feed/image?t=${signImage(id)}`);
+    const isImage = (id: string) => /\.(png|jpe?g|webp|gif|avif)$/i.test(id);
+    const isVideo = (id: string) => /\.(mp4|m4v|webm|mov)$/i.test(id);
+    const images = mediaIds.filter(isImage).map((id) => `/v1/feed/image?t=${signImage(id)}`);
+    const videos = mediaIds.filter(isVideo).map((id) => `/v1/feed/image?t=${signImage(id)}`);
     // Embed the reposted original (one level deep).
     let original: FeedPostDto | undefined;
     if (record.repostOf && depth < 1) {
@@ -4101,6 +4106,7 @@ export async function buildServer(options: ServerOptions) {
       mediaId: record.mediaId,
       mediaIds,
       images,
+      videos,
       pageId: record.pageId,
       repostOf: record.repostOf,
       audience: record.audience ?? "friends",
@@ -4231,6 +4237,25 @@ export async function buildServer(options: ServerOptions) {
       [...body.matchAll(/(?:^|\s)#([A-Za-z0-9_]{1,50})/g)].map((m) => m[1].toLowerCase()),
     )) {
       await store.addPostTag(record.id, tag);
+    }
+    const mentionHandles = new Set(
+      [...body.matchAll(/@([A-Za-z0-9_]{3,30})/g)].map((m) => m[1].toLowerCase()),
+    );
+    if (mentionHandles.size > 0) {
+      const actor = await store.getUserById(authorId);
+      const fromName = actor?.displayName ?? actor?.handle;
+      for (const handle of mentionHandles) {
+        const user = await store.getUserByHandle(handle);
+        if (user && user.id !== authorId) {
+          emit({
+            type: "feed.mention",
+            postId: record.id,
+            fromUserId: authorId,
+            fromName,
+            toUserId: user.id,
+          });
+        }
+      }
     }
     emit({ type: "feed.post", postId: record.id, authorId });
     return reply.code(201).send(await feedPostOf(record, userId, new Map()));
@@ -4762,15 +4787,28 @@ export async function buildServer(options: ServerOptions) {
         ? "image/webp"
         : lower.endsWith(".gif")
           ? "image/gif"
-          : lower.endsWith(".jpg") || lower.endsWith(".jpeg")
-            ? "image/jpeg"
-            : "application/octet-stream";
+          : lower.endsWith(".avif")
+            ? "image/avif"
+            : lower.endsWith(".jpg") || lower.endsWith(".jpeg")
+              ? "image/jpeg"
+              : lower.endsWith(".webm")
+                ? "video/webm"
+                : lower.endsWith(".mp4") || lower.endsWith(".m4v")
+                  ? "video/mp4"
+                  : lower.endsWith(".mov")
+                    ? "video/quicktime"
+                    : lower.endsWith(".mp3")
+                      ? "audio/mpeg"
+                      : lower.endsWith(".wav")
+                        ? "audio/wav"
+                        : "application/octet-stream";
     try {
       const filePath = join(downloadsRoot, payload.m.slice(0, sep), basename(name));
       const info = await stat(filePath);
       if (!info.isFile()) throw new Error("not a file");
       return reply
         .header("cache-control", "private, max-age=86400")
+        .header("content-disposition", "inline")
         .type(type)
         .send(await readFile(filePath));
     } catch {
@@ -5075,8 +5113,10 @@ export async function buildServer(options: ServerOptions) {
           maxTokens: 1000,
         });
         return { text: text.trim() };
-      } catch {
-        return reply.code(502).send({ error: "translation failed" });
+      } catch (err) {
+        request.log.warn({ err }, "translate failed");
+        const detail = err instanceof Error ? err.message : "translation unavailable";
+        return reply.code(502).send({ error: `translation failed: ${detail}` });
       }
     },
   );

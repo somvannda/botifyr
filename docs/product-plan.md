@@ -163,11 +163,41 @@ each proves out, with budgets as the hard bound.
 
 ## 11. Open questions
 
-- Does the ladder live on `CapabilityGrant` (extend) or a new `capability_state`
-  table? (Lean: extend `capability_grants` with `state` + counters.)
-- Promotion thresholds per capability (N=?) — start with 5 for low risk, 10 for
-  money.
-- Does `Quest.trust` set a ceiling, or can a capability be trusted inside a
-  `manual` company? (Lean: ceiling — `manual` overrides to `gated`.)
-- How much of the "company" metaphor do we keep? (Lean: keep it, but the
-  **inbox**, not the org chart, is the front door.)
+- **Storage:** **decided — extend `capability_grants`.** Add `state`
+  (`gated|probation|trusted`), `successes`, `failures`, `lastUsedAt` to
+  `CapabilityGrant` (`packages/shared/src/index.ts`). It's already JSONB in both
+  stores, so no migration.
+- **Promotion thresholds:** **decided — 5 successful uses for low-risk
+  capabilities, 10 for `money`.** A single failure demotes one step and files an
+  incident (reuses `AuditEvent`).
+- **Ceiling:** **decided — the workspace/quest autonomy is a ceiling.** A
+  `manual` company forces every capability to `gated` regardless of its stored
+  state; `autonomous` allows `trusted`.
+- **Company metaphor:** **decided — keep it, but the Inbox/Briefing is the
+  front door, not the org chart.**
+
+### 11.1 The one engine change Phase B needs
+
+The agent gate is currently boolean (`requiresApproval` + a run-level
+`autoApprove` in `packages/agent-core/src/agent.ts`). Per-capability trust needs
+a **per-tool decision**, so add an optional hook to `AgentOptions`:
+
+```ts
+/** Return true to auto-approve this tool call (trust ladder); default false. */
+shouldAutoApprove?: (toolName: string, args: Record<string, unknown>) => boolean;
+```
+
+The gate becomes:
+
+```ts
+if (needsApproval && !options.autoApprove && !options.shouldAutoApprove?.(tool.name, call.arguments)) {
+  // request approval
+}
+```
+
+The runner supplies `shouldAutoApprove` from the ladder: `trusted` →
+`true`; `probation` → `true` (and the use is recorded/surfaced); `gated` →
+`false`. This keeps `agent-core` generic (it only asks a question) and puts the
+policy in `apps/cloud` where the grants live. **This is the only change to
+`agent-core`; everything else is cloud-side.**
+

@@ -119,6 +119,8 @@ export interface FeedPost {
   mediaIds?: string[];
   /** Short-lived signed paths to all attached images. */
   images?: string[];
+  /** Short-lived signed paths to attached videos. */
+  videos?: string[];
   /** Set when the post was authored by a Page. */
   pageId?: string;
   /** Set when this post is a repost (share) of another post. */

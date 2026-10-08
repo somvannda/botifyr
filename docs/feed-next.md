@@ -69,13 +69,18 @@ filter, and `sort=top` ranks by engagement over the last 30 days. The UI has
 DTO, `PUT`/`DELETE /v1/comments/:id/reaction`, `BotifyrClient.reactComment` /
 `unreactComment`, and a reaction picker + count on each comment in the UI.
 
-**Hashtags (FR-11, partial) — done.** A `post_hashtags` table; `#tags` are
+**Hashtags + mentions (FR-11) — done.** A `post_hashtags` table; `#tags` are
 extracted from a post body on create, returned as `hashtags` on the feed DTO,
 listed via `GET /v1/tags/:tag/posts`, and rendered as clickable chips that open a
-tag view. **Mentions (`@handle`) are still open.**
+tag view. `@handle` mentions emit a `feed.mention` event (never self) that raises
+a "New mention" toast.
 
-**Everything else** in this document (video, mentions, stories,
-groups, …) is **not started**.
+**Video (FR-6) — done.** Video uploads reuse the media pipeline; the feed DTO
+classifies attachments into `images` / `videos`, and `GET /v1/feed/image?t=…`
+serves both with the right content-type (inline). The composer accepts
+image/video files and posts render `<video controls>`.
+
+**Everything else** in this document (stories, groups, …) is **not started**.
 
 > **Reconciled with the product as of Oct 2026.** Facebook's reference section
 > (§1) reflects its 2026 behaviour; §2 and §5 note where Botifyr has already moved
