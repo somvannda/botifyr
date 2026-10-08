@@ -2265,7 +2265,10 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
           type="button"
           title="Add emoji"
           aria-label="Add emoji"
-          onClick={() => setReactFor((value) => (value === message.id ? null : message.id))}
+          onClick={() => {
+            setMoreFor(null);
+            setReactFor((value) => (value === message.id ? null : message.id));
+          }}
         >
           <SmileyIcon size={15} />
         </button>
@@ -2283,7 +2286,10 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
           type="button"
           title="More"
           aria-label="More actions"
-          onClick={() => setMoreFor((value) => (value === message.id ? null : message.id))}
+          onClick={() => {
+            setReactFor(null);
+            setMoreFor((value) => (value === message.id ? null : message.id));
+          }}
         >
           <MoreIcon size={15} />
         </button>
