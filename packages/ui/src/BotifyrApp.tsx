@@ -1407,6 +1407,10 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     try {
       await client.deleteWorkspace(companyEdit.id);
       if (workspaceFilter === companyEdit.id) setWorkspaceFilter("all");
+      if (officeCompany?.id === companyEdit.id) {
+        setOfficeCompany(null);
+        setShowOffice3d(false);
+      }
       const [botList, workspaceList] = await Promise.all([client.listBots(), client.listWorkspaces()]);
       setBots(botList);
       setWorkspaces(workspaceList);
@@ -3247,6 +3251,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                     type="button"
                     onClick={() => setCollapsedWorkspaces((prev) => ({ ...prev, [id]: !prev[id] }))}
                     aria-expanded={!collapsed}
+                    aria-label={`${group.name} — ${group.members.length} employee${group.members.length === 1 ? "" : "s"}${pending > 0 ? `, ${pending} need you` : ""}`}
                   >
                     <span className="task-caret">{collapsed ? "▸" : "▾"}</span>
                     {group.workspace?.avatarEmoji && (
@@ -3254,7 +3259,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                     )}
                     <span className="task-section-name">
                       {group.name}
-                      <span className={`task-section-count${pending > 0 ? " has-needs" : ""}`}>
+                      <span className={`task-section-count${pending > 0 ? " has-needs" : ""}`} aria-hidden="true">
                         {pending > 0
                           ? ` (${group.members.length} · ${pending} need you)`
                           : ` (${group.members.length})`}
