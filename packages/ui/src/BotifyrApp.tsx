@@ -559,6 +559,15 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       }}
     />
   );
+
+  /**
+   * The office is "open" only when it also has a company to show. Deriving this
+   * once keeps the grid class and the rendered aside in lock-step — a mismatch
+   * here is what previously collapsed the chat column to a sliver.
+   */
+  const officeOpen = showOffice3d && officeCompany !== null;
+  const officeDocked = officeOpen && office3dDock;
+
   const nodeStartedRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const cancelSigninRef = useRef(false);
@@ -3126,7 +3135,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
 
   return (
     <div
-      className={`app${showBotPanel && activeBot ? " with-panel" : ""}${showOffice3d && office3dDock && officeCompany ? " with-office" : ""}${density === "compact" ? " density-compact" : ""}`}
+      className={`app${showBotPanel && activeBot ? " with-panel" : ""}${officeDocked ? " with-office" : ""}${density === "compact" ? " density-compact" : ""}`}
     >
       {toasts.length > 0 && (
         <div className="toast-stack">
@@ -4240,7 +4249,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
         </form>
       </main>
 
-      {showOffice3d && office3dDock && officeCompany && (
+      {officeDocked && (
         <aside className="office3d-docked">
           <Suspense fallback={<div className="office3d-loading">Building the office…</div>}>
             {renderOffice(true)}
@@ -6083,7 +6092,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
         </div>
       )}
 
-      {showOffice3d && !office3dDock && officeCompany && (
+      {officeOpen && !office3dDock && (
         <Suspense
           fallback={
             <div className="office3d-overlay">
