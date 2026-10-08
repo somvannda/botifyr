@@ -137,30 +137,47 @@ for planter in scene.get("planters", []):
     if not place_glb("planter_box_01.glb", (planter["x"], planter["z"], 0)):
         box("planter", (1.6, 1.6, 0.6), (planter["x"], planter["z"], 0.3), material("plant", (0.24, 0.55, 0.3), 0.9))
 
-# Near-orthographic top-down camera, aimed at the centre via a Track-To target.
-cam_data = bpy.data.cameras.new("cam")
-cam_data.type = "ORTHO"
-cam_data.ortho_scale = max(width, depth) * 1.35
-cam = bpy.data.objects.new("cam", cam_data)
-cam.location = (0, -depth * 1.3, width * 0.62)
-bpy.context.scene.collection.objects.link(cam)
-bpy.context.scene.camera = cam
-
+# Camera + lights aimed at the centre via a Track-To target.
 target = bpy.data.objects.new("target", None)
 target.location = (0, 0, 0)
 bpy.context.scene.collection.objects.link(target)
-track = cam.constraints.new(type="TRACK_TO")
-track.target = target
-track.track_axis = "TRACK_NEGATIVE_Z"
-track.up_axis = "UP_Y"
 
-# World: the real CC0 HDRI for image-based lighting (falls back to a flat sky).
+
+def aim(obj):
+    con = obj.constraints.new(type="TRACK_TO")
+    con.target = target
+    con.track_axis = "TRACK_NEGATIVE_Z"
+    con.up_axis = "UP_Y"
+
+
+def add_sun(name, location, energy, color, angle_deg=6.0):
+    data = bpy.data.lights.new(name, type="SUN")
+    data.energy = energy
+    data.color = color
+    data.angle = math.radians(angle_deg)
+    obj = bpy.data.objects.new(name, data)
+    obj.location = location
+    bpy.context.scene.collection.objects.link(obj)
+    aim(obj)
+    return obj
+
+
+# Perspective camera, 3/4 architectural view.
+cam_data = bpy.data.cameras.new("cam")
+cam_data.lens = 55
+cam = bpy.data.objects.new("cam", cam_data)
+cam.location = (width * 0.2, -depth * 1.7, depth * 1.15)
+bpy.context.scene.collection.objects.link(cam)
+bpy.context.scene.camera = cam
+aim(cam)
+
+# World: soft HDRI ambient (low strength so the 3-point setup reads).
 world = bpy.data.worlds.new("world")
 bpy.context.scene.world = world
 world.use_nodes = True
 nodes = world.node_tree
 bg = nodes.nodes["Background"]
-bg.inputs[1].default_value = 0.5
+bg.inputs[1].default_value = 0.35
 hdri_candidates = [
     os.path.join(assets, "studio_small_08.hdr"),
     os.path.normpath(
@@ -180,14 +197,10 @@ else:
     bg.inputs[0].default_value = (0.9, 0.93, 0.97, 1)
     bg.inputs[1].default_value = 0.6
 
-# A soft key light on top of the HDRI.
-sun = bpy.data.lights.new("sun", type="SUN")
-sun.energy = 3.5
-sun.color = (1.0, 0.95, 0.86)
-sun.angle = math.radians(6)
-sun_obj = bpy.data.objects.new("sun", sun)
-sun_obj.rotation_euler = (math.radians(50), math.radians(10), math.radians(30))
-bpy.context.scene.collection.objects.link(sun_obj)
+# Three-point lighting: warm key, cool fill, warm rim.
+add_sun("key", (width * 0.7, -depth * 0.9, width * 1.0), 3.4, (1.0, 0.95, 0.85), 4)
+add_sun("fill", (-width * 0.9, depth * 0.5, width * 0.6), 1.1, (0.85, 0.90, 1.0), 25)
+add_sun("rim", (0, depth * 1.1, width * 0.5), 1.4, (1.0, 0.90, 0.80), 6)
 
 # Cycles settings (overridable for quick previews).
 prefs = bpy.context.scene
