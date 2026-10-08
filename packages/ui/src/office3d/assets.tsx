@@ -26,6 +26,8 @@ export const ASSET_BASE = "/office3d/";
 /** Set an entry to an asset to swap that prop from primitive to model. */
 export const OFFICE_ASSETS: Record<string, OfficeAsset | null> = {
   chair: { url: `${ASSET_BASE}WoodenChair_01/WoodenChair_01_1k.gltf` },
+  chair2: { url: `${ASSET_BASE}painted_wooden_chair_01/painted_wooden_chair_01_1k.gltf` },
+  loungeChair: { url: `${ASSET_BASE}mid_century_lounge_chair/mid_century_lounge_chair_1k.gltf` },
   desk: { url: `${ASSET_BASE}metal_office_desk/metal_office_desk_1k.gltf` },
   coffeeTable: { url: `${ASSET_BASE}CoffeeTable_01/CoffeeTable_01_1k.gltf` },
   sofa: { url: `${ASSET_BASE}Sofa_01/Sofa_01_1k.gltf` },

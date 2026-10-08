@@ -351,7 +351,12 @@ function RoomFurniture({ room }: { room: RoomLayout }) {
           </Prop>
         </Suspense>
         <Suspense fallback={null}>
-          <Prop kind="armChair" position={[halfW - 1.5, 0, halfD - 1.8]} rotationY={Math.PI}>
+          <Prop kind="loungeChair" position={[halfW - 1.5, 0, halfD - 1.8]} rotationY={Math.PI}>
+            <Plant />
+          </Prop>
+        </Suspense>
+        <Suspense fallback={null}>
+          <Prop kind="armChair" position={[-halfW + 1.6, 0, halfD - 1.8]} rotationY={Math.PI}>
             <Plant />
           </Prop>
         </Suspense>
@@ -568,12 +573,12 @@ function Desk({ desk, style, labels, onSelect }: { desk: DeskLayout; style: Offi
       </mesh>
       <DeskLamp position={[-0.5, 0.765, 0.1]} />
       <Suspense fallback={null}>
-        <Prop kind="chair" position={[0, 0, 0.95]}>
+        <Prop kind={desk.botId.charCodeAt(0) % 2 === 0 ? "chair" : "chair2"} position={[0, 0, 0.95]}>
           <Chair />
         </Prop>
       </Suspense>
       <Suspense fallback={null}>
-        <Person position={[0, 0, 1.15]} rotationY={Math.PI} />
+        <Person position={[0, 0, 1.15]} rotationY={Math.PI} agentId={desk.botId} />
       </Suspense>
       {labels && (
         <Html
