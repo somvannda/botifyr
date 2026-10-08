@@ -80,6 +80,9 @@ WOOD = material("wood", (0.78, 0.68, 0.52), 0.6)
 TILE = material("tile", (0.78, 0.79, 0.81), 0.7)
 WALL = material("wall", (0.93, 0.94, 0.96), 0.85)
 GLASS = material("glass", (0.75, 0.85, 0.92), 0.05, 0.0, 0.25)
+MONITOR = material("monitor", (0.05, 0.06, 0.08), 0.3, 0.2)
+PING = material("pingpong", (0.12, 0.37, 0.62), 0.4)
+GREY = material("grey", (0.55, 0.58, 0.63), 0.6)
 
 width = scene["width"]
 depth = scene["depth"]
@@ -111,24 +114,42 @@ for desk in scene["desks"]:
     place_glb("WoodenChair_01.glb", (desk["x"], desk["z"] + 0.9, 0), rotation_z=math.pi)
     place_glb("xbot.glb", (desk["x"], desk["z"] + 1.2, 0), rotation_z=math.pi)
 
-# Open-plan benches.
+# Open-plan benches: table + monitors on both sides + chairs.
 for bench in scene.get("benches", []):
     box("bench", (bench["width"], 1.5, 0.74), (bench["x"], bench["z"], 0.37), WOOD)
+    count = max(2, int(bench["width"] // 1.8))
+    for index in range(count):
+        x = bench["x"] - bench["width"] / 2 + (bench["width"] / (count + 1)) * (index + 1)
+        box("monitor", (0.6, 0.05, 0.4), (x, bench["z"] - 0.3, 1.0), MONITOR)
+        box("monitor", (0.6, 0.05, 0.4), (x, bench["z"] + 0.3, 1.0), MONITOR)
+        box("benchchair", (0.5, 0.5, 0.9), (x, bench["z"] - 0.85, 0.45), GREY)
+        box("benchchair", (0.5, 0.5, 0.9), (x, bench["z"] + 0.85, 0.45), GREY)
+
+# Ping-pong tables (recreation, open area).
+for table in scene.get("gameTables", []):
+    box("pingpong", (2.74, 1.52, 0.06), (table["x"], table["z"], 0.76), PING)
 
 # Planters (real model with fallback).
 for planter in scene.get("planters", []):
     if not place_glb("planter_box_01.glb", (planter["x"], planter["z"], 0)):
         box("planter", (1.6, 1.6, 0.6), (planter["x"], planter["z"], 0.3), material("plant", (0.24, 0.55, 0.3), 0.9))
 
-# Near-orthographic top-down camera.
+# Near-orthographic top-down camera, aimed at the centre via a Track-To target.
 cam_data = bpy.data.cameras.new("cam")
 cam_data.type = "ORTHO"
-cam_data.ortho_scale = max(width, depth) * 1.15
+cam_data.ortho_scale = max(width, depth) * 1.35
 cam = bpy.data.objects.new("cam", cam_data)
-cam.location = (width * 0.05, depth * 0.9, depth * 1.25)
-cam.rotation_euler = (math.radians(58), 0, math.radians(4))
+cam.location = (0, -depth * 0.85, width * 0.85)
 bpy.context.scene.collection.objects.link(cam)
 bpy.context.scene.camera = cam
+
+target = bpy.data.objects.new("target", None)
+target.location = (0, 0, 0)
+bpy.context.scene.collection.objects.link(target)
+track = cam.constraints.new(type="TRACK_TO")
+track.target = target
+track.track_axis = "TRACK_NEGATIVE_Z"
+track.up_axis = "UP_Y"
 
 # World: the real CC0 HDRI for image-based lighting (falls back to a flat sky).
 world = bpy.data.worlds.new("world")
@@ -172,5 +193,6 @@ prefs.cycles.use_denoising = True
 prefs.render.resolution_x = int(os.environ.get("BOTIFYR_RENDER_X", "2000"))
 prefs.render.resolution_y = int(os.environ.get("BOTIFYR_RENDER_Y", "1400"))
 prefs.render.filepath = out_path
+print(f"objects: {len(bpy.data.objects)} | camera {tuple(round(v, 1) for v in cam.location)} ortho {round(cam_data.ortho_scale, 1)}")
 bpy.ops.render.render(write_still=True)
 print(f"rendered {out_path}")
