@@ -257,6 +257,12 @@ function PostCard({
             />
           )}
         </div>
+      ) : post.images && post.images.length > 1 ? (
+        <div className={`feed-image-grid feed-image-grid-${Math.min(post.images.length, 4)}`}>
+          {post.images.map((src) => (
+            <img key={src} className="feed-image-img" src={`${cloudUrl}${src}`} alt="Post attachment" loading="lazy" />
+          ))}
+        </div>
       ) : post.imageUrl ? (
         <img className="feed-image-img" src={`${cloudUrl}${post.imageUrl}`} alt="Post attachment" loading="lazy" />
       ) : post.mediaId ? (
@@ -718,31 +724,34 @@ export function FeedView({
   const [cursor, setCursor] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [posting, setPosting] = useState(false);
-  const [attachment, setAttachment] = useState<{ name: string; mime: string; data: string } | null>(null);
+  const [attachments, setAttachments] = useState<Array<{ name: string; mime: string; data: string }>>([]);
   const [pages, setPages] = useState<Page[]>([]);
   const [postAs, setPostAs] = useState("");
   const [creatingPage, setCreatingPage] = useState(false);
   const [newPageName, setNewPageName] = useState("");
   const fileRef = useRef<HTMLInputElement | null>(null);
 
-  function pickImage(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
+  function pickImages(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
     event.target.value = "";
-    if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      setError("Only image files can be attached");
-      return;
+    for (const file of files) {
+      if (!file.type.startsWith("image/")) {
+        setError("Only image files can be attached");
+        continue;
+      }
+      if (file.size > 12 * 1024 * 1024) {
+        setError("Image is too large (max 12MB)");
+        continue;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        const data = typeof reader.result === "string" ? reader.result : "";
+        if (data) {
+          setAttachments((prev) => (prev.length >= 4 ? prev : [...prev, { name: file.name, mime: file.type, data }]));
+        }
+      };
+      reader.readAsDataURL(file);
     }
-    if (file.size > 12 * 1024 * 1024) {
-      setError("Image is too large (max 12MB)");
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const data = typeof reader.result === "string" ? reader.result : "";
-      if (data) setAttachment({ name: file.name, mime: file.type, data });
-    };
-    reader.readAsDataURL(file);
   }
 
   const load = useCallback(
@@ -801,19 +810,19 @@ export function FeedView({
   async function publish(event: FormEvent) {
     event.preventDefault();
     const body = draft.trim();
-    if ((!body && !attachment) || posting) return;
+    if ((!body && attachments.length === 0) || posting) return;
     setPosting(true);
     setError(null);
     try {
-      let mediaId: string | undefined;
-      if (attachment) {
-        const media = await client.uploadFile({ name: attachment.name, mime: attachment.mime, data: attachment.data });
-        mediaId = media.id;
+      const mediaIds: string[] = [];
+      for (const file of attachments) {
+        const media = await client.uploadFile({ name: file.name, mime: file.mime, data: file.data });
+        mediaIds.push(media.id);
       }
-      const post = await client.createPost({ body, mediaId, pageId: postAs || undefined });
+      const post = await client.createPost({ body, mediaIds, pageId: postAs || undefined });
       setPosts((prev) => [post, ...prev]);
       setDraft("");
-      setAttachment(null);
+      setAttachments([]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't post that");
     } finally {
@@ -861,17 +870,21 @@ export function FeedView({
               onChange={(event) => setDraft(event.target.value)}
             />
           </div>
-          {attachment && (
-            <div className="feed-composer-preview">
-              <img src={attachment.data} alt="Attachment preview" />
-              <button
-                type="button"
-                className="feed-attachment-remove"
-                onClick={() => setAttachment(null)}
-                aria-label="Remove image"
-              >
-                ✕
-              </button>
+          {attachments.length > 0 && (
+            <div className="feed-composer-grid">
+              {attachments.map((file, index) => (
+                <div key={index} className="feed-composer-thumb">
+                  <img src={file.data} alt="Attachment preview" />
+                  <button
+                    type="button"
+                    className="feed-attachment-remove"
+                    onClick={() => setAttachments((prev) => prev.filter((_, i) => i !== index))}
+                    aria-label="Remove image"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
             </div>
           )}
           <div className="feed-composer-as">
@@ -920,11 +933,18 @@ export function FeedView({
             >
               <SmileyIcon size={16} /> Mood
             </button>
-            <button className="feed-post-btn" type="submit" disabled={(!draft.trim() && !attachment) || posting}>
+            <button className="feed-post-btn" type="submit" disabled={(!draft.trim() && attachments.length === 0) || posting}>
               {posting ? "Posting…" : "Post"}
             </button>
           </div>
-          <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={pickImage} />
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            multiple
+            style={{ display: "none" }}
+            onChange={pickImages}
+          />
         </form>
 
         {error && <div className="feed-error">{error}</div>}

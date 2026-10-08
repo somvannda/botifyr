@@ -112,6 +112,10 @@ export interface FeedPost {
   author: FeedAuthor;
   body: string;
   mediaId?: string;
+  /** All attached image media ids (multi-image). */
+  mediaIds?: string[];
+  /** Short-lived signed paths to all attached images. */
+  images?: string[];
   /** Set when the post was authored by a Page. */
   pageId?: string;
   /** Set when this post is a repost (share) of another post. */
@@ -1080,7 +1084,7 @@ export class BotifyrClient {
     return this.request(`/v1/feed?${params.toString()}`);
   }
 
-  createPost(input: { body: string; mediaId?: string; pageId?: string }): Promise<FeedPost> {
+  createPost(input: { body: string; mediaId?: string; mediaIds?: string[]; pageId?: string }): Promise<FeedPost> {
     return this.request("/v1/posts", { method: "POST", json: true, body: JSON.stringify(input) });
   }
 

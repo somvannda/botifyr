@@ -2981,6 +2981,23 @@ body {
   background: rgba(109, 139, 255, 0.12);
 }
 
+.composer-bar .round.recording {
+  color: #fff;
+  border-color: #e5484d;
+  background: #e5484d;
+  animation: rec-pulse 1s ease-in-out infinite;
+}
+
+@keyframes rec-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
 /* New-chat picker (Grok-style) ------------------------------------------- */
 .main {
   position: relative;
@@ -7287,4 +7304,55 @@ body {
   width: 100%;
   max-height: 320px;
   object-fit: cover;
+}
+
+/* Multi-image composer + post grid (docs/feed-next.md §FR-5) */
+.feed-composer-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.feed-composer-thumb {
+  position: relative;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  aspect-ratio: 1;
+}
+
+.feed-composer-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.feed-image-grid {
+  display: grid;
+  gap: 4px;
+  margin-top: 12px;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.feed-image-grid .feed-image-img {
+  margin-top: 0;
+  border: none;
+  border-radius: 0;
+  height: 100%;
+  max-height: 260px;
+  object-fit: cover;
+}
+
+.feed-image-grid-2 {
+  grid-template-columns: 1fr 1fr;
+}
+
+.feed-image-grid-3 {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+.feed-image-grid-4 {
+  grid-template-columns: 1fr 1fr;
 }

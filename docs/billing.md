@@ -21,11 +21,14 @@ A user has a `billingMode`: `free` | `plan` | `payg`. Admins can switch it, and
 spent (admin toggle).
 
 ### Plans
-| Plan | Price (admin-set) | Period | Included tokens |
+| Plan | Price (admin-set) | Period | Included tokens / period |
 | --- | --- | --- | --- |
-| **free** | $0 | — | `freeMonthlyTokens` (admin-set) |
-| **pro** | `proPriceCents` | `proPeriodDays` | effectively unlimited (rate-limit only) |
-| **business** | `businessPriceCents` | `proPeriodDays` | unlimited + more capacity (optional) |
+| **free** | $0 | — | `freeMonthlyTokens` (admin-set, monthly) |
+| **pro** | `proPriceCents` | `proPeriodDays` | `plans.includedTokens.pro` (default 5,000,000) |
+| **business** | `businessPriceCents` | `proPeriodDays` | `plans.includedTokens.business` (default 50,000,000) |
+
+Over the included quota, work continues only via on-demand credits (or the free
+fallback) — see §7.
 
 `trial` is renamed to **free** (migration maps existing `trial` → `free`).
 
@@ -49,11 +52,12 @@ spent (admin toggle).
 ## 2. Platform settings (admin-controlled)
 
 One `platform_settings` row (JSON), read by billing + cost controls and edited in
-**apps/admin → Settings**. Cached in memory, invalidated on write.
+**apps/admin → Billing**. Cached in memory, invalidated on write.
 
 ```
 plans:            { proPriceCents: 500, businessPriceCents: 1900,
-                    proPeriodDays: 30, currency: "USD" }
+                    proPeriodDays: 30, currency: "USD",
+                    includedTokens: { pro: 5000000, business: 50000000 } }
 freeMonthlyTokens: 500000
 lowBalanceCents:  100              # warn/top-up prompt below this
 graceDays:        7
@@ -65,13 +69,13 @@ fallbackPlan:     "free"
 ```
 
 - **API:** `GET /admin/settings` and `PUT /admin/settings` (admin-only, audited).
-- **Admin UI:** `apps/admin` gains a **Settings** tab. The user app reads the
+- **Admin UI:** `apps/admin` has a **Billing** tab. The user app reads the
   public subset via `/v1/billing`.
 
 ### 2.1 Model pricing (drives on-demand + free-allowance value)
 
 An admin-maintained table (one row per model), separate from the single settings
-row. Edit in **apps/admin → Settings → Model pricing**:
+row. Edit in **apps/admin → Billing → Model pricing**:
 
 ```
 model_pricing
@@ -94,17 +98,17 @@ model_pricing
 platform_settings   (single row)                         # §2
 model_pricing       (one row per model)                  # §2.1
 
-subscription (1/user)
+subscription (fields on `users`; 1/user)
   userId, billingMode: free|plan|payg
   plan, currentPeriodStart, currentPeriodEnd, graceUntil
   status: active|grace|expired|free
 
-wallet (1/user, for payg)
+wallet (table `wallets`; 1/user, for payg)
   userId, balanceCents, updatedAt
 
 ledger (append-only money movement)
   id, userId, kind: topup|usage|refund|grant
-  amountCents (+credit / −debit), tokens?, invoiceId?, note?, createdAt
+  amountCents (+credit / −debit), tokens?, model?, note?, createdAt
 
 invoice (1 per period attempt or top-up)
   id "inv_<uuid>", userId, kind: plan|topup
@@ -112,7 +116,7 @@ invoice (1 per period attempt or top-up)
   providerStatus: pending|paid|expired|failed|superseded|reversed
   status: open|paid|void
   periodStart?, periodEnd?, issuedAt, expiresAt?, paidAt
-  remindersSent: { d7, d3, d1, grace }
+  reminders: { d7, d3, d1, grace }
 ```
 
 ## 4. Lifecycle
@@ -172,13 +176,15 @@ and each reminder fires once. Channels are toggled in `reminderChannels`.
 
 - `free`: monthly window over `usage_events` (`usageSince(user, monthStart)`) vs
   `freeMonthlyTokens`; over → 429 when `BOTIFYR_ENFORCE_BUDGET=1`, else warn + CTA.
-- `plan`: no token cap (per-call `maxTokens` + rate limit still apply).
+- `plan`: per-period included-token cap (`plans.includedTokens.<plan>`, measured
+  from `periodStart`); over → renew/top-up CTA, though credits can cover it when
+  `onDemand.allowPro`. Per-call `maxTokens` + rate limit still apply.
 - `payg`: before a run, if `balanceCents ≤ 0` and `onEmpty = "block"` → 402/429
   with a top-up CTA; otherwise debit after each run and warn near zero.
 
 ## 8. Admin & user UI
 
-- **admin (`apps/admin`)**: **Settings** tab (plans, free quota, grace,
+- **admin (`apps/admin`)**: **Billing** tab (plans, free quota, grace,
   reminder days/channels, on-demand rate/min/onEmpty) + per-user view to set plan,
   grant comp credits, or switch `billingMode`.
 - **user (shared UI)**: Usage & Billing shows plan/credits, period end, tokens
@@ -212,7 +218,7 @@ Numeric policy (prices, quotas, grace, reminders, rates) lives in
 5. `packages/{shared,client}` — types + `billing()`, `billingCheckout(kind)`,
    `adminSettings()` / `adminSaveSettings()`.
 6. `packages/ui` — Usage & Billing states + banner + notifying via existing toasts.
-7. `apps/admin` — Settings tab.
+7. `apps/admin` — Billing tab.
 8. docs + `.env.example`.
 
 ## 11. Edge cases

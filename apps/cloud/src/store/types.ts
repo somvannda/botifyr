@@ -81,6 +81,8 @@ export interface PostRecord {
   pageId?: string;
   /** Set when this post is a repost (share) of another post. */
   repostOf?: string;
+  /** Who can see the post (docs/feed-next.md §FR-7). Defaults to friends. */
+  audience?: "public" | "friends" | "only_me";
   createdAt: string;
   updatedAt: string;
 }

@@ -859,7 +859,7 @@ export class MemoryStore implements Store {
     return true;
   }
 
-  async addPostMedia(postId: string, mediaId: string, position: number): Promise<void> {
+  async addPostMedia(postId: string, mediaId: string, _position: number): Promise<void> {
     const list = this.postMedia.get(postId) ?? [];
     if (!list.includes(mediaId)) list.push(mediaId);
     this.postMedia.set(postId, list);

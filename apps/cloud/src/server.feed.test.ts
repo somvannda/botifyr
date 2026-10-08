@@ -417,6 +417,49 @@ describe("feed", () => {
     await app.close();
   });
 
+  it("attaches multiple images to a post", async () => {
+    const previous = process.env.BOTIFYR_DOWNLOADS_DIR;
+    const dir = join(tmpdir(), `botifyr-feed-${randomUUID()}`);
+    process.env.BOTIFYR_DOWNLOADS_DIR = dir;
+    const { app, signUp, auth } = await setup();
+    try {
+      const alice = await signUp("alice-multi@example.com");
+      const ids: string[] = [];
+      for (const name of ["a.png", "b.png", "c.png"]) {
+        const upload = await app.inject({
+          method: "POST",
+          url: "/v1/uploads",
+          headers: auth(alice.token),
+          payload: { name, mime: "image/png", data: PNG },
+        });
+        expect(upload.statusCode).toBe(201);
+        ids.push((upload.json() as { id: string }).id);
+      }
+
+      const created = await app.inject({
+        method: "POST",
+        url: "/v1/posts",
+        headers: auth(alice.token),
+        payload: { body: "album", mediaIds: ids },
+      });
+      expect(created.statusCode).toBe(201);
+      const dto = created.json() as { images?: string[]; mediaIds?: string[] };
+      expect(dto.mediaIds?.length).toBe(3);
+      expect(dto.images?.length).toBe(3);
+
+      const feed = await app.inject({ method: "GET", url: "/v1/feed", headers: auth(alice.token) });
+      const item = (feed.json() as { items: Array<{ body: string; images?: string[] }> }).items.find(
+        (entry) => entry.body === "album",
+      );
+      expect(item?.images?.length).toBe(3);
+    } finally {
+      await app.close();
+      if (previous === undefined) delete process.env.BOTIFYR_DOWNLOADS_DIR;
+      else process.env.BOTIFYR_DOWNLOADS_DIR = previous;
+      await rm(dir, { recursive: true, force: true }).catch(() => {});
+    }
+  });
+
   it("creates a repost that links back to the original", async () => {
     const { app, store, signUp, auth, createPost } = await setup();
     const alice = await signUp("alice-repost@example.com");

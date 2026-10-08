@@ -3978,6 +3978,7 @@ export async function buildServer(options: ServerOptions) {
     images?: string[];
     pageId?: string;
     repostOf?: string;
+    audience?: "public" | "friends" | "only_me";
     imageUrl?: string;
     createdAt: string;
     updatedAt: string;
@@ -4096,6 +4097,7 @@ export async function buildServer(options: ServerOptions) {
       images,
       pageId: record.pageId,
       repostOf: record.repostOf,
+      audience: record.audience ?? "friends",
       imageUrl: images[0],
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
@@ -4109,6 +4111,10 @@ export async function buildServer(options: ServerOptions) {
       original,
     };
   }
+
+  /** Only the author can see an `only_me` post. */
+  const canSeePost = (post: PostRecord, viewerId: string): boolean =>
+    post.audience !== "only_me" || post.authorId === viewerId;
 
   const feedCommentOf = async (record: PostCommentRecord, cache: Map<string, FeedAuthorDto>) => ({
     id: record.id,
@@ -4128,7 +4134,9 @@ export async function buildServer(options: ServerOptions) {
       const blocked = new Set(await store.listBlockedEither(userId));
       const friendIds = (await store.listFriends(userId)).filter((id) => !blocked.has(id));
       const followedPages = (await store.listFollowedPageIds(userId)).filter((id) => !blocked.has(id));
-      const posts = await store.listFeedPosts([userId, ...friendIds, ...followedPages], limit + 1, cursor);
+      const posts = (await store.listFeedPosts([userId, ...friendIds, ...followedPages], limit + 1, cursor)).filter(
+        (post) => canSeePost(post, userId),
+      );
       const hasMore = posts.length > limit;
       const page = hasMore ? posts.slice(0, limit) : posts;
       const cache = new Map<string, FeedAuthorDto>();
@@ -4138,10 +4146,9 @@ export async function buildServer(options: ServerOptions) {
     },
   );
 
-  app.post<{ Body: { body?: string; mediaId?: string; mediaIds?: string[]; pageId?: string } }>(
-    "/v1/posts",
-    { preHandler: requireAuth },
-    async (request, reply) => {
+  app.post<{
+    Body: { body?: string; mediaId?: string; mediaIds?: string[]; pageId?: string; audience?: string };
+  }>("/v1/posts", { preHandler: requireAuth }, async (request, reply) => {
       const userId = request.userId as string;
       const body = typeof request.body?.body === "string" ? request.body.body.trim() : "";
       const mediaId = typeof request.body?.mediaId === "string" ? request.body.mediaId.trim() : "";
@@ -4167,6 +4174,10 @@ export async function buildServer(options: ServerOptions) {
         authorId = page.id;
       }
 
+      const audience =
+        request.body?.audience === "public" || request.body?.audience === "only_me"
+          ? request.body.audience
+          : "friends";
       const now = new Date().toISOString();
       const record: PostRecord = {
         id: randomUUID(),
@@ -4174,6 +4185,7 @@ export async function buildServer(options: ServerOptions) {
         body,
         mediaId: provided[0] || undefined,
         pageId: page?.id,
+        audience,
         createdAt: now,
         updatedAt: now,
       };

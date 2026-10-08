@@ -49,8 +49,13 @@ original and bumps its share count, `BotifyrClient.repost(id, caption?)`, a
 one-level embedded `original` in the feed DTO, and a **"Shared a post"** card in
 the UI (the Share action now creates a repost).
 
-**Everything else** in this document (comment reactions, multi-image, audience,
-ranking, stories, groups, …) is **not started**.
+**Multi-image (FR-5) — done.** A `post_media` join table (ordered),
+`addPostMedia` / `listPostMedia`, `mediaIds[]` on `POST /v1/posts` (≤4) and signed
+`images[]` on the feed DTO, plus a multi-image composer (pick up to 4, thumbnails)
+and a post image grid in the UI.
+
+**Everything else** in this document (comment reactions, audience, ranking,
+stories, groups, …) is **not started**.
 
 > **Reconciled with the product as of Oct 2026.** Facebook's reference section
 > (§1) reflects its 2026 behaviour; §2 and §5 note where Botifyr has already moved

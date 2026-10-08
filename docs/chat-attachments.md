@@ -87,9 +87,13 @@ Done:
 - ✅ **File sizes** — the size rides in the share-token payload (`s`), is decoded
   client-side (`decodeShare`) and shown on document rows (`formatSize`,
   `.dm-file-size`).
+- ✅ **Voice notes** — the attach menu has "🎤 Record a voice note"; `MediaRecorder`
+  captures the clip, uploads it via `/v1/uploads`, and it renders as an inline
+  audio player (`<audio controls>`).
 
 Next:
-1. **Voice notes** — record in the composer and render a waveform player.
+1. **Waveform** — visualise voice notes (currently the native `<audio>` player).
+2. **Transcription** — a "transcribe" action that shows text under the clip.
 
 ## 4. Server contract
 

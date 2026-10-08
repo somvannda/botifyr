@@ -1217,8 +1217,8 @@ export class PostgresStore implements Store {
 
   async createPost(record: PostRecord): Promise<void> {
     await this.pool.query(
-      "INSERT INTO posts (id, author_id, body, media_id, page_id, repost_of, created_at, updated_at) " +
-        "VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
+      "INSERT INTO posts (id, author_id, body, media_id, page_id, repost_of, audience, created_at, updated_at) " +
+        "VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
       [
         record.id,
         record.authorId,
@@ -1226,6 +1226,7 @@ export class PostgresStore implements Store {
         record.mediaId ?? null,
         record.pageId ?? null,
         record.repostOf ?? null,
+        record.audience ?? "friends",
         record.createdAt,
         record.updatedAt,
       ],
@@ -1736,6 +1737,7 @@ function toPost(row: any): PostRecord {
     mediaId: row.media_id ?? undefined,
     pageId: row.page_id ?? undefined,
     repostOf: row.repost_of ?? undefined,
+    audience: row.audience ?? "friends",
     createdAt: new Date(row.created_at).toISOString(),
     updatedAt: new Date(row.updated_at).toISOString(),
   };

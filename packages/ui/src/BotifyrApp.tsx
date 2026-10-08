@@ -387,6 +387,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   });
   const [notifOpen, setNotifOpen] = useState(false);
   const [attachOpen, setAttachOpen] = useState(false);
+  const [recording, setRecording] = useState(false);
   const [lightbox, setLightbox] = useState<{
     items: { token: string; name: string }[];
     index: number;
@@ -411,6 +412,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const dmKeysRef = useRef<Map<string, CryptoKey>>(new Map());
   const myKeysRef = useRef<DeviceKeyPair | null>(null);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
   const [decrypted, setDecrypted] = useState<Record<string, string>>({});
   // When the host renders an OS title bar with a slot, the notification centre
   // is teleported there; otherwise it renders inline in the chat topbar.
@@ -603,7 +605,6 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [topUpOpen, setTopUpOpen] = useState(false);
   const [showBotPanel, setShowBotPanel] = useState(() => localStorage.getItem("botifyr.botPanel") !== "0");
   const [screenOn, setScreenOn] = useState(false);
-  const [recording, setRecording] = useState(false);
   const [tasksOpen, setTasksOpen] = useState(false);
   const [botPanelTab, setBotPanelTab] = useState<"details" | "library" | "computer">("details");
   const [labels, setLabels] = useState<Record<string, string>>(() => {
@@ -3153,6 +3154,58 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     }
   }
 
+  /** Record a voice note and send it as an audio attachment (Telegram-style). */
+  async function toggleRecording(): Promise<void> {
+    if (recording) {
+      recorderRef.current?.stop();
+      return;
+    }
+    if (
+      typeof navigator === "undefined" ||
+      !navigator.mediaDevices?.getUserMedia ||
+      typeof MediaRecorder === "undefined"
+    ) {
+      setError("Voice notes aren't supported in this browser.");
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      const chunks: Blob[] = [];
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) chunks.push(event.data);
+      };
+      recorder.onstop = () => {
+        setRecording(false);
+        recorderRef.current = null;
+        stream.getTracks().forEach((track) => track.stop());
+        const blob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
+        if (blob.size === 0) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          void (async () => {
+            try {
+              const item = await client.uploadFile({
+                name: `voice-${Date.now()}.webm`,
+                mime: blob.type,
+                data: String(reader.result ?? ""),
+              });
+              await attachFiles([item]);
+            } catch (err: unknown) {
+              setError(messageOf(err));
+            }
+          })();
+        };
+        reader.readAsDataURL(blob);
+      };
+      recorder.start();
+      recorderRef.current = recorder;
+      setRecording(true);
+    } catch {
+      setError("Could not access the microphone.");
+    }
+  }
+
   async function saveProfile(): Promise<void> {
     try {
       const updated = await client.updateProfile({
@@ -5150,6 +5203,16 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                   >
                     ⬆ Upload from this device
                   </button>
+                  <button
+                    className="attach-item"
+                    type="button"
+                    onClick={() => {
+                      setAttachOpen(false);
+                      void toggleRecording();
+                    }}
+                  >
+                    🎤 Record a voice note
+                  </button>
                   <div className="attach-head">From downloads</div>
                   {media.length === 0 ? (
                     <div className="attach-empty">No files yet. Ask a bot to download something first.</div>
@@ -5186,12 +5249,18 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
               )}
               <div className="composer-bar">
                 <button
-                  className="round"
+                  className={`round${recording ? " recording" : ""}`}
                   type="button"
-                  title="Attach a file"
-                  onClick={() => setAttachOpen((value) => !value)}
+                  title={recording ? "Stop recording" : "Attach a file"}
+                  onClick={() => {
+                    if (recording) {
+                      void toggleRecording();
+                      return;
+                    }
+                    setAttachOpen((value) => !value);
+                  }}
                 >
-                  <PlusIcon size={18} />
+                  {recording ? <StopIcon size={16} /> : <PlusIcon size={18} />}
                 </button>
                 <textarea
                   value={text}
