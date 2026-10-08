@@ -754,7 +754,14 @@ export class BotifyrClient {
       scheme?: number;
       ceoBotId?: string;
       operatingHours?: { start: number; end: number; days?: number[]; timezone?: string };
-      repos?: Array<{ id?: string; name: string; path: string; url?: string; branch?: string; createdAt?: string }>;
+      repos?: Array<{
+        id?: string;
+        name: string;
+        path: string;
+        url?: string;
+        branch?: string;
+        createdAt?: string;
+      }>;
     },
   ): Promise<WorkspaceWithRoles> {
     return this.request(`/v1/workspaces/${id}`, {
@@ -1043,3 +1050,6 @@ export class BotifyrClient {
     };
   }
 }
+
+export * from "./crypto.js";
+export * from "./device-keys.js";
