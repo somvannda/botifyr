@@ -345,6 +345,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [wizardBudget, setWizardBudget] = useState("");
   const [wizardActivate, setWizardActivate] = useState(false);
   const [boardWorkspace, setBoardWorkspace] = useState<{ id: string; name: string } | null>(null);
+  /** Company shown in the 3D office. Kept separate from the HQ dialog. */
+  const [officeCompany, setOfficeCompany] = useState<{ id: string; name: string } | null>(null);
   const [showOffice3d, setShowOffice3d] = useState(false);
   const [office3dDock, setOffice3dDock] = useState(true);
   const [repoName, setRepoName] = useState("");
@@ -509,8 +511,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
    * Derived from state we already hold, so opening the office costs no requests.
    */
   const officeAgents = useMemo<OfficeAgent[]>(() => {
-    if (!boardWorkspace) return [];
-    const workspace = workspaces.find((entry) => entry.name === boardWorkspace.name);
+    if (!officeCompany) return [];
+    const workspace = workspaces.find((entry) => entry.name === officeCompany.name);
     if (!workspace) return [];
 
     const latestBySession = new Map<string, Task>();
@@ -535,15 +537,15 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
         },
       ];
     });
-  }, [boardWorkspace, workspaces, tasks, bots]);
+  }, [officeCompany, workspaces, tasks, bots]);
 
   /** The 3D office, rendered either as a docked side panel or a floating overlay. */
   const renderOffice = (docked: boolean) => (
     <LazyOfficeView
-      company={boardWorkspace?.name ?? ""}
+      company={officeCompany?.name ?? ""}
       agents={officeAgents}
       paused={
-        (workspaces.find((entry) => entry.name === boardWorkspace?.name)?.status ?? "active") === "paused"
+        (workspaces.find((entry) => entry.name === officeCompany?.name)?.status ?? "active") === "paused"
       }
       docked={docked}
       onToggleDock={() => setOffice3dDock((value) => !value)}
@@ -1462,6 +1464,13 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     setHqWiki([]);
     setHqChanges([]);
     setAddMemberBotId("");
+  }
+
+  /** Open the 3D office for a company, docked beside the chat — without the HQ dialog. */
+  function openOffice(company: { id: string; name: string }) {
+    closeBoard();
+    setOfficeCompany(company);
+    setShowOffice3d(true);
   }
 
   async function runStandup(kind: "standup" | "weekly" = "standup") {
@@ -3117,7 +3126,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
 
   return (
     <div
-      className={`app${showBotPanel && activeBot ? " with-panel" : ""}${showOffice3d && office3dDock ? " with-office" : ""}${density === "compact" ? " density-compact" : ""}`}
+      className={`app${showBotPanel && activeBot ? " with-panel" : ""}${showOffice3d && office3dDock && officeCompany ? " with-office" : ""}${density === "compact" ? " density-compact" : ""}`}
     >
       {toasts.length > 0 && (
         <div className="toast-stack">
@@ -3274,10 +3283,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                       type="button"
                       title="3D Workspace — see the office live"
                       aria-label="Open 3D workspace"
-                      onClick={() => {
-                        void openBoard(group.workspace!.id, group.name);
-                        setShowOffice3d(true);
-                      }}
+                      onClick={() => openOffice({ id: group.workspace!.id, name: group.name })}
                     >
                       <CubeIcon size={16} />
                     </button>
@@ -4234,7 +4240,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
         </form>
       </main>
 
-      {showOffice3d && office3dDock && boardWorkspace && (
+      {showOffice3d && office3dDock && officeCompany && (
         <aside className="office3d-docked">
           <Suspense fallback={<div className="office3d-loading">Building the office…</div>}>
             {renderOffice(true)}
@@ -5308,7 +5314,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
               {hqTab === "office" && (
                 <>
                   <div className="board-add">
-                    <button className="btn primary small" type="button" onClick={() => setShowOffice3d(true)}>
+                    <button className="btn primary small" type="button" onClick={() => boardWorkspace && openOffice(boardWorkspace)}>
                       3D Workspace
                     </button>
                     <span className="company-hint">See the office in 3D — every employee at their desk.</span>
@@ -5615,7 +5621,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                     <HqButton
                       title="3D Workspace — see the office live (drag to rotate, scroll to zoom)"
                       disabled={boardBusy}
-                      onClick={() => setShowOffice3d(true)}
+                      onClick={() => boardWorkspace && openOffice(boardWorkspace)}
                     >
                       <MonitorIcon size={16} />
                     </HqButton>
@@ -6077,7 +6083,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
         </div>
       )}
 
-      {showOffice3d && !office3dDock && boardWorkspace && (
+      {showOffice3d && !office3dDock && officeCompany && (
         <Suspense
           fallback={
             <div className="office3d-overlay">

@@ -271,6 +271,15 @@ styles; hosts stay thin.
 - **Company view:** left rail = employees by department; main = the chair thread
   (standups, approvals); a **Board** tab = task board; a **Wiki** tab = shared
   Library; a **Budget** tab = this company's spend.
+- **Sidebar company header (shipped):** one row per company — name + headcount
+  (e.g. `Chmaba (6)`, with a `· N need you` accent when work waits on the CEO) —
+  followed by three always-visible quick actions: rename/delete, Company HQ
+  board, and **3D office**.
+- **3D live office (shipped):** a docked 16:9 panel beside the chat (or a
+  floating overlay via **Float**) showing every employee at their desk with live
+  activity. It opens straight from the sidebar cube action or the HQ **Office**
+  tab without opening the HQ dialog, and its labels are clipped inside the stage
+  so they never paint over modals.
 - **Employee card:** reuse the existing bot Details panel; add **Role** and
   **Reports to**.
 - Host differences (open external, focus window) stay behind `BotBridge`
@@ -491,7 +500,8 @@ computer stream:
 - **Needs you** = pending `Approval`s + blocked tasks.
 - **Team** = employees by department (roles + live status from tasks).
 - **Board** = tasks by phase/status.
-- **Office** = the `computer` live view per employee.
+- **Office** = the **3D live office** (every employee at their desk with live
+  activity) plus the `computer` live view per employee.
 
 > **Metric sourcing.** "ARR / Customers" need a data source (a billing connector
 > or a manual figure). Until one exists the HQ shows them as **unknown**, never

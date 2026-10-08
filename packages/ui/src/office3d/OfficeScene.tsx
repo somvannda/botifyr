@@ -328,6 +328,7 @@ function Room({ room }: { room: RoomLayout }) {
       <Html
         center
         distanceFactor={30}
+        zIndexRange={[10, 0]}
         position={[0, height + 0.35, -room.depth / 2 + 0.3]}
         className="office3d-room-label"
       >
@@ -370,6 +371,7 @@ function Desk({ desk, onSelect }: { desk: DeskLayout; onSelect?: (botId: string)
       <Html
         center
         distanceFactor={26}
+        zIndexRange={[10, 0]}
         position={[0, 1.8, 0]}
         className="office3d-desk-label"
         style={{ pointerEvents: onSelect ? "auto" : "none" }}

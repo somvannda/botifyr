@@ -360,14 +360,19 @@ body {
   align-items: center;
   gap: 6px;
   min-width: 0;
-  padding: 8px 8px 2px;
+  padding: 6px 4px 6px 8px;
   background: transparent;
   border: 0;
   color: var(--text);
-  font-size: 13px;
+  font-size: 18px;
   font-weight: 700;
   text-align: left;
   cursor: pointer;
+}
+
+.task-section-headrow .task-section-head {
+  width: auto;
+  flex: 1 1 auto;
 }
 
 .task-section-head.static {
@@ -378,47 +383,23 @@ body {
   color: var(--accent);
 }
 
-.task-section-sub {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  padding: 0 4px 6px 8px;
-}
-
-.task-section-sub .task-section-count {
-  flex: 1;
-  text-align: left;
-}
-
 .task-section-edit {
   flex: none;
   display: inline-grid;
   place-items: center;
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   border: 0;
   border-radius: 7px;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.12s ease;
-}
-
-.task-section:hover .task-section-edit,
-.task-section-edit:focus-visible {
-  opacity: 1;
+  transition: color 0.12s ease, background 0.12s ease;
 }
 
 .task-section-edit:hover {
   color: var(--text);
   background: var(--panel-2);
-}
-
-@media (hover: none) {
-  .task-section-edit {
-    opacity: 1;
-  }
 }
 
 .task-caret {
@@ -438,7 +419,7 @@ body {
 
 .task-section-count {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 600;
   letter-spacing: 0.02em;
 }
@@ -472,10 +453,6 @@ body {
 
 .density-compact .task-section-head {
   padding-top: 6px;
-}
-
-.density-compact .task-section-sub {
-  padding-bottom: 4px;
 }
 
 .task-section-list {
@@ -1860,7 +1837,7 @@ body {
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  padding: 16px 0 8px;
+  padding: 6px 0 8px;
 }
 
 .sidebar-avatar {
@@ -4535,6 +4512,29 @@ body {
   font-size: 12.5px;
 }
 
+.portal-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.grow {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.emoji-input {
+  width: 56px;
+  max-width: 56px;
+  text-align: center;
+}
+
+.field-full {
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+}
+
 .settings-note {
   color: var(--muted);
   font-size: 12px;
@@ -5365,7 +5365,7 @@ body {
 }
 
 .app.with-panel.with-office {
-  grid-template-columns: 320px 1fr 320px min(38vw, 600px);
+  grid-template-columns: 320px 1fr min(38vw, 640px) 320px;
 }
 
 .office3d-docked {
@@ -5396,7 +5396,7 @@ body {
 }
 
 .office3d-panel {
-  width: min(1200px, 96vw);
+  width: min(1200px, 96vw, calc((92vh - 110px) * 16 / 9));
   height: min(840px, 92vh);
   background: var(--panel);
   border: 1px solid var(--border);
@@ -5446,8 +5446,13 @@ body {
 
 .office3d-stage {
   position: relative;
-  flex: 1;
+  width: 100%;
+  flex: none;
+  aspect-ratio: 16 / 9;
+  margin-block: auto;
   min-height: 0;
+  isolation: isolate;
+  overflow: hidden;
   background: #0e1320;
 }
 
@@ -5533,7 +5538,9 @@ body {
   line-height: 1.4;
   white-space: nowrap;
   cursor: pointer;
-  transition: background 120ms ease, border-color 120ms ease;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease;
 }
 
 .office3d-desk-label button:hover {
@@ -5576,7 +5583,9 @@ body {
   cursor: pointer;
   display: grid;
   place-items: center;
-  transition: background 120ms ease, border-color 120ms ease;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease;
 }
 
 .office3d-controls button:hover {
