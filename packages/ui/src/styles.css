@@ -110,6 +110,13 @@ body,
   height: 100%;
 }
 
+html {
+  /* App shell: never scroll the document itself. `.app` is offset below the
+     fixed title bar, which otherwise makes the document overflow and lets the
+     page scroll the content behind the header. */
+  overflow: hidden;
+}
+
 body {
   background: var(--bg);
   color: var(--text);
