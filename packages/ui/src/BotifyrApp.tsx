@@ -257,6 +257,9 @@ function token(): string {
 
 const PENDING_KEY = "botifyr.pendingState";
 
+/** Remember the active top-level view (Chat / Feed / Startups) across reloads. */
+const WORKSPACE_FILTER_KEY = "botifyr.workspaceFilter";
+
 export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const client = useMemo(() => new BotifyrClient(CLOUD_URL), []);
   const [user, setUser] = useState<User | null>(null);
@@ -450,7 +453,10 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [botIntro, setBotIntro] = useState("");
   const [botWorkspace, setBotWorkspace] = useState("");
   const [collapsedWorkspaces, setCollapsedWorkspaces] = useState<Record<string, boolean>>({});
-  const [workspaceFilter, setWorkspaceFilter] = useState("personal");
+  const [workspaceFilter, setWorkspaceFilter] = useState<"personal" | "feed" | "startups">(() => {
+    const stored = localStorage.getItem(WORKSPACE_FILTER_KEY);
+    return stored === "feed" || stored === "startups" ? stored : "personal";
+  });
   /** Permalink target from `#post=<id>`; the Feed scrolls to and highlights it. */
   const [feedFocusPost, setFeedFocusPost] = useState<string | null>(null);
 
@@ -1044,6 +1050,16 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   useEffect(() => {
     localStorage.setItem("botifyr.useComputer", useComputer ? "1" : "0");
   }, [useComputer]);
+
+  // Persist the active top-level view so a reload/HMR stays on the same tab
+  // (e.g. the Feed) instead of snapping back to Chat.
+  useEffect(() => {
+    if (workspaceFilter === "feed" || workspaceFilter === "startups") {
+      localStorage.setItem(WORKSPACE_FILTER_KEY, workspaceFilter);
+    } else {
+      localStorage.removeItem(WORKSPACE_FILTER_KEY);
+    }
+  }, [workspaceFilter]);
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
@@ -1734,6 +1750,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     }
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(REFRESH_KEY);
+    localStorage.removeItem(WORKSPACE_FILTER_KEY);
+    setWorkspaceFilter("personal");
     client.setToken(null);
     client.setRefreshToken(null);
     setUser(null);
