@@ -50,7 +50,11 @@ test.describe("Composer publish journey", () => {
     await page.getByRole("button", { name: "Post" }).click();
 
     await expect(page.locator(".feed-composer-notice")).toContainText("Post published");
-    await expect(page.locator(".feed-post", { hasText: body }).first()).toBeVisible();
+    const card = page.locator(".feed-post", { hasText: body }).first();
+    await expect(card).toBeVisible();
+    // It renders through the shared PostCard, not a bare row.
+    await expect(card.locator(".feed-actions")).toBeVisible();
+    await expect(card.getByRole("button", { name: "Like" })).toBeVisible();
     // The composer resets only after the server confirms the post.
     await expect(page.getByLabel("Post text")).toHaveValue("");
   });

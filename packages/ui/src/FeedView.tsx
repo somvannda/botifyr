@@ -35,6 +35,12 @@ import { StoriesStrip } from "./Stories";
  * friends-only, enforced server-side.
  */
 
+/** Prepend a post unless it is already present, so a realtime refresh racing a
+ *  local insert can never render two cards for the same post. */
+function prependUnique(list: FeedPost[], post: FeedPost): FeedPost[] {
+  return list.some((existing) => existing.id === post.id) ? list : [post, ...list];
+}
+
 function HeartIcon({ size = 18, filled = false }: { size?: number; filled?: boolean }) {
   return (
     <svg
@@ -2394,7 +2400,7 @@ function PageView({
                     onDelete={removePost}
                     onBlock={(authorId) => setPosts((prev) => prev.filter((p) => p.author.id !== authorId))}
                     onOpenPage={onOpenPage}
-                    onRepost={(next) => setPosts((prev) => [next, ...prev])}
+                    onRepost={(next) => setPosts((prev) => prependUnique(prev, next))}
                   />
                 </div>
               ))}
@@ -2490,7 +2496,7 @@ function TagView({
               onChange={updatePost}
               onDelete={removePost}
               onBlock={(authorId) => setPosts((prev) => prev.filter((p) => p.author.id !== authorId))}
-              onRepost={(next) => setPosts((prev) => [next, ...prev])}
+              onRepost={(next) => setPosts((prev) => prependUnique(prev, next))}
               onOpenTag={onOpenTag}
             />
           ))
@@ -3533,7 +3539,7 @@ function AlbumView({
               onChange={updatePost}
               onDelete={removePost}
               onBlock={(authorId) => setPosts((prev) => prev.filter((p) => p.author.id !== authorId))}
-              onRepost={(next) => setPosts((prev) => [next, ...prev])}
+              onRepost={(next) => setPosts((prev) => prependUnique(prev, next))}
             />
           ))
         )}
@@ -3599,7 +3605,7 @@ function GroupView({
     setError(null);
     try {
       const created = await client.createPost({ body, groupId: group.id });
-      setPosts((prev) => [created, ...prev]);
+      setPosts((prev) => prependUnique(prev, created));
       setDraft("");
     } catch (err) {
       // Keep the text so a failed group post can be retried.
@@ -3698,7 +3704,7 @@ function GroupView({
               onChange={updatePost}
               onDelete={removePost}
               onBlock={(authorId) => setPosts((prev) => prev.filter((p) => p.author.id !== authorId))}
-              onRepost={(next) => setPosts((prev) => [next, ...prev])}
+              onRepost={(next) => setPosts((prev) => prependUnique(prev, next))}
             />
           ))
         )}
@@ -4134,7 +4140,7 @@ export function FeedView({
     client
       .getPost(focusPostId)
       .then((post) => {
-        if (active) setPosts((prev) => (prev.some((p) => p.id === post.id) ? prev : [post, ...prev]));
+        if (active) setPosts((prev) => prependUnique(prev, post));
       })
       .catch(() => {});
     return () => {
@@ -4417,8 +4423,9 @@ export function FeedView({
         album: attachments.length > 0 && album.trim() ? album.trim() : undefined,
         poll: pollOpen && poll.length >= 2 ? poll : undefined,
       });
-      // Confirm only after the server returned the created post.
-      setPosts((prev) => [post, ...prev]);
+      // Confirm only after the server returned the created post. Dedupe so a
+      // realtime refresh that already delivered it can't double the card.
+      setPosts((prev) => prependUnique(prev, post));
       if (scheduledAt) {
         setNotice(`Scheduled for ${new Date(scheduledAt).toLocaleString()}`);
       } else if (postAs) {
@@ -4451,7 +4458,7 @@ export function FeedView({
   const updatePost = (next: FeedPost) => setPosts((prev) => prev.map((p) => (p.id === next.id ? next : p)));
   const removePost = (id: string) => setPosts((prev) => prev.filter((p) => p.id !== id));
   /** A repost arrives as a new post at the top of the feed. */
-  const prependPost = (next: FeedPost) => setPosts((prev) => [next, ...prev]);
+  const prependPost = (next: FeedPost) => setPosts((prev) => prependUnique(prev, next));
   /** After blocking, drop that author's posts from the local feed. */
   const removeAuthorPosts = (authorId: string) =>
     setPosts((prev) => prev.filter((p) => p.author.id !== authorId));

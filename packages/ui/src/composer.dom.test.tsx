@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import type { BotifyrClient, FeedPost, Page } from "@botifyr/client";
+import type { BotifyrClient, FeedPost, Group, Page } from "@botifyr/client";
 import { FeedView } from "./FeedView";
 
 /**
@@ -248,6 +248,98 @@ describe("Composer publish lifecycle", () => {
     await waitFor(() =>
       expect((screen.getByRole("combobox", { name: "Post as" }) as HTMLSelectElement).value).toBe(""),
     );
+  });
+});
+
+/**
+ * Newly published posts must render through the shared `PostCard`, never as a
+ * bare row, and must never appear twice when a realtime refresh races the local
+ * insert (docs/composer-implementation-plan.md).
+ */
+describe("Newly published posts render through the shared card", () => {
+  it("renders the created post as a full PostCard", async () => {
+    const client = makeClient({
+      createPost: vi
+        .fn()
+        .mockImplementation((input: { body: string }) =>
+          Promise.resolve(makePost({ id: "new-post", body: input.body })),
+        ),
+    });
+    const { container } = renderFeed(client);
+    await screen.findByText("existing post");
+
+    fireEvent.change(screen.getByLabelText("Post text"), {
+      target: { value: "fresh from the composer" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Post" }));
+    await screen.findByText("Post published");
+
+    const cards = container.querySelectorAll<HTMLElement>(".feed-post");
+    expect(cards.length).toBe(2); // the new post + the seeded one
+    const first = cards[0];
+    expect(first.textContent).toContain("fresh from the composer");
+    // It is the real card, not a bare row: action bar + overflow menu.
+    expect(first.querySelector(".feed-actions")).toBeTruthy();
+    expect(within(first).getByRole("button", { name: "Like" })).toBeTruthy();
+    expect(within(first).getByRole("button", { name: "More options" })).toBeTruthy();
+  });
+
+  it("does not duplicate a post already delivered before the publish resolves", async () => {
+    const client = makeClient({
+      listFeed: vi.fn().mockResolvedValue({
+        items: [makePost({ id: "new-post", body: "dup post" })],
+        nextCursor: null,
+      }),
+      createPost: vi.fn().mockResolvedValue(makePost({ id: "new-post", body: "dup post" })),
+    });
+    const { container } = renderFeed(client);
+    await screen.findByText("dup post");
+
+    fireEvent.change(screen.getByLabelText("Post text"), { target: { value: "dup post" } });
+    fireEvent.click(screen.getByRole("button", { name: "Post" }));
+    await screen.findByText("Post published");
+
+    expect(screen.getAllByText("dup post")).toHaveLength(1);
+    expect(container.querySelectorAll(".feed-post")).toHaveLength(1);
+  });
+
+  it("renders a new group post through the same card", async () => {
+    const group: Group = {
+      id: "g1",
+      handle: "team",
+      name: "Team",
+      ownerId: "o1",
+      members: 3,
+      joined: true,
+      createdAt: new Date().toISOString(),
+    };
+    const client = makeClient({
+      getGroup: vi.fn().mockResolvedValue(group),
+      groupPosts: vi.fn().mockResolvedValue([]),
+      createPost: vi
+        .fn()
+        .mockImplementation((input: { body: string }) =>
+          Promise.resolve(makePost({ id: "g-post", body: input.body })),
+        ),
+    });
+    const { container } = render(
+      <FeedView
+        client={client}
+        cloudUrl="http://cloud"
+        viewerId="viewer-1"
+        groupHandle="team"
+        onOpenGroup={() => {}}
+      />,
+    );
+
+    const box = await screen.findByPlaceholderText(/Post in Team/);
+    fireEvent.change(box, { target: { value: "group hello" } });
+    fireEvent.click(screen.getByRole("button", { name: "Post" }));
+
+    await screen.findByText("group hello");
+    const card = container.querySelector<HTMLElement>(".feed-post");
+    expect(card?.textContent).toContain("group hello");
+    expect(card?.querySelector(".feed-actions")).toBeTruthy();
   });
 });
 
