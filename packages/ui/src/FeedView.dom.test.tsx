@@ -711,6 +711,22 @@ describe("Feed timeline & discovery", () => {
     // The list was NOT silently replaced — the old top is still rendered.
     expect(screen.getByText("old top post")).toBeTruthy();
   });
+
+  it("announces newly loaded posts to screen readers (FEED-D11)", async () => {
+    const p1 = makePost({ id: "a1", body: "first page post" });
+    const p2 = makePost({ id: "a2", body: "second page post" });
+    const listFeed = vi
+      .fn()
+      .mockResolvedValueOnce({ items: [p1], nextCursor: "c1" })
+      .mockResolvedValueOnce({ items: [p2], nextCursor: null });
+    const client = { ...makeClient([]), listFeed } as unknown as BotifyrClient;
+    render(<FeedView client={client} cloudUrl="http://cloud" viewerId="viewer-1" />);
+    await screen.findByText("first page post");
+
+    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+    await screen.findByText("second page post");
+    expect(screen.getByText("1 more post loaded")).toBeTruthy();
+  });
 });
 
 /**

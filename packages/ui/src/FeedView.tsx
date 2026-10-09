@@ -3491,6 +3491,8 @@ export function FeedView({
   const [cursor, setCursor] = useState<string | null>(null);
   const [pendingNew, setPendingNew] = useState(false);
   const [exhausted, setExhausted] = useState(false);
+  /** Polite live-region text announced to screen readers after pagination. */
+  const [liveMessage, setLiveMessage] = useState("");
   const [errorMode, setErrorMode] = useState<"reset" | "more">("reset");
   const [draft, setDraft] = useState(() => localStorage.getItem(FEED_DRAFT_KEY) ?? "");
   const [posting, setPosting] = useState(false);
@@ -3695,6 +3697,12 @@ export function FeedView({
           setPosts((prev) => [...prev, ...fresh.filter((post) => !prev.some((p) => p.id === post.id))]);
           // If a page added nothing new, stop auto-loading to avoid a loop.
           if (fresh.length === 0) setExhausted(true);
+          // Announce how much arrived, so screen-reader users know more loaded.
+          setLiveMessage(
+            fresh.length > 0
+              ? `${fresh.length} more ${fresh.length === 1 ? "post" : "posts"} loaded`
+              : "",
+          );
         }
         setCursor(page.nextCursor);
       } catch (err) {
@@ -4545,6 +4553,10 @@ export function FeedView({
               You're all caught up
             </div>
           ))}
+
+        <p className="visually-hidden" aria-live="polite">
+          {liveMessage}
+        </p>
 
         {!loading && posts.length > 0 && cursor && !exhausted && (
           <div ref={sentinelRef} className="feed-sentinel" aria-hidden="true" />
