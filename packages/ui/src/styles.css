@@ -304,7 +304,7 @@ body {
 /* Feed sidebar: friend-request actions (Agent 1). */
 .feed-rail-request-actions {
   display: flex;
-  gap: 6px;
+  gap: var(--space-2);
   flex-wrap: wrap;
 }
 
@@ -9120,13 +9120,13 @@ body {
 .page-photos {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .page-photo-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 6px;
+  gap: var(--space-2);
 }
 
 .page-photo {
@@ -11428,7 +11428,7 @@ a.feed-follow-btn {
 .feed-media-broken {
   display: grid;
   place-items: center;
-  gap: 6px;
+  gap: var(--space-2);
   min-height: 160px;
   background: var(--panel-2);
   color: var(--muted);
@@ -11444,7 +11444,7 @@ a.feed-follow-btn {
 
 /* POST-4/5: inline action + comment feedback. */
 .feed-post-feedback {
-  margin-top: 10px;
+  margin-top: var(--space-3);
   padding: 8px 11px;
   border-radius: var(--radius-sm);
   font-size: var(--text-sm);
@@ -11489,8 +11489,8 @@ a.feed-follow-btn {
 .feed-post-edit {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-top: 12px;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
 }
 
 .feed-post-edit-input {
@@ -11514,7 +11514,7 @@ a.feed-follow-btn {
 .feed-post-edit-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 /* POST-14: mention mini-profile. */
@@ -11569,14 +11569,14 @@ a.feed-follow-btn {
 .feed-profile-head {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 14px;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
 }
 
 .feed-profile-posts {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .feed-profile-posts .feed-post {
@@ -11636,7 +11636,7 @@ a.feed-follow-btn {
 .feed-confirm-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--space-2);
   margin-top: 18px;
 }
 
