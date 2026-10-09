@@ -4067,6 +4067,16 @@ body {
   border-color: var(--danger);
 }
 
+.ghost.small.cws-needs-you {
+  border-color: var(--warn-border);
+  color: var(--warn);
+  background: var(--warn-soft);
+}
+
+.ghost.small.cws-needs-you:hover:not(:disabled) {
+  border-color: var(--warn);
+}
+
 .link {
   background: none;
   border: none;

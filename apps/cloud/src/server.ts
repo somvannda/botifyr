@@ -55,8 +55,10 @@ import { encryptSecret, decryptSecret } from "./vault.js";
 import { oneShot, runTask, runtimeInfo, summarizeConversation } from "./runner.js";
 import {
   analyzeSource,
+  boardFingerprint,
   buildStandup,
   buildWeeklyReport,
+  hasOpenWork,
   planCompanyDirections,
   rewriteBrief,
   shouldRunSchedule,
@@ -1084,6 +1086,40 @@ export async function buildServer(options: ServerOptions) {
     }
   }
 
+  /**
+   * Work-driven continuation: after a scheduled run, if the board still has open
+   * work and the run actually moved it, fire the employee again shortly instead
+   * of waiting a full cadence — so it keeps delegating/doing the next task
+   * toward the goal. An hourly budget bounds the extra model spend.
+   */
+  const continueBudget = new Map<string, { count: number; since: number }>();
+  const CONTINUE_DELAY_MS = Math.max(15_000, Number(process.env.BOTIFYR_CONTINUE_DELAY_MS ?? 60_000));
+  const CONTINUE_MAX = Math.max(0, Number(process.env.BOTIFYR_CONTINUE_MAX ?? 20));
+  const CONTINUE_WINDOW_MS = 60 * 60 * 1000;
+
+  async function maybeContinueWorking(bot: Bot, workspaceId: string, before: string): Promise<void> {
+    if (CONTINUE_MAX === 0 || !bot.schedule) return;
+    const items = await store.listWorkItems(workspaceId).catch(() => []);
+    // Nothing left to do, or the run didn't change the board → stop (wait for cadence).
+    if (!hasOpenWork(items) || boardFingerprint(items) === before) return;
+    const now = Date.now();
+    const entry = continueBudget.get(bot.id);
+    const budget =
+      !entry || now - entry.since > CONTINUE_WINDOW_MS ? { count: 0, since: now } : entry;
+    if (budget.count >= CONTINUE_MAX) return;
+    budget.count += 1;
+    continueBudget.set(bot.id, budget);
+    bot.schedule = {
+      ...bot.schedule,
+      nextRunAt: new Date(now + CONTINUE_DELAY_MS).toISOString(),
+    };
+    await store.updateBot(bot);
+    app.log.info(
+      { botId: bot.id, userId: bot.userId, count: budget.count },
+      "scheduler: continuing while work remains",
+    );
+  }
+
   /** Run a bot's scheduled prompt with no incoming user message. */
   async function runScheduled(session: Session, bot: Bot, prompt: string): Promise<void> {
     const windowSize = maxHistoryTurns * 2;
@@ -1105,6 +1141,16 @@ export async function buildServer(options: ServerOptions) {
     rememberTask(task.id, session.id, bot.userId);
     emit({ type: "task.created", task });
 
+    // Snapshot the board so we can tell whether this run moved it. A run that
+    // finishes a task or delegates a new one changes the fingerprint.
+    const workspace = bot.workspace
+      ? ((await store.listWorkspaces(bot.userId)).find((entry) => entry.name === bot.workspace) ??
+        null)
+      : null;
+    const boardBefore = workspace
+      ? boardFingerprint(await store.listWorkItems(workspace.id).catch(() => []))
+      : "";
+
     // Reflect reality on the board: the employee's next task is now in progress,
     // and becomes done when the run finishes.
     await advanceAssignedItems(bot, "todo", "in_progress").catch(() => {});
@@ -1124,7 +1170,10 @@ export async function buildServer(options: ServerOptions) {
       },
       task,
     )
-      .then(() => advanceAssignedItems(bot, "in_progress", "done"))
+      .then(async () => {
+        await advanceAssignedItems(bot, "in_progress", "done");
+        if (workspace) await maybeContinueWorking(bot, workspace.id, boardBefore).catch(() => {});
+      })
       .catch((error) => app.log.error({ err: error, taskId: task.id }, "scheduled run failed"));
   }
 

@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   analyzeSource,
+  boardFingerprint,
   buildWeeklyReport,
   defaultCompany,
   enrichWithTemplate,
+  hasOpenWork,
   isBudgetExhausted,
   planCompany,
   planCompanyDirections,
@@ -12,6 +14,27 @@ import {
   shouldRunSchedule,
   withinOperatingHours,
 } from "./company.js";
+
+describe("board continuation signals", () => {
+  it("changes when the board status mix changes", () => {
+    const before = boardFingerprint([{ status: "todo" }, { status: "todo" }]);
+    const after = boardFingerprint([{ status: "done" }, { status: "todo" }]);
+    expect(before).not.toBe(after);
+  });
+
+  it("changes when a task is delegated (new item)", () => {
+    const before = boardFingerprint([{ status: "todo" }]);
+    const after = boardFingerprint([{ status: "todo" }, { status: "todo" }]);
+    expect(before).not.toBe(after);
+  });
+
+  it("is stable for the same board and reports open work", () => {
+    const items = [{ status: "done" }, { status: "in_progress" }];
+    expect(boardFingerprint(items)).toBe(boardFingerprint([...items]));
+    expect(hasOpenWork(items)).toBe(true);
+    expect(hasOpenWork([{ status: "done" }])).toBe(false);
+  });
+});
 
 describe("company onboarding planner", () => {
   it("derives a default org with exactly one chair", () => {

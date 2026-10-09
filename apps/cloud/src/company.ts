@@ -76,6 +76,26 @@ export function shouldRunSchedule(workspaceStatus: string | undefined): boolean 
   return workspaceStatus !== "paused" && workspaceStatus !== "archived";
 }
 
+/**
+ * A cheap fingerprint of a company board, used to tell whether a run actually
+ * moved it (an item changed status, a new item was delegated, …). Two different
+ * boards almost always yield different fingerprints.
+ */
+export function boardFingerprint(items: Array<{ status: string }>): string {
+  const counts = new Map<string, number>();
+  for (const item of items) counts.set(item.status, (counts.get(item.status) ?? 0) + 1);
+  const mix = [...counts.entries()]
+    .sort(([a], [b]) => (a < b ? -1 : 1))
+    .map(([status, n]) => `${status}=${n}`)
+    .join(",");
+  return `${items.length}:${mix}`;
+}
+
+/** True while a company board still has work that is not done. */
+export function hasOpenWork(items: Array<{ status: string }>): boolean {
+  return items.some((item) => item.status !== "done");
+}
+
 const WEEKDAYS: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
 
 /** Local day-of-week and hour (0–24) for `now` in an IANA timezone (default UTC). */
