@@ -6,12 +6,19 @@
 
 ## Current status
 
-**Destination v3 — IMPLEMENTED + locally TESTED (branch `agent/pages-videos`, PR pending).**
+**Destination v3 — INTEGRATED + VERIFIED.** Stage: PLANNED → IMPLEMENTED →
+TESTED → **INTEGRATED** (PR **#20**, squash-merged to `origin/main` as `d4d9118`)
+→ **VERIFIED** (CI green: Typecheck/Lint/Test + Cloud image).
 Adds a **Videos** section on top of v2: `GET /v1/pages/:handle/media?kind=video`
 (shared endpoint with Photos) + a lazy **Videos** tab with native playback.
 Local gate: `typecheck` 0, `lint` 0, `npm test` **475/475**; cloud Pages **12/12**;
-UI Pages **12/12**. (One `POST-13` full-run failure was a flake — it passes on
-re-run and on pristine `origin/main`.)
+UI Pages **12/12**.
+
+> ⚠️ **Known flaky test (not Pages):** `FeedView.dom.test.tsx > Post interactions
+> > "highlights the permalink-focused post (POST-13)"` intermittently fails
+> (`expected null to be truthy`) and broke CI once on PR #20 (passed on re-run and
+> on pristine `origin/main`). Owner: **Post Manager / Feed QA** — worth making
+> deterministic.
 
 **Destination v2 — INTEGRATED + VERIFIED.** Stage: PLANNED → IMPLEMENTED →
 TESTED → **INTEGRATED** (PR **#13**, squash-merged to `origin/main` as
