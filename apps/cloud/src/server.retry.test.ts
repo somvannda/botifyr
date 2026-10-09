@@ -162,10 +162,11 @@ describe("task retry", () => {
     });
     expect(response.statusCode).toBe(200);
 
-    // todo → in_progress (when the retry starts) → done (when it finishes).
+    // todo → in_progress (when the retry starts) → review (when it finishes);
+    // only company.report + a CEO verify move it to "done".
     await vi.waitFor(async () => {
       const [item] = await store.listWorkItems("ws1");
-      expect(item?.status).toBe("done");
+      expect(item?.status).toBe("review");
     });
     await app.close();
   });

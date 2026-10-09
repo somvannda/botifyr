@@ -1036,7 +1036,9 @@ export async function buildServer(options: ServerOptions) {
     emit({ type: "task.updated", task });
 
     // Mirror a fresh scheduled run so the board reflects the retry: the
-    // employee's item moves to "in progress" now, and to "done" when it finishes.
+    // employee's item moves to "in progress" now, and to "review" when the run
+    // finishes. It only becomes "done" when the employee records a result
+    // (company.report) and the CEO verifies it — so "done" always has a deliverable.
     if (bot) await advanceAssignedItems(bot, "todo", "in_progress").catch(() => {});
 
     const { mediaTask, initialToolCall, initialToolOnly } = confidentPlan(task.goal);
@@ -1058,7 +1060,7 @@ export async function buildServer(options: ServerOptions) {
       task,
     )
       .then(() =>
-        bot && task.status === "completed" ? advanceAssignedItems(bot, "in_progress", "done") : undefined,
+        bot && task.status === "completed" ? advanceAssignedItems(bot, "in_progress", "review") : undefined,
       )
       .catch((error) => app.log.error({ err: error, taskId: task.id }, "rerun task failed"));
 
@@ -1124,7 +1126,7 @@ export async function buildServer(options: ServerOptions) {
       },
       task,
     )
-      .then(() => advanceAssignedItems(bot, "in_progress", "done"))
+      .then(() => advanceAssignedItems(bot, "in_progress", "review"))
       .catch((error) => app.log.error({ err: error, taskId: task.id }, "scheduled run failed"));
   }
 
