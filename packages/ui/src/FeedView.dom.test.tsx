@@ -79,6 +79,7 @@ function makeClient(
     }),
     followPage: vi.fn().mockResolvedValue({ ok: true }),
     unfollowPage: vi.fn().mockResolvedValue(undefined),
+    listFriends: vi.fn().mockResolvedValue([]),
     listFriendRequests: vi.fn().mockResolvedValue([]),
     respondFriendRequest: vi.fn().mockResolvedValue({ ok: true, friend: true }),
     listComments: vi.fn().mockResolvedValue([]),
@@ -1475,5 +1476,28 @@ describe("Feed sidebar — friend requests (Agent 1)", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Accept" }));
     await waitFor(() => expect(respond).toHaveBeenCalledWith("r1", "accept"));
+  });
+});
+
+describe("Feed sidebar — online contacts (Agent 1)", () => {
+  it("lists online friends only", async () => {
+    const online: Person = { id: "f1", handle: "sam", displayName: "Sam", online: true };
+    const offline: Person = { id: "f2", handle: "lee", displayName: "Lee", online: false };
+    const client = {
+      ...makeClient([]),
+      suggestPeople: vi.fn().mockResolvedValue([]),
+      listBlocks: vi.fn().mockResolvedValue([]),
+      listTrending: vi.fn().mockResolvedValue([]),
+      listGroups: vi.fn().mockResolvedValue([]),
+      suggestPages: vi.fn().mockResolvedValue([]),
+      listAlbums: vi.fn().mockResolvedValue([]),
+      listFriendRequests: vi.fn().mockResolvedValue([]),
+      listFriends: vi.fn().mockResolvedValue([online, offline]),
+    } as unknown as BotifyrClient;
+
+    render(<FeedRail client={client} />);
+    await screen.findByText("Online now");
+    expect(screen.getByText("Sam")).toBeTruthy();
+    expect(screen.queryByText("Lee")).toBeNull();
   });
 });

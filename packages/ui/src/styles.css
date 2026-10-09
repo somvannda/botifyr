@@ -281,6 +281,24 @@ body {
   flex-wrap: wrap;
 }
 
+/* Feed sidebar: online-now presence dot (Agent 1). */
+.feed-rail-online-wrap {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+
+.feed-rail-online-dot {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-round);
+  background: var(--ok);
+  border: 2px solid var(--panel);
+}
+
 /* Right-rail section headings get a subtle separator (Agent 1 polish). */
 .feed-rail-section .feed-rail-head {
   padding-bottom: 6px;
