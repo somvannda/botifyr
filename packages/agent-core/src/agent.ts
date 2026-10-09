@@ -276,7 +276,7 @@ export async function runAgent(options: RunAgentOptions): Promise<AgentResult> {
         forceToolCall = true;
         options.onStreamReset?.();
         log("refusal detected; re-directing the agent to use its tools");
-        messages.push({ role: "assistant", content: text });
+        messages.push({ role: "assistant", content: text, reasoningContent: response.reasoningContent });
         messages.push({ role: "user", content: REFUSAL_REDIRECT });
         continue;
       }
@@ -291,7 +291,12 @@ export async function runAgent(options: RunAgentOptions): Promise<AgentResult> {
 
     forceToolCall = false;
 
-    messages.push({ role: "assistant", content: response.text ?? "", toolCalls: response.toolCalls });
+    messages.push({
+      role: "assistant",
+      content: response.text ?? "",
+      toolCalls: response.toolCalls,
+      reasoningContent: response.reasoningContent,
+    });
 
     for (const call of response.toolCalls) {
       stepCount += 1;

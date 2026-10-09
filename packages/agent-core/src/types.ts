@@ -29,6 +29,12 @@ export interface ModelResponse {
   text?: string;
   /** Optional short reasoning summary for the UI. */
   reasoning?: string;
+  /**
+   * The provider's raw chain-of-thought for this turn, when it exposes one.
+   * Thinking models such as DeepSeek require it to be echoed back on the next
+   * request; providers that don't expose it leave this undefined.
+   */
+  reasoningContent?: string;
   toolCalls: ToolCall[];
   /** Provider-reported token usage for this call, when available. */
   usage?: TokenUsage;
@@ -38,6 +44,8 @@ export interface ModelResponse {
 export interface AgentMessage {
   role: "system" | "user" | "assistant" | "tool";
   content: string;
+  /** Raw reasoning to echo back to thinking-mode providers (assistant turns). */
+  reasoningContent?: string;
   toolCalls?: ToolCall[];
   toolCallId?: string;
   toolName?: string;
