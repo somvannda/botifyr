@@ -314,6 +314,11 @@ export function decodeFeedCursor(cursor: string): { createdAt: string; id: strin
     : { createdAt: cursor.slice(0, index), id: cursor.slice(index + 1) };
 }
 
+/** Image media ids end with a known image extension (mirrors `feedPostOf`). */
+const isImageMedia = (id: string): boolean => /\.(png|jpe?g|webp|gif|avif)$/i.test(id);
+/** Video media ids end with a known video extension (mirrors `feedPostOf`). */
+const isVideoMedia = (id: string): boolean => /\.(mp4|m4v|webm|mov)$/i.test(id);
+
 export async function buildServer(options: ServerOptions) {
   const { store, vaultKey, localChannel } = options;
 
@@ -5398,23 +5403,79 @@ export async function buildServer(options: ServerOptions) {
     },
   );
 
-  app.get<{ Params: { handle: string } }>(
+  app.get<{ Params: { handle: string }; Querystring: { cursor?: string; limit?: string } }>(
     "/v1/pages/:handle/posts",
     { preHandler: requireAuth },
     async (request, reply) => {
       const page = await store.getPageByHandle(request.params.handle);
       if (!page) return reply.code(404).send({ error: "page not found" });
-      const all = await store.listPostsByAuthor(page.id, 20);
-      const pinned = page.pinnedPostId;
-      const posts = pinned
-        ? [...all.filter((post) => post.id === pinned), ...all.filter((post) => post.id !== pinned)]
-        : all;
+      const limit = Math.max(1, Math.min(50, Number(request.query?.limit ?? 20) || 20));
+      const cursor = request.query?.cursor?.trim() || undefined;
+      const before = cursor ? decodeFeedCursor(cursor) : undefined;
+      // Keyset pagination (DB-2), one extra row to detect "has more".
+      const records = await store.listFeedPosts([page.id], limit + 1, before);
+      const hasMore = records.length > limit;
+      const visible = hasMore ? records.slice(0, limit) : records;
+      // Pin to the top only on the first page, so pagination stays stable.
+      if (!before && page.pinnedPostId) {
+        const index = visible.findIndex((post) => post.id === page.pinnedPostId);
+        if (index > 0) visible.unshift(visible.splice(index, 1)[0]);
+      }
       const cache = new Map<string, FeedAuthorDto>();
       const items = [];
-      for (const record of posts) items.push(await feedPostOf(record, request.userId as string, cache));
-      return items;
+      for (const record of visible) items.push(await feedPostOf(record, request.userId as string, cache));
+      const last = visible[visible.length - 1];
+      return { items, nextCursor: hasMore && last ? encodeFeedCursor(last) : null };
     },
   );
+
+  /* A Page's photos (or videos): media attachments across its posts, newest first. */
+  app.get<{
+    Params: { handle: string };
+    Querystring: { cursor?: string; limit?: string; kind?: string };
+  }>("/v1/pages/:handle/media", { preHandler: requireAuth }, async (request, reply) => {
+    const page = await store.getPageByHandle(request.params.handle);
+    if (!page) return reply.code(404).send({ error: "page not found" });
+    const limit = Math.max(1, Math.min(60, Number(request.query?.limit ?? 30) || 30));
+    const cursor = request.query?.cursor?.trim() || undefined;
+    const kind = request.query?.kind === "video" ? "video" : "image";
+    const matches = kind === "video" ? isVideoMedia : isImageMedia;
+    let before = cursor ? decodeFeedCursor(cursor) : undefined;
+    const items: Array<{ id: string; url: string }> = [];
+    let last: PostRecord | undefined;
+    let exhausted = false;
+    // Walk posts in batches, collecting matching media until a full page is built.
+    while (items.length < limit) {
+      const batch = await store.listFeedPosts([page.id], 50, before);
+      if (batch.length === 0) {
+        exhausted = true;
+        break;
+      }
+      for (const record of batch) {
+        last = record;
+        const attached = await store.listPostMedia(record.id);
+        const mediaIds =
+          attached.length > 0
+            ? attached.map((entry) => entry.mediaId)
+            : record.mediaId
+              ? [record.mediaId]
+              : [];
+        for (const mediaId of mediaIds) {
+          if (!matches(mediaId)) continue;
+          items.push({ id: mediaId, url: `/v1/feed/image?t=${signImage(mediaId)}` });
+          if (items.length >= limit) break;
+        }
+        if (items.length >= limit) break;
+      }
+      if (batch.length < 50) {
+        exhausted = items.length < limit;
+        break;
+      }
+      before = { createdAt: batch[batch.length - 1].createdAt, id: batch[batch.length - 1].id };
+    }
+    const hasMore = !exhausted && items.length >= limit;
+    return { items, nextCursor: hasMore && last ? encodeFeedCursor(last) : null };
+  });
 
   app.post<{ Params: { id: string } }>(
     "/v1/pages/:id/follow",

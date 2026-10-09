@@ -68,7 +68,6 @@ Components **must** reference these, never raw color literals.
 | `--accent-border` | accent 45% | — | accent borders/badges |
 | `--accent-glow` | accent 35% | — | small accent shadow |
 | `--accent-solid` | `#5568e0` | `#3d52c2` | solid buttons with **white** text |
-| `--accent-2-solid` | `#6d4ad6` | — | second gradient stop for white-text buttons (`.btn.allow`) |
 | `--focus-ring` | `= --accent` | | focus outline |
 
 ### 1.5 Status

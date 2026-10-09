@@ -138,8 +138,8 @@ under the viewer; if it disappears, a guard effect closes the viewer.
 
 - The tray uses only the latest story's thumbnail for each creator (no eager load
   of every image).
-- No prefetch of next media this iteration (bandwidth/privacy); noted as
-  **Planned** (prefetch only the next story's image on tap).
+- **Prefetch (Done):** only the immediate next story's image is warmed (one ahead),
+  never a whole collection — bandwidth/privacy conscious, one request per story.
 - Exactly one `setTimeout` per active story; no overlapping timers.
 - No new media library introduced.
 

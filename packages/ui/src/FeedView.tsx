@@ -36,6 +36,7 @@ import {
   ShieldIcon,
   SmileyIcon,
   SparkIcon,
+  UserPlusIcon,
   UsersIcon,
   VolumeIcon,
 } from "./Icons";
@@ -49,6 +50,12 @@ import { StoriesStrip } from "./Stories";
  * `sharePost`, `listComments`, `addComment`, and `deletePost`. Visibility is
  * friends-only, enforced server-side.
  */
+
+/** Prepend a post unless it is already present, so a realtime refresh racing a
+ *  local insert can never render two cards for the same post. */
+function prependUnique(list: FeedPost[], post: FeedPost): FeedPost[] {
+  return list.some((existing) => existing.id === post.id) ? list : [post, ...list];
+}
 
 function HeartIcon({ size = 18, filled = false }: { size?: number; filled?: boolean }) {
   return (
@@ -1565,20 +1572,34 @@ function PageView({
   const [insightsOpen, setInsightsOpen] = useState(false);
   const [inbox, setInbox] = useState<Awaited<ReturnType<BotifyrClient["pageInbox"]>> | null>(null);
   const [inboxOpen, setInboxOpen] = useState(false);
-  const [section, setSection] = useState<"posts" | "about">("posts");
+  const [section, setSection] = useState<"posts" | "about" | "photos" | "videos">("posts");
   const [error, setError] = useState<string | null>(null);
   const [followError, setFollowError] = useState<string | null>(null);
   const [nonce, setNonce] = useState(0);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [media, setMedia] = useState<Array<{ id: string; url: string }>>([]);
+  const [mediaCursor, setMediaCursor] = useState<string | null>(null);
+  const [mediaLoading, setMediaLoading] = useState(false);
+  const [mediaLoadingMore, setMediaLoadingMore] = useState(false);
+  const [mediaLoaded, setMediaLoaded] = useState(false);
+  const [videos, setVideos] = useState<Array<{ id: string; url: string }>>([]);
+  const [videosCursor, setVideosCursor] = useState<string | null>(null);
+  const [videosLoading, setVideosLoading] = useState(false);
+  const [videosLoadingMore, setVideosLoadingMore] = useState(false);
+  const [videosLoaded, setVideosLoaded] = useState(false);
+  const [lightbox, setLightbox] = useState<number | null>(null);
 
   useEffect(() => {
     let active = true;
     setLoading(true);
     setError(null);
     Promise.all([client.getPage(handle), client.listPagePosts(handle)])
-      .then(([record, list]) => {
+      .then(([record, feed]) => {
         if (!active) return;
         setPage(record);
-        setPosts(list);
+        setPosts(feed.items);
+        setCursor(feed.nextCursor);
       })
       .catch(() => {
         if (active)
@@ -1591,6 +1612,105 @@ function PageView({
       active = false;
     };
   }, [client, handle, nonce]);
+
+  // The Photos section loads lazily, only when first opened.
+  useEffect(() => {
+    if (section !== "photos" || mediaLoaded || !page) return;
+    let active = true;
+    setMediaLoading(true);
+    client
+      .listPageMedia(page.handle)
+      .then((feed) => {
+        if (!active) return;
+        setMedia(feed.items);
+        setMediaCursor(feed.nextCursor);
+        setMediaLoaded(true);
+      })
+      .catch(() => {
+        if (active) setMediaLoaded(true);
+      })
+      .finally(() => {
+        if (active) setMediaLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [section, mediaLoaded, page, client]);
+
+  // The Videos section loads lazily, only when first opened.
+  useEffect(() => {
+    if (section !== "videos" || videosLoaded || !page) return;
+    let active = true;
+    setVideosLoading(true);
+    client
+      .listPageMedia(page.handle, undefined, 30, "video")
+      .then((feed) => {
+        if (!active) return;
+        setVideos(feed.items);
+        setVideosCursor(feed.nextCursor);
+        setVideosLoaded(true);
+      })
+      .catch(() => {
+        if (active) setVideosLoaded(true);
+      })
+      .finally(() => {
+        if (active) setVideosLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [section, videosLoaded, page, client]);
+
+  async function loadMore() {
+    if (!cursor || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const feed = await client.listPagePosts(handle, cursor);
+      setPosts((prev) => {
+        const seen = new Set(prev.map((post) => post.id));
+        return [...prev, ...feed.items.filter((post) => !seen.has(post.id))];
+      });
+      setCursor(feed.nextCursor);
+    } catch {
+      // Keep the cursor so the reader can retry.
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
+  async function loadMoreMedia() {
+    if (!mediaCursor || mediaLoadingMore) return;
+    setMediaLoadingMore(true);
+    try {
+      const feed = await client.listPageMedia(handle, mediaCursor);
+      setMedia((prev) => {
+        const seen = new Set(prev.map((item) => item.id));
+        return [...prev, ...feed.items.filter((item) => !seen.has(item.id))];
+      });
+      setMediaCursor(feed.nextCursor);
+    } catch {
+      // Keep the cursor so the reader can retry.
+    } finally {
+      setMediaLoadingMore(false);
+    }
+  }
+
+  async function loadMoreVideos() {
+    if (!videosCursor || videosLoadingMore) return;
+    setVideosLoadingMore(true);
+    try {
+      const feed = await client.listPageMedia(handle, videosCursor, 30, "video");
+      setVideos((prev) => {
+        const seen = new Set(prev.map((item) => item.id));
+        return [...prev, ...feed.items.filter((item) => !seen.has(item.id))];
+      });
+      setVideosCursor(feed.nextCursor);
+    } catch {
+      // Keep the cursor so the reader can retry.
+    } finally {
+      setVideosLoadingMore(false);
+    }
+  }
 
   const isAdmin = page?.role === "admin";
 
@@ -1627,7 +1747,9 @@ function PageView({
     try {
       await client.pinPagePost(page.id, postId);
       setPage({ ...page, pinnedPostId: postId ?? undefined });
-      setPosts(await client.listPagePosts(handle));
+      const feed = await client.listPagePosts(handle);
+      setPosts(feed.items);
+      setCursor(feed.nextCursor);
     } catch {
       // Leave the pin unchanged on failure.
     }
@@ -1941,6 +2063,24 @@ function PageView({
               >
                 About
               </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={section === "photos"}
+                className={`page-tab${section === "photos" ? " active" : ""}`}
+                onClick={() => setSection("photos")}
+              >
+                Photos
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={section === "videos"}
+                className={`page-tab${section === "videos" ? " active" : ""}`}
+                onClick={() => setSection("videos")}
+              >
+                Videos
+              </button>
             </div>
           </>
         ) : null}
@@ -2183,6 +2323,76 @@ function PageView({
                 )}
               </dl>
             </div>
+          ) : section === "photos" ? (
+            <div className="page-photos">
+              {mediaLoading ? (
+                <div className="feed-state">Loading…</div>
+              ) : media.length === 0 ? (
+                <div className="feed-state">No photos yet.</div>
+              ) : (
+                <>
+                  <div className="page-photo-grid">
+                    {media.map((item, index) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className="page-photo"
+                        onClick={() => setLightbox(index)}
+                        aria-label={`Open photo ${index + 1}`}
+                      >
+                        <img src={`${cloudUrl}${item.url}`} alt="" loading="lazy" />
+                      </button>
+                    ))}
+                  </div>
+                  {mediaCursor ? (
+                    <button
+                      type="button"
+                      className="feed-more"
+                      onClick={() => void loadMoreMedia()}
+                      disabled={mediaLoadingMore}
+                    >
+                      {mediaLoadingMore ? "Loading…" : "Load more photos"}
+                    </button>
+                  ) : (
+                    <div className="feed-end">You're all caught up</div>
+                  )}
+                </>
+              )}
+            </div>
+          ) : section === "videos" ? (
+            <div className="page-videos">
+              {videosLoading ? (
+                <div className="feed-state">Loading…</div>
+              ) : videos.length === 0 ? (
+                <div className="feed-state">No videos yet.</div>
+              ) : (
+                <>
+                  <div className="page-video-grid">
+                    {videos.map((item) => (
+                      <video
+                        key={item.id}
+                        className="page-video"
+                        src={`${cloudUrl}${item.url}`}
+                        controls
+                        preload="metadata"
+                      />
+                    ))}
+                  </div>
+                  {videosCursor ? (
+                    <button
+                      type="button"
+                      className="feed-more"
+                      onClick={() => void loadMoreVideos()}
+                      disabled={videosLoadingMore}
+                    >
+                      {videosLoadingMore ? "Loading…" : "Load more videos"}
+                    </button>
+                  ) : (
+                    <div className="feed-end">You're all caught up</div>
+                  )}
+                </>
+              )}
+            </div>
           ) : loading ? (
             <div className="feed-state">Loading…</div>
           ) : posts.length === 0 ? (
@@ -2192,24 +2402,48 @@ function PageView({
                 : "This Page hasn't posted yet."}
             </div>
           ) : (
-            posts.map((post) => (
-              <div key={post.id} className="feed-post-wrap">
-                {page.pinnedPostId === post.id && <div className="feed-repost-label">📌 Pinned</div>}
-                <PostCard
-                  post={post}
-                  client={client}
-                  cloudUrl={cloudUrl}
-                  canDelete={canManage === true || (!post.pageId && post.author.id === viewerId)}
-                  viewerId={viewerId}
-                  onChange={updatePost}
-                  onDelete={removePost}
-                  onBlock={(authorId) => setPosts((prev) => prev.filter((p) => p.author.id !== authorId))}
-                  onOpenPage={onOpenPage}
-                  onRepost={(next) => setPosts((prev) => [next, ...prev])}
-                />
-              </div>
-            ))
+            <>
+              {posts.map((post) => (
+                <div key={post.id} className="feed-post-wrap">
+                  {page.pinnedPostId === post.id && <div className="feed-repost-label">📌 Pinned</div>}
+                  <PostCard
+                    post={post}
+                    client={client}
+                    cloudUrl={cloudUrl}
+                    canDelete={canManage === true || (!post.pageId && post.author.id === viewerId)}
+                    viewerId={viewerId}
+                    onChange={updatePost}
+                    onDelete={removePost}
+                    onBlock={(authorId) => setPosts((prev) => prev.filter((p) => p.author.id !== authorId))}
+                    onOpenPage={onOpenPage}
+                    onRepost={(next) => setPosts((prev) => prependUnique(prev, next))}
+                  />
+                </div>
+              ))}
+              {cursor ? (
+                <button
+                  type="button"
+                  className="feed-more"
+                  onClick={() => void loadMore()}
+                  disabled={loadingMore}
+                >
+                  {loadingMore ? "Loading…" : "Load more"}
+                </button>
+              ) : (
+                <div className="feed-end">You're all caught up</div>
+              )}
+            </>
           ))}
+
+        {lightbox !== null && (
+          <MediaLightbox
+            images={media.map((item) => item.url)}
+            index={lightbox}
+            cloudUrl={cloudUrl}
+            onClose={() => setLightbox(null)}
+            onNavigate={setLightbox}
+          />
+        )}
       </div>
     </div>
   );
@@ -2278,7 +2512,7 @@ function TagView({
               onChange={updatePost}
               onDelete={removePost}
               onBlock={(authorId) => setPosts((prev) => prev.filter((p) => p.author.id !== authorId))}
-              onRepost={(next) => setPosts((prev) => [next, ...prev])}
+              onRepost={(next) => setPosts((prev) => prependUnique(prev, next))}
               onOpenTag={onOpenTag}
             />
           ))
@@ -3321,7 +3555,7 @@ function AlbumView({
               onChange={updatePost}
               onDelete={removePost}
               onBlock={(authorId) => setPosts((prev) => prev.filter((p) => p.author.id !== authorId))}
-              onRepost={(next) => setPosts((prev) => [next, ...prev])}
+              onRepost={(next) => setPosts((prev) => prependUnique(prev, next))}
             />
           ))
         )}
@@ -3562,7 +3796,7 @@ function GroupView({
     setPostError(null);
     try {
       const created = await client.createPost({ body, groupId: group.id });
-      setPosts((prev) => [created, ...prev]);
+      setPosts((prev) => prependUnique(prev, created));
       setDraft("");
     } catch (err) {
       // Keep the text so a failed group post can be retried.
@@ -4101,7 +4335,7 @@ function GroupView({
                   onChange={updatePost}
                   onDelete={removePost}
                   onBlock={(authorId) => setPosts((prev) => prev.filter((p) => p.author.id !== authorId))}
-                  onRepost={(next) => setPosts((prev) => [next, ...prev])}
+                  onRepost={(next) => setPosts((prev) => prependUnique(prev, next))}
                 />
               ))
             )}
@@ -4701,7 +4935,12 @@ export function FeedView({
   const [draft, setDraft] = useState(() => localStorage.getItem(FEED_DRAFT_KEY) ?? "");
   const [posting, setPosting] = useState(false);
   /** Set while media uploads run, so the composer can show n / total progress. */
-  const [upload, setUpload] = useState<{ done: number; total: number } | null>(null);
+  const [upload, setUpload] = useState<{
+    done: number;
+    total: number;
+    loaded: number;
+    totalBytes: number;
+  } | null>(null);
   /** Composer-specific errors stay separate from timeline-load errors. */
   const [composerError, setComposerError] = useState<string | null>(null);
   /** Transient confirmation shown after a successful publish/schedule. */
@@ -4871,7 +5110,7 @@ export function FeedView({
     client
       .getPost(focusPostId)
       .then((post) => {
-        if (active) setPosts((prev) => (prev.some((p) => p.id === post.id) ? prev : [post, ...prev]));
+        if (active) setPosts((prev) => prependUnique(prev, post));
       })
       .catch(() => {});
     return () => {
@@ -5115,17 +5354,33 @@ export function FeedView({
     uploadedMediaRef.current.clear();
     try {
       const mediaIds: string[] = [];
-      if (attachments.length > 0) setUpload({ done: 0, total: attachments.length });
+      const totalBytes = attachments.reduce((sum, file) => sum + file.size, 0);
+      let completedBytes = 0;
+      if (attachments.length > 0) {
+        setUpload({ done: 0, total: attachments.length, loaded: 0, totalBytes });
+      }
       for (const file of attachments) {
-        // Raw bytes, so large media isn't inflated by base64 on the wire.
-        const media = await client.uploadFileRaw({
-          name: file.name,
-          mime: file.mime,
-          blob: file.file,
-        });
+        // Raw bytes, so large media isn't inflated by base64 on the wire. The
+        // callback adds byte-level progress on top of the per-file count.
+        const media = await client.uploadFileRaw(
+          { name: file.name, mime: file.mime, blob: file.file },
+          (loaded) =>
+            setUpload({
+              done: mediaIds.length,
+              total: attachments.length,
+              loaded: completedBytes + loaded,
+              totalBytes,
+            }),
+        );
         uploadedMediaRef.current.set(file.id, media.id);
         mediaIds.push(media.id);
-        setUpload({ done: mediaIds.length, total: attachments.length });
+        completedBytes += file.size;
+        setUpload({
+          done: mediaIds.length,
+          total: attachments.length,
+          loaded: completedBytes,
+          totalBytes,
+        });
       }
       const poll = pollOptions.map((option) => option.trim()).filter(Boolean);
       const post = await client.createPost({
@@ -5138,8 +5393,9 @@ export function FeedView({
         album: attachments.length > 0 && album.trim() ? album.trim() : undefined,
         poll: pollOpen && poll.length >= 2 ? poll : undefined,
       });
-      // Confirm only after the server returned the created post.
-      setPosts((prev) => [post, ...prev]);
+      // Confirm only after the server returned the created post. Dedupe so a
+      // realtime refresh that already delivered it can't double the card.
+      setPosts((prev) => prependUnique(prev, post));
       if (scheduledAt) {
         setNotice(`Scheduled for ${new Date(scheduledAt).toLocaleString()}`);
       } else if (postAs) {
@@ -5172,7 +5428,7 @@ export function FeedView({
   const updatePost = (next: FeedPost) => setPosts((prev) => prev.map((p) => (p.id === next.id ? next : p)));
   const removePost = (id: string) => setPosts((prev) => prev.filter((p) => p.id !== id));
   /** A repost arrives as a new post at the top of the feed. */
-  const prependPost = (next: FeedPost) => setPosts((prev) => [next, ...prev]);
+  const prependPost = (next: FeedPost) => setPosts((prev) => prependUnique(prev, next));
   /** After blocking, drop that author's posts from the local feed. */
   const removeAuthorPosts = (authorId: string) =>
     setPosts((prev) => prev.filter((p) => p.author.id !== authorId));
@@ -5312,6 +5568,13 @@ export function FeedView({
       />,
     );
   }
+
+  // Byte-level progress when sizes are known, else fall back to file count.
+  const uploadPercent = upload
+    ? upload.totalBytes > 0
+      ? Math.round((upload.loaded / upload.totalBytes) * 100)
+      : Math.round((upload.done / Math.max(upload.total, 1)) * 100)
+    : 0;
 
   return (
     <div className="feed">
@@ -5567,17 +5830,14 @@ export function FeedView({
               role="progressbar"
               aria-label="Uploading media"
               aria-valuemin={0}
-              aria-valuemax={upload.total}
-              aria-valuenow={upload.done}
+              aria-valuemax={100}
+              aria-valuenow={uploadPercent}
             >
               <div className="feed-upload-track">
-                <div
-                  className="feed-upload-fill"
-                  style={{ width: `${Math.round((upload.done / upload.total) * 100)}%` }}
-                />
+                <div className="feed-upload-fill" style={{ width: `${uploadPercent}%` }} />
               </div>
               <span className="feed-upload-label">
-                Uploading {upload.done} / {upload.total}…
+                Uploading {uploadPercent}% ({upload.done}/{upload.total})
               </span>
             </div>
           )}
@@ -5803,6 +6063,8 @@ export function FeedRail({
   const [albums, setAlbums] = useState<Array<{ name: string; count: number }>>([]);
   const [requested, setRequested] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState<string | null>(null);
+  const [requests, setRequests] = useState<Array<{ id: string; person: Person }>>([]);
+  const [onlineFriends, setOnlineFriends] = useState<Person[]>([]);
 
   useEffect(() => {
     let active = true;
@@ -5918,6 +6180,37 @@ export function FeedRail({
     };
   }, [client]);
 
+  useEffect(() => {
+    let active = true;
+    client
+      .listFriendRequests()
+      .then((list) => {
+        if (!active) return;
+        setRequests(
+          list
+            .filter((entry) => entry.direction === "incoming")
+            .map((entry) => ({ id: entry.id, person: entry.person })),
+        );
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [client]);
+
+  useEffect(() => {
+    let active = true;
+    client
+      .listFriends()
+      .then((list) => {
+        if (active) setOnlineFriends(list.filter((person) => person.online).slice(0, 6));
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [client]);
+
   async function followSuggestedPage(page: Page) {
     try {
       await client.followPage(page.id);
@@ -5927,8 +6220,81 @@ export function FeedRail({
     }
   }
 
+  async function respondRequest(id: string, action: "accept" | "decline") {
+    try {
+      await client.respondFriendRequest(id, action);
+      setRequests((prev) => prev.filter((entry) => entry.id !== id));
+    } catch {
+      // Leave the row so the user can retry.
+    }
+  }
+
   return (
     <>
+      {requests.length > 0 && (
+        <div className="feed-rail-section">
+          <div className="feed-rail-head">
+            <UserPlusIcon size={15} /> Friend requests
+          </div>
+          <ul className="feed-rail-people">
+            {requests.map((entry) => (
+              <li key={entry.id} className="feed-rail-person">
+                <Avatar emoji={entry.person.avatarEmoji} name={entry.person.displayName} size={36} />
+                <div className="feed-rail-person-meta">
+                  <span className="feed-rail-person-name">
+                    {entry.person.displayName ||
+                      (entry.person.handle ? `@${entry.person.handle}` : "Someone")}
+                  </span>
+                  <span className="feed-rail-person-sub">
+                    {entry.person.handle ? `@${entry.person.handle}` : "New here"}
+                  </span>
+                </div>
+                <div className="feed-rail-request-actions">
+                  <button
+                    type="button"
+                    className="feed-follow-btn"
+                    onClick={() => void respondRequest(entry.id, "accept")}
+                  >
+                    Accept
+                  </button>
+                  <button
+                    type="button"
+                    className="feed-follow-btn"
+                    onClick={() => void respondRequest(entry.id, "decline")}
+                  >
+                    Decline
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {onlineFriends.length > 0 && (
+        <div className="feed-rail-section">
+          <div className="feed-rail-head">
+            <UsersIcon size={15} /> Online now
+          </div>
+          <ul className="feed-rail-people">
+            {onlineFriends.map((person) => (
+              <li key={person.id} className="feed-rail-person">
+                <span className="feed-rail-online-wrap">
+                  <Avatar emoji={person.avatarEmoji} name={person.displayName} size={36} />
+                  <span className="feed-rail-online-dot" aria-hidden="true" />
+                </span>
+                <div className="feed-rail-person-meta">
+                  <span className="feed-rail-person-name">
+                    {person.displayName || (person.handle ? `@${person.handle}` : "Someone")}
+                  </span>
+                  <span className="feed-rail-person-sub">
+                    {person.handle ? `@${person.handle}` : "Online"}
+                  </span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {groups.length > 0 && (
         <div className="feed-rail-section">
           <div className="feed-rail-head">

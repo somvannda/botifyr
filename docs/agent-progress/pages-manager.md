@@ -6,12 +6,38 @@
 
 ## Current status
 
-**Complete and fully green.** Pages tests 9/9; cloud Pages tests 10/10; E2E 4/4;
-visual E2E captured; whole-repo gate green (`typecheck` 0, `lint` 0,
-`npm test` 451/451). Delivered: three live-only bugs (PG-18 Postgres
-post-as-Page, PG-19 mobile clipping, PG-20 role-inaccurate controls), the
-`listPostMedia` consumer coordination fix, and **`pages.cta_url` end-to-end**
-(label + destination, schema → API → UI → tests).
+**Destination v3 — INTEGRATED + VERIFIED.** Stage: PLANNED → IMPLEMENTED →
+TESTED → **INTEGRATED** (PR **#20**, squash-merged to `origin/main` as `d4d9118`)
+→ **VERIFIED** (CI green: Typecheck/Lint/Test + Cloud image).
+Adds a **Videos** section on top of v2: `GET /v1/pages/:handle/media?kind=video`
+(shared endpoint with Photos) + a lazy **Videos** tab with native playback.
+Local gate: `typecheck` 0, `lint` 0, `npm test` **475/475**; cloud Pages **12/12**;
+UI Pages **12/12**.
+
+> ⚠️ **Known flaky test (not Pages):** `FeedView.dom.test.tsx > Post interactions
+> > "highlights the permalink-focused post (POST-13)"` intermittently fails
+> (`expected null to be truthy`) and broke CI once on PR #20 (passed on re-run and
+> on pristine `origin/main`). Owner: **Post Manager / Feed QA** — worth making
+> deterministic.
+
+**Destination v2 — INTEGRATED + VERIFIED.** Stage: PLANNED → IMPLEMENTED →
+TESTED → **INTEGRATED** (PR **#13**, squash-merged to `origin/main` as
+`3105f9d`) → **VERIFIED** (CI green: Typecheck/Lint/Test + Cloud image).
+Adds the three requested capabilities on top of the verified base:
+
+- **A — timeline pagination:** `GET /v1/pages/:handle/posts?cursor=&limit=` returns
+  `{ items, nextCursor }` (keyset over `(createdAt,id)`, pin-first on page 1);
+  client + `PageView` "Load more" (dedup on append).
+- **B — Photos section:** `GET /v1/pages/:handle/media` (image attachments,
+  signed URLs) + a lazy **Photos** tab and the shared lightbox.
+- **C — hash routing:** `#/pages/:handle` in `BotifyrApp` (refresh, share,
+  back/forward; activates the Feed view).
+
+Local gate in the worktree: `typecheck` 0, `lint` 0, `npm test` **462/462**;
+cloud Pages tests **12/12**; UI Pages tests **11/11**; CI green on the PR.
+
+**Prior verified base** (on `origin/main`): PG-18/19/20 fixes, `listPostMedia`
+coordination fix, `pages.cta_url`, E2E seed fix (PR #5), CI green.
 
 ## Problem statement
 
@@ -89,7 +115,7 @@ supported sections — not core functionality. See the audit for the ranked list
 - `npm run typecheck` (all workspaces) → **exit 0**. ✅
 - `npm run lint` → **exit 0**, 0 errors. ✅
 - `npx vitest run apps/cloud/src/server.pages.test.ts` → **9 passed / 9**. ✅
-- Pages component tests → **8 passed / 8** (incl. role coverage).
+- Pages component tests → **9 passed / 9** (incl. role + `cta_url` coverage).
 - `prettier --check` on Pages-authored files → **clean**. (`FeedView.tsx` is
   shared and concurrently edited; its remaining churn is in other managers'
   regions, not the `PageView` code.)
@@ -98,6 +124,9 @@ supported sections — not core functionality. See the audit for the ranked list
 - E2E (`E2E_PAGES_TOKEN=… E2E_BASE_URL=http://localhost:1420 npx playwright test e2e/pages.spec.ts`)
   → **4 passed**: discover/open, identity + posts, Posts/About nav, owner
   controls, mobile visibility. ✅
+- E2E seed made **unique per parallel worker** (a millisecond stamp could make
+  two workers race for one Page handle). Verified with 3 consecutive 4/4 runs;
+  shipped as **PR #5** (`94fdabe`), CI green (Typecheck/Lint/Test + Cloud image).
 
 > The repo churned heavily under concurrent edits during this session: gate runs
 > went transiently red from other managers' in-flight changes (Story viewer,
