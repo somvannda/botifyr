@@ -117,6 +117,8 @@ function StoryViewer({
   const suppressClickRef = useRef(false);
   const advanceRef = useRef<() => void>(() => {});
   const backRef = useRef<() => void>(() => {});
+  /** Story ids whose media we've already prefetched (avoid duplicate requests). */
+  const prefetchedRef = useRef<Set<string>>(new Set());
 
   // Reset per-story state whenever the active story changes.
   useEffect(() => {
@@ -157,6 +159,23 @@ function StoryViewer({
     onVisibility();
     return () => document.removeEventListener("visibilitychange", onVisibility);
   }, []);
+
+  // Warm only the immediate next story's image (one ahead) so advancing feels
+  // instant without loading an entire collection (bandwidth/privacy conscious).
+  useEffect(() => {
+    if (!story || !group) return;
+    const next =
+      storyIndex + 1 < group.stories.length
+        ? group.stories[storyIndex + 1]
+        : groupIndex + 1 < groups.length
+          ? groups[groupIndex + 1].stories[0]
+          : undefined;
+    if (!next?.imageUrl || prefetchedRef.current.has(next.id)) return;
+    prefetchedRef.current.add(next.id);
+    const image = new window.Image();
+    image.decoding = "async";
+    image.src = `${cloudUrl}${next.imageUrl}`;
+  }, [story, storyIndex, group, groupIndex, groups, cloudUrl]);
 
   function restart() {
     elapsedRef.current = 0;

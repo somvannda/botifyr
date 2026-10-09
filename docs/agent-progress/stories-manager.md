@@ -139,8 +139,8 @@ ESLint 0 errors; Prettier clean.
 
 ## Outstanding tasks
 
-1. Optional: prefetch only the next story's image.
-2. Optional: commit the work (currently uncommitted).
+None. This branch adds the optional next-image prefetch; the Stories feature is
+otherwise complete and integrated.
 
 ## Dependencies & blockers
 
