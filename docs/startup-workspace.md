@@ -41,7 +41,8 @@ The chat side panels are hidden while it is open, so it uses the full width.
   quests.
 - **Team** — employees with per-capability trust chips (gated / probation /
   trusted).
-- **Board** — work items with status.
+- **Board** — work items with status, plus a **Start a mission** form (the next
+  quest; one active at a time).
 - **Office** — opens the 3D office docked beside the pane (same data).
 - **Budget / Standup / Changes / Wiki** — token cap, reports, staged diffs,
   company docs.
@@ -52,6 +53,9 @@ A selector in the topbar: **Assisted** (`manual`), **Delegated** (`supervised`,
 the recommended default), and **Autonomous** (`autonomous`). Maps to
 `WorkspaceAutonomy`; the engine gates consequential actions by the capability
 ladder + budget.
+
+The **active mission** also carries its own **trust** dial and **token budget**
+(0 = inherit the workspace cap), set from the Current mission card.
 
 ## 5. Honesty
 
@@ -78,4 +82,3 @@ autonomy levels, AI rewrite, honest failures. The full gate
 
 - Embed the 3D office **inside** the pane (currently docked beside it).
 - Richer verification signals per work item ("result verified").
-- Per-quest budget/trust controls in the workspace (present in the engine).
