@@ -159,6 +159,19 @@ export interface FeedPost {
   myReaction?: string | null;
 }
 
+/** A community group with its own post stream. */
+export interface Group {
+  id: string;
+  handle: string;
+  name: string;
+  about?: string;
+  avatarEmoji?: string;
+  ownerId: string;
+  members: number;
+  joined: boolean;
+  createdAt: string;
+}
+
 /** A 24-hour ephemeral story. */
 export interface Story {
   id: string;
@@ -204,6 +217,8 @@ export interface Conversation {
   title: string;
   participants: string[];
   last?: { id: string; role: string; content: string; createdAt: string; senderId?: string };
+  /** Per-user last-read timestamps (read receipts). */
+  readAt?: Record<string, string>;
   createdAt: string;
 }
 
@@ -1083,6 +1098,15 @@ export class BotifyrClient {
     });
   }
 
+  /** Mark a conversation read up to now (read receipts). */
+  markConversationRead(id: string): Promise<{ ok: boolean }> {
+    return this.request(`/v1/conversations/${encodeURIComponent(id)}/read`, {
+      method: "POST",
+      json: true,
+      body: "{}",
+    });
+  }
+
   /** Remove a member from a group (removing yourself leaves the group). */
   removeConversationMember(id: string, userId: string): Promise<Session> {
     return this.request(`/v1/conversations/${encodeURIComponent(id)}/members/${encodeURIComponent(userId)}`, {
@@ -1170,6 +1194,7 @@ export class BotifyrClient {
     mediaId?: string;
     mediaIds?: string[];
     pageId?: string;
+    groupId?: string;
     audience?: "public" | "friends" | "only_me";
     scheduledAt?: string;
     poll?: string[];
@@ -1220,7 +1245,14 @@ export class BotifyrClient {
 
   /** A Page's community inbox: recent comments on its posts. */
   pageInbox(id: string): Promise<
-    Array<{ id: string; postId: string; body: string; hidden: boolean; createdAt: string; author: FeedAuthor }>
+    Array<{
+      id: string;
+      postId: string;
+      body: string;
+      hidden: boolean;
+      createdAt: string;
+      author: FeedAuthor;
+    }>
   > {
     return this.request(`/v1/pages/${id}/inbox`);
   }
@@ -1275,6 +1307,31 @@ export class BotifyrClient {
 
   listStories(): Promise<Story[]> {
     return this.request("/v1/stories");
+  }
+
+  /* Groups (communities). */
+  listGroups(): Promise<Group[]> {
+    return this.request("/v1/groups");
+  }
+
+  createGroup(input: { name: string; about?: string; avatarEmoji?: string }): Promise<Group> {
+    return this.request("/v1/groups", { method: "POST", json: true, body: JSON.stringify(input) });
+  }
+
+  getGroup(handle: string): Promise<Group> {
+    return this.request(`/v1/groups/${encodeURIComponent(handle)}`);
+  }
+
+  groupPosts(handle: string): Promise<FeedPost[]> {
+    return this.request(`/v1/groups/${encodeURIComponent(handle)}/posts`);
+  }
+
+  joinGroup(id: string): Promise<{ ok: boolean }> {
+    return this.request(`/v1/groups/${id}/join`, { method: "POST", json: true, body: "{}" });
+  }
+
+  leaveGroup(id: string): Promise<void> {
+    return this.request(`/v1/groups/${id}/join`, { method: "DELETE" });
   }
 
   /** Vote for an option in a post's poll. */

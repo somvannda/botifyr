@@ -10,6 +10,8 @@ import type {
   DeviceKey,
   FileRecord,
   FriendRequestRecord,
+  GroupMemberRecord,
+  GroupRecord,
   InvoiceRecord,
   LearnedSkillRecord,
   LedgerRecord,
@@ -84,6 +86,9 @@ export class MemoryStore implements Store {
   private postTags = new Map<string, Set<string>>();
   private polls = new Map<string, { options: Array<{ id: string; label: string }>; closesAt?: string }>();
   private stories = new Map<string, StoryRecord>();
+  private groups = new Map<string, GroupRecord>();
+  /** Keyed by `${groupId}:${userId}`. */
+  private groupMembers = new Map<string, GroupMemberRecord>();
   /** Keyed by `${postId}:${userId}` → optionId. */
   private pollVotes = new Map<string, string>();
   /** Keyed by `${commentId}:${userId}` → the viewer's reaction. */
@@ -870,6 +875,70 @@ export class MemoryStore implements Store {
     this.polls.delete(id);
     for (const key of [...this.pollVotes.keys()]) if (key.startsWith(`${id}:`)) this.pollVotes.delete(key);
     return true;
+  }
+
+  async createGroup(record: GroupRecord): Promise<void> {
+    this.groups.set(record.id, { ...record });
+  }
+
+  async getGroup(id: string): Promise<GroupRecord | null> {
+    const record = this.groups.get(id);
+    return record ? { ...record } : null;
+  }
+
+  async getGroupByHandle(handle: string): Promise<GroupRecord | null> {
+    const wanted = handle.replace(/^@/, "").toLowerCase();
+    for (const record of this.groups.values()) {
+      if (record.handle.toLowerCase() === wanted) return { ...record };
+    }
+    return null;
+  }
+
+  async listGroupsForUser(userId: string): Promise<GroupRecord[]> {
+    const ids = new Set<string>();
+    for (const member of this.groupMembers.values()) if (member.userId === userId) ids.add(member.groupId);
+    return [...this.groups.values()]
+      .filter((group) => ids.has(group.id))
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      .map((group) => ({ ...group }));
+  }
+
+  async updateGroup(record: GroupRecord): Promise<void> {
+    if (this.groups.has(record.id)) this.groups.set(record.id, { ...record });
+  }
+
+  async deleteGroup(ownerId: string, id: string): Promise<boolean> {
+    const record = this.groups.get(id);
+    if (!record || record.ownerId !== ownerId) return false;
+    this.groups.delete(id);
+    for (const [key, member] of [...this.groupMembers]) if (member.groupId === id) this.groupMembers.delete(key);
+    return true;
+  }
+
+  async setGroupMember(record: GroupMemberRecord): Promise<void> {
+    this.groupMembers.set(`${record.groupId}:${record.userId}`, { ...record });
+  }
+
+  async deleteGroupMember(groupId: string, userId: string): Promise<boolean> {
+    return this.groupMembers.delete(`${groupId}:${userId}`);
+  }
+
+  async isGroupMember(groupId: string, userId: string): Promise<boolean> {
+    return this.groupMembers.has(`${groupId}:${userId}`);
+  }
+
+  async listGroupPosts(groupId: string, limit: number): Promise<PostRecord[]> {
+    return [...this.posts.values()]
+      .filter((post) => post.groupId === groupId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, Math.max(1, Math.min(100, limit)))
+      .map((post) => ({ ...post }));
+  }
+
+  async listGroupMembers(groupId: string): Promise<GroupMemberRecord[]> {
+    return [...this.groupMembers.values()]
+      .filter((member) => member.groupId === groupId)
+      .map((member) => ({ ...member }));
   }
 
   async createStory(record: StoryRecord): Promise<void> {

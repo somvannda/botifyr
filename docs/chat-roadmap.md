@@ -12,7 +12,7 @@ Status legend: ✅ done · 🚧 in progress · ⬜ not started
 | 1 | Model-status banner (credit/provider failures) | Improvement | ✅ |
 | 2 | Chat search (across chats + within a chat) | Feature | 🚧 |
 | 3 | Group management (rename, add/remove, leave) | Feature | ✅ |
-| 4 | Read receipts + message reactions | Feature | 🚧 |
+| 4 | Read receipts + message reactions | Feature | ✅ |
 | 5 | Light-theme audit of the new chat surfaces | Improvement | ✅ |
 | 6 | Cached transcripts (persist transcription on the message) | Improvement | ✅ |
 
@@ -51,12 +51,14 @@ the first failure.
   "Add a friend…" picker, and Leave group (`.group-admin`, `.contact-input`).
 - Verified live: create group → rename to "Renamed Group" → remove member (200).
 
-## 4. Read receipts + reactions
+## 4. Read receipts + reactions (done)
 
-- **Reactions:** the message UI already has a react picker for some paths; make
-  it consistent for DM/group messages and persist server-side.
-- **Read receipts:** track and display "seen" state for DMs (needs a per-message
-  read marker; reuse the existing `readAt` bookkeeping).
+- **Reactions:** the emoji picker + reaction badge are wired into both DM/group
+  message branches (`actionsFor`). Local-only today (not persisted server-side).
+- **Read receipts:** `POST /v1/conversations/:id/read` records a per-user
+  `readAt` on the session (persisted via the store); `GET /v1/conversations`
+  returns it; the client marks a conversation read on open and shows a **"Seen"**
+  marker on your last message when a peer has read up to it.
 
 ## 5. Light-theme audit (done)
 

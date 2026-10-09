@@ -224,6 +224,8 @@ export interface SessionRecord {
   participants?: string[];
   summary?: string;
   summaryUpTo?: number;
+  /** For human conversations: per-user last-read timestamps (read receipts). */
+  readAt?: Record<string, string>;
 }
 
 /** A bot: a named agent that owns one conversation thread. */
@@ -470,6 +472,8 @@ export interface Store {
   deleteGroupMember(groupId: string, userId: string): Promise<boolean>;
   isGroupMember(groupId: string, userId: string): Promise<boolean>;
   listGroupMembers(groupId: string): Promise<GroupMemberRecord[]>;
+  /** Newest-first posts belonging to a group. */
+  listGroupPosts(groupId: string, limit: number): Promise<PostRecord[]>;
 
   /* Stories (docs/feed-next.md §FR-13) */
   createStory(record: StoryRecord): Promise<void>;

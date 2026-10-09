@@ -106,7 +106,11 @@ with percentages + the viewer's vote.
 `listActiveStories`, `POST`/`GET /v1/stories`, and a feed **stories strip** with a
 viewer overlay. Image/text stories; expiration is enforced on read.
 
-**Everything else** in this document (groups, live, …) is **not started**.
+**Groups — backend done.** `groups` / `group_members` tables, `Store` methods,
+`posts.group_id`, and `/v1/groups…` routes (create, list, get, join/leave,
+group posts) with membership-gated posting (`server.groups.test.ts`). **UI open.**
+
+**Everything else** in this document (live, analytics export, …) is **not started**.
 
 > **Reconciled with the product as of Oct 2026.** Facebook's reference section
 > (§1) reflects its 2026 behaviour; §2 and §5 note where Botifyr has already moved

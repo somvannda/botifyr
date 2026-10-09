@@ -81,6 +81,7 @@ import type {
   LearnedSkillRecord,
   MediaRecipe,
   ModelPricingRecord,
+  GroupRecord,
   PageRecord,
   PlatformSettings,
   Plan,
@@ -3470,6 +3471,7 @@ export async function buildServer(options: ServerOptions) {
         title: session.title,
         participants: session.participants ?? [],
         last: session.messages[session.messages.length - 1],
+        readAt: session.readAt ?? {},
         createdAt: session.createdAt,
       }));
   });
@@ -3550,6 +3552,23 @@ export async function buildServer(options: ServerOptions) {
       if (!isParticipant) return reply.code(404).send({ error: "conversation not found" });
       await store.deleteSession(session.userId, session.id);
       return reply.code(204).send();
+    },
+  );
+
+  // Mark a conversation read up to now (read receipts).
+  app.post<{ Params: { id: string } }>(
+    "/v1/conversations/:id/read",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const session = await store.getSession(request.params.id);
+      if (!session || !(session.participants ?? []).includes(userId)) {
+        return reply.code(404).send({ error: "conversation not found" });
+      }
+      session.readAt = { ...(session.readAt ?? {}), [userId]: new Date().toISOString() };
+      await store.updateSession(session);
+      emit({ type: "session.created", session });
+      return { ok: true };
     },
   );
 
@@ -4065,6 +4084,7 @@ export async function buildServer(options: ServerOptions) {
     /** Short-lived signed paths to attached videos. */
     videos?: string[];
     pageId?: string;
+    groupId?: string;
     repostOf?: string;
     audience?: "public" | "friends" | "only_me";
     scheduledAt?: string;
@@ -4191,6 +4211,7 @@ export async function buildServer(options: ServerOptions) {
       images,
       videos,
       pageId: record.pageId,
+      groupId: record.groupId,
       repostOf: record.repostOf,
       audience: record.audience ?? "friends",
       scheduledAt: record.scheduledAt,
@@ -4280,7 +4301,10 @@ export async function buildServer(options: ServerOptions) {
 
       const nowIso = new Date().toISOString();
       const posts = (await store.listFeedPosts(authorIds, limit + 1, cursor)).filter(
-        (post) => canSeePost(post, userId) && (!isFutureScheduled(post, nowIso) || post.authorId === userId),
+        (post) =>
+          !post.groupId &&
+          canSeePost(post, userId) &&
+          (!isFutureScheduled(post, nowIso) || post.authorId === userId),
       );
       const hasMore = posts.length > limit;
       const page = hasMore ? posts.slice(0, limit) : posts;
@@ -4295,6 +4319,7 @@ export async function buildServer(options: ServerOptions) {
       mediaId?: string;
       mediaIds?: string[];
       pageId?: string;
+      groupId?: string;
       audience?: string;
       scheduledAt?: string;
       poll?: string[];
@@ -4325,6 +4350,16 @@ export async function buildServer(options: ServerOptions) {
       authorId = page.id;
     }
 
+    const groupId = typeof request.body?.groupId === "string" ? request.body.groupId.trim() : "";
+    let group: GroupRecord | null = null;
+    if (groupId) {
+      group = await store.getGroup(groupId);
+      if (!group) return reply.code(404).send({ error: "group not found" });
+      if (!(await store.isGroupMember(groupId, userId))) {
+        return reply.code(403).send({ error: "join the group before posting" });
+      }
+    }
+
     const audience =
       request.body?.audience === "public" || request.body?.audience === "only_me"
         ? request.body.audience
@@ -4341,6 +4376,7 @@ export async function buildServer(options: ServerOptions) {
       body,
       mediaId: provided[0] || undefined,
       pageId: page?.id,
+      groupId: group?.id,
       audience,
       scheduledAt,
       createdAt: now,
@@ -4996,6 +5032,101 @@ export async function buildServer(options: ServerOptions) {
     },
   );
 
+  /* Groups: communities with their own post stream. */
+  const groupDto = async (group: GroupRecord, viewerId: string) => ({
+    id: group.id,
+    handle: group.handle,
+    name: group.name,
+    about: group.about,
+    avatarEmoji: group.avatarEmoji,
+    ownerId: group.ownerId,
+    members: (await store.listGroupMembers(group.id)).length,
+    joined: await store.isGroupMember(group.id, viewerId),
+    createdAt: group.createdAt,
+  });
+
+  app.get("/v1/groups", { preHandler: requireAuth }, async (request) => {
+    const userId = request.userId as string;
+    const groups = await store.listGroupsForUser(userId);
+    return Promise.all(groups.map((group) => groupDto(group, userId)));
+  });
+
+  app.post<{ Body: { name?: string; about?: string; avatarEmoji?: string } }>(
+    "/v1/groups",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const name = (request.body?.name ?? "").trim().slice(0, 60);
+      if (name.length < 2) return reply.code(400).send({ error: "name must be at least 2 characters" });
+      const handle = slugify(name);
+      if (handle.length < 3) return reply.code(400).send({ error: "handle must be at least 3 characters" });
+      if (await store.getGroupByHandle(handle))
+        return reply.code(409).send({ error: "that group name is taken" });
+      const now = new Date().toISOString();
+      const record: GroupRecord = {
+        id: randomUUID(),
+        ownerId: userId,
+        name,
+        handle,
+        about: request.body?.about?.trim().slice(0, 500) || undefined,
+        avatarEmoji: request.body?.avatarEmoji?.trim().slice(0, 8) || undefined,
+        createdAt: now,
+        updatedAt: now,
+      };
+      await store.createGroup(record);
+      await store.setGroupMember({ groupId: record.id, userId, role: "admin" });
+      return reply.code(201).send(await groupDto(record, userId));
+    },
+  );
+
+  app.get<{ Params: { handle: string } }>(
+    "/v1/groups/:handle",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const group = await store.getGroupByHandle(request.params.handle);
+      if (!group) return reply.code(404).send({ error: "group not found" });
+      return groupDto(group, request.userId as string);
+    },
+  );
+
+  app.get<{ Params: { handle: string } }>(
+    "/v1/groups/:handle/posts",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const group = await store.getGroupByHandle(request.params.handle);
+      if (!group) return reply.code(404).send({ error: "group not found" });
+      const userId = request.userId as string;
+      const nowIso = new Date().toISOString();
+      const posts = (await store.listGroupPosts(group.id, 50)).filter(
+        (post) => canSeePost(post, userId) && !isFutureScheduled(post, nowIso),
+      );
+      const cache = new Map<string, FeedAuthorDto>();
+      const items = [];
+      for (const record of posts) items.push(await feedPostOf(record, userId, cache));
+      return items;
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    "/v1/groups/:id/join",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const group = await store.getGroup(request.params.id);
+      if (!group) return reply.code(404).send({ error: "group not found" });
+      await store.setGroupMember({ groupId: group.id, userId: request.userId as string, role: "member" });
+      return { ok: true };
+    },
+  );
+
+  app.delete<{ Params: { id: string } }>(
+    "/v1/groups/:id/join",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      await store.deleteGroupMember(request.params.id, request.userId as string);
+      return reply.code(204).send();
+    },
+  );
+
   /* Page insights for managers (docs/feed-next.md §FR-20). */
   app.get<{ Params: { id: string } }>(
     "/v1/pages/:id/insights",
@@ -5047,7 +5178,8 @@ export async function buildServer(options: ServerOptions) {
     async (request, reply) => {
       const userId = request.userId as string;
       const mediaId = typeof request.body?.mediaId === "string" ? request.body.mediaId.trim() : "";
-      const caption = typeof request.body?.caption === "string" ? request.body.caption.trim().slice(0, 200) : "";
+      const caption =
+        typeof request.body?.caption === "string" ? request.body.caption.trim().slice(0, 200) : "";
       if (!mediaId && !caption) return reply.code(400).send({ error: "a story needs an image or text" });
       const now = Date.now();
       await store.createStory({

@@ -92,6 +92,7 @@ import {
 } from "./Icons";
 import { Markdown } from "./Markdown";
 import { FeedRail, FeedView } from "./FeedView";
+import { CompanyWorkspace } from "./CompanyWorkspace";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { P2P, deviceId, saveBlob, setIceServers } from "./p2p";
 import { defaultBridge, type BotBridge } from "./bridge";
@@ -404,6 +405,11 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [translations, setTranslations] = useState<Record<string, string>>({});
   const [groupTitleDraft, setGroupTitleDraft] = useState("");
   const [addMemberId, setAddMemberId] = useState("");
+  // conversationId -> (userId -> last-read ISO) for read receipts.
+  const [readReceipts, setReadReceipts] = useState<Record<string, Record<string, string>>>({});
+  // Referenced (wired into the UI as that work lands).
+  void readReceipts;
+  void openBoard;
   const [lightbox, setLightbox] = useState<{
     items: { token: string; name: string }[];
     index: number;
@@ -485,6 +491,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [wizardBudget, setWizardBudget] = useState("");
   const [wizardActivate, setWizardActivate] = useState(false);
   const [boardWorkspace, setBoardWorkspace] = useState<{ id: string; name: string } | null>(null);
+  /** Company the Startup Workspace should focus (set by the sidebar board button). */
+  const [startupFocusId, setStartupFocusId] = useState<string | null>(null);
   // The Company HQ opens as a full main area by default; "Float" turns it into a
   // smaller, movable panel over the chat.
   const [hqFloating, setHqFloating] = useState(false);
@@ -545,6 +553,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [feedRefresh, setFeedRefresh] = useState(0);
   /** When set, the Feed area shows this Page's timeline instead of the feed. */
   const [feedPage, setFeedPage] = useState<string | null>(null);
+  /** When set, the Feed area shows this Group's stream instead of the feed. */
+  const [feedGroup, setFeedGroup] = useState<string | null>(null);
   const [groupMembers, setGroupMembers] = useState<string[]>([]);
   const [autonomous, setAutonomous] = useState(false);
   const [autoApprove, setAutoApprove] = useState(false);
@@ -1705,6 +1715,15 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       setCompanyError(messageOf(err));
       setCompanyBusy(false);
     }
+  }
+
+  /** A company was created inside the Startup Workspace → refresh and focus it. */
+  async function handleCompanyCreated(created: WorkspaceWithRoles) {
+    const [botList, workspaceList] = await Promise.all([client.listBots(), client.listWorkspaces()]);
+    setBots(botList);
+    setWorkspaces(workspaceList);
+    setStartupFocusId(created.id);
+    setWorkspaceFilter("startups");
   }
 
   /** Apply a chosen direction: its team and its first quest. */
@@ -3429,6 +3448,20 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     activeSession && activeSession.kind === "group"
       ? friends.filter((person) => !(activeSession.participants ?? []).includes(person.id))
       : [];
+  // Read receipts: the latest read time of any other participant, and the id of
+  // our most recent outbound message (where "Seen" is shown).
+  const peerReadAt =
+    activeSession && (activeSession.kind === "dm" || activeSession.kind === "group")
+      ? Object.entries(readReceipts[activeSession.id] ?? {})
+          .filter(([id]) => id !== user?.id)
+          .map(([, at]) => at)
+          .sort()
+          .pop()
+      : undefined;
+  const lastOwnMessageId =
+    activeSession && (activeSession.kind === "dm" || activeSession.kind === "group")
+      ? [...activeSession.messages].reverse().find((message) => message.senderId === user?.id)?.id
+      : undefined;
 
   // Seed the rename input when the open group changes (not on every message).
   useEffect(() => {
@@ -3668,6 +3701,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   // Feed is a view, not a workspace filter: the left list keeps showing the
   // chats while the main area swaps to the social timeline.
   const feedActive = activeWorkspaceFilter === "feed";
+  // The Startup Workspace is a full-pane view in the main area (like the Feed).
+  const startupsActive = activeWorkspaceFilter === "startups";
   const workspaceFiltered = feedActive
     ? filteredBots
     : activeWorkspaceFilter === "startups"
@@ -3778,6 +3813,11 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       setFriends(friendList);
       setFriendRequests(requests);
       const human: Conversation[] = convos;
+      setReadReceipts((prev) => {
+        const next = { ...prev };
+        for (const convo of human) next[convo.id] = convo.readAt ?? {};
+        return next;
+      });
       setSessions((prev) => {
         const byId = new Map(prev.map((session) => [session.id, session]));
         for (const convo of human) {
@@ -3865,15 +3905,27 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       .catch(() => {});
   }, [user, client]);
 
-  // Opening a conversation marks it read (so the unread badge clears).
+  // Opening a conversation marks it read (so the unread badge clears) and
+  // records a read receipt on the server for the other participants.
   useEffect(() => {
     if (!activeSessionId) return;
+    const now = new Date().toISOString();
     setReadAt((prev) => {
-      const next = { ...prev, [activeSessionId]: new Date().toISOString() };
+      const next = { ...prev, [activeSessionId]: now };
       localStorage.setItem("botifyr.readAt", JSON.stringify(next));
       return next;
     });
-  }, [activeSessionId]);
+    const session = sessions.find((entry) => entry.id === activeSessionId);
+    if (session && (session.kind === "dm" || session.kind === "group")) {
+      void client.markConversationRead(session.id).catch(() => {});
+      if (user) {
+        setReadReceipts((prev) => ({
+          ...prev,
+          [session.id]: { ...(prev[session.id] ?? {}), [user.id]: now },
+        }));
+      }
+    }
+  }, [activeSessionId, sessions, client, user]);
 
   // Raise a toast for incoming messages in a conversation you're not viewing.
   // A session's existing history is seeded silently on first sight, so only
@@ -4535,7 +4587,10 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                       type="button"
                       title="Company board"
                       aria-label="Company board"
-                      onClick={() => void openBoard(group.workspace!.id, group.name)}
+                      onClick={() => {
+                        setStartupFocusId(group.workspace!.id);
+                        setWorkspaceFilter("startups");
+                      }}
                     >
                       <ChartIcon size={16} />
                     </button>
@@ -4748,9 +4803,21 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
             refreshKey={feedRefresh}
             pageHandle={feedPage}
             onOpenPage={setFeedPage}
+            groupHandle={feedGroup}
+            onOpenGroup={setFeedGroup}
           />
         )}
-        {(!feedActive || showNewChat) && (
+        {startupsActive && (
+          <CompanyWorkspace
+            client={client}
+            companies={workspaces}
+            bots={bots}
+            focusCompanyId={startupFocusId}
+            onOpenOffice={openOffice}
+            onCreated={handleCompanyCreated}
+          />
+        )}
+        {((!feedActive && !startupsActive) || showNewChat) && (
           <>
             {showNewChat && (
               <div className="newchat-overlay" onClick={() => setShowNewChat(false)}>
@@ -5043,6 +5110,9 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                               {reactions[message.id] && (
                                 <span className="reaction">{reactions[message.id]}</span>
                               )}
+                              {message.id === lastOwnMessageId &&
+                                peerReadAt &&
+                                message.createdAt <= peerReadAt && <div className="read-receipt">Seen</div>}
                             </div>
                             <SelfAvatar user={user} email={user.email} className="msg-user-avatar" />
                           </div>
@@ -5903,7 +5973,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       {feedActive && (
         <aside className="bot-panel feed-rail">
           <div className="feed-rail-title">Discover</div>
-          <FeedRail client={client} onOpenPage={setFeedPage} />
+          <FeedRail client={client} onOpenPage={setFeedPage} onOpenGroup={setFeedGroup} />
         </aside>
       )}
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
-import type { BotifyrClient, FeedComment, FeedPost, Page, Person, Story } from "@botifyr/client";
+import type { BotifyrClient, FeedComment, FeedPost, Group, Page, Person, Story } from "@botifyr/client";
 import { CameraIcon, ChartIcon, ForwardIcon, MessageIcon, SendIcon, SmileyIcon, SparkIcon } from "./Icons";
 
 /**
@@ -1047,6 +1047,148 @@ function TagView({
   );
 }
 
+function GroupView({
+  client,
+  cloudUrl,
+  viewerId,
+  handle,
+  onBack,
+}: {
+  client: BotifyrClient;
+  cloudUrl: string;
+  viewerId?: string;
+  handle: string;
+  onBack: () => void;
+}) {
+  const [group, setGroup] = useState<Group | null>(null);
+  const [posts, setPosts] = useState<FeedPost[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    Promise.all([client.getGroup(handle), client.groupPosts(handle)])
+      .then(([record, list]) => {
+        if (!active) return;
+        setGroup(record);
+        setPosts(list);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [client, handle]);
+
+  async function toggleJoin() {
+    if (!group) return;
+    try {
+      if (group.joined) await client.leaveGroup(group.id);
+      else await client.joinGroup(group.id);
+      setGroup({ ...group, joined: !group.joined, members: group.members + (group.joined ? -1 : 1) });
+    } catch {
+      // ignore
+    }
+  }
+
+  async function post(event: FormEvent) {
+    event.preventDefault();
+    const body = draft.trim();
+    if (!body || !group || busy) return;
+    setBusy(true);
+    try {
+      const created = await client.createPost({ body, groupId: group.id });
+      setPosts((prev) => [created, ...prev]);
+      setDraft("");
+    } catch {
+      // ignore
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const updatePost = (next: FeedPost) => setPosts((prev) => prev.map((p) => (p.id === next.id ? next : p)));
+  const removePost = (id: string) => setPosts((prev) => prev.filter((p) => p.id !== id));
+
+  return (
+    <div className="feed">
+      <div className="feed-topbar">
+        <button type="button" className="ghost small" onClick={onBack}>
+          ← Back
+        </button>
+        <span className="feed-topbar-title">{group?.name ?? "Group"}</span>
+      </div>
+      <div className="feed-scroll">
+        {group && (
+          <div className="page-head">
+            <div className="page-head-body">
+              <Avatar emoji={group.avatarEmoji} name={group.name} size={64} />
+              <div className="page-head-meta">
+                <div className="page-name">{group.name}</div>
+                <div className="page-sub">
+                  @{group.handle} · {group.members} member{group.members === 1 ? "" : "s"}
+                </div>
+                {group.about && <p className="page-about">{group.about}</p>}
+              </div>
+              <button
+                type="button"
+                className={`feed-follow-btn${group.joined ? " following" : ""}`}
+                onClick={() => void toggleJoin()}
+              >
+                {group.joined ? "Leave" : "Join"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {group?.joined && (
+          <form className="feed-composer" onSubmit={post}>
+            <div className="feed-composer-row">
+              <Avatar name="You" />
+              <textarea
+                className="feed-composer-input"
+                placeholder={`Post in ${group.name}…`}
+                rows={2}
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+              />
+            </div>
+            <div className="feed-composer-actions">
+              <button className="feed-post-btn" type="submit" disabled={!draft.trim() || busy}>
+                {busy ? "Posting…" : "Post"}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {loading ? (
+          <div className="feed-state">Loading…</div>
+        ) : posts.length === 0 ? (
+          <div className="feed-state">No posts yet.</div>
+        ) : (
+          posts.map((post) => (
+            <PostCard
+              key={post.id}
+              post={post}
+              client={client}
+              cloudUrl={cloudUrl}
+              canDelete={!post.pageId && post.author.id === viewerId}
+              onChange={updatePost}
+              onDelete={removePost}
+              onBlock={(authorId) => setPosts((prev) => prev.filter((p) => p.author.id !== authorId))}
+              onRepost={(next) => setPosts((prev) => [next, ...prev])}
+            />
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function FeedView({
   client,
   viewerId,
@@ -1054,6 +1196,8 @@ export function FeedView({
   refreshKey = 0,
   pageHandle,
   onOpenPage,
+  groupHandle,
+  onOpenGroup,
 }: {
   client: BotifyrClient;
   viewerId?: string;
@@ -1063,6 +1207,9 @@ export function FeedView({
   /** When set, show this Page's timeline instead of the feed. */
   pageHandle?: string | null;
   onOpenPage?: (handle: string | null) => void;
+  /** When set, show this Group's stream instead of the feed. */
+  groupHandle?: string | null;
+  onOpenGroup?: (handle: string | null) => void;
 }) {
   const [posts, setPosts] = useState<FeedPost[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1281,6 +1428,18 @@ export function FeedView({
         tag={openTag}
         onBack={() => setOpenTag(null)}
         onOpenTag={(next) => setOpenTag(next)}
+      />
+    );
+  }
+
+  if (groupHandle) {
+    return (
+      <GroupView
+        client={client}
+        cloudUrl={cloudUrl}
+        viewerId={viewerId}
+        handle={groupHandle}
+        onBack={() => onOpenGroup?.(null)}
       />
     );
   }
@@ -1567,14 +1726,17 @@ export function FeedView({
 export function FeedRail({
   client,
   onOpenPage,
+  onOpenGroup,
 }: {
   client: BotifyrClient;
   onOpenPage?: (handle: string) => void;
+  onOpenGroup?: (handle: string) => void;
 }) {
   const [people, setPeople] = useState<Person[] | null>(null);
   const [blocked, setBlocked] = useState<Person[]>([]);
   const [trending, setTrending] = useState<FeedPost[]>([]);
   const [pages, setPages] = useState<Page[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
   const [requested, setRequested] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -1653,8 +1815,47 @@ export function FeedRail({
     }
   }
 
+  useEffect(() => {
+    let active = true;
+    client
+      .listGroups()
+      .then((list) => {
+        if (active) setGroups(list);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [client]);
+
   return (
     <>
+      {groups.length > 0 && (
+        <div className="feed-rail-section">
+          <div className="feed-rail-head">
+            <SparkIcon size={15} /> Your Groups
+          </div>
+          <ul className="feed-rail-people">
+            {groups.map((group) => (
+              <li key={group.id} className="feed-rail-person">
+                <Avatar emoji={group.avatarEmoji} name={group.name} size={36} />
+                <div className="feed-rail-person-meta">
+                  <span className="feed-rail-person-name">{group.name}</span>
+                  <span className="feed-rail-person-sub">
+                    {group.members} member{group.members === 1 ? "" : "s"}
+                  </span>
+                </div>
+                {onOpenGroup && (
+                  <button type="button" className="feed-follow-btn" onClick={() => onOpenGroup(group.handle)}>
+                    View
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {pages.length > 0 && (
         <div className="feed-rail-section">
           <div className="feed-rail-head">

@@ -11,6 +11,8 @@ import type {
   DeviceKey,
   FileRecord,
   FriendRequestRecord,
+  GroupMemberRecord,
+  GroupRecord,
   InvoiceRecord,
   LearnedSkillRecord,
   LedgerRecord,
@@ -253,6 +255,7 @@ export class PostgresStore implements Store {
         participants: record.participants,
         summary: record.summary,
         summaryUpTo: record.summaryUpTo,
+        readAt: record.readAt,
       },
       record.createdAt,
     ]);
@@ -262,7 +265,13 @@ export class PostgresStore implements Store {
     await withLock(record.id, async () => {
       const { rows } = await this.pool.query("SELECT data FROM sessions WHERE id = $1", [record.id]);
       const existing = rows[0]?.data as
-        { messages?: SessionRecord["messages"]; summary?: string; summaryUpTo?: number } | undefined;
+        | {
+            messages?: SessionRecord["messages"];
+            summary?: string;
+            summaryUpTo?: number;
+            readAt?: Record<string, string>;
+          }
+        | undefined;
       const existingMessages = existing?.messages ?? [];
       const incoming = record.messages ?? [];
       let messages = incoming;
@@ -287,6 +296,7 @@ export class PostgresStore implements Store {
             participants: record.participants,
             summary: record.summary ?? existing?.summary,
             summaryUpTo: record.summaryUpTo ?? existing?.summaryUpTo,
+            readAt: record.readAt ?? existing?.readAt,
           },
           record.createdAt,
         ],
@@ -450,10 +460,12 @@ export class PostgresStore implements Store {
   }
 
   async updateWorkItem(record: WorkItemRecord): Promise<void> {
-    await this.pool.query(
-      "UPDATE work_items SET data = $1, quest_id = $2, updated_at = $3 WHERE id = $4",
-      [record, record.questId ?? null, record.updatedAt, record.id],
-    );
+    await this.pool.query("UPDATE work_items SET data = $1, quest_id = $2, updated_at = $3 WHERE id = $4", [
+      record,
+      record.questId ?? null,
+      record.updatedAt,
+      record.id,
+    ]);
   }
 
   async deleteWorkItem(workspaceId: string, id: string): Promise<boolean> {
@@ -1237,8 +1249,8 @@ export class PostgresStore implements Store {
 
   async createPost(record: PostRecord): Promise<void> {
     await this.pool.query(
-      "INSERT INTO posts (id, author_id, body, media_id, page_id, repost_of, audience, scheduled_at, created_at, updated_at) " +
-        "VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
+      "INSERT INTO posts (id, author_id, body, media_id, page_id, repost_of, group_id, audience, scheduled_at, created_at, updated_at) " +
+        "VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
       [
         record.id,
         record.authorId,
@@ -1246,6 +1258,7 @@ export class PostgresStore implements Store {
         record.mediaId ?? null,
         record.pageId ?? null,
         record.repostOf ?? null,
+        record.groupId ?? null,
         record.audience ?? "friends",
         record.scheduledAt ?? null,
         record.createdAt,
@@ -1282,7 +1295,9 @@ export class PostgresStore implements Store {
   }
 
   async listPostTags(postId: string): Promise<string[]> {
-    const { rows } = await this.pool.query("SELECT tag FROM post_hashtags WHERE post_id = $1 ORDER BY tag", [postId]);
+    const { rows } = await this.pool.query("SELECT tag FROM post_hashtags WHERE post_id = $1 ORDER BY tag", [
+      postId,
+    ]);
     return rows.map((row) => row.tag as string);
   }
 
@@ -1297,7 +1312,10 @@ export class PostgresStore implements Store {
   }
 
   async deletePost(authorId: string, id: string): Promise<boolean> {
-    const result = await this.pool.query("DELETE FROM posts WHERE id = $1 AND author_id = $2", [id, authorId]);
+    const result = await this.pool.query("DELETE FROM posts WHERE id = $1 AND author_id = $2", [
+      id,
+      authorId,
+    ]);
     return (result.rowCount ?? 0) > 0;
   }
 
@@ -1348,7 +1366,10 @@ export class PostgresStore implements Store {
         [postId, userId, reaction],
       );
     } else {
-      await this.pool.query("DELETE FROM post_reactions WHERE post_id = $1 AND user_id = $2", [postId, userId]);
+      await this.pool.query("DELETE FROM post_reactions WHERE post_id = $1 AND user_id = $2", [
+        postId,
+        userId,
+      ]);
     }
   }
 
@@ -1382,10 +1403,10 @@ export class PostgresStore implements Store {
 
   async setPostShare(postId: string, userId: string, shared: boolean): Promise<void> {
     if (shared) {
-      await this.pool.query("INSERT INTO post_shares (post_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING", [
-        postId,
-        userId,
-      ]);
+      await this.pool.query(
+        "INSERT INTO post_shares (post_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING",
+        [postId, userId],
+      );
     } else {
       await this.pool.query("DELETE FROM post_shares WHERE post_id = $1 AND user_id = $2", [postId, userId]);
     }
@@ -1406,10 +1427,109 @@ export class PostgresStore implements Store {
     }
   }
 
+  async createGroup(record: GroupRecord): Promise<void> {
+    await this.pool.query(
+      "INSERT INTO groups (id, owner_id, name, handle, about, avatar_emoji, created_at, updated_at) " +
+        "VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
+      [
+        record.id,
+        record.ownerId,
+        record.name,
+        record.handle,
+        record.about ?? null,
+        record.avatarEmoji ?? null,
+        record.createdAt,
+        record.updatedAt,
+      ],
+    );
+  }
+
+  async getGroup(id: string): Promise<GroupRecord | null> {
+    const { rows } = await this.pool.query("SELECT * FROM groups WHERE id = $1", [id]);
+    return rows[0] ? toGroup(rows[0]) : null;
+  }
+
+  async getGroupByHandle(handle: string): Promise<GroupRecord | null> {
+    const { rows } = await this.pool.query("SELECT * FROM groups WHERE lower(handle) = lower($1)", [
+      handle.replace(/^@/, ""),
+    ]);
+    return rows[0] ? toGroup(rows[0]) : null;
+  }
+
+  async listGroupsForUser(userId: string): Promise<GroupRecord[]> {
+    const { rows } = await this.pool.query(
+      "SELECT g.* FROM groups g JOIN group_members m ON m.group_id = g.id WHERE m.user_id = $1 ORDER BY g.created_at ASC",
+      [userId],
+    );
+    return rows.map(toGroup);
+  }
+
+  async updateGroup(record: GroupRecord): Promise<void> {
+    await this.pool.query(
+      "UPDATE groups SET name=$2, handle=$3, about=$4, avatar_emoji=$5, updated_at=$6 WHERE id=$1",
+      [
+        record.id,
+        record.name,
+        record.handle,
+        record.about ?? null,
+        record.avatarEmoji ?? null,
+        record.updatedAt,
+      ],
+    );
+  }
+
+  async deleteGroup(ownerId: string, id: string): Promise<boolean> {
+    const result = await this.pool.query("DELETE FROM groups WHERE id = $1 AND owner_id = $2", [id, ownerId]);
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async setGroupMember(record: GroupMemberRecord): Promise<void> {
+    await this.pool.query(
+      "INSERT INTO group_members (group_id, user_id, role) VALUES ($1,$2,$3) ON CONFLICT (group_id, user_id) DO UPDATE SET role = EXCLUDED.role",
+      [record.groupId, record.userId, record.role],
+    );
+  }
+
+  async deleteGroupMember(groupId: string, userId: string): Promise<boolean> {
+    const result = await this.pool.query("DELETE FROM group_members WHERE group_id = $1 AND user_id = $2", [
+      groupId,
+      userId,
+    ]);
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async isGroupMember(groupId: string, userId: string): Promise<boolean> {
+    const { rows } = await this.pool.query(
+      "SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2",
+      [groupId, userId],
+    );
+    return rows.length > 0;
+  }
+
+  async listGroupMembers(groupId: string): Promise<GroupMemberRecord[]> {
+    const { rows } = await this.pool.query("SELECT * FROM group_members WHERE group_id = $1", [groupId]);
+    return rows.map(toGroupMember);
+  }
+
+  async listGroupPosts(groupId: string, limit: number): Promise<PostRecord[]> {
+    const { rows } = await this.pool.query(
+      "SELECT * FROM posts WHERE group_id = $1 ORDER BY created_at DESC LIMIT $2",
+      [groupId, Math.max(1, Math.min(100, limit))],
+    );
+    return rows.map(toPost);
+  }
+
   async createStory(record: StoryRecord): Promise<void> {
     await this.pool.query(
       "INSERT INTO stories (id, author_id, media_id, caption, created_at, expires_at) VALUES ($1,$2,$3,$4,$5,$6)",
-      [record.id, record.authorId, record.mediaId ?? null, record.caption, record.createdAt, record.expiresAt],
+      [
+        record.id,
+        record.authorId,
+        record.mediaId ?? null,
+        record.caption,
+        record.createdAt,
+        record.expiresAt,
+      ],
     );
   }
 
@@ -1423,7 +1543,10 @@ export class PostgresStore implements Store {
   }
 
   async createPoll(postId: string, options: string[], closesAt?: string): Promise<void> {
-    await this.pool.query("INSERT INTO post_polls (post_id, closes_at) VALUES ($1,$2)", [postId, closesAt ?? null]);
+    await this.pool.query("INSERT INTO post_polls (post_id, closes_at) VALUES ($1,$2)", [
+      postId,
+      closesAt ?? null,
+    ]);
     let index = 0;
     for (const label of options) {
       await this.pool.query("INSERT INTO poll_options (id, post_id, label, position) VALUES ($1,$2,$3,$4)", [
@@ -1451,10 +1574,10 @@ export class PostgresStore implements Store {
       votes: Number(row.votes ?? 0),
     }));
     const total = options.reduce((sum, option) => sum + option.votes, 0);
-    const mine = await this.pool.query("SELECT option_id FROM poll_votes WHERE post_id = $1 AND user_id = $2", [
-      postId,
-      viewerId,
-    ]);
+    const mine = await this.pool.query(
+      "SELECT option_id FROM poll_votes WHERE post_id = $1 AND user_id = $2",
+      [postId, viewerId],
+    );
     return {
       postId,
       options,
@@ -1499,7 +1622,15 @@ export class PostgresStore implements Store {
     commentId: string,
     viewerId: string,
   ): Promise<{ reactions: Record<ReactionType, number>; myReaction: ReactionType | null }> {
-    const reactions: Record<ReactionType, number> = { like: 0, love: 0, care: 0, haha: 0, wow: 0, sad: 0, angry: 0 };
+    const reactions: Record<ReactionType, number> = {
+      like: 0,
+      love: 0,
+      care: 0,
+      haha: 0,
+      wow: 0,
+      sad: 0,
+      angry: 0,
+    };
     const { rows } = await this.pool.query(
       "SELECT reaction, COUNT(*)::int AS n FROM comment_reactions WHERE comment_id = $1 GROUP BY reaction",
       [commentId],
@@ -1516,7 +1647,15 @@ export class PostgresStore implements Store {
   }
 
   async getPostStats(postId: string, viewerId: string): Promise<PostStatsRecord> {
-    const reactions: Record<ReactionType, number> = { like: 0, love: 0, care: 0, haha: 0, wow: 0, sad: 0, angry: 0 };
+    const reactions: Record<ReactionType, number> = {
+      like: 0,
+      love: 0,
+      care: 0,
+      haha: 0,
+      wow: 0,
+      sad: 0,
+      angry: 0,
+    };
     const grouped = await this.pool.query(
       "SELECT reaction, COUNT(*)::int AS n FROM post_reactions WHERE post_id = $1 GROUP BY reaction",
       [postId],
@@ -1641,9 +1780,10 @@ export class PostgresStore implements Store {
   }
 
   async listPages(ownerId: string): Promise<PageRecord[]> {
-    const { rows } = await this.pool.query("SELECT * FROM pages WHERE owner_id = $1 ORDER BY created_at ASC", [
-      ownerId,
-    ]);
+    const { rows } = await this.pool.query(
+      "SELECT * FROM pages WHERE owner_id = $1 ORDER BY created_at ASC",
+      [ownerId],
+    );
     return rows.map(toPage);
   }
 
@@ -1672,7 +1812,10 @@ export class PostgresStore implements Store {
   }
 
   async setPagePinnedPost(pageId: string, postId: string | null): Promise<void> {
-    await this.pool.query("UPDATE pages SET pinned_post_id = $2, updated_at = now() WHERE id = $1", [pageId, postId]);
+    await this.pool.query("UPDATE pages SET pinned_post_id = $2, updated_at = now() WHERE id = $1", [
+      pageId,
+      postId,
+    ]);
   }
 
   async setPageRole(record: PageRoleRecord): Promise<void> {
@@ -1720,10 +1863,10 @@ export class PostgresStore implements Store {
   }
 
   async isFollowingPage(pageId: string, userId: string): Promise<boolean> {
-    const { rows } = await this.pool.query("SELECT 1 FROM page_followers WHERE page_id = $1 AND user_id = $2", [
-      pageId,
-      userId,
-    ]);
+    const { rows } = await this.pool.query(
+      "SELECT 1 FROM page_followers WHERE page_id = $1 AND user_id = $2",
+      [pageId, userId],
+    );
     return rows.length > 0;
   }
 
@@ -1738,7 +1881,9 @@ export class PostgresStore implements Store {
   }
 
   async countPageFollowers(pageId: string): Promise<number> {
-    const { rows } = await this.pool.query("SELECT COUNT(*) AS n FROM page_followers WHERE page_id = $1", [pageId]);
+    const { rows } = await this.pool.query("SELECT COUNT(*) AS n FROM page_followers WHERE page_id = $1", [
+      pageId,
+    ]);
     return Number(rows[0]?.n ?? 0);
   }
 }
@@ -1908,6 +2053,7 @@ function toPost(row: any): PostRecord {
     mediaId: row.media_id ?? undefined,
     pageId: row.page_id ?? undefined,
     repostOf: row.repost_of ?? undefined,
+    groupId: row.group_id ?? undefined,
     audience: row.audience ?? "friends",
     scheduledAt: row.scheduled_at ? new Date(row.scheduled_at).toISOString() : undefined,
     createdAt: new Date(row.created_at).toISOString(),
@@ -1924,6 +2070,27 @@ function toPostComment(row: any): PostCommentRecord {
     parentId: row.parent_id ?? undefined,
     hidden: row.hidden === true,
     createdAt: new Date(row.created_at).toISOString(),
+  };
+}
+
+function toGroup(row: any): GroupRecord {
+  return {
+    id: row.id,
+    ownerId: row.owner_id,
+    name: row.name,
+    handle: row.handle,
+    about: row.about ?? undefined,
+    avatarEmoji: row.avatar_emoji ?? undefined,
+    createdAt: new Date(row.created_at).toISOString(),
+    updatedAt: new Date(row.updated_at).toISOString(),
+  };
+}
+
+function toGroupMember(row: any): GroupMemberRecord {
+  return {
+    groupId: row.group_id,
+    userId: row.user_id,
+    role: row.role === "admin" ? "admin" : "member",
   };
 }
 
@@ -2050,6 +2217,7 @@ function toSession(row: any): SessionRecord {
     participants: row.data?.participants,
     summary: row.data?.summary,
     summaryUpTo: row.data?.summaryUpTo,
+    readAt: row.data?.readAt,
     createdAt: row.created_at.toISOString(),
   };
 }
