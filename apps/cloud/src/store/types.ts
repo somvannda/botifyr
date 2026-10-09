@@ -466,6 +466,8 @@ export interface Store {
   /* Feed (social posts) */
   createPost(record: PostRecord): Promise<void>;
   getPost(id: string): Promise<PostRecord | null>;
+  /** Update a post's body; only the author may (POST-edit). */
+  updatePostBody(authorId: string, id: string, body: string, updatedAt: string): Promise<boolean>;
   /** Only the author may delete; cascades likes/comments/shares. */
   deletePost(authorId: string, id: string): Promise<boolean>;
   /** Attach an image to a post (multi-image; position orders the grid). */

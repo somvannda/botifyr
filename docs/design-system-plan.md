@@ -49,10 +49,14 @@ Established product knowledge, not live captures:
 | DS-T7 | Token/contrast guard test | P1 | `designSystem.test.ts` | test green | **Done** |
 | DS-T8 | Tokenise the global accent literals (chat/workspace) | P2 | rest of `styles.css` | same computed colors | **Done** |
 | DS-T9 | Normalise the red family to `--danger*` | P2 | `styles.css` | one red role | **Done** |
-| DS-T10 | Type/spacing token scale | P3 | `styles.css` | documented scale adopted incrementally | **Partial** (type scale adopted app-wide; spacing documented) |
+| DS-T10 | Type/spacing token scale | P3 | `styles.css` | documented scale adopted incrementally | **Partial** (type scale app-wide; 4-pt spacing grid, Feed-first) |
 | DS-T11 | Automated a11y check (axe) + light-theme component pass | P3 | CI, UI | axe clean on Feed | **Partial** (axe clean on Feed; non-Feed pending) |
 | DS-T12 | `--danger-solid` for solid destructive buttons (white text ≥4.5:1) | P1 | `:root`, `.feed-confirm-danger` | 4.8:1 in both themes | **Done** |
 | DS-T13 | `--accent-solid` for solid accent buttons (white text ≥4.5:1) | P1 | `:root`, Feed buttons | ≥4.7:1 in both themes | **Done** |
+| DS-T14 | `--input-bg` for input/search surfaces; drop the scattered light override | P2 | `:root`/`[data-theme=light]`, inputs | identical computed values | **Done** |
+| DS-T15 | Apply `--accent-solid` to all solid-accent elements (not just the Feed) | P1 | `styles.css` | 0 white-on-`--accent`; axe clean | **Done** |
+| DS-T16 | `--on-media` / `--on-media-muted` for text on dark media backdrops; fix Reels empty state | P1 | `:root`, `.reels-scroll` | axe clean (light Reels) | **Done** |
+| DS-T17 | Status tint tokens `--ok-soft/-border`, `--warn-soft/-border` | P2 | `:root`, components | value-preserving; light-adaptive | **Done** |
 
 ## 5. Acceptance criteria
 

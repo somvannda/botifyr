@@ -35,8 +35,8 @@ and empty/error states — with verification.
 - `packages/ui/src/FeedView.tsx` — timeline mechanics (see "Done").
 - `packages/ui/src/styles.css` — `.feed-end`, `.feed-sentinel`,
   `.feed-new-banner`, `.feed-sort`.
-- `packages/ui/src/FeedView.dom.test.tsx` — 7 new timeline/discovery tests
-  (FEED-D1/D2/D3/D5/D6/D7/D10).
+- `packages/ui/src/FeedView.dom.test.tsx` — 8 new timeline/discovery tests
+  (FEED-D1/D2/D3/D5/D6/D7/D10/D11).
 - `apps/cloud/src/server.ts` + `apps/cloud/src/events.ts` — DB-1 realtime
   delivery filter (`feedEventRecipient` / `canReceive`); DB-2 cursor
   `encodeFeedCursor`/`decodeFeedCursor`.
@@ -78,6 +78,9 @@ and empty/error states — with verification.
   newest post (throttled 15s) and raise the "New activity" banner if the top
   changed — so new content surfaces even though the realtime stream is dead
   (DB-1), and the list is never replaced under the reader.
+- **FEED-D11** a11y: a polite, visually-hidden live region announces
+  "N more posts loaded" after infinite-scroll pagination (the classic
+  screen-reader gap for infinite scroll).
 - **DB-1 (backend)** realtime delivery: `canReceive` now routes
   `feed.like/comment/share/mention` to the event's `toUserId` and `feed.post` to
   its `authorId`, via a pure `feedEventRecipient` helper — so the app's existing
@@ -131,9 +134,9 @@ and empty/error states — with verification.
 The Stories/Reels/Composer workstream rewrote large parts of `FeedView.tsx` and
 its test file, but my timeline code and tests survived and still pass:
 
-- `npm test` (repo-wide) → **452 passed / 452** (64 files, at the time of writing).
-- `npx vitest run packages/ui/src/FeedView.dom.test.tsx` → **67 passed / 67**
-  (includes FEED-D1/D2/D3/D5/D6/D7/D10, which are still present).
+- `npm test` (repo-wide) → **455 passed / 455** (64 files, at the time of writing).
+- `npx vitest run packages/ui/src/FeedView.dom.test.tsx` → **74 passed / 74**
+  (includes FEED-D1/D2/D3/D5/D6/D7/D10/D11, which are still present).
 - **Live E2E** re-run `node scripts/feed-discovery-verify.mjs` (added a11y +
   responsive checks):
   - `initial 20` → `after auto-load 25` → `unique 25` (no dupes) ✓
@@ -163,13 +166,16 @@ its test file, but my timeline code and tests survived and still pass:
   not Feed-specific.
 - The Feed's own controls are additionally covered by the component/E2E a11y
   checks: `role="status"` end state and `role="alert"` error, labelled
-  Refresh/Sort controls, and the shared `:focus-visible` ring.
+  Refresh/Sort controls, a polite live region for loaded pages (FEED-D11), and
+  the shared `:focus-visible` ring.
+- `npm run test:e2e` (Playwright, portal `:4322`): **4 passed / 7 skipped**, no
+  failures (skips are pre-existing setup-gated specs).
 
 ## Known failures / not verified
 
-- **No failures remain.** The repo-wide suite is **452 passed / 452** (64 files)
-  and the Feed test file is **67 passed / 67**, including all of
-  FEED-D1/D2/D3/D5/D6/D7/D10. The transient EXP-1/EXP-2 (Stories) and EXP-3
+- **No failures remain.** The repo-wide suite is **455 passed / 455** (64 files)
+  and the Feed test file is **74 passed / 74**, including all of
+  FEED-D1/D2/D3/D5/D6/D7/D10/D11. The transient EXP-1/EXP-2 (Stories) and EXP-3
   (Reels) failures from the concurrent workstream were fixed by their owner, and
   the composer typecheck error was resolved too.
 - **DB-1 is fixed.** Feed realtime delivery is covered by `events.test.ts`
@@ -192,10 +198,10 @@ since been resolved by that workstream.
 
 ## Exact next action
 
-1. **✅ Complete.** All Feed & Discovery work (FEED-D1…D7 + D10) plus the
+1. **✅ Complete.** All Feed & Discovery work (FEED-D1…D7 + D10 + D11) plus the
    **DB-1** realtime-delivery and **DB-2** stable-keyset-pagination fixes is
-   implemented and verified: repo suite **452 passed / 452**, Feed tests
-   **67 passed / 67**, `typecheck` clean, `eslint` 0 errors, and both headless
+   implemented and verified: repo suite **455 passed / 455**, Feed tests
+   **74 passed / 74**, `typecheck` clean, `eslint` 0 errors, and both headless
    scripts (`feed-discovery-verify.mjs`, `feed-discovery-perf.mjs`) pass every
    check — pagination integrity, no duplicate requests, no infinite-scroll loop,
    end state, scroll restoration, refresh/sort, freshness-on-wake, and no
@@ -205,3 +211,29 @@ since been resolved by that workstream.
    fallback covers that UX).
 3. **Optional polish (P3):** `FEED-D8` paginate the `Top` sort once the backend
    supports it; `FEED-D9` virtualization only if profiling shows a real cost.
+
+## Integration & verification status
+
+Tracked per AGENTS.md §8 (PLANNED → IMPLEMENTED → TESTED → INTEGRATED → VERIFIED).
+
+- **Stage: VERIFIED.** All Feed & Discovery work (FEED-D1…D7, D10) plus the
+  **DB-1** and **DB-2** backend fixes are integrated on `main` (the repo's
+  parallel-workstream commits and merged PRs), and the repo gate passes there:
+  - `npm run typecheck` → **clean**
+  - `npm run lint` → **clean**
+  - `npm test` → **455 passed / 455** (64 files)
+- **Workstream files:** `packages/ui/src/FeedView.tsx`,
+  `packages/ui/src/styles.css`, `packages/ui/src/FeedView.dom.test.tsx`,
+  `apps/cloud/src/server.ts`, `apps/cloud/src/events.ts`,
+  `apps/cloud/src/store/{types,postgres,memory}.ts`, new tests
+  (`apps/cloud/src/events.test.ts`, `feed-realtime.test.ts`,
+  `feed-pagination.test.ts`), E2E scripts
+  (`scripts/feed-discovery-verify.mjs`, `feed-discovery-perf.mjs`), and these
+  three docs.
+- **Other-workstream files (not touched):** at the time of writing, the
+  uncommitted hunks in `apps/desktop/index.html` and `packages/ui/src/styles.css`
+  (a titlebar / `.feed-topbar` height change) belonged to another workstream and
+  were left untouched.
+- **Dependencies / handoff:** DB-1 follow-up (friends' realtime posts),
+  FEED-D8 (`Top`-sort pagination), FEED-D9 (virtualization) — all optional, none
+  are defects. Integration/merge and final gating are the integration owner's.
