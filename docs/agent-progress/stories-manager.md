@@ -1,5 +1,7 @@
 # Stories Manager — Progress & Context Recovery
 
+> **Historical record** — ports reflect the run at the time. Canonical local dev is defined in [`AGENTS.md`](../../AGENTS.md) §10.
+
 > Owner: **Stories Manager** (Feed Experience Team, reports to Feed Experience
 > Lead). Update after each milestone. Companion docs:
 > [`stories-competitive-research.md`](../stories-competitive-research.md),

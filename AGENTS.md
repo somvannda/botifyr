@@ -108,6 +108,9 @@ complements §1–§3, it does not replace them.
 - Only the **integration owner** reviews the diff, merges changes, and re-runs the
   relevant checks after integration. Never claim a change is merged or verified
   unless it actually is.
+- **Every finished job must be merged.** An agent's task is not complete while its
+  work sits on an unmerged branch, worktree, or PR — close it out through the
+  integration owner before stopping.
 
 **When something breaks**
 - On conflict or a failed import: preserve existing work, stop, find the root cause,
@@ -151,3 +154,47 @@ on every PR.
 - Never force-push, never commit directly to `main`, and never run destructive git
   (`reset --hard`, `clean -fd`) outside your own worktree. `npm run wt -- list`
   shows active worktrees.
+
+**Done means merged — never left dangling**
+- A job is finished when it is **merged into `main`** (PR with green CI, or
+  `wt finish`) — not when the code is written. The ladder in §8 is only satisfied
+  at **INTEGRATED → VERIFIED**, so a green local test run is not "done".
+- The **integration owner merges every agent's finished job**, **one at a time**,
+  re-running `npm run typecheck && npm run lint && npm test` after each merge.
+  Never stack several unmerged branches and merge them in a batch.
+- No agent stops holding an open branch, worktree, or PR as a "handoff". After a
+  merge, delete the branch/worktree (`--delete-branch`, or `wt finish` does it);
+  `npm run wt -- list` should show no finished worktrees left behind.
+
+## 10. One local dev environment — fixed ports, no ad-hoc copies
+Local dev is **one topology**, not one per agent. Before starting anything, assume
+the stack is **already running** and reuse it. Never stand up a second copy or
+move it to a new port.
+
+**Canonical stack (the only supported local dev shape):**
+
+| Piece | How it runs | Address |
+| --- | --- | --- |
+| Postgres | Docker Compose (`postgres`) | `localhost:54329` |
+| Cloud API | Docker Compose (`cloud`, baked from `apps/cloud/Dockerfile`) | `http://localhost:8787` |
+| Web / portal (baked) | Docker Compose (`web`) | `http://localhost:4322` |
+| Admin (baked) | Docker Compose (`admin`) | `http://localhost:4324` |
+| Desktop UI (HMR) | `npm run dev:desktop` (Vite, `strictPort`) | `http://localhost:1420` |
+| Portal UI (HMR) | `npm run dev -w @botifyr/portal` (Vite, `strictPort`) | `http://localhost:1421` |
+
+Rules:
+- **One instance per service.** Reuse the running stack; do not start a second
+  cloud, Postgres, or Vite dev server. The cloud belongs in Docker — don't run
+  `npm run dev:cloud` on the host while the `cloud` container is already on `8787`
+  (that is "two clouds on one port").
+- **Never invent a port.** These ports are the contract (`docker-compose.yml`,
+  `apps/*/vite.config.ts`). If you need a different one, change it in those files
+  **and** the docs — never just pass `--port`/`-p` locally. `strictPort` is
+  deliberate: a busy port is a signal, not something to route around.
+- **A busy port means find/stop the stale process**, not pick the next port.
+  Reusing an existing instance is always preferred over starting a new one.
+- **Front-end edits use the running Vite dev server (HMR).** Do not add a new
+  preview server on a random port. The baked `:4322` web build is **not** a dev
+  server — use it to verify the production bundle, not to iterate.
+- **Report canonical URLs** in progress notes and verification output (e.g.
+  "cloud `:8787`, desktop `:1420`"), never ad-hoc ports from a one-off run.

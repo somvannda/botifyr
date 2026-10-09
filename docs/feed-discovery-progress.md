@@ -1,5 +1,7 @@
 # Feed & Discovery — Progress Checkpoint
 
+> **Historical record** — ports reflect the run at the time. Canonical local dev is defined in [`AGENTS.md`](../AGENTS.md) §10.
+
 > Resume point for the **Feed & Discovery Manager** assignment. Update after
 > meaningful work. Plan: [`feed-discovery-plan.md`](feed-discovery-plan.md) ·
 > Backlog: [`feed-discovery-backlog.md`](feed-discovery-backlog.md).

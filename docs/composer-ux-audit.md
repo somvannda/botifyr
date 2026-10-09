@@ -1,5 +1,7 @@
 # Content Composer — UX & Reliability Audit
 
+> **Historical record** — ports reflect the run at the time. Canonical local dev is defined in [`AGENTS.md`](../AGENTS.md) §10.
+
 > Owner: **Composer Manager** (Feed Experience Team). Companion docs:
 > `docs/composer-competitive-research.md`, `docs/composer-implementation-plan.md`,
 > `docs/agent-progress/composer-manager.md`.

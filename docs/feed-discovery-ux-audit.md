@@ -1,5 +1,7 @@
 # Feed & Discovery — UX Audit
 
+> **Historical record** — ports reflect the run at the time. Canonical local dev is defined in [`AGENTS.md`](../AGENTS.md) §10.
+
 > Agent 3 (Feed & Discovery Manager). Scope: the **main feed timeline** — its
 > structure, loading, ordering, pagination, refresh and feed-specific state.
 > Composer (Agent 8), Stories (Agent 6), post cards (Agent 4), the page shell

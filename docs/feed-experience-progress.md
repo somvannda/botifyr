@@ -1,5 +1,7 @@
 # Feed Experience — Progress Checkpoint (Lead)
 
+> **Historical record** — ports reflect the run at the time. Canonical local dev is defined in [`AGENTS.md`](../AGENTS.md) §10.
+
 > Resume point for the **Feed Experience Lead** assignment. Update after each
 > meaningful batch. Plan: `feed-experience-plan.md` · Backlog:
 > `feed-experience-backlog.md`. Last verified: Oct 2026.

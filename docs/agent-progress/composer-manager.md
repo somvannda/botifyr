@@ -1,5 +1,7 @@
 # Composer Manager — Progress & Context Recovery
 
+> **Historical record** — ports reflect the run at the time. Canonical local dev is defined in [`AGENTS.md`](../../AGENTS.md) §10.
+
 > Owner: **Composer Manager** (Feed Experience Team, reports to Feed Experience
 > Lead). Update after each batch. Companion docs:
 > `docs/composer-competitive-research.md`, `docs/composer-ux-audit.md`,

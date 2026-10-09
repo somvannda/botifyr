@@ -1,5 +1,7 @@
 # Feed Experience Lead (Agent 1) — Progress
 
+> **Historical record** — ports reflect the run at the time. Canonical local dev is defined in [`AGENTS.md`](../../AGENTS.md) §10.
+
 > Durable resume point for the Facebook-inspired Feed page redesign.
 > Plan: [`docs/feed-page-redesign-plan.md`](../feed-page-redesign-plan.md).
 

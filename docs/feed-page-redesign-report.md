@@ -1,5 +1,7 @@
 # Feed Page Redesign — Final Report (Agent 1)
 
+> **Historical record** — ports reflect the run at the time. Canonical local dev is defined in [`AGENTS.md`](../AGENTS.md) §10.
+
 > Agent 1 — Feed Experience Lead. Reference: Facebook-inspired Feed, with the
 > primary navigation as a **Feed-scoped bottom menu inside the central column**.
 > Reuses the real app; real data only. Date: Oct 2026.

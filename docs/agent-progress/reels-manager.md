@@ -1,5 +1,7 @@
 # Agent 5 — Reels Manager · Progress Record
 
+> **Historical record** — ports reflect the run at the time. Canonical local dev is defined in [`AGENTS.md`](../../AGENTS.md) §10.
+
 > Durable resume point. Update after each meaningful milestone. Last updated:
 > **Oct 2026**.
 
