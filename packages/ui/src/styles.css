@@ -302,7 +302,7 @@ body {
   top: 0;
   left: 0;
   right: 0;
-  height: 34px;
+  height: var(--titlebar, 34px);
   z-index: 200;
   display: flex;
   align-items: center;
@@ -1687,7 +1687,7 @@ body {
 }
 
 .topbar {
-  height: 120px;
+  height: 52px;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -2353,7 +2353,7 @@ body {
 /* Startup / landing (Grok-style) ----------------------------------------- */
 .startup {
   position: fixed;
-  inset: 34px 0 0 0;
+  inset: var(--titlebar, 0px) 0 0 0;
   background: #000;
   display: grid;
   place-items: center;
@@ -2828,7 +2828,7 @@ body {
 /* Connect apps modal */
 .apps-overlay {
   position: fixed;
-  inset: 34px 0 0 0;
+  inset: var(--titlebar, 0px) 0 0 0;
   z-index: 130;
   background: rgba(9, 11, 16, 0.72);
   display: grid;
@@ -5491,7 +5491,7 @@ body {
 /* Settings modal --------------------------------------------------------- */
 .settings-overlay {
   position: fixed;
-  inset: 34px 0 0 0;
+  inset: var(--titlebar, 0px) 0 0 0;
   z-index: 140;
   background: rgba(6, 7, 10, 0.6);
   display: grid;
@@ -7388,7 +7388,7 @@ body {
   display: flex;
   align-items: baseline;
   gap: 10px;
-  height: 120px;
+  height: 52px;
   padding: 0 20px;
   border-bottom: 1px solid var(--border);
   flex: none;
@@ -10393,7 +10393,7 @@ a.feed-follow-btn {
   display: flex;
   align-items: center;
   gap: 10px;
-  height: 120px;
+  height: 52px;
   padding: 0 20px;
   border-bottom: 1px solid var(--border);
   flex: none;
