@@ -1712,9 +1712,9 @@ describe("Groups", () => {
 
   it("shows a retry when the groups service fails, then recovers", async () => {
     let fail = true;
-    const discover = vi.fn().mockImplementation(() =>
-      fail ? Promise.reject(new Error("offline")) : Promise.resolve([baseGroup]),
-    );
+    const discover = vi
+      .fn()
+      .mockImplementation(() => (fail ? Promise.reject(new Error("offline")) : Promise.resolve([baseGroup])));
     const client = groupClient({
       discoverGroups: discover,
       groupCategories: vi.fn().mockResolvedValue({ categories: [] }),
@@ -1830,5 +1830,20 @@ describe("Post share / reaction hover / repost layout (Agent 1)", () => {
     );
     await screen.findByText(/Shared a post/);
     expect(container.querySelector(".feed-author-name .feed-repost-label")).toBeTruthy();
+  });
+
+  it("focuses the caption and shares on Enter", async () => {
+    const repost = vi.fn().mockResolvedValue(makePost({ id: "repost-2" }));
+    const client = { ...makeClient([makePost()]), repost } as unknown as BotifyrClient;
+    render(<FeedView client={client} cloudUrl="http://cloud" viewerId="viewer-1" />);
+    await screen.findByText("A quiet feed is a happy feed.");
+
+    fireEvent.click(screen.getByRole("button", { name: "Share" }));
+    const input = (await screen.findByLabelText("Share caption")) as HTMLTextAreaElement;
+    expect(document.activeElement).toBe(input);
+
+    fireEvent.change(input, { target: { value: "on enter" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(repost).toHaveBeenCalledWith("post-1", "on enter"));
   });
 });
