@@ -27,6 +27,7 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "deploy:web": "node scripts/deploy-web.mjs",
+    "deploy:cloud": "node scripts/deploy-cloud.mjs",
     "verify:media": "node apps/cloud/scripts/verify-media.mjs",
     "wt": "node scripts/worktree.mjs",
     "hooks:install": "node scripts/install-hooks.mjs",
