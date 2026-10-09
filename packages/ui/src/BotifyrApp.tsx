@@ -39,6 +39,7 @@ import {
   type Conversation,
   type DeviceKeyPair,
   type MediaItem,
+  type Page,
   type Person,
   type SealedMessage,
 } from "@botifyr/client";
@@ -258,6 +259,9 @@ function token(): string {
 
 const PENDING_KEY = "botifyr.pendingState";
 
+/** Remember the active top-level view (Chat / Feed / Startups) across reloads. */
+const WORKSPACE_FILTER_KEY = "botifyr.workspaceFilter";
+
 export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const client = useMemo(() => new BotifyrClient(CLOUD_URL), []);
   const [user, setUser] = useState<User | null>(null);
@@ -292,7 +296,6 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [connections, setConnections] = useState<ConnectionInfo[]>([]);
   const [connectingApp, setConnectingApp] = useState<string | null>(null);
   const [marketQuery, setMarketQuery] = useState("");
-  const [marketFilter, setMarketFilter] = useState<"all" | "installed">("all");
   const [marketViewAll, setMarketViewAll] = useState(false);
   const [tokenInputFor, setTokenInputFor] = useState<string | null>(null);
   const [tokenValue, setTokenValue] = useState("");
@@ -452,7 +455,13 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [botIntro, setBotIntro] = useState("");
   const [botWorkspace, setBotWorkspace] = useState("");
   const [collapsedWorkspaces, setCollapsedWorkspaces] = useState<Record<string, boolean>>({});
-  const [workspaceFilter, setWorkspaceFilter] = useState("personal");
+  const [workspaceFilter, setWorkspaceFilter] = useState<"personal" | "feed" | "startups">(() => {
+    const stored = localStorage.getItem(WORKSPACE_FILTER_KEY);
+    return stored === "feed" || stored === "startups" ? stored : "personal";
+  });
+  /** Facebook-style "acting as a Page": the id of the Page the account is switched into. */
+  const [actingAs, setActingAs] = useState<string | null>(null);
+  const [myPages, setMyPages] = useState<Page[]>([]);
   /** Permalink target from `#post=<id>`; the Feed scrolls to and highlights it. */
   const [feedFocusPost, setFeedFocusPost] = useState<string | null>(null);
 
@@ -1047,6 +1056,16 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     localStorage.setItem("botifyr.useComputer", useComputer ? "1" : "0");
   }, [useComputer]);
 
+  // Persist the active top-level view so a reload/HMR stays on the same tab
+  // (e.g. the Feed) instead of snapping back to Chat.
+  useEffect(() => {
+    if (workspaceFilter === "feed" || workspaceFilter === "startups") {
+      localStorage.setItem(WORKSPACE_FILTER_KEY, workspaceFilter);
+    } else {
+      localStorage.removeItem(WORKSPACE_FILTER_KEY);
+    }
+  }, [workspaceFilter]);
+
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
@@ -1399,6 +1418,22 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     return () => document.removeEventListener("mousedown", onDown);
   }, [showAccountMenu]);
 
+  // Pages the account manages, for the "switch to Page" menu.
+  useEffect(() => {
+    let active = true;
+    client
+      .listMyPages()
+      .then((list) => {
+        if (active) setMyPages(list);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [client]);
+
+  const actingPage = actingAs ? (myPages.find((page) => page.id === actingAs) ?? null) : null;
+
   const getDmKey = useCallback(
     async (session: { id: string; participants?: string[] }): Promise<CryptoKey | null> => {
       const cached = dmKeysRef.current.get(session.id);
@@ -1736,6 +1771,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     }
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(REFRESH_KEY);
+    localStorage.removeItem(WORKSPACE_FILTER_KEY);
+    setWorkspaceFilter("personal");
     client.setToken(null);
     client.setRefreshToken(null);
     setUser(null);
@@ -4444,6 +4481,65 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
 
         {showAccountMenu && (
           <div className="account-menu" ref={accountMenuRef}>
+            {actingPage && (
+              <button
+                className="account-item account-switch-back"
+                type="button"
+                onClick={() => setActingAs(null)}
+              >
+                <span className="account-ico">
+                  <LogoutIcon size={16} />
+                </span>
+                <span className="account-label">
+                  {`Switch back to ${user.displayName || user.email}`}
+                </span>
+              </button>
+            )}
+            {myPages.length > 0 && (
+              <>
+                <div className="account-menu-head">Pages</div>
+                {myPages.map((page) => (
+                  <button
+                    key={page.id}
+                    className="account-item"
+                    type="button"
+                    onClick={() => {
+                      setActingAs(page.id);
+                      setWorkspaceFilter("feed");
+                      setShowAccountMenu(false);
+                    }}
+                  >
+                    <span className="account-ico">
+                      <span className="account-page-emoji" aria-hidden="true">
+                        {page.avatarEmoji ?? "📄"}
+                      </span>
+                    </span>
+                    <span className="account-label">
+                      {page.name}
+                      {actingAs === page.id ? " · acting" : ""}
+                    </span>
+                    <span className="account-chev">›</span>
+                  </button>
+                ))}
+                <button
+                  className="account-item"
+                  type="button"
+                  onClick={() => {
+                    const page = myPages[0];
+                    setShowAccountMenu(false);
+                    setWorkspaceFilter("feed");
+                    if (page) openFeedPage(page.handle);
+                  }}
+                >
+                  <span className="account-ico">
+                    <GearIcon size={16} />
+                  </span>
+                  <span className="account-label">Manage pages</span>
+                  <span className="account-chev">›</span>
+                </button>
+                <div className="account-sep" />
+              </>
+            )}
             <button
               className="account-item"
               type="button"
@@ -4575,12 +4671,26 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       </aside>
 
       <main className="main">
+        {actingPage && (
+          <div className="acting-banner" role="status">
+            <span className="acting-banner-emoji" aria-hidden="true">
+              {actingPage.avatarEmoji ?? "📄"}
+            </span>
+            <span className="acting-banner-text">
+              You&apos;re acting as <strong>{actingPage.name}</strong>
+            </span>
+            <button type="button" className="ghost small" onClick={() => setActingAs(null)}>
+              Switch back to {user?.displayName || user?.email || "your profile"}
+            </button>
+          </div>
+        )}
         {feedActive && (
           <FeedView
             client={client}
             viewerId={user?.id}
             cloudUrl={CLOUD_URL}
             refreshKey={feedRefresh}
+            defaultPostAs={actingAs ?? undefined}
             pageHandle={feedPage}
             onOpenPage={openFeedPage}
             groupHandle={feedGroup}
@@ -6223,23 +6333,6 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       {showConnectApps && (
         <div className="apps-overlay" onClick={() => setShowConnectApps(false)}>
           <div className="apps-panel marketplace" onClick={(event) => event.stopPropagation()}>
-            <div className="market-head">
-              <span className="apps-title">Marketplace</span>
-              <div className="market-head-right">
-                <button
-                  className={`market-installed${marketFilter === "installed" ? " active" : ""}`}
-                  type="button"
-                  onClick={() => setMarketFilter((value) => (value === "installed" ? "all" : "installed"))}
-                >
-                  <span className="market-installed-dot" />
-                  {connections.length} installed <span className="account-chev">›</span>
-                </button>
-                <button className="round small" type="button" onClick={() => setShowConnectApps(false)}>
-                  <CloseIcon size={13} />
-                </button>
-              </div>
-            </div>
-
             <div className="market-search-wrap">
               <SearchIcon size={15} />
               <input
@@ -6282,10 +6375,6 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                     ? MARKETPLACE
                     : MARKETPLACE.filter((app) => app.section === section)
                 ).filter((app) => {
-                  const installed = app.provider
-                    ? connections.some((entry) => entry.provider === app.provider)
-                    : false;
-                  if (marketFilter === "installed" && !installed) return false;
                   if (!marketQuery.trim()) return true;
                   return `${app.name} ${app.category} ${app.desc}`
                     .toLowerCase()

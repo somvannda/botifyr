@@ -606,6 +606,14 @@ CREATE TABLE IF NOT EXISTS page_roles (
   PRIMARY KEY (page_id, user_id)
 );
 
+-- Page roles for bots (a bot has no users row, so it needs its own table).
+CREATE TABLE IF NOT EXISTS page_bot_roles (
+  page_id TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+  bot_id  TEXT NOT NULL REFERENCES bots(id) ON DELETE CASCADE,
+  role    TEXT NOT NULL,
+  PRIMARY KEY (page_id, bot_id)
+);
+
 CREATE TABLE IF NOT EXISTS page_followers (
   page_id    TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
   user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

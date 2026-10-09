@@ -56,9 +56,11 @@ export function createFeedTools(store: Store, ctx: FeedToolContext): ToolDefinit
     return (await store.getPage(trimmed)) ?? (await store.getPageByHandle(slugify(trimmed)));
   };
 
-  /** The bot's role on a Page: owner or bot-linked ⇒ admin, else its stored role. */
+  /** The bot's role on a Page: owner/bot-linked ⇒ admin, else its bot role, then its owner's role. */
   const pageRole = async (page: PageRecord): Promise<PageRole | "admin" | null> => {
     if (page.ownerId === ctx.userId || page.botId === ctx.botId) return "admin";
+    const botRole = await store.getPageBotRole(page.id, ctx.botId);
+    if (botRole) return botRole.role;
     return (await store.getPageRole(page.id, ctx.userId))?.role ?? null;
   };
 
@@ -597,6 +599,7 @@ export function createFeedTools(store: Store, ctx: FeedToolContext): ToolDefinit
           cta: { type: "string", description: "Call-to-action label." },
           ctaUrl: { type: "string" },
           userId: { type: "string", description: "For setRole/removeRole: the member's user id." },
+          botId: { type: "string", description: "For setRole/removeRole: a bot you own (instead of userId)." },
           role: {
             type: "string",
             enum: ["admin", "editor", "moderator", "analyst"],
@@ -641,18 +644,27 @@ export function createFeedTools(store: Store, ctx: FeedToolContext): ToolDefinit
         }
         if (action === "setrole" || action === "removerole") {
           if (role !== "admin") return { ok: false, output: "Only a Page admin can manage roles." };
+          const botId = String(args.botId ?? "").trim();
           const userId = String(args.userId ?? "").trim();
-          if (!userId) return { ok: false, output: "userId is required." };
+          if (!botId && !userId) return { ok: false, output: "userId or botId is required." };
+          const member = botId ? `bot ${botId}` : userId;
           if (action === "removerole") {
-            await store.deletePageRole(page.id, userId);
-            return { ok: true, output: `Removed ${userId} from @${page.handle}.` };
+            if (botId) await store.deletePageBotRole(page.id, botId);
+            else await store.deletePageRole(page.id, userId);
+            return { ok: true, output: `Removed ${member} from @${page.handle}.` };
           }
           const newRole = String(args.role ?? "").trim() as PageRole;
           if (!["admin", "editor", "moderator", "analyst"].includes(newRole)) {
             return { ok: false, output: "role must be admin, editor, moderator, or analyst." };
           }
-          await store.setPageRole({ pageId: page.id, userId, role: newRole });
-          return { ok: true, output: `Set ${userId} as ${newRole} on @${page.handle}.` };
+          if (botId) {
+            const bot = await store.getBot(botId);
+            if (!bot || bot.userId !== ctx.userId) return { ok: false, output: `No bot ${botId} you own.` };
+            await store.setPageBotRole({ pageId: page.id, botId, role: newRole });
+          } else {
+            await store.setPageRole({ pageId: page.id, userId, role: newRole });
+          }
+          return { ok: true, output: `Set ${member} as ${newRole} on @${page.handle}.` };
         }
         if (action === "pin" || action === "unpin") {
           if (action === "unpin") {

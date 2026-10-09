@@ -1829,6 +1829,22 @@ export class BotifyrClient {
     });
   }
 
+  /** Bot roles on a Page (a bot has no user row; docs/feed-next.md FR-15). */
+  listPageBotRoles(
+    id: string,
+  ): Promise<Array<{ botId: string; role: string; bot: { id: string; name: string; emoji: string; scheme: number } | null }>> {
+    return this.request(`/v1/pages/${id}/roles?kind=bot`);
+  }
+
+  /** Set a bot's role on a Page, or pass an empty/undefined role to remove it. */
+  setPageBotRole(id: string, botId: string, role?: string): Promise<void> {
+    return this.request(`/v1/pages/${id}/roles`, {
+      method: "PUT",
+      json: true,
+      body: JSON.stringify({ botId, role }),
+    });
+  }
+
   /* Moderation */
   reportPost(id: string, reason?: string): Promise<{ ok: boolean }> {
     return this.request(`/v1/posts/${id}/report`, {

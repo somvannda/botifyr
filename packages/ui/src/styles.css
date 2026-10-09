@@ -5776,6 +5776,43 @@ body {
   margin: var(--space-1) var(--space-2);
 }
 
+/* Page switcher: Facebook-style "act as a Page" -------------------------- */
+.account-menu-head {
+  padding: var(--space-1) var(--space-3);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.account-page-emoji {
+  font-size: var(--text-lg);
+}
+
+.account-switch-back {
+  color: var(--accent);
+}
+
+.acting-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-size: var(--text-md);
+}
+
+.acting-banner-emoji {
+  font-size: var(--text-xl);
+}
+
+.acting-banner-text {
+  flex: 1;
+  min-width: 0;
+}
+
 /* Settings modal --------------------------------------------------------- */
 .settings-overlay {
   position: fixed;
@@ -7751,6 +7788,89 @@ body {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+}
+
+/* The composer rests as a single clickable row and expands in place
+   (docs/composer-implementation-plan.md). */
+.feed-composer.collapsed {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-3);
+  cursor: text;
+}
+
+.feed-composer.collapsed .feed-composer-row {
+  flex: 1;
+  align-items: center;
+}
+
+.feed-composer.collapsed .feed-composer-actions {
+  flex: none;
+  flex-wrap: nowrap;
+  border-top: none;
+  padding-top: 0;
+}
+
+.feed-composer.collapsed .feed-composer-head,
+.feed-composer.collapsed .feed-composer-drop,
+.feed-composer.collapsed .feed-draft-hint,
+.feed-composer.collapsed .mention-menu,
+.feed-composer.collapsed .feed-composer-grid,
+.feed-composer.collapsed .feed-composer-alts,
+.feed-composer.collapsed .feed-composer-options,
+.feed-composer.collapsed .feed-poll-editor,
+.feed-composer.collapsed .feed-upload,
+.feed-composer.collapsed .feed-composer-error,
+.feed-composer.collapsed .feed-composer-notice,
+.feed-composer.collapsed .feed-composer-destination,
+.feed-composer.collapsed .feed-composer-actions .feed-composer-tool,
+.feed-composer.collapsed .feed-mood,
+.feed-composer.collapsed .feed-composer-count {
+  display: none;
+}
+
+.feed-composer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.feed-composer-title {
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  color: var(--text);
+}
+
+.feed-composer-close {
+  padding: var(--space-1) var(--space-2);
+}
+
+.feed-composer-drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-5) var(--space-4);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.feed-composer-drop:hover {
+  border-color: var(--accent-border);
+  background: var(--hover);
+}
+
+.feed-composer-drop-title {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--text);
 }
 
 .feed-composer-row {
@@ -11208,10 +11328,13 @@ a.feed-follow-btn {
   background: var(--danger-soft);
 }
 
-/* FEED-5: keep the Feed comfortable on narrow viewports. */
-.feed-topbar .mobile-nav-btn {
-  align-self: center;
-  flex: none;
+/* FEED-5: keep the Feed comfortable on narrow viewports. The floating toggle
+   replaces the Feed top bar (removed) on narrow screens. */
+.feed-mobile-nav {
+  position: fixed;
+  top: calc(var(--titlebar, 0px) + var(--space-3));
+  left: var(--space-3);
+  z-index: 120;
 }
 
 /* Feed at phone widths: match the shell's drawer breakpoint. */

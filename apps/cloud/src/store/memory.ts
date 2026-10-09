@@ -20,6 +20,7 @@ import type {
   MediaRecord,
   ModelPricingRecord,
   NotificationRecord,
+  PageBotRoleRecord,
   PageRecord,
   PageRoleRecord,
   Plan,
@@ -115,6 +116,8 @@ export class MemoryStore implements Store {
   private pages = new Map<string, PageRecord>();
   /** Keyed by `${pageId}:${userId}`. */
   private pageRoles = new Map<string, PageRoleRecord>();
+  /** Keyed by `${pageId}:${botId}`. */
+  private pageBotRoles = new Map<string, PageBotRoleRecord>();
   private pageFollowers = new Set<string>();
   private settings: PlatformSettings | null = null;
   private modelPricing = new Map<string, ModelPricingRecord>();
@@ -1551,6 +1554,25 @@ export class MemoryStore implements Store {
 
   async deletePageRole(pageId: string, userId: string): Promise<boolean> {
     return this.pageRoles.delete(`${pageId}:${userId}`);
+  }
+
+  async setPageBotRole(record: PageBotRoleRecord): Promise<void> {
+    this.pageBotRoles.set(`${record.pageId}:${record.botId}`, { ...record });
+  }
+
+  async getPageBotRole(pageId: string, botId: string): Promise<PageBotRoleRecord | null> {
+    const record = this.pageBotRoles.get(`${pageId}:${botId}`);
+    return record ? { ...record } : null;
+  }
+
+  async listPageBotRoles(pageId: string): Promise<PageBotRoleRecord[]> {
+    return [...this.pageBotRoles.values()]
+      .filter((record) => record.pageId === pageId)
+      .map((record) => ({ ...record }));
+  }
+
+  async deletePageBotRole(pageId: string, botId: string): Promise<boolean> {
+    return this.pageBotRoles.delete(`${pageId}:${botId}`);
   }
 
   async followPage(pageId: string, userId: string): Promise<void> {
