@@ -779,6 +779,22 @@ export class BotifyrClient {
     });
   }
 
+  /** Rewrite a rough idea into a concrete brief so the org is shaped right. */
+  rewriteCompanyBrief(input: {
+    kind: "url" | "idea";
+    value: string;
+    guidance?: string;
+  }): Promise<{ brief: string }> {
+    return this.request("/v1/workspaces/rewrite", {
+      method: "POST",
+      json: true,
+      body: JSON.stringify({
+        source: { kind: input.kind, value: input.value },
+        guidance: input.guidance,
+      }),
+    });
+  }
+
   /* Company board (work items). */
   listWorkItems(workspaceId: string): Promise<WorkItem[]> {
     return this.request(`/v1/workspaces/${workspaceId}/work`);

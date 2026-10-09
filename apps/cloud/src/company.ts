@@ -357,6 +357,41 @@ export async function analyzeSource(
 
 const MAX_MEMBERS = 8;
 
+/**
+ * Sharpen a rough business idea into a concrete brief an AI company can act on
+ * (the "AI rewriting" step before planning). Falls back to a deterministic
+ * brief when the model is unavailable, so the flow never blocks.
+ */
+export async function rewriteBrief(
+  complete: CompleteFn,
+  input: { idea: string; guidance?: string },
+): Promise<{ brief: string }> {
+  const idea = input.idea.trim().slice(0, 1000);
+  if (!idea) return { brief: idea };
+  const guidance = input.guidance?.trim().slice(0, 300);
+  try {
+    const system =
+      "You help a founder sharpen a rough business idea into a clear, concrete brief that an AI " +
+      "company can act on. Reply with the rewritten brief as plain prose only — 3 to 6 sentences, " +
+      "no headings, no markdown, no quotes. State what is being built, who it is for, where, the " +
+      "core value, and a 90-day goal.";
+    const user =
+      `Rough idea:\n${idea}\n\n` +
+      (guidance ? `The founder wants the company shaped to optimise for: ${guidance}\n\n` : "") +
+      "Rewrite the idea into a tighter brief that reflects this.";
+    const text = (await complete({ system, user, maxTokens: 400 })).trim();
+    const brief = text.replace(/^["']|["']$/g, "").slice(0, 1200);
+    return { brief: brief || idea };
+  } catch {
+    const aim = guidance ? ` Optimise for ${guidance}.` : "";
+    return {
+      brief:
+        `${idea}. Build it as a focused first release, validate it with a small group of target ` +
+        `customers, and reach a working MVP within 90 days.${aim}`,
+    };
+  }
+}
+
 /** Emoji per department, used when the catalog builds a default org. */
 const ROLE_EMOJI: Record<string, string> = {
   exec: "🧭",

@@ -58,6 +58,7 @@ import {
   buildStandup,
   buildWeeklyReport,
   planCompanyDirections,
+  rewriteBrief,
   shouldRunSchedule,
   toDepartment,
   uniqueWorkspaceName,
@@ -2233,6 +2234,17 @@ export async function buildServer(options: ServerOptions) {
       if (!value) return reply.code(400).send({ error: "a website URL or an idea is required" });
       const kind = request.body?.source?.kind === "url" ? "url" : "idea";
       return analyzeSource({ kind, value }, { complete: oneShot, fetchText: fetchPageText });
+    },
+  );
+
+  /** Rewrite a rough idea into a concrete brief so the org is shaped right. */
+  app.post<{ Body: { source?: { kind?: string; value?: string }; guidance?: string } }>(
+    "/v1/workspaces/rewrite",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const value = (request.body?.source?.value ?? "").trim().slice(0, 1000);
+      if (!value) return reply.code(400).send({ error: "an idea is required" });
+      return rewriteBrief(oneShot, { idea: value, guidance: request.body?.guidance });
     },
   );
 

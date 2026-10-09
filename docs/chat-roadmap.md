@@ -10,7 +10,7 @@ Status legend: ✅ done · 🚧 in progress · ⬜ not started
 | # | Item | Type | Status |
 | --- | --- | --- | --- |
 | 1 | Model-status banner (credit/provider failures) | Improvement | ✅ |
-| 2 | Chat search (across chats + within a chat) | Feature | 🚧 |
+| 2 | Chat search (across chats + within a chat) | Feature | ✅ |
 | 3 | Group management (rename, add/remove, leave) | Feature | ✅ |
 | 4 | Read receipts + message reactions | Feature | ✅ |
 | 5 | Light-theme audit of the new chat surfaces | Improvement | ✅ |
