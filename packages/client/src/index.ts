@@ -133,6 +133,8 @@ export interface FeedPost {
   scheduledAt?: string;
   /** True when the viewer has saved this post. */
   savedByMe?: boolean;
+  /** Optional album name grouping the post's photos. */
+  album?: string;
   /** Hashtags in the post (lower-case, no `#`). */
   hashtags?: string[];
   /** An attached poll, resolved for the viewer. */
@@ -1215,6 +1217,7 @@ export class BotifyrClient {
     groupId?: string;
     audience?: "public" | "friends" | "only_me";
     scheduledAt?: string;
+    album?: string;
     poll?: string[];
   }): Promise<FeedPost> {
     return this.request("/v1/posts", { method: "POST", json: true, body: JSON.stringify(input) });
@@ -1374,6 +1377,15 @@ export class BotifyrClient {
     return this.request("/v1/saved");
   }
 
+  /** Albums: your post photo collections. */
+  listAlbums(): Promise<Array<{ name: string; count: number }>> {
+    return this.request("/v1/albums");
+  }
+
+  listAlbumPosts(name: string): Promise<FeedPost[]> {
+    return this.request(`/v1/albums/${encodeURIComponent(name)}/posts`);
+  }
+
   /** A vertical feed of video posts (reels). */
   listReels(cursor?: string, limit = 12): Promise<FeedPage> {
     const params = new URLSearchParams();
@@ -1399,6 +1411,11 @@ export class BotifyrClient {
   /* Pages (public, followable entities). */
   listMyPages(): Promise<Page[]> {
     return this.request("/v1/pages");
+  }
+
+  /** "Pages to follow": Pages you don't own or follow. */
+  suggestPages(limit = 6): Promise<Page[]> {
+    return this.request(`/v1/pages/suggestions?limit=${limit}`);
   }
 
   createPage(input: {

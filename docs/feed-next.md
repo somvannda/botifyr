@@ -6,9 +6,8 @@ what Botifyr ships today and specifies the next improvements in detail.
 
 - **Status:** most of this document is built — see *Implementation status* below
   and [`docs/feed.md`](feed.md).
-  - **Open:** post **Save / Hide / Snooze / Unfollow** (FR-10), a "**Pages to
-    follow**" discovery surface (FR-21), **albums** (FR-5 variant), the reaction
-    **summary/hover** affordances, and Page **CTA-button** rendering.
+  - **Open:** the **albums UI** (backend done), the reaction **summary/hover**
+    affordances, and Page **CTA-button** rendering.
   - **Deferred:** live streaming (realtime media infra).
   - **Non-goals:** ads / marketplace / events / shops.
 - **This document:** the requirements, data model, API, UI, priorities, and phases
@@ -115,6 +114,22 @@ and a **Group view** (join/leave + in-group composer + post stream), covered by
 **Reels — done.** `GET /v1/reels` returns a vertical feed of video posts (reusing
 the video pipeline); the UI has a **Reels** view. **Live streaming is out of
 scope** (needs realtime media infrastructure).
+
+**Post controls (FR-10) — done.** `post_saves` / `post_hides` / `author_mutes`,
+`setPostSaved` / `setPostHidden` / `setAuthorMute` / `listMutedAuthorIds`,
+`PUT`/`DELETE /v1/posts/:id/save|hide`, `POST`/`DELETE /v1/authors/:id/mute`, a
+`GET /v1/saved` list, `savedByMe` on the feed DTO, feed filtering of hidden posts
+and muted authors, and a per-post **⋯** menu (Save / Hide / Snooze 30 days /
+Unfollow) plus a **Save** action in the UI.
+
+**Pages to follow (FR-21) — done.** `listAllPages` + `GET /v1/pages/suggestions`
+(excludes Pages you own, follow, or are blocked from), `BotifyrClient.suggestPages`,
+and a rail **Pages to follow** section with Follow buttons.
+
+**Albums (FR-5) — backend done.** `posts.album` + `listAlbums` / `listAlbumPosts`,
+`GET /v1/albums` and `/v1/albums/:name/posts`, `album` on the create/feed DTO, and
+`BotifyrClient.listAlbums` / `listAlbumPosts`. **UI open** (no composer album field
+or album view yet).
 
 **Everything else** in this document (ads / marketplace / events / shops, …) is
 explicitly **out of scope**.

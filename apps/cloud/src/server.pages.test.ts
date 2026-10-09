@@ -294,4 +294,30 @@ describe("pages", () => {
 
     await app.close();
   });
+
+  it("suggests Pages to follow, excluding owned and followed", async () => {
+    const { app, signUp, auth, createPage } = await setup();
+    const alice = await signUp("alice-sugpages@example.com");
+    const bob = await signUp("bob-sugpages@example.com");
+    const mine = await createPage(alice.token, "My Own Page", "myownpage");
+    const theirs = await createPage(bob.token, "Their Page", "theirpage");
+
+    const list = await app.inject({ method: "GET", url: "/v1/pages/suggestions", headers: auth(alice.token) });
+    expect(list.statusCode).toBe(200);
+    const ids = (list.json() as Array<{ id: string }>).map((entry) => entry.id);
+    expect(ids).toContain(theirs.id);
+    expect(ids).not.toContain(mine.id);
+
+    // Following a suggested Page removes it from suggestions.
+    await app.inject({
+      method: "POST",
+      url: `/v1/pages/${theirs.id}/follow`,
+      headers: auth(alice.token),
+      payload: {},
+    });
+    const after = await app.inject({ method: "GET", url: "/v1/pages/suggestions", headers: auth(alice.token) });
+    expect((after.json() as Array<{ id: string }>).map((entry) => entry.id)).not.toContain(theirs.id);
+
+    await app.close();
+  });
 });

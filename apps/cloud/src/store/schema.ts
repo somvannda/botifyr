@@ -565,6 +565,8 @@ CREATE TABLE IF NOT EXISTS page_followers (
 ALTER TABLE posts ADD COLUMN IF NOT EXISTS page_id TEXT REFERENCES pages(id) ON DELETE CASCADE;
 /* Reposts (shares) link back to the original post. */
 ALTER TABLE posts ADD COLUMN IF NOT EXISTS repost_of TEXT REFERENCES posts(id) ON DELETE SET NULL;
+/* Optional album name grouping a post's photos. */
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS album TEXT;
 /* Post audience: public | friends | only_me. */
 ALTER TABLE posts ADD COLUMN IF NOT EXISTS audience TEXT NOT NULL DEFAULT 'friends';
 /* Scheduled publish time (null = published now). */

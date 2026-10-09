@@ -1897,6 +1897,7 @@ export function FeedRail({
   const [blocked, setBlocked] = useState<Person[]>([]);
   const [trending, setTrending] = useState<FeedPost[]>([]);
   const [pages, setPages] = useState<Page[]>([]);
+  const [pageSuggestions, setPageSuggestions] = useState<Page[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [requested, setRequested] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState<string | null>(null);
@@ -1989,6 +1990,28 @@ export function FeedRail({
     };
   }, [client]);
 
+  useEffect(() => {
+    let active = true;
+    client
+      .suggestPages(6)
+      .then((list) => {
+        if (active) setPageSuggestions(list);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [client]);
+
+  async function followSuggestedPage(page: Page) {
+    try {
+      await client.followPage(page.id);
+      setPageSuggestions((prev) => prev.filter((entry) => entry.id !== page.id));
+    } catch {
+      // ignore
+    }
+  }
+
   return (
     <>
       {groups.length > 0 && (
@@ -2011,6 +2034,32 @@ export function FeedRail({
                     View
                   </button>
                 )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {pageSuggestions.length > 0 && (
+        <div className="feed-rail-section">
+          <div className="feed-rail-head">
+            <SparkIcon size={15} /> Pages to follow
+          </div>
+          <ul className="feed-rail-people">
+            {pageSuggestions.map((page) => (
+              <li key={page.id} className="feed-rail-person">
+                <Avatar emoji={page.avatarEmoji} name={page.name} size={36} />
+                <div className="feed-rail-person-meta">
+                  <span className="feed-rail-person-name">{page.name}</span>
+                  <span className="feed-rail-person-sub">@{page.handle}</span>
+                </div>
+                <button
+                  type="button"
+                  className="feed-follow-btn"
+                  onClick={() => void followSuggestedPage(page)}
+                >
+                  Follow
+                </button>
               </li>
             ))}
           </ul>

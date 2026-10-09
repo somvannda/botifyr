@@ -22,6 +22,7 @@ function fakeClient(overrides: Record<string, unknown> = {}): BotifyrClient {
     listCompanyReports: vi.fn().mockResolvedValue([]),
     listQuests: vi.fn().mockResolvedValue([]),
     listWorkspaceFiles: vi.fn().mockResolvedValue([]),
+    listProposals: vi.fn().mockResolvedValue([]),
     getWorkspace: vi.fn().mockResolvedValue(null),
   };
   return { ...base, ...overrides } as unknown as BotifyrClient;

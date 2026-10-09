@@ -84,7 +84,16 @@ type CompanyPlan = CreateWorkspaceRequest & {
 
 type WorkspaceFile = { id: string; name: string; content: string; department?: string };
 
-type Section = "home" | "inbox" | "team" | "board" | "office" | "wiki" | "budget" | "standup";
+type Section =
+  | "home"
+  | "inbox"
+  | "team"
+  | "board"
+  | "office"
+  | "wiki"
+  | "budget"
+  | "standup"
+  | "changes";
 
 interface Priority {
   id: string;
@@ -99,6 +108,7 @@ export function CompanyWorkspace({
   companies,
   bots,
   focusCompanyId,
+  createNonce,
   onOpenOffice,
   onCreated,
 }: {
@@ -108,6 +118,8 @@ export function CompanyWorkspace({
   bots: Bot[];
   /** When set, jump to this company (e.g. the sidebar's board button). */
   focusCompanyId?: string | null;
+  /** Bumped by a host action ("Start a company") to open the inline flow. */
+  createNonce?: number;
   /** Open the 3D office for a company (docked, not a modal). */
   onOpenOffice: (company: { id: string; name: string }) => void;
   /** A company was created inline → refresh the account + focus it. */
@@ -121,6 +133,9 @@ export function CompanyWorkspace({
   const [grants, setGrants] = useState<CapabilityGrant[]>([]);
   const [reports, setReports] = useState<CompanyReport[]>([]);
   const [wiki, setWiki] = useState<WorkspaceFile[]>([]);
+  const [proposals, setProposals] = useState<
+    Array<{ repo: string; path: string; content: string; diff: string; exists: boolean }>
+  >([]);
   const [budget, setBudget] = useState<WorkspaceBudget | null>(null);
   void budget; // referenced; surfaced in the UI as that work lands
   const [loading, setLoading] = useState(false);
@@ -177,7 +192,7 @@ export function CompanyWorkspace({
         setLastVisitAt(null);
       }
       try {
-        const [it, nd, bd, gr, rp, qs, wk, ws] = await Promise.all([
+        const [it, nd, bd, gr, rp, qs, wk, ws, pr] = await Promise.all([
           client.listWorkItems(id).catch(() => []),
           client.listWorkspaceNeeds(id).catch(() => []),
           client.getWorkspaceBudget(id).catch(() => null),
@@ -186,6 +201,7 @@ export function CompanyWorkspace({
           client.listQuests(id).catch(() => []),
           client.listWorkspaceFiles(id).catch(() => []),
           client.getWorkspace(id).catch(() => null),
+          client.listProposals(id).catch(() => []),
         ]);
         setItems(it);
         setNeeds(nd);
@@ -195,6 +211,7 @@ export function CompanyWorkspace({
         setReports(rp);
         setQuests(qs);
         setWiki(wk);
+        setProposals(pr);
         if (ws) setMeta(ws);
       } finally {
         setLoading(false);
@@ -206,6 +223,15 @@ export function CompanyWorkspace({
   useEffect(() => {
     if (selectedId) void load(selectedId);
   }, [selectedId, load]);
+
+  // A host "Start a company" action opens the inline onboarding (no modal).
+  useEffect(() => {
+    if (createNonce) {
+      resetOnboarding();
+      setCreating(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [createNonce]);
 
   const company = useMemo(
     () => companies.find((entry) => entry.id === selectedId) ?? null,
@@ -866,6 +892,7 @@ export function CompanyWorkspace({
             ["office", "Office"],
             ["budget", "Budget"],
             ["standup", "Standup"],
+            ["changes", "Changes"],
             ["wiki", "Wiki"],
           ] as const
         ).map(([id, label]) => (
@@ -1276,6 +1303,46 @@ export function CompanyWorkspace({
                     {report.kind} · {new Date(report.createdAt).toLocaleString()}
                   </span>
                   <pre className="cws-pre">{report.summary}</pre>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {tab === "changes" && (
+          <div className="cws-card">
+            <div className="cws-card-head">
+              <h3>Changes</h3>
+              <span className="cws-muted">{proposals.length} staged</span>
+            </div>
+            {proposals.length === 0 && (
+              <p className="cws-muted">
+                No proposed changes yet — engineering agents stage edits here for your review.
+              </p>
+            )}
+            <ul className="cws-list">
+              {proposals.map((change) => (
+                <li key={`${change.repo}/${change.path}`} className="cws-wiki">
+                  <div className="cws-wiki-name">
+                    {change.repo}/{change.path}
+                    <span className="cws-muted">{change.exists ? "modified" : "new"}</span>
+                  </div>
+                  <pre className="cws-pre cws-diff">
+                    {change.diff.split("\n").map((line, index) => (
+                      <div
+                        key={index}
+                        className={
+                          line.startsWith("+")
+                            ? "diff-add"
+                            : line.startsWith("-")
+                              ? "diff-del"
+                              : "diff-ctx"
+                        }
+                      >
+                        {line || " "}
+                      </div>
+                    ))}
+                  </pre>
                 </li>
               ))}
             </ul>

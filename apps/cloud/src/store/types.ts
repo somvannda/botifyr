@@ -83,6 +83,8 @@ export interface PostRecord {
   repostOf?: string;
   /** Set when the post belongs to a group. */
   groupId?: string;
+  /** Optional album name grouping a post's photos. */
+  album?: string;
   /** Who can see the post (docs/feed-next.md §FR-7). Defaults to friends. */
   audience?: "public" | "friends" | "only_me";
   /** Future publish time; hidden from others until then (docs/feed-next.md §FR-19). */
@@ -460,6 +462,10 @@ export interface Store {
   /** Set/replace the viewer's reaction, or clear it with `null`. */
   setPostReaction(postId: string, userId: string, reaction: ReactionType | null): Promise<void>;
   setCommentReaction(commentId: string, userId: string, reaction: ReactionType | null): Promise<void>;
+  /* Albums (photos grouped by name) */
+  listAlbums(ownerId: string): Promise<Array<{ name: string; count: number }>>;
+  listAlbumPosts(ownerId: string, album: string, limit: number): Promise<PostRecord[]>;
+
   /* Post controls (FR-10): save / hide / mute */
   setPostSaved(postId: string, userId: string, saved: boolean): Promise<void>;
   listSavedPostIds(userId: string): Promise<string[]>;
@@ -534,6 +540,8 @@ export interface Store {
   getPage(id: string): Promise<PageRecord | null>;
   getPageByHandle(handle: string): Promise<PageRecord | null>;
   listPages(ownerId: string): Promise<PageRecord[]>;
+  /** All Pages (for discovery); newest first, bounded. */
+  listAllPages(): Promise<PageRecord[]>;
   updatePage(record: PageRecord): Promise<void>;
   deletePage(ownerId: string, id: string): Promise<boolean>;
   /** Pin (or unpin with `null`) a post to the Page timeline. */

@@ -1249,8 +1249,8 @@ export class PostgresStore implements Store {
 
   async createPost(record: PostRecord): Promise<void> {
     await this.pool.query(
-      "INSERT INTO posts (id, author_id, body, media_id, page_id, repost_of, group_id, audience, scheduled_at, created_at, updated_at) " +
-        "VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
+      "INSERT INTO posts (id, author_id, body, media_id, page_id, repost_of, group_id, audience, scheduled_at, album, created_at, updated_at) " +
+        "VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)",
       [
         record.id,
         record.authorId,
@@ -1261,6 +1261,7 @@ export class PostgresStore implements Store {
         record.groupId ?? null,
         record.audience ?? "friends",
         record.scheduledAt ?? null,
+        record.album ?? null,
         record.createdAt,
         record.updatedAt,
       ],
@@ -1509,6 +1510,22 @@ export class PostgresStore implements Store {
   async listGroupMembers(groupId: string): Promise<GroupMemberRecord[]> {
     const { rows } = await this.pool.query("SELECT * FROM group_members WHERE group_id = $1", [groupId]);
     return rows.map(toGroupMember);
+  }
+
+  async listAlbums(ownerId: string): Promise<Array<{ name: string; count: number }>> {
+    const { rows } = await this.pool.query(
+      "SELECT album, COUNT(*)::int AS count FROM posts WHERE author_id = $1 AND album IS NOT NULL GROUP BY album ORDER BY album",
+      [ownerId],
+    );
+    return rows.map((row) => ({ name: row.album as string, count: Number(row.count ?? 0) }));
+  }
+
+  async listAlbumPosts(ownerId: string, album: string, limit: number): Promise<PostRecord[]> {
+    const { rows } = await this.pool.query(
+      "SELECT * FROM posts WHERE author_id = $1 AND album = $2 ORDER BY created_at DESC LIMIT $3",
+      [ownerId, album, Math.max(1, Math.min(100, limit))],
+    );
+    return rows.map(toPost);
   }
 
   async setPostSaved(postId: string, userId: string, saved: boolean): Promise<void> {
@@ -1846,6 +1863,11 @@ export class PostgresStore implements Store {
     return rows.map(toPage);
   }
 
+  async listAllPages(): Promise<PageRecord[]> {
+    const { rows } = await this.pool.query("SELECT * FROM pages ORDER BY created_at DESC LIMIT 200");
+    return rows.map(toPage);
+  }
+
   async updatePage(record: PageRecord): Promise<void> {
     await this.pool.query(
       "UPDATE pages SET handle=$2, name=$3, category=$4, about=$5, avatar_emoji=$6, avatar_url=$7, cover_url=$8, cta=$9, verified=$10, updated_at=$11 WHERE id=$1",
@@ -2113,6 +2135,7 @@ function toPost(row: any): PostRecord {
     pageId: row.page_id ?? undefined,
     repostOf: row.repost_of ?? undefined,
     groupId: row.group_id ?? undefined,
+    album: row.album ?? undefined,
     audience: row.audience ?? "friends",
     scheduledAt: row.scheduled_at ? new Date(row.scheduled_at).toISOString() : undefined,
     createdAt: new Date(row.created_at).toISOString(),

@@ -776,6 +776,37 @@ describe("feed", () => {
     await app.close();
   });
 
+  it("groups posts into albums", async () => {
+    const { app, signUp, auth } = await setup();
+    const alice = await signUp("alice-album@example.com");
+    const first = await app.inject({
+      method: "POST",
+      url: "/v1/posts",
+      headers: auth(alice.token),
+      payload: { body: "photo one", album: "Summer" },
+    });
+    expect((first.json() as { album?: string }).album).toBe("Summer");
+    await app.inject({
+      method: "POST",
+      url: "/v1/posts",
+      headers: auth(alice.token),
+      payload: { body: "photo two", album: "Summer" },
+    });
+    await app.inject({ method: "POST", url: "/v1/posts", headers: auth(alice.token), payload: { body: "no album" } });
+
+    const albums = await app.inject({ method: "GET", url: "/v1/albums", headers: auth(alice.token) });
+    const list = albums.json() as Array<{ name: string; count: number }>;
+    expect(list.find((entry) => entry.name === "Summer")?.count).toBe(2);
+
+    const posts = await app.inject({ method: "GET", url: "/v1/albums/Summer/posts", headers: auth(alice.token) });
+    const bodies = (posts.json() as Array<{ body: string }>).map((entry) => entry.body);
+    expect(bodies).toContain("photo one");
+    expect(bodies).toContain("photo two");
+    expect(bodies).not.toContain("no album");
+
+    await app.close();
+  });
+
   it("supports reactions on comments", async () => {
     const { app, store, signUp, auth, createPost } = await setup();
     const alice = await signUp("alice-creact@example.com");

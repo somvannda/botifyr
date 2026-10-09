@@ -4101,6 +4101,7 @@ export async function buildServer(options: ServerOptions) {
     audience?: "public" | "friends" | "only_me";
     scheduledAt?: string;
     savedByMe?: boolean;
+    album?: string;
     poll?: PollRecord;
     hashtags?: string[];
     imageUrl?: string;
@@ -4230,6 +4231,7 @@ export async function buildServer(options: ServerOptions) {
       audience: record.audience ?? "friends",
       scheduledAt: record.scheduledAt,
       savedByMe: savedIds ? savedIds.has(record.id) : undefined,
+      album: record.album,
       poll: (await store.getPoll(record.id, viewerId)) ?? undefined,
       hashtags: await store.listPostTags(record.id),
       imageUrl: images[0],
@@ -4342,6 +4344,7 @@ export async function buildServer(options: ServerOptions) {
       groupId?: string;
       audience?: string;
       scheduledAt?: string;
+      album?: string;
       poll?: string[];
     };
   }>("/v1/posts", { preHandler: requireAuth }, async (request, reply) => {
@@ -4397,6 +4400,7 @@ export async function buildServer(options: ServerOptions) {
       mediaId: provided[0] || undefined,
       pageId: page?.id,
       groupId: group?.id,
+      album: (request.body?.album ?? "").trim().slice(0, 60) || undefined,
       audience,
       scheduledAt,
       createdAt: now,
@@ -4731,6 +4735,24 @@ export async function buildServer(options: ServerOptions) {
     return items;
   });
 
+  /* Albums: photos grouped by name (docs/feed-next.md §FR-5). */
+  app.get("/v1/albums", { preHandler: requireAuth }, async (request) =>
+    store.listAlbums(request.userId as string),
+  );
+
+  app.get<{ Params: { name: string } }>(
+    "/v1/albums/:name/posts",
+    { preHandler: requireAuth },
+    async (request) => {
+      const userId = request.userId as string;
+      const posts = await store.listAlbumPosts(userId, decodeURIComponent(request.params.name), 50);
+      const cache = new Map<string, FeedAuthorDto>();
+      const items = [];
+      for (const record of posts) items.push(await feedPostOf(record, userId, cache));
+      return items;
+    },
+  );
+
   /* Vote in a post's poll (docs/feed-next.md §FR-12). */
   app.post<{ Params: { id: string }; Body: { optionId?: string } }>(
     "/v1/posts/:id/vote",
@@ -4947,6 +4969,25 @@ export async function buildServer(options: ServerOptions) {
     await store.setPageRole({ pageId: record.id, userId, role: "admin" });
     return reply.code(201).send(await pageDto(record, userId));
   });
+
+  /* "Pages to follow" discovery (docs/feed-next.md §FR-21). */
+  app.get<{ Querystring: { limit?: string } }>(
+    "/v1/pages/suggestions",
+    { preHandler: requireAuth },
+    async (request) => {
+      const userId = request.userId as string;
+      const limit = Math.max(1, Math.min(20, Number(request.query?.limit ?? 6) || 6));
+      const blocked = new Set(await store.listBlockedEither(userId));
+      const followed = new Set(await store.listFollowedPageIds(userId));
+      const out = [];
+      for (const page of await store.listAllPages()) {
+        if (page.ownerId === userId || followed.has(page.id) || blocked.has(page.id)) continue;
+        out.push(await pageDto(page, userId));
+        if (out.length >= limit) break;
+      }
+      return out;
+    },
+  );
 
   app.get<{ Params: { handle: string } }>(
     "/v1/pages/:handle",

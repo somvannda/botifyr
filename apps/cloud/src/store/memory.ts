@@ -932,6 +932,25 @@ export class MemoryStore implements Store {
     return this.groupMembers.has(`${groupId}:${userId}`);
   }
 
+  async listAlbums(ownerId: string): Promise<Array<{ name: string; count: number }>> {
+    const counts = new Map<string, number>();
+    for (const post of this.posts.values()) {
+      if (post.authorId !== ownerId || !post.album) continue;
+      counts.set(post.album, (counts.get(post.album) ?? 0) + 1);
+    }
+    return [...counts.entries()]
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  async listAlbumPosts(ownerId: string, album: string, limit: number): Promise<PostRecord[]> {
+    return [...this.posts.values()]
+      .filter((post) => post.authorId === ownerId && post.album === album)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, Math.max(1, Math.min(100, limit)))
+      .map((post) => ({ ...post }));
+  }
+
   async setPostSaved(postId: string, userId: string, saved: boolean): Promise<void> {
     const key = `${userId}:${postId}`;
     if (saved) this.postSaves.add(key);
@@ -1284,6 +1303,12 @@ export class MemoryStore implements Store {
     return [...this.pages.values()]
       .filter((record) => record.ownerId === ownerId)
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      .map((record) => ({ ...record }));
+  }
+
+  async listAllPages(): Promise<PageRecord[]> {
+    return [...this.pages.values()]
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .map((record) => ({ ...record }));
   }
 
