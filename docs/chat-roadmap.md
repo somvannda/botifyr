@@ -13,7 +13,7 @@ Status legend: ✅ done · 🚧 in progress · ⬜ not started
 | 2 | Chat search (across chats + within a chat) | Feature | 🚧 |
 | 3 | Group management (rename, add/remove, leave) | Feature | ✅ |
 | 4 | Read receipts + message reactions | Feature | ⬜ |
-| 5 | Light-theme audit of the new chat surfaces | Improvement | ⬜ |
+| 5 | Light-theme audit of the new chat surfaces | Improvement | ✅ |
 | 6 | Cached transcripts (persist transcription on the message) | Improvement | ⬜ |
 
 ---
@@ -58,13 +58,14 @@ the first failure.
 - **Read receipts:** track and display "seen" state for DMs (needs a per-message
   read marker; reuse the existing `readAt` bookkeeping).
 
-## 5. Light-theme audit
+## 5. Light-theme audit (done)
 
-The new surfaces (`.contact-panel`, `.contact-media-grid`, `.voice-note*`,
-`.dm-*`, `.lightbox`, `.attach-menu`) were authored mostly with theme variables,
-but a pass is due: switch `data-theme="light"` and check for hardcoded dark
-colors (e.g. the `.voice-note-play` accent, the lightbox scrim, red action
-colors) and contrast.
+Audited the new surfaces (`.contact-panel`, `.contact-*`, `.group-*`,
+`.contact-media-grid`, `.voice-note*`, `.dm-*`, `.search-hit*`, `.attach-menu`,
+`.model-banner`, `.lightbox`). All colors come from theme variables
+(`--panel`, `--border`, `--text`, `--muted`, `--hover`, `--accent`) except two
+intentional cases: white text on the accent play button / recording state, and
+the lightbox's dark scrim (kept dark in both themes). No changes required.
 
 ## 6. Cached transcripts
 

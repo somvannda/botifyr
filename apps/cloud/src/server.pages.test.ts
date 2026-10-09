@@ -241,4 +241,57 @@ describe("pages", () => {
 
     await app.close();
   });
+
+  it("moderates page comments through the community inbox", async () => {
+    const { app, signUp, auth, createPage } = await setup();
+    const alice = await signUp("alice-inbox@example.com");
+    const bob = await signUp("bob-inbox@example.com");
+    const page = await createPage(alice.token, "Community", "community");
+    const post = (
+      await app.inject({
+        method: "POST",
+        url: "/v1/posts",
+        headers: auth(alice.token),
+        payload: { body: "page post", pageId: page.id },
+      })
+    ).json() as { id: string };
+    const comment = (
+      await app.inject({
+        method: "POST",
+        url: `/v1/posts/${post.id}/comments`,
+        headers: auth(bob.token),
+        payload: { body: "nice page" },
+      })
+    ).json() as { id: string };
+
+    const inbox = await app.inject({ method: "GET", url: `/v1/pages/${page.id}/inbox`, headers: auth(alice.token) });
+    expect(inbox.statusCode).toBe(200);
+    expect((inbox.json() as Array<{ id: string }>).map((entry) => entry.id)).toContain(comment.id);
+
+    // A non-moderator can't hide.
+    const denied = await app.inject({
+      method: "POST",
+      url: `/v1/comments/${comment.id}/hide`,
+      headers: auth(bob.token),
+      payload: {},
+    });
+    expect(denied.statusCode).toBe(403);
+
+    // The owner hides it; it disappears from public reads.
+    const hide = await app.inject({
+      method: "POST",
+      url: `/v1/comments/${comment.id}/hide`,
+      headers: auth(alice.token),
+      payload: {},
+    });
+    expect(hide.statusCode).toBe(200);
+    const listed = await app.inject({
+      method: "GET",
+      url: `/v1/posts/${post.id}/comments`,
+      headers: auth(alice.token),
+    });
+    expect((listed.json() as Array<{ id: string }>).map((entry) => entry.id)).not.toContain(comment.id);
+
+    await app.close();
+  });
 });

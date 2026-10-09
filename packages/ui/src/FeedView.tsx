@@ -497,6 +497,8 @@ function PageView({
   const [roleResults, setRoleResults] = useState<Person[]>([]);
   const [insights, setInsights] = useState<Awaited<ReturnType<BotifyrClient["pageInsights"]>> | null>(null);
   const [insightsOpen, setInsightsOpen] = useState(false);
+  const [inbox, setInbox] = useState<Awaited<ReturnType<BotifyrClient["pageInbox"]>> | null>(null);
+  const [inboxOpen, setInboxOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -553,6 +555,26 @@ function PageView({
       setPosts(await client.listPagePosts(handle));
     } catch {
       // Leave the pin unchanged on failure.
+    }
+  }
+
+  async function openInbox() {
+    if (!page) return;
+    setInboxOpen(true);
+    try {
+      setInbox(await client.pageInbox(page.id));
+    } catch {
+      setInbox([]);
+    }
+  }
+
+  async function toggleHideComment(id: string, hidden: boolean) {
+    try {
+      if (hidden) await client.hideComment(id);
+      else await client.unhideComment(id);
+      setInbox((prev) => (prev ?? []).map((entry) => (entry.id === id ? { ...entry, hidden } : entry)));
+    } catch {
+      // Ignore a failed moderation action.
     }
   }
 
@@ -687,6 +709,9 @@ function PageView({
                       </option>
                     ))}
                   </select>
+                  <button type="button" className="feed-follow-btn" onClick={() => void openInbox()}>
+                    Community
+                  </button>
                   <button type="button" className="feed-follow-btn" onClick={() => void openInsights()}>
                     Insights
                   </button>
@@ -842,6 +867,38 @@ function PageView({
             )}
             <div className="page-settings-actions">
               <button type="button" className="ghost small" onClick={() => setInsightsOpen(false)}>
+                Close
+              </button>
+            </div>
+          </div>
+        )}
+
+        {inboxOpen && (
+          <div className="page-settings">
+            <div className="feed-rail-head">Community inbox</div>
+            {inbox === null ? (
+              <div className="feed-state">Loading…</div>
+            ) : inbox.length === 0 ? (
+              <div className="feed-state">No comments yet.</div>
+            ) : (
+              inbox.map((entry) => (
+                <div key={entry.id} className="page-role-row">
+                  <span>
+                    {entry.author.displayName || (entry.author.handle ? `@${entry.author.handle}` : "Someone")}:{" "}
+                    {entry.body}
+                  </span>
+                  <button
+                    type="button"
+                    className="ghost small"
+                    onClick={() => void toggleHideComment(entry.id, !entry.hidden)}
+                  >
+                    {entry.hidden ? "Unhide" : "Hide"}
+                  </button>
+                </div>
+              ))
+            )}
+            <div className="page-settings-actions">
+              <button type="button" className="ghost small" onClick={() => setInboxOpen(false)}>
                 Close
               </button>
             </div>
