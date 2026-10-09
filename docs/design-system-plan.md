@@ -43,6 +43,7 @@ Established product knowledge, not live captures:
 | DS-T10 | Type/spacing token scale | P3 | `styles.css` | documented scale adopted incrementally | **Deferred** (values are off-grid — 5/6/7/9/10/14px — so normalising changes visuals; documented in components doc) |
 | DS-T11 | Automated a11y check (axe) + light-theme component pass | P3 | CI, UI | axe clean on Feed | **Partial** (axe clean on Feed; non-Feed pending) |
 | DS-T12 | `--danger-solid` for solid destructive buttons (white text ≥4.5:1) | P1 | `:root`, `.feed-confirm-danger` | 4.8:1 in both themes | **Done** |
+| DS-T13 | `--accent-solid` for solid accent buttons (white text ≥4.5:1) | P1 | `:root`, Feed buttons | ≥4.7:1 in both themes | **Done** |
 
 ## 5. Acceptance criteria
 

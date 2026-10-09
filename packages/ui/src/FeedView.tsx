@@ -386,26 +386,34 @@ function PostMedia({
   if (gallery.length > 1) {
     return (
       <div className={`feed-image-grid feed-image-grid-${Math.min(gallery.length, 4)}`}>
-        {gallery.map((src, index) => (
-          <FeedImage
-            key={src}
-            src={`${cloudUrl}${src}`}
-            alt={`Post attachment ${index + 1}`}
-            interactive={Boolean(onOpenImage)}
-            label={`Open image ${index + 1} of ${gallery.length}`}
-            onActivate={() => onOpenImage?.(index)}
-          />
-        ))}
+        {gallery.map((src, index) => {
+          const alt = imageAlts?.[index] || `Post attachment ${index + 1}`;
+          return (
+            <FeedImage
+              key={src}
+              src={`${cloudUrl}${src}`}
+              alt={alt}
+              interactive={Boolean(onOpenImage)}
+              label={
+                imageAlts?.[index]
+                  ? `${imageAlts[index]}. Open image ${index + 1} of ${gallery.length}`
+                  : `Open image ${index + 1} of ${gallery.length}`
+              }
+              onActivate={() => onOpenImage?.(index)}
+            />
+          );
+        })}
       </div>
     );
   }
   if (gallery.length === 1) {
+    const alt = imageAlts?.[0] || "Post attachment";
     return (
       <FeedImage
         src={`${cloudUrl}${gallery[0] as string}`}
-        alt="Post attachment"
+        alt={alt}
         interactive={Boolean(onOpenImage)}
-        label="Open image"
+        label={imageAlts?.[0] ? `${alt}. Open image` : "Open image"}
         onActivate={() => onOpenImage?.(0)}
       />
     );
@@ -941,6 +949,7 @@ function PostCard({
             images={post.original.images}
             videos={post.original.videos}
             imageUrl={post.original.imageUrl}
+            imageAlts={post.original.imageAlts}
             cloudUrl={cloudUrl}
           />
           {post.original.hashtags && post.original.hashtags.length > 0 && (
@@ -958,6 +967,7 @@ function PostCard({
           images={post.images}
           videos={post.videos}
           imageUrl={post.imageUrl}
+          imageAlts={post.imageAlts}
           cloudUrl={cloudUrl}
           onOpenImage={(index) => setViewer(index)}
         />
@@ -3259,11 +3269,46 @@ const MAX_ATTACHMENTS = 4;
 const FEED_DRAFT_KEY = "botifyr.feedDraft";
 /** A small, curated set for the composer's "Mood" picker. */
 const FEED_EMOJIS = [
-  "😀", "😄", "😁", "😆", "😊", "🙂", "😉", "😍",
-  "😘", "😎", "🤩", "🥳", "😇", "🤔", "😴", "😭",
-  "😅", "😂", "🤣", "😢", "😮", "😡", "🤯", "🥺",
-  "👍", "👏", "🙌", "🙏", "💪", "👋", "🤝", "✌️",
-  "❤️", "🔥", "✨", "🎉", "💡", "🚀", "🌟", "☕",
+  "😀",
+  "😄",
+  "😁",
+  "😆",
+  "😊",
+  "🙂",
+  "😉",
+  "😍",
+  "😘",
+  "😎",
+  "🤩",
+  "🥳",
+  "😇",
+  "🤔",
+  "😴",
+  "😭",
+  "😅",
+  "😂",
+  "🤣",
+  "😢",
+  "😮",
+  "😡",
+  "🤯",
+  "🥺",
+  "👍",
+  "👏",
+  "🙌",
+  "🙏",
+  "💪",
+  "👋",
+  "🤝",
+  "✌️",
+  "❤️",
+  "🔥",
+  "✨",
+  "🎉",
+  "💡",
+  "🚀",
+  "🌟",
+  "☕",
 ];
 
 /** A file the user picked, held in memory until it is uploaded on publish. */
@@ -4988,6 +5033,44 @@ export function FeedView({
           <div ref={sentinelRef} className="feed-sentinel" aria-hidden="true" />
         )}
       </div>
+
+      <nav className="feed-bottom-nav" aria-label="Feed navigation">
+        <button
+          type="button"
+          className={`bottom-nav-item${tab === "pages" ? "" : " active"}`}
+          aria-current={tab === "pages" ? undefined : "page"}
+          onClick={() => setTab("all")}
+        >
+          <HomeIcon size={20} />
+          <span>Feed</span>
+        </button>
+        <button type="button" className="bottom-nav-item" onClick={() => setReelsOpen(true)}>
+          <PlayIcon size={20} />
+          <span>Reels</span>
+        </button>
+        <button
+          type="button"
+          className={`bottom-nav-item${tab === "pages" ? " active" : ""}`}
+          aria-current={tab === "pages" ? "page" : undefined}
+          onClick={() => setTab("pages")}
+        >
+          <PanelIcon size={20} />
+          <span>Pages</span>
+        </button>
+        <button type="button" className="bottom-nav-item" onClick={() => setGroupsOpen(true)}>
+          <UsersIcon size={20} />
+          <span>Groups</span>
+        </button>
+        <button
+          type="button"
+          className="bottom-nav-item"
+          onClick={() => onOpenMarketplace?.()}
+          disabled={!onOpenMarketplace}
+        >
+          <CubeIcon size={20} />
+          <span>Marketplace</span>
+        </button>
+      </nav>
 
       {storyOpen &&
         (() => {

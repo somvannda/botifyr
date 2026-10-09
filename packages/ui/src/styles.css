@@ -193,6 +193,49 @@ body {
   outline-offset: -3px;
 }
 
+.feed-bottom-nav .bottom-nav-item:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Feed list rows (Groups / simple list views). */
+.feed-list-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  padding: 12px 14px;
+  cursor: pointer;
+}
+
+.feed-list-row:hover {
+  background: var(--panel-2);
+}
+
+.feed-list-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.feed-list-name {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.feed-list-sub {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
 .bottom-nav-badge {
   position: absolute;
   top: 6px;
@@ -10066,6 +10109,12 @@ a.feed-follow-btn {
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.02em;
+}
+
+.feed-composer-alts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .feed-mood {

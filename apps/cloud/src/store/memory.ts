@@ -887,7 +887,8 @@ export class MemoryStore implements Store {
     for (const [key, comment] of [...this.postComments]) {
       if (comment.postId === id) this.postComments.delete(key);
     }
-    for (const key of [...this.postReactions.keys()]) if (key.startsWith(`${id}:`)) this.postReactions.delete(key);
+    for (const key of [...this.postReactions.keys()])
+      if (key.startsWith(`${id}:`)) this.postReactions.delete(key);
     for (const key of [...this.postShares]) if (key.startsWith(`${id}:`)) this.postShares.delete(key);
     this.postMedia.delete(id);
     this.postTags.delete(id);
@@ -930,7 +931,8 @@ export class MemoryStore implements Store {
     const record = this.groups.get(id);
     if (!record || record.ownerId !== ownerId) return false;
     this.groups.delete(id);
-    for (const [key, member] of [...this.groupMembers]) if (member.groupId === id) this.groupMembers.delete(key);
+    for (const [key, member] of [...this.groupMembers])
+      if (member.groupId === id) this.groupMembers.delete(key);
     return true;
   }
 
@@ -1237,7 +1239,15 @@ export class MemoryStore implements Store {
   }
 
   async getPostStats(postId: string, viewerId: string): Promise<PostStatsRecord> {
-    const reactions: Record<ReactionType, number> = { like: 0, love: 0, care: 0, haha: 0, wow: 0, sad: 0, angry: 0 };
+    const reactions: Record<ReactionType, number> = {
+      like: 0,
+      love: 0,
+      care: 0,
+      haha: 0,
+      wow: 0,
+      sad: 0,
+      angry: 0,
+    };
     let likes = 0;
     for (const [key, reaction] of this.postReactions) {
       if (!key.startsWith(`${postId}:`)) continue;
@@ -1270,7 +1280,15 @@ export class MemoryStore implements Store {
     commentId: string,
     viewerId: string,
   ): Promise<{ reactions: Record<ReactionType, number>; myReaction: ReactionType | null }> {
-    const reactions: Record<ReactionType, number> = { like: 0, love: 0, care: 0, haha: 0, wow: 0, sad: 0, angry: 0 };
+    const reactions: Record<ReactionType, number> = {
+      like: 0,
+      love: 0,
+      care: 0,
+      haha: 0,
+      wow: 0,
+      sad: 0,
+      angry: 0,
+    };
     for (const [key, reaction] of this.commentReactions) {
       if (!key.startsWith(`${commentId}:`)) continue;
       reactions[reaction] += 1;

@@ -113,6 +113,9 @@ supported sections — not core functionality. See the audit for the ranked list
 - **PG-19 (S2):** `.page-head { overflow:hidden }` shrank in the flex column and
   clipped the owner actions on mobile. Fixed with `flex: none`; verified by the
   re-captured `page-mobile.png`.
+- **PG-20 (S2):** management controls ignored the viewer's role (moderators had
+  no Community entry; analysts had no Insights). Fixed with role-aware flags;
+  component test now covers admin/moderator/analyst/visitor.
 
 
 ## Note on concurrent work

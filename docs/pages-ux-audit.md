@@ -70,15 +70,17 @@ Legend: severity **S1** (blocking/broken) · **S2** (high) · **S3** (medium) ·
 | PG-17 | S4 | Section tabs must be keyboard-navigable and expose the active state. | new | a11y parity with `.feed-tab`. | Use `<button role="tab" aria-selected>` + visible active style. | — |
 | PG-18 | **S1** | **Posting as a Page returns HTTP 500 on Postgres.** `posts.author_id` had a legacy `REFERENCES users(id)` FK, but post-as-Page stores the **Page id** there (FR-17). The MemoryStore doesn't enforce FKs, so the Pages backend tests passed. | Live harness: `POST /v1/posts {pageId}` → `23503 posts_author_id_fkey`; confirmed by the screenshot run. | The core Pages capability (publish as the Page) was **broken in production** while tests were green. | Drop the FK (`posts.author_id` is a generic author id, like `author_mutes.author_id`); guard it in `server.pages.test.ts`. | Cloud |
 | PG-19 | S2 | **Page header actions were clipped on mobile.** `.page-head { overflow: hidden }` zeroes a flex item's automatic `min-height`, so on short viewports the header shrank and cut off the owner action row entirely. | Live DOM: `.page-head` height 371px vs ~499px content; actions present but not painted. Confirmed in `page-mobile.png` before the fix. | Owners lost all management entry points on mobile. | Add `flex: none` to `.page-head`; verified in the re-captured `page-mobile.png`. | — |
+| PG-20 | S2 | **Management controls ignored the viewer's role.** The UI used one `canManage` (admin/editor) for Pin, Community, Insights and Settings, but the backend allows **Community for moderators** and **Insights for analysts**. | `server.ts`: inbox = admin/editor/moderator; insights = admin/editor/analyst; pin/settings = admin/editor. `PageView` used `canManage` for all. | Moderators and analysts saw the visitor view and had **no entry point** to capabilities the server permits. | Role-aware flags (`canManage`/`canModerate`/`canViewInsights`); controls render per role; component test covers moderator + analyst. | — |
 
 ## Prioritised fix list (this workstream)
 
 1. **PG-18** — post-as-Page 500 on Postgres (**shipped blocker**).
 2. **PG-19** — mobile header action clipping.
-3. **PG-01 / PG-09 / PG-08** — error + Retry, skeleton, tailored empty (resilience).
-4. **PG-03** — render the uploaded Page avatar (identity parity with posts).
-5. **PG-11 / PG-12** — stop rendering a dead CTA; show the owner's CTA text.
-6. **PG-06** — add Posts / About section navigation (data already present).
+3. **PG-20** — role-accurate management controls.
+4. **PG-01 / PG-09 / PG-08** — error + Retry, skeleton, tailored empty (resilience).
+5. **PG-03** — render the uploaded Page avatar (identity parity with posts).
+6. **PG-11 / PG-12** — stop rendering a dead CTA; show the owner's CTA text.
+7. **PG-06** — add Posts / About section navigation (data already present).
 7. **PG-13 / PG-14** — safer follow action (pending + confirmed state, inline error).
 8. **PG-04 / PG-16 / PG-17** — heading semantics, responsive action row, accessible tabs.
 

@@ -209,6 +209,38 @@ describe("Composer publish lifecycle", () => {
   });
 });
 
+describe("Composer image descriptions", () => {
+  it("sends per-image alt text with the post", async () => {
+    const client = makeClient();
+    const { container } = renderFeed(client);
+    await screen.findByText("existing post");
+
+    fireEvent.change(fileInput(container), { target: { files: [imageFile("cat.png")] } });
+    await waitFor(() => expect(container.querySelector(".feed-composer-thumb")).toBeTruthy());
+
+    fireEvent.change(screen.getByLabelText("Alt text for cat.png"), {
+      target: { value: "A cat on a mat" },
+    });
+    fireEvent.change(screen.getByLabelText("Post text"), { target: { value: "look" } });
+    fireEvent.click(screen.getByRole("button", { name: "Post" }));
+
+    await waitFor(() =>
+      expect(client.createPost).toHaveBeenCalledWith(
+        expect.objectContaining({ alts: ["A cat on a mat"] }),
+      ),
+    );
+  });
+
+  it("uses the stored alt text when rendering a post image", async () => {
+    const post = makePost({ images: ["/v1/feed/image?t=a"], imageAlts: ["A red fox"] });
+    const { container } = renderFeed(makeClient({ listFeed: vi.fn().mockResolvedValue({ items: [post], nextCursor: null }) }));
+    await screen.findByText("existing post");
+
+    const img = container.querySelector("img.feed-image-img");
+    expect(img?.getAttribute("alt")).toBe("A red fox");
+  });
+});
+
 describe("Composer draft persistence", () => {
   it("restores a saved draft and lets the user discard it", async () => {
     localStorage.setItem("botifyr.feedDraft", "unfinished thought");

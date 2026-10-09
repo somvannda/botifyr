@@ -60,6 +60,7 @@ typography or elevation. Those values were inlined per rule.
 | DS-9 | Global accent literals remained outside the Feed (chat, workspace, page composer). | Low | 12× `rgba(109,139,255,…)` outside Feed | **Fixed** (all → tokens/`color-mix`) |
 | DS-10 | Red family drift app-wide: `#f0556b`, `#f87171`, `#ef4444`, `#e5484d`, `--danger #ff6b6b`. | Low | `grep` counts | **Fixed** (all unified to `--danger*`) |
 | DS-11 | Solid destructive button used `#f0556b` with white text — **3.4:1** (fails AA); switching to `--danger` would worsen it. | Medium | `.feed-confirm-danger` | **Fixed** via `--danger-solid` (4.8:1) |
+| DS-12 | Solid **accent** buttons (Post, comment send, story reply/send, reel sheet) put white text on `--accent` — **3.09:1** in dark (fails AA). Only visible once the composer is enabled, so the first axe pass missed it. | High | `.feed-post-btn`, `.feed-comment-send`, `.story-*`, `.reel-sheet-send` | **Fixed** via `--accent-solid` (4.7–6.6:1) |
 
 ## 4. Accessibility
 
@@ -92,9 +93,11 @@ was tuned to `#3d52c2` for exactly this reason (the earlier `#4b64d8` measured
   `aria-modal`; icon-only controls carry `aria-label`; emoji avatars are
   `aria-hidden`.
 - **Automated a11y (axe-core 4.10.2, scoped to `.feed`):** **0 violations** in
-  both themes. Two findings were fixed to get there: the light-theme accent on
-  the tinted pills (above), and a `label-title-only` on the composer's schedule
-  input (added `aria-label="Schedule for later"`).
+  both themes — including with the composer enabled (Post button active). Three
+  findings were fixed to get there: the light-theme accent on the tinted pills
+  (above), a `label-title-only` on the composer's schedule input (added
+  `aria-label="Schedule for later"`), and white-on-accent on the solid primary
+  buttons (added `--accent-solid`).
 - **Not verified:** a full screen-reader pass, axe on non-Feed surfaces
   (chat/workspace still show findings, e.g. `.connect-apps-label` in light).
 

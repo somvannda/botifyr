@@ -200,7 +200,10 @@ describe("feed", () => {
     expect(pageOne.items[0]?.body).toBe("third");
     expect(pageOne.nextCursor).not.toBeNull();
 
-    const pageTwo = await feed(alice.token, `?limit=2&cursor=${encodeURIComponent(pageOne.nextCursor ?? "")}`);
+    const pageTwo = await feed(
+      alice.token,
+      `?limit=2&cursor=${encodeURIComponent(pageOne.nextCursor ?? "")}`,
+    );
     expect(pageTwo.items).toHaveLength(1);
     expect(pageTwo.items[0]?.body).toBe("first");
     expect(pageTwo.nextCursor).toBeNull();
@@ -583,7 +586,11 @@ describe("feed", () => {
     };
     expect(post.hashtags).toEqual(["launchday"]);
 
-    const tag = await app.inject({ method: "GET", url: "/v1/tags/launchday/posts", headers: auth(bob.token) });
+    const tag = await app.inject({
+      method: "GET",
+      url: "/v1/tags/launchday/posts",
+      headers: auth(bob.token),
+    });
     expect(tag.statusCode).toBe(200);
     expect((tag.json() as Array<{ id: string }>).map((entry) => entry.id)).toContain(post.id);
 
@@ -612,7 +619,11 @@ describe("feed", () => {
     expect((await feed(alice.token)).items.map((entry) => entry.id)).toContain(dto.id);
 
     // Alice's scheduled list shows it.
-    const queued = await app.inject({ method: "GET", url: "/v1/posts/scheduled", headers: auth(alice.token) });
+    const queued = await app.inject({
+      method: "GET",
+      url: "/v1/posts/scheduled",
+      headers: auth(alice.token),
+    });
     expect((queued.json() as Array<{ id: string }>).map((entry) => entry.id)).toContain(dto.id);
 
     // A past time is treated as published now.
@@ -642,7 +653,11 @@ describe("feed", () => {
     expect(created.statusCode).toBe(201);
     const dto = created.json() as {
       id: string;
-      poll?: { options: Array<{ id: string; label: string; votes: number }>; total: number; myVote: string | null };
+      poll?: {
+        options: Array<{ id: string; label: string; votes: number }>;
+        total: number;
+        myVote: string | null;
+      };
     };
     expect(dto.poll?.options.length).toBe(2);
     const cats = dto.poll?.options.find((option) => option.label === "Cats")?.id as string;
@@ -692,7 +707,9 @@ describe("feed", () => {
 
     const list = await app.inject({ method: "GET", url: "/v1/stories", headers: auth(bob.token) });
     expect(list.statusCode).toBe(200);
-    expect((list.json() as Array<{ caption: string }>).some((story) => story.caption === "hello story")).toBe(true);
+    expect((list.json() as Array<{ caption: string }>).some((story) => story.caption === "hello story")).toBe(
+      true,
+    );
 
     // An expired story is not shown.
     await store.createStory({
@@ -703,7 +720,9 @@ describe("feed", () => {
       expiresAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
     });
     const after = await app.inject({ method: "GET", url: "/v1/stories", headers: auth(bob.token) });
-    expect((after.json() as Array<{ caption: string }>).some((story) => story.caption === "old story")).toBe(false);
+    expect((after.json() as Array<{ caption: string }>).some((story) => story.caption === "old story")).toBe(
+      false,
+    );
 
     await app.close();
   });
@@ -729,7 +748,9 @@ describe("feed", () => {
       myReaction: string | null;
     };
     const list = async (): Promise<StoryDto[]> =>
-      (await app.inject({ method: "GET", url: "/v1/stories", headers: auth(bob.token) })).json() as StoryDto[];
+      (
+        await app.inject({ method: "GET", url: "/v1/stories", headers: auth(bob.token) })
+      ).json() as StoryDto[];
 
     const story = (await list()).find((entry) => entry.caption === "view me");
     expect(story).toBeTruthy();
@@ -862,13 +883,22 @@ describe("feed", () => {
       headers: auth(alice.token),
       payload: { body: "photo two", album: "Summer" },
     });
-    await app.inject({ method: "POST", url: "/v1/posts", headers: auth(alice.token), payload: { body: "no album" } });
+    await app.inject({
+      method: "POST",
+      url: "/v1/posts",
+      headers: auth(alice.token),
+      payload: { body: "no album" },
+    });
 
     const albums = await app.inject({ method: "GET", url: "/v1/albums", headers: auth(alice.token) });
     const list = albums.json() as Array<{ name: string; count: number }>;
     expect(list.find((entry) => entry.name === "Summer")?.count).toBe(2);
 
-    const posts = await app.inject({ method: "GET", url: "/v1/albums/Summer/posts", headers: auth(alice.token) });
+    const posts = await app.inject({
+      method: "GET",
+      url: "/v1/albums/Summer/posts",
+      headers: auth(alice.token),
+    });
     const bodies = (posts.json() as Array<{ body: string }>).map((entry) => entry.body);
     expect(bodies).toContain("photo one");
     expect(bodies).toContain("photo two");
@@ -900,14 +930,22 @@ describe("feed", () => {
     });
     expect(put.statusCode).toBe(200);
 
-    const listed = await app.inject({ method: "GET", url: `/v1/posts/${post.id}/comments`, headers: auth(alice.token) });
+    const listed = await app.inject({
+      method: "GET",
+      url: `/v1/posts/${post.id}/comments`,
+      headers: auth(alice.token),
+    });
     const c = (
       listed.json() as Array<{ id: string; reactions?: Record<string, number>; myReaction?: string | null }>
     ).find((entry) => entry.id === comment.id);
     expect(c?.reactions?.love).toBe(1);
     expect(c?.myReaction ?? null).toBeNull();
 
-    const asBob = await app.inject({ method: "GET", url: `/v1/posts/${post.id}/comments`, headers: auth(bob.token) });
+    const asBob = await app.inject({
+      method: "GET",
+      url: `/v1/posts/${post.id}/comments`,
+      headers: auth(bob.token),
+    });
     const cb = (asBob.json() as Array<{ id: string; myReaction?: string | null }>).find(
       (entry) => entry.id === comment.id,
     );
@@ -947,12 +985,19 @@ describe("feed", () => {
         payload: { body: "page post", pageId: page.id },
       })
     ).json() as { id: string };
-    await app.inject({ method: "POST", url: `/v1/pages/${page.id}/follow`, headers: auth(bob.token), payload: {} });
+    await app.inject({
+      method: "POST",
+      url: `/v1/pages/${page.id}/follow`,
+      headers: auth(bob.token),
+      payload: {},
+    });
 
     const ids = async (url: string) =>
-      ((await app.inject({ method: "GET", url, headers: auth(bob.token) })).json() as {
-        items: Array<{ id: string }>;
-      }).items.map((entry) => entry.id);
+      (
+        (await app.inject({ method: "GET", url, headers: auth(bob.token) })).json() as {
+          items: Array<{ id: string }>;
+        }
+      ).items.map((entry) => entry.id);
 
     expect(await ids("/v1/feed?tab=all")).toEqual(expect.arrayContaining([friendPost.id, pagePost.id]));
     const friends = await ids("/v1/feed?tab=friends");
@@ -989,7 +1034,11 @@ describe("feed", () => {
     expect((await feed(alice.token)).items.map((entry) => entry.id)).toContain(dto.id);
 
     // A friend can't interact with it.
-    const like = await app.inject({ method: "PUT", url: `/v1/posts/${dto.id}/like`, headers: auth(bob.token) });
+    const like = await app.inject({
+      method: "PUT",
+      url: `/v1/posts/${dto.id}/like`,
+      headers: auth(bob.token),
+    });
     expect(like.statusCode).toBe(403);
     const comment = await app.inject({
       method: "POST",
@@ -998,7 +1047,11 @@ describe("feed", () => {
       payload: { body: "hi" },
     });
     expect(comment.statusCode).toBe(403);
-    const comments = await app.inject({ method: "GET", url: `/v1/posts/${dto.id}/comments`, headers: auth(bob.token) });
+    const comments = await app.inject({
+      method: "GET",
+      url: `/v1/posts/${dto.id}/comments`,
+      headers: auth(bob.token),
+    });
     expect(comments.json()).toEqual([]);
 
     await app.close();
@@ -1029,7 +1082,11 @@ describe("feed", () => {
     expect(reply.statusCode).toBe(201);
     expect((reply.json() as { parentId?: string }).parentId).toBe(topId);
 
-    const listed = await app.inject({ method: "GET", url: `/v1/posts/${post.id}/comments`, headers: auth(alice.token) });
+    const listed = await app.inject({
+      method: "GET",
+      url: `/v1/posts/${post.id}/comments`,
+      headers: auth(alice.token),
+    });
     const comments = listed.json() as Array<{ id: string; parentId?: string }>;
     expect(comments).toHaveLength(2);
     expect(comments.find((entry) => entry.id === topId)?.parentId).toBeUndefined();
@@ -1104,7 +1161,9 @@ describe("feed", () => {
       url: "/v1/people/suggestions",
       headers: auth(alice.token),
     });
-    expect((suggestions.json() as Array<{ id: string }>).map((person) => person.id)).not.toContain(bob.user.id);
+    expect((suggestions.json() as Array<{ id: string }>).map((person) => person.id)).not.toContain(
+      bob.user.id,
+    );
 
     // Bob can't interact with Alice's post.
     const alicePost = await createPost(alice.token, "alice post");

@@ -1544,10 +1544,10 @@ export class PostgresStore implements Store {
 
   async setPostSaved(postId: string, userId: string, saved: boolean): Promise<void> {
     if (saved) {
-      await this.pool.query("INSERT INTO post_saves (post_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING", [
-        postId,
-        userId,
-      ]);
+      await this.pool.query(
+        "INSERT INTO post_saves (post_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING",
+        [postId, userId],
+      );
     } else {
       await this.pool.query("DELETE FROM post_saves WHERE post_id = $1 AND user_id = $2", [postId, userId]);
     }
@@ -1563,10 +1563,10 @@ export class PostgresStore implements Store {
 
   async setPostHidden(postId: string, userId: string, hidden: boolean): Promise<void> {
     if (hidden) {
-      await this.pool.query("INSERT INTO post_hides (post_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING", [
-        postId,
-        userId,
-      ]);
+      await this.pool.query(
+        "INSERT INTO post_hides (post_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING",
+        [postId, userId],
+      );
     } else {
       await this.pool.query("DELETE FROM post_hides WHERE post_id = $1 AND user_id = $2", [postId, userId]);
     }

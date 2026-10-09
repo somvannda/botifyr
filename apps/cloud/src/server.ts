@@ -680,6 +680,15 @@ export async function buildServer(options: ServerOptions) {
         return event.toUserId === userId;
       case "p2p.signal":
         return event.toUserId === userId;
+      // Feed realtime (DB-1, docs/feed-discovery-plan.md). Interactions carry an
+      // explicit recipient; a new post reaches its author (other devices).
+      case "feed.mention":
+      case "feed.like":
+      case "feed.comment":
+      case "feed.share":
+        return event.toUserId === userId;
+      case "feed.post":
+        return event.authorId === userId;
       default:
         return false;
     }

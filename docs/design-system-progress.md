@@ -39,17 +39,21 @@ system. Audit → plan (`docs/design-system-plan.md`), components
    (exact-value, now theme-aware). The Feed region and the file as a whole contain
    **0** of these literals. Includes the Post Manager surfaces added concurrently
    (`.feed-post-feedback`, `.feed-comment-error`, `.feed-confirm*`).
-5. **Accessible destructive button** (DS-11): added `--danger-solid #c8324a`
-   (white text 4.8:1) and used it in `.feed-confirm-danger` (was `#f0556b`,
-   3.4:1).
+5. **Accessible solid buttons** (DS-11/DS-12): added `--danger-solid #c8324a`
+   (white 4.8:1) and `--accent-solid` (dark `#5568e0`, white 4.7:1; light
+   `#3d52c2`, white 6.6:1), applied to the destructive confirm and the six
+   Feed primary buttons (`.feed-post-btn`, `.feed-comment-send`,
+   `.reel-sheet-send`, `.feed-new-banner`, `.story-own-add`, `.story-reply-send`).
+   The Post button only fails AA when enabled, which the first axe pass missed.
 6. **Reduced motion** (DS-5) for the reaction picker pop/scale.
 7. **Shape scale adopted app-wide** (DS-T5): 275 `border-radius` declarations
    now use `--radius-*` (value-preserving). A few legacy one-offs remain.
 8. **Automated a11y (DS-T11):** axe-core on `.feed` reports **0 violations** in
-   both themes. Fixed the light accent-on-tint contrast (→ `#3d52c2`) and a
-   `label-title-only` finding (added `aria-label="Schedule for later"` in
-   `FeedView.tsx`).
-9. **Guard test** `packages/ui/src/designSystem.test.ts` (25 assertions).
+   both themes, including with the composer enabled. Fixed the light
+   accent-on-tint contrast (→ `#3d52c2`), a `label-title-only` finding
+   (`aria-label="Schedule for later"` in `FeedView.tsx`), and white-on-accent
+   solid buttons (`--accent-solid`).
+9. **Guard test** `packages/ui/src/designSystem.test.ts` (26 assertions).
 10. **Screenshots** for dark/light Feed (desktop + mobile) and the confirm dialog.
 
 ## Files modified / created
@@ -82,14 +86,14 @@ system. Audit → plan (`docs/design-system-plan.md`), components
 
 | Command | Result |
 | --- | --- |
-| `npx vitest run packages/ui/src/designSystem.test.ts` | **25 passed** |
+| `npx vitest run packages/ui/src/designSystem.test.ts` | **26 passed** |
 | `npx vitest run packages/ui/src` | **147 passed** (12 files) |
-| `npm test` | **423 passed, 4 failed** — all 4 in `apps/cloud/src/server.feed.test.ts` (media/signed-URL, concurrent backend workstream), unrelated to the UI |
+| `npm test` | **429 passed** (61 files) |
 | `npm run typecheck -w @botifyr/ui` | **clean** |
 | `npm run lint` | **0 errors** |
 | `npx prettier --check` (new files) | clean |
 | In-app contrast audit (dark & light) | all Feed text ≥4.5:1 (audit §4.1) |
-| axe-core 4.10.2 scoped to `.feed` (dark & light) | **0 violations** |
+| axe-core 4.10.2 scoped to `.feed` (dark & light, composer enabled) | **0 violations** |
 | `getComputedStyle` probe | `.feed-tag` / `.feed-tab.active` → `color(srgb 0.427… / 0.14)` (dark) |
 | Visual | dark + light Feed and the confirm dialog render correctly (`docs/assets/design-system/`) |
 
@@ -104,9 +108,8 @@ system. Audit → plan (`docs/design-system-plan.md`), components
 
 ## Blockers / caveats
 
-- Concurrent workstream edits `FeedView.tsx`/`styles.css`/`server.ts`; the UI gate
-  is green, but `npm test` shows 4 failures in the backend
-  `server.feed.test.ts` media tests that belong to that workstream.
+- Concurrent workstream edits `FeedView.tsx`/`styles.css`/`server.ts`; the full
+  gate is green as of the last run (`npm test` 429 passed).
 - Fresh Playwright contexts no longer authenticate (the app now requires device
   keys), so `scripts/design-system-screenshots.mjs` re-capture failed; the saved
   screenshots predate the final light-accent tweak (hue-only change).

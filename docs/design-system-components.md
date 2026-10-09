@@ -14,7 +14,7 @@ raw colors.
 | Surfaces | `--bg`, `--panel`, `--panel-2`, `--hover`, `--bubble` |
 | Text | `--text` (primary), `--muted` (secondary) |
 | Lines | `--border` |
-| Accent | `--accent`, `--accent-2`, `--accent-soft`, `--accent-soft-strong`, `--accent-border`, `--accent-glow` |
+| Accent | `--accent`, `--accent-2`, `--accent-soft`, `--accent-soft-strong`, `--accent-border`, `--accent-glow`, `--accent-solid` |
 | Status | `--ok`, `--warn`, `--danger`, `--danger-soft`, `--danger-border`, `--danger-solid` |
 | Focus | `--focus-ring` (= `--accent`) |
 | Shape | `--radius-xs` 6 · `--radius-sm` 9 · `--radius-control` 8 · `--radius-md` 10 · `--radius-bubble` 12 · `--radius-card` 14 · `--radius-pill` 999 · `--radius-round` 50% |
@@ -54,7 +54,7 @@ content padding `12–16px`, gaps `8/10/12px`, section spacing `16–22px`.
 ### Buttons
 | Class | Role | Notes |
 | --- | --- | --- |
-| `.feed-post-btn` | primary (solid `--accent`, white text, pill) | `:disabled` opacity .5 |
+| `.feed-post-btn` | primary (solid `--accent-solid`, white text, pill) | `:disabled` opacity .5 |
 | `.feed-follow-btn` | secondary/outline | `.following` mutes it |
 | `.feed-more` | secondary (panel-2, pill) | pagination |
 | `.feed-comment-send` | primary icon-only | `aria-label` required |

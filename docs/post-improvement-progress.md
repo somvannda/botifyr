@@ -131,9 +131,12 @@ scope**:
 
 ## Exact next actions
 
-1. Re-run `node scripts/post-audit.mjs` and `npx vitest run packages/ui` after the
-   concurrent workstreams settle, to reconfirm no cross-breakage.
-2. Only if the Composer owner agrees, clear the 4–5 unused composer vars to make
-   the repo-wide typecheck green.
+1. After the concurrent workstreams settle, re-run the full gate
+   (`npm run typecheck && npm run lint && npm test`) — it is currently red from
+   the Pages suite and a `BotifyrApp.tsx` prop mismatch, **not** Post code.
+2. Re-run `node scripts/post-audit.mjs` after `botifyr-cloud` is rebuilt to
+   confirm `videoPosts ≥ 1` (live video rendering is the one unverified item).
 3. Deferred (backend): POST-12 comment paging, POST-13 copy-link/permalink,
-   POST-14 mention profile routing.
+   POST-14 mention profile routing (and edit-post — no API).
+4. Cross-boundary: report the shell `ws-tab` contrast to the Design System
+   owner.

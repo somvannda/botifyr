@@ -9,15 +9,18 @@
 ## Current status
 
 **Implementation complete and verified, including the previously backend-blocked
-story views and reactions.** `FeedView.dom.test.tsx` → **66 passed**. Backend
-story tests → **2 passed**. `typecheck` clean for `@botifyr/cloud`,
-`@botifyr/client`, `@botifyr/ui`. Cloud container rebuilt and the new routes are
-live (unauthenticated `POST /v1/stories/:id/view` → 401).
+story views and reactions.** Repo-wide `npm test` → **429 passed / 0 failed**.
+Stories Playwright E2E → **1 passed** (open, react, pause, close). Live Feed QA
+(`scripts/feed-qa.mjs`) → "Story viewer opens" **true**, **0 console errors**.
+Cloud container rebuilt; new routes live (unauthenticated `POST
+/v1/stories/:id/view` → 401). `typecheck` for `@botifyr/cloud`/`@botifyr/client`
+clean; `@botifyr/ui` currently has 6 unused-import errors from a concurrent
+workstream (not Stories). ESLint 0 errors.
 
-> Concurrent-writer note: sibling agents are editing shared files. One introduced
-> a backtick typo in `apps/cloud/src/store/schema.ts` (inside the SQL template
-> literal) that broke the cloud test transform; fixed. Four `server.feed.test.ts`
-> post-media/alt-text failures remain and belong to that workstream, not Stories.
+> Concurrent-writer note: sibling agents edit shared files; one introduced (then
+> fixed) a backtick typo in `apps/cloud/src/store/schema.ts`. The earlier 4
+> post-media test failures were resolved by their owner. The Vite dev server on
+> `:1420` was restarted to pick up the new `@botifyr/client` (HMR missed it).
 
 ## Environment
 
@@ -73,7 +76,10 @@ live (unauthenticated `POST /v1/stories/:id/view` → 401).
 - `apps/cloud/src/server.feed.test.ts` — "records story views and reactions".
 - `packages/client/src/index.ts` — `Story` gains `viewedByMe`/`reactions`/
   `myReaction`; added `viewStory` + `reactStory`.
-- `packages/ui/src/styles.css` — `.story-reactions`/`.story-reaction` and spacing.
+- `packages/ui/src/styles.css` — `.story-reactions`/`.story-reaction`, spacing,
+  more opaque viewer backdrop.
+- `e2e/stories.spec.ts` — live Stories journey (open, react, pause, close) +
+  `docs/assets/feed/story-viewer.png` screenshot.
 - New docs: `stories-competitive-research.md`, `stories-ux-audit.md`,
   `stories-implementation-plan.md`, this file.
 
@@ -107,22 +113,26 @@ live (unauthenticated `POST /v1/stories/:id/view` → 401).
 
 ## Test results (actual)
 
-- `npx vitest run packages/ui/src/FeedView.dom.test.tsx` → **66 passed / 0 failed**
-  (13 Stories tests: grouping, per-creator progress, expiry hidden, end-of-
-  collection close, keyboard nav, tab-hidden pause, seen + persistence,
-  pause/resume, reply, media error, view-recorded, reaction toggle).
-- `npx vitest run apps/cloud/src/server.feed.test.ts -t story` → **2 passed**
+- `npm test` (repo-wide) → **429 passed / 0 failed** (61 files).
+- `npx vitest run packages/ui/src/FeedView.dom.test.tsx` → **66 passed** (13
+  Stories tests: grouping, per-creator progress, expiry hidden, end-of-collection
+  close, keyboard nav, tab-hidden pause, seen + persistence, pause/resume, reply,
+  media error, view-recorded, reaction toggle).
+- `npx vitest run apps/cloud/src/server.feed.test.ts` → **2 story tests passed**
   (expiry + "records story views and reactions").
-- `npm test` (repo-wide) → **423 passed / 4 failed** (61 files). The 4 failures
-  are the concurrent post-media/alt-text work, not Stories.
-- `npm run typecheck -w @botifyr/{cloud,client,ui}` → **clean**.
-- Live: cloud rebuilt; `POST /v1/stories/:id/view` returns 401 unauthenticated.
+- `npx playwright test e2e/stories.spec.ts` → **1 passed** (live: open, react,
+  pause badge, close; screenshot at `docs/assets/feed/story-viewer.png`).
+- `node scripts/feed-qa.mjs` → Story viewer opens **true**, **0 console errors**.
+- Live API: `POST /v1/stories/:id/view` → 200 then `viewedByMe: true`; reaction →
+  `{ "❤️": 1 }` + `myReaction`; clear → `{}`; unknown → 404.
+- `npm run typecheck` → `@botifyr/cloud`/`@botifyr/client` clean; `@botifyr/ui`
+  has 6 unused-import errors from a concurrent workstream (not Stories).
+- `npx eslint .` → **0 errors**; `npx prettier --check` clean on touched files.
 
 ## Outstanding tasks
 
-1. **Playwright story E2E** with a seeded account (mobile viewport).
-2. Optional: extract Stories into `packages/ui/src/Stories.tsx`.
-3. Optional: prefetch only the next story's image; post-send DM navigation.
+1. Optional: extract Stories into `packages/ui/src/Stories.tsx`.
+2. Optional: prefetch only the next story's image; post-send DM navigation.
 
 ## Dependencies & blockers
 
@@ -134,7 +144,7 @@ live (unauthenticated `POST /v1/stories/:id/view` → 401).
 
 ## Next concrete actions
 
-1. Add a Playwright story E2E.
+1. Resolve the 6 `@botifyr/ui` unused-import errors with their owner.
 2. Keep the local seen store as an optimistic cache alongside the server route.
 3. Optional: extract Stories into its own module to end shared-file contention.
 

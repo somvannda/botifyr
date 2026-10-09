@@ -58,7 +58,6 @@ import {
   ForwardIcon,
   GearIcon,
   HelpIcon,
-  HomeIcon,
   LockIcon,
   LogoutIcon,
   MenuIcon,
