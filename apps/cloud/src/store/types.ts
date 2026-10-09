@@ -119,6 +119,27 @@ export interface PostStatsRecord {
   myReaction: ReactionType | null;
 }
 
+/** A poll attached to a post, resolved for a viewer. */
+export interface PollRecord {
+  postId: string;
+  options: Array<{ id: string; label: string; votes: number }>;
+  total: number;
+  /** The viewer's chosen option id, if any. */
+  myVote: string | null;
+  closesAt?: string;
+  closed: boolean;
+}
+
+/** A 24-hour ephemeral story (docs/feed-next.md §FR-13). */
+export interface StoryRecord {
+  id: string;
+  authorId: string;
+  mediaId?: string;
+  caption: string;
+  createdAt: string;
+  expiresAt: string;
+}
+
 /** A moderation report against a post. */
 export interface PostReportRecord {
   id: string;
@@ -417,6 +438,17 @@ export interface Store {
   /** Set/replace the viewer's reaction, or clear it with `null`. */
   setPostReaction(postId: string, userId: string, reaction: ReactionType | null): Promise<void>;
   setCommentReaction(commentId: string, userId: string, reaction: ReactionType | null): Promise<void>;
+  /* Stories (docs/feed-next.md §FR-13) */
+  createStory(record: StoryRecord): Promise<void>;
+  /** Unexpired stories by any of `authorIds`, newest first. */
+  listActiveStories(authorIds: string[], nowIso: string, limit: number): Promise<StoryRecord[]>;
+
+  /* Polls (docs/feed-next.md §FR-12) */
+  createPoll(postId: string, options: string[], closesAt?: string): Promise<void>;
+  getPoll(postId: string, viewerId: string): Promise<PollRecord | null>;
+  /** Vote for an option (one per viewer; replaces a prior vote). */
+  votePoll(postId: string, optionId: string, userId: string): Promise<boolean>;
+
   /** Page moderation: hide/unhide a comment. */
   setCommentHidden(commentId: string, hidden: boolean): Promise<void>;
   /** Recent comments on a Page's posts (its community inbox). */

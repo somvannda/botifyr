@@ -21,6 +21,7 @@ import type {
   PageRoleRecord,
   Plan,
   PlatformSettings,
+  PollRecord,
   PostCommentRecord,
   PostRecord,
   PostReportRecord,
@@ -32,6 +33,7 @@ import type {
   SecretRecord,
   SessionRecord,
   Store,
+  StoryRecord,
   UsageRecord,
   UserRecord,
   WalletRecord,
@@ -80,6 +82,10 @@ export class MemoryStore implements Store {
   private postMedia = new Map<string, string[]>();
   /** postId → hashtags (lower-case, no `#`). */
   private postTags = new Map<string, Set<string>>();
+  private polls = new Map<string, { options: Array<{ id: string; label: string }>; closesAt?: string }>();
+  private stories = new Map<string, StoryRecord>();
+  /** Keyed by `${postId}:${userId}` → optionId. */
+  private pollVotes = new Map<string, string>();
   /** Keyed by `${commentId}:${userId}` → the viewer's reaction. */
   private commentReactions = new Map<string, ReactionType>();
   /** Keyed by `${blockerId}:${blockedId}`. */
@@ -861,6 +867,59 @@ export class MemoryStore implements Store {
     for (const key of [...this.postShares]) if (key.startsWith(`${id}:`)) this.postShares.delete(key);
     this.postMedia.delete(id);
     this.postTags.delete(id);
+    this.polls.delete(id);
+    for (const key of [...this.pollVotes.keys()]) if (key.startsWith(`${id}:`)) this.pollVotes.delete(key);
+    return true;
+  }
+
+  async createStory(record: StoryRecord): Promise<void> {
+    this.stories.set(record.id, { ...record });
+  }
+
+  async listActiveStories(authorIds: string[], nowIso: string, limit: number): Promise<StoryRecord[]> {
+    const authors = new Set(authorIds);
+    return [...this.stories.values()]
+      .filter((story) => authors.has(story.authorId) && story.expiresAt > nowIso)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, Math.max(1, Math.min(100, limit)))
+      .map((story) => ({ ...story }));
+  }
+
+  async createPoll(postId: string, options: string[], closesAt?: string): Promise<void> {
+    this.polls.set(postId, {
+      options: options.map((label, index) => ({ id: `${postId}:opt${index}`, label })),
+      closesAt,
+    });
+  }
+
+  async getPoll(postId: string, viewerId: string): Promise<PollRecord | null> {
+    const poll = this.polls.get(postId);
+    if (!poll) return null;
+    const counts = new Map<string, number>();
+    for (const [key, optionId] of this.pollVotes) {
+      if (key.startsWith(`${postId}:`)) counts.set(optionId, (counts.get(optionId) ?? 0) + 1);
+    }
+    const options = poll.options.map((option) => ({
+      id: option.id,
+      label: option.label,
+      votes: counts.get(option.id) ?? 0,
+    }));
+    const total = options.reduce((sum, option) => sum + option.votes, 0);
+    return {
+      postId,
+      options,
+      total,
+      myVote: this.pollVotes.get(`${postId}:${viewerId}`) ?? null,
+      closesAt: poll.closesAt,
+      closed: Boolean(poll.closesAt && poll.closesAt <= new Date().toISOString()),
+    };
+  }
+
+  async votePoll(postId: string, optionId: string, userId: string): Promise<boolean> {
+    const poll = this.polls.get(postId);
+    if (!poll || !poll.options.some((option) => option.id === optionId)) return false;
+    if (poll.closesAt && poll.closesAt <= new Date().toISOString()) return false;
+    this.pollVotes.set(`${postId}:${userId}`, optionId);
     return true;
   }
 

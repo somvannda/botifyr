@@ -84,6 +84,7 @@ import type {
   PageRecord,
   PlatformSettings,
   Plan,
+  PollRecord,
   PostCommentRecord,
   PostRecord,
   ReactionType,
@@ -4067,6 +4068,7 @@ export async function buildServer(options: ServerOptions) {
     repostOf?: string;
     audience?: "public" | "friends" | "only_me";
     scheduledAt?: string;
+    poll?: PollRecord;
     hashtags?: string[];
     imageUrl?: string;
     createdAt: string;
@@ -4192,6 +4194,7 @@ export async function buildServer(options: ServerOptions) {
       repostOf: record.repostOf,
       audience: record.audience ?? "friends",
       scheduledAt: record.scheduledAt,
+      poll: (await store.getPoll(record.id, viewerId)) ?? undefined,
       hashtags: await store.listPostTags(record.id),
       imageUrl: images[0],
       createdAt: record.createdAt,
@@ -4294,6 +4297,7 @@ export async function buildServer(options: ServerOptions) {
       pageId?: string;
       audience?: string;
       scheduledAt?: string;
+      poll?: string[];
     };
   }>("/v1/posts", { preHandler: requireAuth }, async (request, reply) => {
     const userId = request.userId as string;
@@ -4368,6 +4372,13 @@ export async function buildServer(options: ServerOptions) {
         }
       }
     }
+    const pollOptions = Array.isArray(request.body?.poll)
+      ? request.body.poll
+          .filter((label): label is string => typeof label === "string" && label.trim().length > 0)
+          .map((label) => label.trim().slice(0, 80))
+          .slice(0, 4)
+      : [];
+    if (pollOptions.length >= 2) await store.createPoll(record.id, pollOptions);
     emit({ type: "feed.post", postId: record.id, authorId });
     return reply.code(201).send(await feedPostOf(record, userId, new Map()));
   });
@@ -4596,6 +4607,25 @@ export async function buildServer(options: ServerOptions) {
     { preHandler: requireAuth },
     async (request) => {
       await store.setCommentReaction(request.params.id, request.userId as string, null);
+      return { ok: true };
+    },
+  );
+
+  /* Vote in a post's poll (docs/feed-next.md §FR-12). */
+  app.post<{ Params: { id: string }; Body: { optionId?: string } }>(
+    "/v1/posts/:id/vote",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const post = await store.getPost(request.params.id);
+      if (!post) return reply.code(404).send({ error: "post not found" });
+      const userId = request.userId as string;
+      if (!canSeePost(post, userId) || (await store.isBlockedEither(userId, post.authorId))) {
+        return reply.code(403).send({ error: "not allowed" });
+      }
+      const optionId = typeof request.body?.optionId === "string" ? request.body.optionId.trim() : "";
+      if (!optionId) return reply.code(400).send({ error: "optionId is required" });
+      const ok = await store.votePoll(post.id, optionId, userId);
+      if (!ok) return reply.code(400).send({ error: "invalid option or the poll is closed" });
       return { ok: true };
     },
   );
@@ -5009,6 +5039,54 @@ export async function buildServer(options: ServerOptions) {
       };
     },
   );
+
+  /* Stories: 24-hour ephemeral posts (docs/feed-next.md §FR-13). */
+  app.post<{ Body: { mediaId?: string; caption?: string } }>(
+    "/v1/stories",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const mediaId = typeof request.body?.mediaId === "string" ? request.body.mediaId.trim() : "";
+      const caption = typeof request.body?.caption === "string" ? request.body.caption.trim().slice(0, 200) : "";
+      if (!mediaId && !caption) return reply.code(400).send({ error: "a story needs an image or text" });
+      const now = Date.now();
+      await store.createStory({
+        id: randomUUID(),
+        authorId: userId,
+        mediaId: mediaId || undefined,
+        caption,
+        createdAt: new Date(now).toISOString(),
+        expiresAt: new Date(now + 24 * 60 * 60 * 1000).toISOString(),
+      });
+      return reply.code(201).send({ ok: true });
+    },
+  );
+
+  app.get("/v1/stories", { preHandler: requireAuth }, async (request) => {
+    const userId = request.userId as string;
+    const blocked = new Set(await store.listBlockedEither(userId));
+    const friendIds = (await store.listFriends(userId)).filter((id) => !blocked.has(id));
+    const nowIso = new Date().toISOString();
+    const stories = await store.listActiveStories([userId, ...friendIds], nowIso, 50);
+    const people = await store.listUsersByIds([...new Set(stories.map((story) => story.authorId))]);
+    const byId = new Map(people.map((person) => [person.id, personOf(person)]));
+    return stories.map((story) => ({
+      id: story.id,
+      author: byId.get(story.authorId) ?? {
+        id: story.authorId,
+        handle: undefined,
+        displayName: "Someone",
+        avatarEmoji: undefined,
+        avatarScheme: undefined,
+        avatarUrl: undefined,
+        online: false,
+      },
+      caption: story.caption,
+      imageUrl: story.mediaId ? `/v1/feed/image?t=${signImage(story.mediaId)}` : undefined,
+      createdAt: story.createdAt,
+      expiresAt: story.expiresAt,
+    }));
+  });
 
   /* Posts carrying a hashtag (docs/feed-next.md §FR-11). */
   app.get<{ Params: { tag: string } }>(

@@ -133,6 +133,15 @@ export interface FeedPost {
   scheduledAt?: string;
   /** Hashtags in the post (lower-case, no `#`). */
   hashtags?: string[];
+  /** An attached poll, resolved for the viewer. */
+  poll?: {
+    postId: string;
+    options: Array<{ id: string; label: string; votes: number }>;
+    total: number;
+    myVote: string | null;
+    closesAt?: string;
+    closed: boolean;
+  };
   /** The reposted original, embedded (one level deep). */
   original?: FeedPost;
   /** Short-lived signed path to the attached image, if any. */
@@ -148,6 +157,16 @@ export interface FeedPost {
   reactions?: Record<string, number>;
   /** The viewer's own reaction, if any. */
   myReaction?: string | null;
+}
+
+/** A 24-hour ephemeral story. */
+export interface Story {
+  id: string;
+  author: FeedAuthor;
+  caption: string;
+  imageUrl?: string;
+  createdAt: string;
+  expiresAt: string;
 }
 
 /** One page of the feed (newest first). */
@@ -1153,6 +1172,7 @@ export class BotifyrClient {
     pageId?: string;
     audience?: "public" | "friends" | "only_me";
     scheduledAt?: string;
+    poll?: string[];
   }): Promise<FeedPost> {
     return this.request("/v1/posts", { method: "POST", json: true, body: JSON.stringify(input) });
   }
@@ -1246,6 +1266,24 @@ export class BotifyrClient {
   /** The viewer's own upcoming (scheduled) posts. */
   listScheduled(): Promise<FeedPost[]> {
     return this.request("/v1/posts/scheduled");
+  }
+
+  /* Stories (24-hour ephemeral). */
+  createStory(input: { mediaId?: string; caption?: string }): Promise<{ ok: boolean }> {
+    return this.request("/v1/stories", { method: "POST", json: true, body: JSON.stringify(input) });
+  }
+
+  listStories(): Promise<Story[]> {
+    return this.request("/v1/stories");
+  }
+
+  /** Vote for an option in a post's poll. */
+  votePoll(id: string, optionId: string): Promise<{ ok: boolean }> {
+    return this.request(`/v1/posts/${id}/vote`, {
+      method: "POST",
+      json: true,
+      body: JSON.stringify({ optionId }),
+    });
   }
 
   /** Engagement-ranked posts from you and your friends (last 7 days). */

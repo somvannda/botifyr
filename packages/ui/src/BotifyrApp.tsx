@@ -540,7 +540,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [botIntro, setBotIntro] = useState("");
   const [botWorkspace, setBotWorkspace] = useState("");
   const [collapsedWorkspaces, setCollapsedWorkspaces] = useState<Record<string, boolean>>({});
-  const [workspaceFilter, setWorkspaceFilter] = useState("all");
+  const [workspaceFilter, setWorkspaceFilter] = useState("personal");
   /** Bumped on any feed event so an open Feed reloads (Phase 3 realtime). */
   const [feedRefresh, setFeedRefresh] = useState(0);
   /** When set, the Feed area shows this Page's timeline instead of the feed. */
@@ -1583,7 +1583,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
 
   /** Leave the Feed workspace when a conversation is picked from the sidebar. */
   function exitFeed(): void {
-    setWorkspaceFilter((current) => (current === "feed" ? "all" : current));
+    setWorkspaceFilter((current) => (current === "feed" ? "personal" : current));
   }
 
   function selectBot(bot: Bot) {
@@ -1693,7 +1693,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       setBots(botList);
       setSessions(sessionList);
       setWorkspaces(workspaceList);
-      setWorkspaceFilter(created.id);
+      setWorkspaceFilter("startups");
       const chairId = created.ceoBotId ?? created.roles[0]?.botId;
       const chair = botList.find((bot) => bot.id === chairId);
       if (chair) {
@@ -1787,7 +1787,6 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     setCompanyError(null);
     try {
       await client.deleteWorkspace(companyEdit.id);
-      if (workspaceFilter === companyEdit.id) setWorkspaceFilter("all");
       if (officeCompany?.id === companyEdit.id) {
         setOfficeCompany(null);
         setShowOffice3d(false);
@@ -3641,7 +3640,6 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     if (bot.workspace) return { id: `label:${bot.workspace}`, name: bot.workspace };
     return { id: "personal", name: "Personal" };
   }
-  const companies = [...workspaceById.values()];
   // Names for the "Company" datalist in the bot editor (companies + legacy labels).
   const workspaceNames = [
     ...new Set([
@@ -3649,27 +3647,19 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       ...bots.map((bot) => bot.workspace).filter((name): name is string => Boolean(name)),
     ]),
   ];
-  // Guard against a stale filter (e.g. after the last bot leaves a company).
+  // Guard against a stale filter (e.g. an old company id left in state).
   const activeWorkspaceFilter =
-    workspaceFilter === "all" ||
-    workspaceFilter === "personal" ||
-    workspaceFilter === "feed" ||
-    workspaceById.has(workspaceFilter)
-      ? workspaceFilter
-      : "all";
+    workspaceFilter === "feed" || workspaceFilter === "startups" ? workspaceFilter : "personal";
   // Feed is a view, not a workspace filter: the left list keeps showing the
   // chats while the main area swaps to the social timeline.
   const feedActive = activeWorkspaceFilter === "feed";
-  const workspaceFiltered =
-    activeWorkspaceFilter === "all" || feedActive
-      ? filteredBots
-      : activeWorkspaceFilter === "personal"
-        ? filteredBots.filter((bot) => companyOf(bot).id === "personal")
-        : filteredBots.filter((bot) => companyOf(bot).id === activeWorkspaceFilter);
-  // Human conversations live in the "Personal" workspace: show them on the All
-  // and Personal tabs, hide them when a company tab is selected.
-  const personalChats =
-    activeWorkspaceFilter === "all" || activeWorkspaceFilter === "personal" || feedActive ? humanChats : [];
+  const workspaceFiltered = feedActive
+    ? filteredBots
+    : activeWorkspaceFilter === "startups"
+      ? filteredBots.filter((bot) => companyOf(bot).id !== "personal")
+      : filteredBots.filter((bot) => companyOf(bot).id === "personal");
+  // Human conversations live in the Chat tab; the Feed shows them too.
+  const personalChats = activeWorkspaceFilter === "personal" || feedActive ? humanChats : [];
   const companyGroups = new Map<string, { name: string; workspace?: WorkspaceWithRoles; members: Bot[] }>();
   const ungroupedBots: Bot[] = [];
   for (const bot of workspaceFiltered) {
@@ -4420,22 +4410,13 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
 
         <div className="ws-tabs" role="tablist" aria-label="Filter by workspace">
           <button
-            className={`ws-tab${activeWorkspaceFilter === "all" ? " active" : ""}`}
-            type="button"
-            role="tab"
-            aria-selected={activeWorkspaceFilter === "all"}
-            onClick={() => setWorkspaceFilter("all")}
-          >
-            All
-          </button>
-          <button
             className={`ws-tab${activeWorkspaceFilter === "personal" ? " active" : ""}`}
             type="button"
             role="tab"
             aria-selected={activeWorkspaceFilter === "personal"}
             onClick={() => setWorkspaceFilter("personal")}
           >
-            Personal
+            Chat
           </button>
           <button
             className={`ws-tab${feedActive ? " active" : ""}`}
@@ -4446,19 +4427,15 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
           >
             Feed
           </button>
-          {companies.map((company) => (
-            <button
-              key={company.id}
-              className={`ws-tab${activeWorkspaceFilter === company.id ? " active" : ""}`}
-              type="button"
-              role="tab"
-              aria-selected={activeWorkspaceFilter === company.id}
-              onClick={() => setWorkspaceFilter(company.id)}
-              title={company.name}
-            >
-              {company.name}
-            </button>
-          ))}
+          <button
+            className={`ws-tab${activeWorkspaceFilter === "startups" ? " active" : ""}`}
+            type="button"
+            role="tab"
+            aria-selected={activeWorkspaceFilter === "startups"}
+            onClick={() => setWorkspaceFilter("startups")}
+          >
+            Startup Workspace
+          </button>
         </div>
 
         <div className="task-list">
@@ -4489,9 +4466,9 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
           )}
           {workspaceFiltered.length === 0 && personalChats.length === 0 && (
             <p className="empty">
-              {activeWorkspaceFilter === "all"
-                ? "No bots yet. Tap ＋ to create one."
-                : "No bots in this workspace."}
+              {activeWorkspaceFilter === "startups"
+                ? "No startup yet. Tap ＋ → Start a company."
+                : "No chats yet. Tap ＋ to create a bot."}
             </p>
           )}
           {[...companyGroups.entries()].map(([id, group]) => {
@@ -4566,7 +4543,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
           })}
           {companyGroups.size > 0 && (ungroupedBots.length > 0 || personalChats.length > 0) && (
             <div className="task-section-head static" aria-hidden="true">
-              <span className="task-section-name">Personal</span>
+              <span className="task-section-name">Chats</span>
               <span className="task-section-count">{ungroupedBots.length + personalChats.length}</span>
             </div>
           )}
@@ -4748,7 +4725,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       </aside>
 
       <main className="main">
-        {feedActive ? (
+        {feedActive && (
           <FeedView
             client={client}
             viewerId={user?.id}
@@ -4757,7 +4734,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
             pageHandle={feedPage}
             onOpenPage={setFeedPage}
           />
-        ) : (
+        )}
+        {(!feedActive || showNewChat) && (
           <>
             {showNewChat && (
               <div className="newchat-overlay" onClick={() => setShowNewChat(false)}>
@@ -5040,12 +5018,16 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                       if (mine) {
                         return (
                           <div key={message.id} className="msg-user">
+                            {actionsFor(message, user.displayName || "You")}
                             <div className="msg-user-bubble">
                               <div className="msg-author">
                                 {user.displayName || (user.handle ? `@${user.handle}` : "You")}
                               </div>
                               {dmFileCard(displayText(decrypted, message.content, message.id)) ??
                                 displayText(decrypted, message.content, message.id)}
+                              {reactions[message.id] && (
+                                <span className="reaction">{reactions[message.id]}</span>
+                              )}
                             </div>
                             <SelfAvatar user={user} email={user.email} className="msg-user-avatar" />
                           </div>
@@ -5078,6 +5060,10 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                             {translations[message.id] && (
                               <div className="msg-translation">{translations[message.id]}</div>
                             )}
+                            {reactions[message.id] && (
+                              <span className="reaction">{reactions[message.id]}</span>
+                            )}
+                            {actionsFor(message, label)}
                           </div>
                         </div>
                       );

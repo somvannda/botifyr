@@ -627,6 +627,55 @@ describe("feed", () => {
     await app.close();
   });
 
+  it("creates a poll and tallies votes", async () => {
+    const { app, store, signUp, auth } = await setup();
+    const alice = await signUp("alice-poll@example.com");
+    const bob = await signUp("bob-poll@example.com");
+    await store.createFriendship(alice.user.id, bob.user.id);
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/v1/posts",
+      headers: auth(alice.token),
+      payload: { body: "vote!", poll: ["Cats", "Dogs"] },
+    });
+    expect(created.statusCode).toBe(201);
+    const dto = created.json() as {
+      id: string;
+      poll?: { options: Array<{ id: string; label: string; votes: number }>; total: number; myVote: string | null };
+    };
+    expect(dto.poll?.options.length).toBe(2);
+    const cats = dto.poll?.options.find((option) => option.label === "Cats")?.id as string;
+
+    const vote = await app.inject({
+      method: "POST",
+      url: `/v1/posts/${dto.id}/vote`,
+      headers: auth(bob.token),
+      payload: { optionId: cats },
+    });
+    expect(vote.statusCode).toBe(200);
+
+    const feed = await app.inject({ method: "GET", url: "/v1/feed", headers: auth(bob.token) });
+    const item = (
+      feed.json() as {
+        items: Array<{ id: string; poll?: { total: number; myVote: string | null } }>;
+      }
+    ).items.find((entry) => entry.id === dto.id);
+    expect(item?.poll?.total).toBe(1);
+    expect(item?.poll?.myVote).toBe(cats);
+
+    // An unknown option is rejected.
+    const bad = await app.inject({
+      method: "POST",
+      url: `/v1/posts/${dto.id}/vote`,
+      headers: auth(bob.token),
+      payload: { optionId: "nope" },
+    });
+    expect(bad.statusCode).toBe(400);
+
+    await app.close();
+  });
+
   it("supports reactions on comments", async () => {
     const { app, store, signUp, auth, createPost } = await setup();
     const alice = await signUp("alice-creact@example.com");

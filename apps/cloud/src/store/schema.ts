@@ -400,6 +400,35 @@ CREATE TABLE IF NOT EXISTS post_shares (
   PRIMARY KEY (post_id, user_id)
 );
 
+/* Stories: 24-hour ephemeral posts (docs/feed-next.md §FR-13). */
+CREATE TABLE IF NOT EXISTS stories (
+  id         TEXT PRIMARY KEY,
+  author_id  TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  media_id   TEXT,
+  caption    TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS stories_author_idx ON stories (author_id, created_at DESC);
+
+/* Polls (docs/feed-next.md §FR-12). */
+CREATE TABLE IF NOT EXISTS post_polls (
+  post_id    TEXT PRIMARY KEY REFERENCES posts(id) ON DELETE CASCADE,
+  closes_at  TIMESTAMPTZ
+);
+CREATE TABLE IF NOT EXISTS poll_options (
+  id       TEXT PRIMARY KEY,
+  post_id  TEXT NOT NULL REFERENCES post_polls(post_id) ON DELETE CASCADE,
+  label    TEXT NOT NULL,
+  position INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS poll_votes (
+  post_id   TEXT NOT NULL REFERENCES post_polls(post_id) ON DELETE CASCADE,
+  option_id TEXT NOT NULL REFERENCES poll_options(id) ON DELETE CASCADE,
+  user_id   TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  PRIMARY KEY (post_id, user_id)
+);
+
 /* Hashtags (docs/feed-next.md §FR-11). */
 CREATE TABLE IF NOT EXISTS post_hashtags (
   post_id TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,

@@ -22,6 +22,7 @@ import type {
   PageRoleRecord,
   Plan,
   PlatformSettings,
+  PollRecord,
   PostCommentRecord,
   PostRecord,
   PostReportRecord,
@@ -33,6 +34,7 @@ import type {
   SecretRecord,
   SessionRecord,
   Store,
+  StoryRecord,
   UsageRecord,
   UserRecord,
   WalletRecord,
@@ -1404,6 +1406,82 @@ export class PostgresStore implements Store {
     }
   }
 
+  async createStory(record: StoryRecord): Promise<void> {
+    await this.pool.query(
+      "INSERT INTO stories (id, author_id, media_id, caption, created_at, expires_at) VALUES ($1,$2,$3,$4,$5,$6)",
+      [record.id, record.authorId, record.mediaId ?? null, record.caption, record.createdAt, record.expiresAt],
+    );
+  }
+
+  async listActiveStories(authorIds: string[], nowIso: string, limit: number): Promise<StoryRecord[]> {
+    if (authorIds.length === 0) return [];
+    const { rows } = await this.pool.query(
+      "SELECT * FROM stories WHERE author_id = ANY($1) AND expires_at > $2 ORDER BY created_at DESC LIMIT $3",
+      [authorIds, nowIso, Math.max(1, Math.min(100, limit))],
+    );
+    return rows.map(toStory);
+  }
+
+  async createPoll(postId: string, options: string[], closesAt?: string): Promise<void> {
+    await this.pool.query("INSERT INTO post_polls (post_id, closes_at) VALUES ($1,$2)", [postId, closesAt ?? null]);
+    let index = 0;
+    for (const label of options) {
+      await this.pool.query("INSERT INTO poll_options (id, post_id, label, position) VALUES ($1,$2,$3,$4)", [
+        `${postId}:opt${index}`,
+        postId,
+        label,
+        index,
+      ]);
+      index += 1;
+    }
+  }
+
+  async getPoll(postId: string, viewerId: string): Promise<PollRecord | null> {
+    const poll = await this.pool.query("SELECT closes_at FROM post_polls WHERE post_id = $1", [postId]);
+    if (poll.rows.length === 0) return null;
+    const closesAt = poll.rows[0].closes_at ? new Date(poll.rows[0].closes_at).toISOString() : undefined;
+    const { rows } = await this.pool.query(
+      "SELECT o.id, o.label, (SELECT COUNT(*)::int FROM poll_votes v WHERE v.option_id = o.id) AS votes " +
+        "FROM poll_options o WHERE o.post_id = $1 ORDER BY o.position ASC",
+      [postId],
+    );
+    const options = rows.map((row) => ({
+      id: row.id as string,
+      label: row.label as string,
+      votes: Number(row.votes ?? 0),
+    }));
+    const total = options.reduce((sum, option) => sum + option.votes, 0);
+    const mine = await this.pool.query("SELECT option_id FROM poll_votes WHERE post_id = $1 AND user_id = $2", [
+      postId,
+      viewerId,
+    ]);
+    return {
+      postId,
+      options,
+      total,
+      myVote: (mine.rows[0]?.option_id as string) ?? null,
+      closesAt,
+      closed: Boolean(closesAt && closesAt <= new Date().toISOString()),
+    };
+  }
+
+  async votePoll(postId: string, optionId: string, userId: string): Promise<boolean> {
+    const option = await this.pool.query("SELECT 1 FROM poll_options WHERE id = $1 AND post_id = $2", [
+      optionId,
+      postId,
+    ]);
+    if (option.rows.length === 0) return false;
+    const poll = await this.pool.query("SELECT closes_at FROM post_polls WHERE post_id = $1", [postId]);
+    const closesAt = poll.rows[0]?.closes_at;
+    if (closesAt && new Date(closesAt).getTime() <= Date.now()) return false;
+    await this.pool.query(
+      "INSERT INTO poll_votes (post_id, option_id, user_id) VALUES ($1,$2,$3) " +
+        "ON CONFLICT (post_id, user_id) DO UPDATE SET option_id = EXCLUDED.option_id",
+      [postId, optionId, userId],
+    );
+    return true;
+  }
+
   async setCommentHidden(commentId: string, hidden: boolean): Promise<void> {
     await this.pool.query("UPDATE post_comments SET hidden = $2 WHERE id = $1", [commentId, hidden]);
   }
@@ -1846,6 +1924,17 @@ function toPostComment(row: any): PostCommentRecord {
     parentId: row.parent_id ?? undefined,
     hidden: row.hidden === true,
     createdAt: new Date(row.created_at).toISOString(),
+  };
+}
+
+function toStory(row: any): StoryRecord {
+  return {
+    id: row.id,
+    authorId: row.author_id,
+    mediaId: row.media_id ?? undefined,
+    caption: row.caption ?? "",
+    createdAt: new Date(row.created_at).toISOString(),
+    expiresAt: new Date(row.expires_at).toISOString(),
   };
 }
 

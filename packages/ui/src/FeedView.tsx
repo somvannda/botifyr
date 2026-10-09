@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
-import type { BotifyrClient, FeedComment, FeedPost, Page, Person } from "@botifyr/client";
-import { CameraIcon, ForwardIcon, MessageIcon, SendIcon, SmileyIcon, SparkIcon } from "./Icons";
+import type { BotifyrClient, FeedComment, FeedPost, Page, Person, Story } from "@botifyr/client";
+import { CameraIcon, ChartIcon, ForwardIcon, MessageIcon, SendIcon, SmileyIcon, SparkIcon } from "./Icons";
 
 /**
  * Feed — the social wall / timeline (see docs/feed.md).
@@ -239,6 +239,22 @@ function PostCard({
     }
   }
 
+  async function vote(optionId: string) {
+    if (!post.poll) return;
+    try {
+      await client.votePoll(post.id, optionId);
+      const previous = post.poll.myVote;
+      const options = post.poll.options.map((option) => ({
+        ...option,
+        votes: option.votes + (option.id === optionId ? 1 : 0) - (option.id === previous ? 1 : 0),
+      }));
+      const total = options.reduce((sum, option) => sum + option.votes, 0);
+      onChange({ ...post, poll: { ...post.poll, options, total, myVote: optionId } });
+    } catch {
+      // Ignore a failed vote.
+    }
+  }
+
   async function toggleComments() {
     const open = !commentsOpen;
     setCommentsOpen(open);
@@ -349,6 +365,33 @@ function PostCard({
       ) : post.mediaId ? (
         <div className="feed-image feed-image-placeholder">📷 Image</div>
       ) : null}
+
+      {post.poll && (
+        <div className="feed-poll">
+          {post.poll.options.map((option) => {
+            const pct = post.poll && post.poll.total > 0 ? Math.round((option.votes / post.poll.total) * 100) : 0;
+            const chosen = post.poll?.myVote === option.id;
+            const showPct = Boolean(post.poll?.myVote) || Boolean(post.poll?.closed);
+            return (
+              <button
+                key={option.id}
+                type="button"
+                className={`feed-poll-option${chosen ? " chosen" : ""}`}
+                onClick={() => void vote(option.id)}
+                disabled={post.poll?.closed}
+              >
+                {showPct && <span className="feed-poll-bar" style={{ width: `${pct}%` }} />}
+                <span className="feed-poll-label">{option.label}</span>
+                {showPct && <span className="feed-poll-pct">{pct}%</span>}
+              </button>
+            );
+          })}
+          <div className="feed-poll-total">
+            {post.poll.total} vote{post.poll.total === 1 ? "" : "s"}
+            {post.poll.closed ? " · closed" : ""}
+          </div>
+        </div>
+      )}
 
       <div className="feed-stats">
         {post.likes > 0 && (
@@ -1031,6 +1074,8 @@ export function FeedView({
   const [attachments, setAttachments] = useState<Array<{ name: string; mime: string; data: string }>>([]);
   const [audience, setAudience] = useState<"public" | "friends" | "only_me">("friends");
   const [scheduledAt, setScheduledAt] = useState("");
+  const [pollOpen, setPollOpen] = useState(false);
+  const [pollOptions, setPollOptions] = useState<string[]>(["", ""]);
   const [tab, setTab] = useState<"all" | "friends" | "pages">("all");
   const [sort, setSort] = useState<"recent" | "top">("recent");
   const [openTag, setOpenTag] = useState<string | null>(null);
@@ -1039,7 +1084,10 @@ export function FeedView({
   const [creatingPage, setCreatingPage] = useState(false);
   const [newPageName, setNewPageName] = useState("");
   const [mentionResults, setMentionResults] = useState<Person[]>([]);
+  const [stories, setStories] = useState<Story[]>([]);
+  const [storyView, setStoryView] = useState<Story | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const storyRef = useRef<HTMLInputElement | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
 
   /** As the user types `@name`, offer people to insert. */
@@ -1126,6 +1174,38 @@ export function FeedView({
   useEffect(() => {
     let active = true;
     client
+      .listStories()
+      .then((list) => {
+        if (active) setStories(list);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [client]);
+
+  async function addStory(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !file.type.startsWith("image/")) return;
+    const data = await new Promise<string>((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
+      reader.readAsDataURL(file);
+    });
+    if (!data) return;
+    try {
+      const media = await client.uploadFile({ name: file.name, mime: file.type, data });
+      await client.createStory({ mediaId: media.id });
+      setStories(await client.listStories());
+    } catch {
+      // Ignore a failed story.
+    }
+  }
+
+  useEffect(() => {
+    let active = true;
+    client
       .listMyPages()
       .then((list) => {
         if (active) setPages(list);
@@ -1162,17 +1242,21 @@ export function FeedView({
         const media = await client.uploadFile({ name: file.name, mime: file.mime, data: file.data });
         mediaIds.push(media.id);
       }
+      const poll = pollOptions.map((option) => option.trim()).filter(Boolean);
       const post = await client.createPost({
         body,
         mediaIds,
         pageId: postAs || undefined,
         audience,
         scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : undefined,
+        poll: pollOpen && poll.length >= 2 ? poll : undefined,
       });
       setPosts((prev) => [post, ...prev]);
       setDraft("");
       setAttachments([]);
       setScheduledAt("");
+      setPollOpen(false);
+      setPollOptions(["", ""]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't post that");
     } finally {
@@ -1252,6 +1336,21 @@ export function FeedView({
       </div>
 
       <div className="feed-scroll">
+        <div className="stories-strip">
+          <button type="button" className="story-tile" onClick={() => storyRef.current?.click()}>
+            <span className="story-avatar add">＋</span>
+            <span className="story-name">Your story</span>
+          </button>
+          {stories.map((story) => (
+            <button key={story.id} type="button" className="story-tile" onClick={() => setStoryView(story)}>
+              <span className="story-avatar">
+                {story.imageUrl ? <img src={`${cloudUrl}${story.imageUrl}`} alt="" /> : authorEmoji(story.author)}
+              </span>
+              <span className="story-name">{authorName(story.author)}</span>
+            </button>
+          ))}
+          <input ref={storyRef} type="file" accept="image/*" style={{ display: "none" }} onChange={addStory} />
+        </div>
         <form className="feed-composer" onSubmit={publish}>
           <div className="feed-composer-row">
             <Avatar name="You" />
@@ -1356,6 +1455,30 @@ export function FeedView({
               title="Schedule for later"
             />
           </div>
+          {pollOpen && (
+            <div className="feed-poll-editor">
+              {pollOptions.map((option, index) => (
+                <input
+                  key={index}
+                  className="feed-composer-as-input"
+                  placeholder={`Option ${index + 1}`}
+                  value={option}
+                  onChange={(event) =>
+                    setPollOptions((prev) => prev.map((value, i) => (i === index ? event.target.value : value)))
+                  }
+                />
+              ))}
+              {pollOptions.length < 4 && (
+                <button
+                  type="button"
+                  className="feed-composer-tool"
+                  onClick={() => setPollOptions((prev) => [...prev, ""])}
+                >
+                  + Add option
+                </button>
+              )}
+            </div>
+          )}
           <div className="feed-composer-actions">
             <button type="button" className="feed-composer-tool" onClick={() => fileRef.current?.click()}>
               <CameraIcon size={16} /> Photo
@@ -1366,6 +1489,13 @@ export function FeedView({
               onClick={() => setDraft((value) => `${value}${value ? " " : ""}😀`)}
             >
               <SmileyIcon size={16} /> Mood
+            </button>
+            <button
+              type="button"
+              className={`feed-composer-tool${pollOpen ? " active" : ""}`}
+              onClick={() => setPollOpen((value) => !value)}
+            >
+              <ChartIcon size={16} /> Poll
             </button>
             <button className="feed-post-btn" type="submit" disabled={(!draft.trim() && attachments.length === 0) || posting}>
               {posting ? "Saving…" : scheduledAt ? "Schedule" : "Post"}
@@ -1416,6 +1546,20 @@ export function FeedView({
           </button>
         )}
       </div>
+
+      {storyView && (
+        <div className="story-viewer" onClick={() => setStoryView(null)}>
+          {storyView.imageUrl ? (
+            <img src={`${cloudUrl}${storyView.imageUrl}`} alt="" />
+          ) : (
+            <div className="story-text">{storyView.caption}</div>
+          )}
+          {storyView.caption && storyView.imageUrl && <div className="story-caption">{storyView.caption}</div>}
+          <button type="button" className="story-close" onClick={() => setStoryView(null)} aria-label="Close">
+            ✕
+          </button>
+        </div>
+      )}
     </div>
   );
 }

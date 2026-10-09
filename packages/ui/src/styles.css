@@ -7145,6 +7145,173 @@ body {
   background: rgba(109, 139, 255, 0.22);
 }
 
+/* Polls (docs/feed-next.md §FR-12) */
+.feed-poll-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.feed-poll {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.feed-poll-option {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.feed-poll-option:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.feed-poll-option.chosen {
+  border-color: var(--accent);
+}
+
+.feed-poll-option:disabled {
+  cursor: default;
+}
+
+.feed-poll-bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  background: rgba(109, 139, 255, 0.16);
+  z-index: 0;
+}
+
+.feed-poll-label,
+.feed-poll-pct {
+  position: relative;
+  z-index: 1;
+}
+
+.feed-poll-pct {
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.feed-poll-total {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+/* Stories (docs/feed-next.md §FR-13) */
+.stories-strip {
+  width: 100%;
+  max-width: 620px;
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.story-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  flex: 0 0 auto;
+  width: 64px;
+}
+
+.story-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 24px;
+  background: var(--panel-2);
+  border: 2px solid var(--accent);
+  overflow: hidden;
+}
+
+.story-avatar.add {
+  color: var(--accent);
+  border-style: dashed;
+}
+
+.story-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.story-name {
+  font-size: 11px;
+  color: var(--muted);
+  max-width: 64px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.story-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  background: rgba(0, 0, 0, 0.9);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.story-viewer img {
+  max-width: min(520px, 90vw);
+  max-height: 80vh;
+  border-radius: 12px;
+}
+
+.story-text {
+  color: #fff;
+  font-size: 20px;
+  max-width: 520px;
+  text-align: center;
+}
+
+.story-caption {
+  position: absolute;
+  bottom: 28px;
+  color: #fff;
+  font-size: 14px;
+  max-width: 520px;
+}
+
+.story-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  font-size: 14px;
+  cursor: pointer;
+}
+
 .feed-repost {
   margin-top: 10px;
   padding: 12px;

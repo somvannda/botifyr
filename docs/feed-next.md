@@ -92,7 +92,17 @@ datetime control, future posts are hidden from others until their time (author
 sees them via the feed + `GET /v1/posts/scheduled`), with a **🕒 Scheduled**
 label.
 
-**Everything else** in this document (stories, groups, …) is **not started**.
+**Community inbox (FR-22) — done.** `post_comments.hidden` +
+`GET /v1/pages/:id/inbox` (moderators) list a Page's comments; moderators can
+**hide/unhide** (`POST`/`DELETE /v1/comments/:id/hide`), and hidden comments are
+excluded from public reads. The Page view has a **Community** panel.
+
+**Polls (FR-12) — done.** `post_polls` / `poll_options` / `poll_votes`,
+`createPoll` / `getPoll` / `votePoll`, `poll` on the feed DTO,
+`POST /v1/posts/:id/vote`, a composer poll editor (2–4 options), and result bars
+with percentages + the viewer's vote.
+
+**Everything else** in this document (stories, groups, live, …) is **not started**.
 
 > **Reconciled with the product as of Oct 2026.** Facebook's reference section
 > (§1) reflects its 2026 behaviour; §2 and §5 note where Botifyr has already moved
