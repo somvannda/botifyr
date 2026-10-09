@@ -149,4 +149,59 @@ describe("feed tools (Botifyr social surface)", () => {
     expect(hidden.ok).toBe(true);
     expect((await store.getPostComment("c1"))?.hidden).toBe(true);
   });
+
+  it("honours a bot's Page role (moderator moderates, editor posts)", async () => {
+    const store = await seeded();
+    await store.createBot({
+      id: "bot1",
+      userId: me,
+      name: "Helper",
+      emoji: "🤖",
+      scheme: 0,
+      instructions: "",
+      sessionId: "s1",
+      createdAt: now,
+    });
+    // Moderator on a Page owned by someone else.
+    await store.setPageBotRole({ pageId: "page2", botId: "bot1", role: "moderator" });
+    await store.createPost({
+      id: "pp",
+      authorId: "page2",
+      pageId: "page2",
+      body: "hello",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await store.createPostComment({ id: "c9", postId: "pp", authorId: friend, body: "spam", createdAt: now });
+    const hidden = await tool(store, "feed.moderate").run({ action: "hide", commentId: "c9" }, ctx);
+    expect(hidden.ok).toBe(true);
+    // A moderator still can't post as the Page…
+    const refused = await tool(store, "feed.post").run({ body: "nope", page: "other" }, ctx);
+    expect(refused.ok).toBe(false);
+    // …but an editor can.
+    await store.setPageBotRole({ pageId: "page2", botId: "bot1", role: "editor" });
+    const posted = await tool(store, "feed.post").run({ body: "update", page: "other" }, ctx);
+    expect(posted.ok).toBe(true);
+    expect(await store.listPostsByAuthor("page2", 10)).toHaveLength(2);
+  });
+
+  it("assigns a bot role via page.manage with botId", async () => {
+    const store = await seeded();
+    await store.createBot({
+      id: "bot1",
+      userId: me,
+      name: "Helper",
+      emoji: "🤖",
+      scheme: 0,
+      instructions: "",
+      sessionId: "s1",
+      createdAt: now,
+    });
+    const set = await tool(store, "page.manage").run(
+      { page: "acme", action: "setRole", botId: "bot1", role: "analyst" },
+      ctx,
+    );
+    expect(set.ok).toBe(true);
+    expect((await store.getPageBotRole("page1", "bot1"))?.role).toBe("analyst");
+  });
 });

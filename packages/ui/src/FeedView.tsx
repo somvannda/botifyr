@@ -10,7 +10,7 @@ import type {
   Page,
   Person,
 } from "@botifyr/client";
-import type { Session } from "@botifyr/shared";
+import type { Bot, Session } from "@botifyr/shared";
 import {
   BookmarkIcon,
   CameraIcon,
@@ -1640,6 +1640,12 @@ function PageView({
   const [roles, setRoles] = useState<Array<{ userId: string; role: string; person: Person | null }>>([]);
   const [roleQuery, setRoleQuery] = useState("");
   const [roleResults, setRoleResults] = useState<Person[]>([]);
+  const [botRoles, setBotRoles] = useState<
+    Array<{ botId: string; role: string; bot: { id: string; name: string; emoji: string; scheme: number } | null }>
+  >([]);
+  const [bots, setBots] = useState<Bot[]>([]);
+  const [botToAdd, setBotToAdd] = useState("");
+  const [roleToAdd, setRoleToAdd] = useState("editor");
   const [insights, setInsights] = useState<Awaited<ReturnType<BotifyrClient["pageInsights"]>> | null>(null);
   const [insightsOpen, setInsightsOpen] = useState(false);
   const [inbox, setInbox] = useState<Awaited<ReturnType<BotifyrClient["pageInbox"]>> | null>(null);
@@ -1795,6 +1801,18 @@ function PageView({
         if (active) setRoles(list);
       })
       .catch(() => {});
+    client
+      .listPageBotRoles(page.id)
+      .then((list) => {
+        if (active) setBotRoles(list);
+      })
+      .catch(() => {});
+    client
+      .listBots()
+      .then((list) => {
+        if (active) setBots(list);
+      })
+      .catch(() => {});
     return () => {
       active = false;
     };
@@ -1943,6 +1961,31 @@ function PageView({
     try {
       await client.setPageRole(page.id, userId);
       setRoles((prev) => prev.filter((entry) => entry.userId !== userId));
+    } catch {
+      // ignore
+    }
+  }
+
+  async function addBotRole(botId: string, role: string) {
+    if (!page || !botId) return;
+    try {
+      await client.setPageBotRole(page.id, botId, role);
+      const bot = bots.find((entry) => entry.id === botId);
+      setBotRoles((prev) => [
+        ...prev.filter((entry) => entry.botId !== botId),
+        { botId, role, bot: bot ? { id: bot.id, name: bot.name, emoji: bot.emoji, scheme: bot.scheme } : null },
+      ]);
+      setBotToAdd("");
+    } catch {
+      // ignore
+    }
+  }
+
+  async function removeBotRole(botId: string) {
+    if (!page) return;
+    try {
+      await client.setPageBotRole(page.id, botId);
+      setBotRoles((prev) => prev.filter((entry) => entry.botId !== botId));
     } catch {
       // ignore
     }
@@ -2261,6 +2304,45 @@ function PageView({
                     </select>
                   </div>
                 ))}
+                <div className="feed-rail-head">Bots</div>
+                {botRoles.map((entry) => (
+                  <div key={entry.botId} className="page-role-row">
+                    <span>{entry.bot ? `${entry.bot.emoji} ${entry.bot.name}` : entry.botId}</span>
+                    <span className="feed-bot-badge">{entry.role}</span>
+                    <button type="button" className="ghost small" onClick={() => void removeBotRole(entry.botId)}>
+                      Remove
+                    </button>
+                  </div>
+                ))}
+                <div className="page-role-add">
+                  <select
+                    aria-label="Pick a bot to add"
+                    value={botToAdd}
+                    onChange={(event) => setBotToAdd(event.target.value)}
+                  >
+                    <option value="">Pick a bot…</option>
+                    {bots.map((bot) => (
+                      <option key={bot.id} value={bot.id}>{`${bot.emoji} ${bot.name}`}</option>
+                    ))}
+                  </select>
+                  <select
+                    aria-label="Pick a role for the bot"
+                    value={roleToAdd}
+                    onChange={(event) => setRoleToAdd(event.target.value)}
+                  >
+                    <option value="editor">Editor</option>
+                    <option value="moderator">Moderator</option>
+                    <option value="analyst">Analyst</option>
+                  </select>
+                  <button
+                    type="button"
+                    className="ghost small"
+                    disabled={!botToAdd}
+                    onClick={() => void addBotRole(botToAdd, roleToAdd)}
+                  >
+                    Add
+                  </button>
+                </div>
               </div>
             )}
           </form>
@@ -4939,6 +5021,7 @@ export function FeedView({
   viewerId,
   cloudUrl,
   refreshKey = 0,
+  defaultPostAs,
   pageHandle,
   onOpenPage,
   groupHandle,
@@ -4956,6 +5039,8 @@ export function FeedView({
   cloudUrl: string;
   /** Bumped by the host on feed events; reloads the top of the feed. */
   refreshKey?: number;
+  /** When the host is acting as a Page, default the composer to post as it. */
+  defaultPostAs?: string | null;
   /** When set, show this Page's timeline instead of the feed. */
   pageHandle?: string | null;
   onOpenPage?: (handle: string | null) => void;
@@ -5024,9 +5109,13 @@ export function FeedView({
   );
   const [openTag, setOpenTag] = useState<string | null>(null);
   const [pages, setPages] = useState<Page[]>([]);
-  const [postAs, setPostAs] = useState("");
+  const [postAs, setPostAs] = useState(defaultPostAs ?? "");
   const [creatingPage, setCreatingPage] = useState(false);
   const [newPageName, setNewPageName] = useState("");
+  // When the host switches into/out of a Page, follow it in the composer.
+  useEffect(() => {
+    setPostAs(defaultPostAs ?? "");
+  }, [defaultPostAs]);
   const [mentionResults, setMentionResults] = useState<Person[]>([]);
   const [reelsOpen, setReelsOpen] = useState(false);
   const [groupsOpen, setGroupsOpen] = useState(false);
