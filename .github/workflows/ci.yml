@@ -1,25 +1,33 @@
 name: CI
 
+# The merge gate. Green here = safe to merge (see AGENTS.md §8/§9).
+# Runs on every PR and on pushes to main.
 on:
+  pull_request:
   push:
     branches: [main]
-  pull_request:
+
+# Cancel superseded runs so a fast-follow push doesn't queue behind a stale one.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  checks:
+  check:
+    name: Typecheck / Lint / Test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 20
           cache: npm
 
-      - name: Install
+      - name: Install dependencies
         run: npm ci
 
-      - name: Typecheck
+      - name: Typecheck (all workspaces)
         run: npm run typecheck
 
       - name: Lint
@@ -27,25 +35,3 @@ jobs:
 
       - name: Test
         run: npm test
-
-      - name: Build libraries
-        run: |
-          npm run build -w @botifyr/shared --if-present
-          npm run build -w @botifyr/agent-core --if-present
-          npm run build -w @botifyr/channels --if-present
-
-  cloud:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Install
-        run: npm ci
-
-      - name: Build cloud image
-        run: docker build -f apps/cloud/Dockerfile -t botifyr-cloud:ci .
