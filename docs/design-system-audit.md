@@ -54,7 +54,7 @@ typography or elevation. Those values were inlined per rule.
 | DS-3 | No semantic interaction tints (`--accent-soft`, `--danger-soft`, …); every rule invented its own alpha. | Medium | 6 distinct alphas for the accent tint | **Fixed** |
 | DS-4 | `--muted` in light theme (`#6b7280`) = **4.47:1** on `--bg` — just under AA. | Medium | Measured in-app | **Fixed** (`#616875`, 5.19:1) |
 | DS-5 | Reduced-motion honoured only for skeletons + story progress; `.reaction-btn` hover scale still animated. | Low | `styles.css` | **Fixed** |
-| DS-6 | Radii ungoverned: 54× `999px`, then `8/9/10/11/12/14/16px` — no scale. | Low | `grep border-radius` | **Fixed** (275 declarations → `--radius-*`; 10 legacy one-offs documented) |
+| DS-6 | Radii ungoverned: 54× `999px`, then `8/9/10/11/12/14/16px` — no scale. | Low | `grep border-radius` | **Fixed** (all `border-radius` now uses `--radius-*`; tail normalised onto the scale) |
 | DS-7 | Type scale inlined: 74× `12.5px`, 73× `12px`, 64× `13px`, … 26 distinct sizes. | Low | `grep font-size` | **Fixed** (12 `--text-*` steps; 433 declarations adopted) |
 | DS-8 | Spacing inlined; no scale. | Low | `grep gap/padding` | **Fixed** (4-pt grid `--space-1..6`; 1,001 values migrated app-wide) |
 | DS-9 | Global accent literals remained outside the Feed (chat, workspace, page composer). | Low | 12× `rgba(109,139,255,…)` outside Feed | **Fixed** (all → tokens/`color-mix`) |

@@ -11,13 +11,13 @@ raw colors.
 
 | Group | Tokens |
 | --- | --- |
-| Surfaces | `--bg`, `--panel`, `--panel-2`, `--hover`, `--bubble`, `--input-bg` |
+| Surfaces | `--bg`, `--panel`, `--panel-2`, `--hover`, `--bubble`, `--input-bg`, `--overlay` |
 | Text | `--text` (primary), `--muted` (secondary) |
 | Lines | `--border` |
 | Accent | `--accent`, `--accent-2`, `--accent-soft`, `--accent-soft-strong`, `--accent-border`, `--accent-glow`, `--accent-solid` |
 | Status | `--ok`, `--ok-soft`, `--ok-border`, `--warn`, `--warn-soft`, `--warn-border`, `--danger`, `--danger-soft`, `--danger-border`, `--danger-solid` |
 | Focus | `--focus-ring` (= `--accent`) |
-| Shape | `--radius-xs` 6 · `--radius-sm` 9 · `--radius-control` 8 · `--radius-md` 10 · `--radius-bubble` 12 · `--radius-card` 14 · `--radius-pill` 999 · `--radius-round` 50% |
+| Shape | `--radius-2xs` 4 · `--radius-xs` 6 · `--radius-control` 8 · `--radius-sm` 9 · `--radius-md` 10 · `--radius-bubble` 12 · `--radius-card` 14 · `--radius-lg` 16 · `--radius-pill` 999 · `--radius-round` 50% |
 | Type | `--text-4xs` 10 · `--text-3xs` 10.5 · `--text-2xs` 11 · `--text-xs` 11.5 · `--text-sm` 12 · `--text-md` 12.5 · `--text-lg` 13 · `--text-xl` 13.5 · `--text-2xl` 14 · `--text-3xl` 15 · `--text-4xl` 16 · `--text-5xl` 18 |
 
 Tints (`--accent-soft`, `--danger-soft`, `--accent-glow`, …) are derived with

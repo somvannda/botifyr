@@ -57,6 +57,7 @@ Established product knowledge, not live captures:
 | DS-T15 | Apply `--accent-solid` to all solid-accent elements (not just the Feed) | P1 | `styles.css` | 0 white-on-`--accent`; axe clean | **Done** |
 | DS-T16 | `--on-media` / `--on-media-muted` for text on dark media backdrops; fix Reels empty state | P1 | `:root`, `.reels-scroll` | axe clean (light Reels) | **Done** |
 | DS-T17 | Status tint tokens `--ok-soft/-border`, `--warn-soft/-border` | P2 | `:root`, components | value-preserving; light-adaptive | **Done** |
+| DS-T18 | Close the shape/overlay tails (`--radius-2xs/-lg`, `--overlay`) | P3 | `styles.css` | all `border-radius` tokenised | **Done** |
 
 ## 5. Acceptance criteria
 

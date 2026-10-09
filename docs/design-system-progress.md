@@ -75,7 +75,10 @@ system. Audit → plan (`docs/design-system-plan.md`), components
     including pinned dark/light token values and shape/type/spacing adoption.
 14. **Status tints tokenised** (DS-T17): `--ok-soft/-border`,
     `--warn-soft/-border` (derived); 11 values adopted — light-adaptive.
-15. **Screenshots** for dark/light Feed (desktop + mobile) and the confirm dialog.
+15. **Shape/overlay tails closed** (DS-T18): `--radius-2xs` 4 · `--radius-lg` 16
+    added and the radius tail normalised onto the scale; `--overlay` adopted for
+    the common backdrop. All `border-radius` now tokenised.
+16. **Screenshots** for dark/light Feed (desktop + mobile) and the confirm dialog.
 
 ## Files modified / created
 
@@ -111,7 +114,7 @@ system. Audit → plan (`docs/design-system-plan.md`), components
 | `npx vitest run packages/ui/src/designSystem.test.ts parity.test.ts smoke.dom.test.tsx` | **36 passed** |
 | `npm run typecheck` (repo) | **exit 0** |
 | `npm run lint` (repo) | **exit 0** |
-| `npm test` | **462 passed** (64 files) |
+| `npm test` | **467 passed** (65 files) |
 | `npx prettier --check` (new files) | clean |
 | In-app contrast audit (dark & light) | all Feed text ≥4.5:1 (audit §4.1) |
 | axe-core 4.10.2 (real theme toggle, composer enabled) | **0 violations** — Feed (All/Pages/Reels) dark & light, Chat, Startup Workspace |
@@ -125,14 +128,13 @@ system. Audit → plan (`docs/design-system-plan.md`), components
 | --- | --- | --- |
 | Semantic color / danger / accent-solid tokens | **VERIFIED** | committed on `main`; 31 guard tests; axe 0 violations |
 | Accessible light theme | **VERIFIED** | contrast audit + axe (both themes) |
-| Shape scale (global) | **VERIFIED** | 275 declarations tokenised; guard test |
+| Shape scale (global) | **VERIFIED** | all `border-radius` tokenised; tail normalised; guard test |
 | Type scale (global) | **VERIFIED** | 433 declarations; computed sizes unchanged in-app |
 | Focus-ring token | **VERIFIED** | 6 outlines use it; guard test |
 | Input-surface token (`--input-bg`) | **VERIFIED** | 9 usages; light override removed; gate green |
 | Solid-accent AA (app-wide `--accent-solid`) | **VERIFIED** | 0 white-on-`--accent`; axe clean (Feed + workspace, both themes) |
 | Media-backdrop text (`--on-media`) | **VERIFIED** | light Reels empty state axe-clean (fresh tab) |
-| Status tints (`--ok-*`, `--warn-*`) | **VERIFIED** | 11 values tokenised; guard test; gate green |
-| Spacing scale (app-wide) | **VERIFIED** | `--space-1..6`; 1,001 values migrated; in-app check + axe clean |
+| Status tints (`--ok-*`, `--warn-*`) | **VERIFIED** | 11 values tokenised; guard test; gate green || Spacing scale (app-wide) | **VERIFIED** | `--space-1..6`; 1,001 values migrated; in-app check + axe clean |
 
 Ownership: `styles.css`/`FeedView.tsx` are owned by the Feed workstream; my
 committed changes were captured by its integration commits. Per §8 I do not edit
