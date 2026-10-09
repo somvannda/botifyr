@@ -291,7 +291,6 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [connections, setConnections] = useState<ConnectionInfo[]>([]);
   const [connectingApp, setConnectingApp] = useState<string | null>(null);
   const [marketQuery, setMarketQuery] = useState("");
-  const [marketFilter, setMarketFilter] = useState<"all" | "installed">("all");
   const [marketViewAll, setMarketViewAll] = useState(false);
   const [tokenInputFor, setTokenInputFor] = useState<string | null>(null);
   const [tokenValue, setTokenValue] = useState("");
@@ -6222,23 +6221,6 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       {showConnectApps && (
         <div className="apps-overlay" onClick={() => setShowConnectApps(false)}>
           <div className="apps-panel marketplace" onClick={(event) => event.stopPropagation()}>
-            <div className="market-head">
-              <span className="apps-title">Marketplace</span>
-              <div className="market-head-right">
-                <button
-                  className={`market-installed${marketFilter === "installed" ? " active" : ""}`}
-                  type="button"
-                  onClick={() => setMarketFilter((value) => (value === "installed" ? "all" : "installed"))}
-                >
-                  <span className="market-installed-dot" />
-                  {connections.length} installed <span className="account-chev">›</span>
-                </button>
-                <button className="round small" type="button" onClick={() => setShowConnectApps(false)}>
-                  <CloseIcon size={13} />
-                </button>
-              </div>
-            </div>
-
             <div className="market-search-wrap">
               <SearchIcon size={15} />
               <input
@@ -6281,10 +6263,6 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                     ? MARKETPLACE
                     : MARKETPLACE.filter((app) => app.section === section)
                 ).filter((app) => {
-                  const installed = app.provider
-                    ? connections.some((entry) => entry.provider === app.provider)
-                    : false;
-                  if (marketFilter === "installed" && !installed) return false;
                   if (!marketQuery.trim()) return true;
                   return `${app.name} ${app.category} ${app.desc}`
                     .toLowerCase()
