@@ -12608,7 +12608,7 @@ a.feed-follow-btn {
 }
 
 .main-split > .chat-pane {
-  flex: 0 1 494px;
+  flex: 0 1 543px;
   min-width: 300px;
   border-left: 1px solid var(--border);
 }
