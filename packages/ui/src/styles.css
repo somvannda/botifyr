@@ -7488,6 +7488,14 @@ body {
   padding: 14px 16px;
 }
 
+.feed-post {
+  transition: border-color 120ms ease;
+}
+
+.feed-post:hover {
+  border-color: var(--accent-border);
+}
+
 .feed-composer {
   display: flex;
   flex-direction: column;
@@ -7615,7 +7623,7 @@ body {
 
 .feed-body {
   margin: 12px 0 0;
-  font-size: var(--text-xl);
+  font-size: var(--text-2xl);
   line-height: 1.55;
   color: var(--text);
   white-space: pre-wrap;
@@ -8531,7 +8539,7 @@ body {
 }
 
 .feed-action.active {
-  color: var(--danger);
+  color: var(--accent);
 }
 
 .feed-action-emoji {
@@ -9743,18 +9751,22 @@ a.feed-follow-btn {
 
 /* POST-8: keyboard-focusable reaction summary. */
 .feed-reaction-summary {
-  border: none;
-  background: transparent;
-  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
   font: inherit;
   font-size: var(--text-xs);
-  padding: 0;
+  font-weight: 600;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-pill);
   cursor: pointer;
 }
 
 .feed-reaction-summary:hover {
-  text-decoration: underline;
-  color: var(--text);
+  border-color: var(--accent-border);
 }
 
 /* POST-3: destructive-action confirmation dialog. */
