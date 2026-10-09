@@ -2,6 +2,7 @@ import type { Task } from "@botifyr/shared";
 import type {
   ApiKeyRecord,
   AuditRecord,
+  AuthorStatsRecord,
   BotRecord,
   BotRoleRecord,
   CapabilityGrantRecord,
@@ -103,6 +104,8 @@ export class MemoryStore implements Store {
   private groupJoinRequests = new Map<string, GroupJoinRequestRecord>();
   /** Keyed by `${userId}:${postId}`. */
   private postSaves = new Set<string>();
+  /** Keyed by `${postId}:${userId}` → viewedAt ISO (unique impressions). */
+  private postViews = new Map<string, string>();
   private postHides = new Set<string>();
   /** Keyed by `${userId}:${authorId}` → mute-until (null = unfollow). */
   private authorMutes = new Map<string, string | null>();
@@ -188,6 +191,7 @@ export class MemoryStore implements Store {
       avatarEmoji?: string;
       avatarScheme?: number;
       avatarUrl?: string | null;
+      birthday?: string | null;
     },
   ): Promise<void> {
     const record = this.users.get(id);
@@ -197,6 +201,7 @@ export class MemoryStore implements Store {
     if (profile.avatarEmoji !== undefined) record.avatarEmoji = profile.avatarEmoji;
     if (profile.avatarScheme !== undefined) record.avatarScheme = profile.avatarScheme;
     if (profile.avatarUrl !== undefined) record.avatarUrl = profile.avatarUrl ?? undefined;
+    if (profile.birthday !== undefined) record.birthday = profile.birthday ?? undefined;
   }
 
   private friendKey(a: string, b: string): string {
@@ -1294,6 +1299,55 @@ export class MemoryStore implements Store {
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .slice(0, Math.max(1, Math.min(100, limit)))
       .map((record) => ({ ...record }));
+  }
+
+  async listPostsOnMonthDay(
+    authorIds: string[],
+    month: number,
+    day: number,
+    limit: number,
+  ): Promise<PostRecord[]> {
+    const authors = new Set(authorIds);
+    return [...this.posts.values()]
+      .filter((record) => authors.has(record.authorId))
+      .filter((record) => {
+        const when = new Date(record.createdAt);
+        return when.getUTCMonth() + 1 === month && when.getUTCDate() === day;
+      })
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, Math.max(1, Math.min(100, limit)))
+      .map((record) => ({ ...record }));
+  }
+
+  async recordPostView(postId: string, userId: string): Promise<void> {
+    this.postViews.set(`${postId}:${userId}`, new Date().toISOString());
+  }
+
+  async getPostViewCount(postId: string): Promise<number> {
+    let count = 0;
+    for (const key of this.postViews.keys()) if (key.startsWith(`${postId}:`)) count += 1;
+    return count;
+  }
+
+  async getAuthorStats(authorId: string): Promise<AuthorStatsRecord> {
+    const postIds = new Set<string>();
+    for (const post of this.posts.values()) if (post.authorId === authorId) postIds.add(post.id);
+    const stats: AuthorStatsRecord = {
+      posts: postIds.size,
+      reactions: 0,
+      comments: 0,
+      shares: 0,
+      saves: 0,
+      reach: 0,
+    };
+    for (const postId of postIds) {
+      for (const key of this.postReactions.keys()) if (key.startsWith(`${postId}:`)) stats.reactions += 1;
+      for (const key of this.postShares) if (key.startsWith(`${postId}:`)) stats.shares += 1;
+      for (const key of this.postViews.keys()) if (key.startsWith(`${postId}:`)) stats.reach += 1;
+      for (const key of this.postSaves) if (key.endsWith(`:${postId}`)) stats.saves += 1;
+    }
+    for (const comment of this.postComments.values()) if (postIds.has(comment.postId)) stats.comments += 1;
+    return stats;
   }
 
   async listTrendingPosts(

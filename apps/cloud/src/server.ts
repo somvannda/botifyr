@@ -649,6 +649,7 @@ export async function buildServer(options: ServerOptions) {
     avatarEmoji?: string;
     avatarScheme?: number;
     avatarUrl?: string;
+    birthday?: string;
   }): User => ({
     id: record.id,
     email: record.email,
@@ -660,6 +661,7 @@ export async function buildServer(options: ServerOptions) {
     avatarEmoji: record.avatarEmoji,
     avatarScheme: record.avatarScheme,
     avatarUrl: record.avatarUrl,
+    birthday: record.birthday,
   });
 
   const slugify = (value: string): string =>
@@ -4103,6 +4105,7 @@ export async function buildServer(options: ServerOptions) {
       avatarEmoji?: string;
       avatarScheme?: number;
       avatarUrl?: string | null;
+      birthday?: string | null;
     };
   }>("/v1/profile", { preHandler: requireAuth }, async (request, reply) => {
     const userId = request.userId as string;
@@ -4112,6 +4115,7 @@ export async function buildServer(options: ServerOptions) {
       avatarEmoji?: string;
       avatarScheme?: number;
       avatarUrl?: string | null;
+      birthday?: string | null;
     } = {};
     if (typeof request.body?.handle === "string") {
       const handle = slugify(request.body.handle);
@@ -4134,6 +4138,21 @@ export async function buildServer(options: ServerOptions) {
         return reply.code(400).send({ error: "avatar must be a base64 image data URL" });
       if (value.length > 500_000) return reply.code(413).send({ error: "avatar image is too large" });
       profile.avatarUrl = value || null;
+    }
+    if (request.body?.birthday === null) {
+      profile.birthday = null;
+    } else if (typeof request.body?.birthday === "string") {
+      const value = request.body.birthday.trim();
+      if (value) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(value))
+          return reply.code(400).send({ error: "birthday must be YYYY-MM-DD" });
+        const parsed = new Date(`${value}T00:00:00Z`);
+        if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value)
+          return reply.code(400).send({ error: "birthday is not a valid date" });
+        profile.birthday = value;
+      } else {
+        profile.birthday = null;
+      }
     }
     await store.updateUserProfile(userId, profile);
     const record = await store.getUserById(userId);
@@ -5145,6 +5164,118 @@ export async function buildServer(options: ServerOptions) {
     }
     return items;
   });
+
+  /* Feed sidebar ▸ Dashboard: the viewer's own engagement stats. */
+  app.get("/v1/dashboard", { preHandler: requireAuth }, async (request) => {
+    const userId = request.userId as string;
+    const stats = await store.getAuthorStats(userId);
+    const friends = (await store.listFriends(userId)).length;
+    const pages = await store.listPages(userId);
+    let followers = 0;
+    for (const page of pages) followers += await store.countPageFollowers(page.id);
+    const recent: Array<{
+      id: string;
+      body: string;
+      createdAt: string;
+      likes: number;
+      comments: number;
+      shares: number;
+      reach: number;
+    }> = [];
+    for (const post of await store.listPostsByAuthor(userId, 10)) {
+      const postStats = await store.getPostStats(post.id, userId);
+      recent.push({
+        id: post.id,
+        body: post.body.slice(0, 160),
+        createdAt: post.createdAt,
+        likes: postStats.likes,
+        comments: postStats.comments,
+        shares: postStats.shares,
+        reach: await store.getPostViewCount(post.id),
+      });
+    }
+    return {
+      posts: stats.posts,
+      reactions: stats.reactions,
+      comments: stats.comments,
+      shares: stats.shares,
+      saves: stats.saves,
+      reach: stats.reach,
+      friends,
+      pages: pages.length,
+      followers,
+      recent,
+    };
+  });
+
+  /* Feed sidebar ▸ Memories: "on this day" posts from previous years. */
+  app.get("/v1/memories", { preHandler: requireAuth }, async (request) => {
+    const userId = request.userId as string;
+    const now = new Date();
+    const month = now.getUTCMonth() + 1;
+    const day = now.getUTCDate();
+    const pageIds = (await store.listPages(userId)).map((page) => page.id);
+    const cache = new Map<string, FeedAuthorDto>();
+    const records = await store.listPostsOnMonthDay([userId, ...pageIds], month, day, 60);
+    const savedIds = new Set(await store.listSavedPostIds(userId));
+    const groups = new Map<string, FeedPostDto[]>();
+    for (const record of records) {
+      const year = new Date(record.createdAt).getUTCFullYear();
+      if (year === now.getUTCFullYear()) continue;
+      const key = String(year);
+      const bucket = groups.get(key) ?? [];
+      bucket.push(await feedPostOf(record, userId, cache, 0, savedIds));
+      groups.set(key, bucket);
+    }
+    return [...groups.entries()]
+      .sort((a, b) => b[0].localeCompare(a[0]))
+      .map(([key, posts]) => {
+        const yearsAgo = now.getUTCFullYear() - Number(key);
+        return {
+          key,
+          label: `${yearsAgo} year${yearsAgo === 1 ? "" : "s"} ago`,
+          posts,
+        };
+      });
+  });
+
+  /* Feed sidebar ▸ Birthdays: friends' birthdays in the next 7 days. */
+  app.get("/v1/birthdays", { preHandler: requireAuth }, async (request) => {
+    const userId = request.userId as string;
+    const friendIds = await store.listFriends(userId);
+    const start = new Date();
+    start.setUTCHours(0, 0, 0, 0);
+    const entries: Array<{ person: ReturnType<typeof personOf>; date: string; daysUntil: number }> = [];
+    for (const friendId of friendIds) {
+      const record = await store.getUserById(friendId);
+      if (!record?.birthday) continue;
+      const [, monthStr, dayStr] = record.birthday.split("-");
+      const month = Number(monthStr);
+      const day = Number(dayStr);
+      let candidate = new Date(Date.UTC(start.getUTCFullYear(), month - 1, day));
+      let daysUntil = Math.round((candidate.getTime() - start.getTime()) / 86_400_000);
+      if (daysUntil < 0) {
+        candidate = new Date(Date.UTC(start.getUTCFullYear() + 1, month - 1, day));
+        daysUntil = Math.round((candidate.getTime() - start.getTime()) / 86_400_000);
+      }
+      if (daysUntil > 6) continue;
+      entries.push({ person: personOf(record), date: candidate.toISOString().slice(0, 10), daysUntil });
+    }
+    entries.sort((a, b) => a.daysUntil - b.daysUntil || a.person.id.localeCompare(b.person.id));
+    return entries;
+  });
+
+  /* Record a post impression (Feed reach). Fire-and-forget from the client. */
+  app.post<{ Params: { id: string } }>(
+    "/v1/posts/:id/view",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const post = await store.getPost(request.params.id);
+      if (post && canSeePost(post, userId)) await store.recordPostView(post.id, userId);
+      return reply.code(204).send();
+    },
+  );
 
   /* Albums: photos grouped by name (docs/feed-next.md §FR-5). */
   app.get("/v1/albums", { preHandler: requireAuth }, async (request) =>

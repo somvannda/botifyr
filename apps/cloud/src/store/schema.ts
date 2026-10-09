@@ -632,6 +632,18 @@ ALTER TABLE posts ADD COLUMN IF NOT EXISTS audience TEXT NOT NULL DEFAULT 'frien
 /* Scheduled publish time (null = published now). */
 ALTER TABLE posts ADD COLUMN IF NOT EXISTS scheduled_at TIMESTAMPTZ;
 
+/* Optional date of birth (YYYY-MM-DD), used by the Feed birthdays view. */
+ALTER TABLE users ADD COLUMN IF NOT EXISTS birthday DATE;
+
+/* Post impressions: one row per unique viewer per post (reach + impressions). */
+CREATE TABLE IF NOT EXISTS post_views (
+  post_id    TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+  user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (post_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS post_views_post_idx ON post_views (post_id);
+
 -- Seed the default policy and a starter model price (editable in admin).
 INSERT INTO platform_settings (id, data) VALUES ('global', '{"plans":{"proPriceCents":500,"businessPriceCents":1900,"proPeriodDays":30,"includedTokens":{"pro":5000000,"business":50000000},"currency":"USD"},"freeMonthlyTokens":500000,"lowBalanceCents":100,"graceDays":7,"reminderDays":[7,3,1],"reminderChannels":{"os":true,"email":true,"telegram":true},"onDemand":{"enabled":true,"markupPercent":15,"minTopUpCents":100,"allowPro":false,"onEmpty":"block"},"fallbackPlan":"free"}')
   ON CONFLICT (id) DO NOTHING;

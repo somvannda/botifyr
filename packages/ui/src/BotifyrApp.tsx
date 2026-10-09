@@ -91,6 +91,8 @@ import {
 } from "./Icons";
 import { Markdown } from "./Markdown";
 import { FeedRail, FeedView } from "./FeedView";
+import { FeedSidebar } from "./FeedSidebar";
+import type { FeedSection } from "./feedTypes";
 import { Select } from "./Select";
 import { CompanyWorkspace } from "./CompanyWorkspace";
 import { ErrorBoundary } from "./ErrorBoundary";
@@ -503,6 +505,10 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [myPages, setMyPages] = useState<Page[]>([]);
   /** Permalink target from `#post=<id>`; the Feed scrolls to and highlights it. */
   const [feedFocusPost, setFeedFocusPost] = useState<string | null>(null);
+  /** Which Feed-sidebar destination is open in the Feed area (defaults to the timeline). */
+  const [feedSection, setFeedSection] = useState<FeedSection>("feed");
+  /** Friends with a birthday in the next 7 days (Feed sidebar badge). */
+  const [birthdayCount, setBirthdayCount] = useState(0);
 
   // Open a shared post link (`#post=<id>`) directly in the Feed.
   useEffect(() => {
@@ -1470,6 +1476,21 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       active = false;
     };
   }, [client]);
+
+  // Upcoming birthdays for the Feed sidebar badge (loaded while in the Feed).
+  useEffect(() => {
+    if (workspaceFilter !== "feed") return;
+    let active = true;
+    client
+      .listBirthdays()
+      .then((list) => {
+        if (active) setBirthdayCount(list.length);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [client, workspaceFilter, feedRefresh]);
 
   const actingPage = actingAs ? (myPages.find((page) => page.id === actingAs) ?? null) : null;
 
@@ -4373,6 +4394,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
             aria-selected={feedActive}
             onClick={() => {
               setWorkspaceFilter("feed");
+              setFeedSection("feed");
               setMobileNavOpen(false);
             }}
           >
@@ -4392,7 +4414,23 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
           </button>
         </div>
 
-        <div className="task-list">
+        {feedActive && (
+          <FeedSidebar
+            user={user}
+            cloudUrl={CLOUD_URL}
+            active={feedSection}
+            onNavigate={(next) => setFeedSection(next)}
+            pages={myPages}
+            actingPage={actingPage}
+            onActPage={(page) => setActingAs(page ? page.id : null)}
+            onOpenPage={openFeedPage}
+            onCreatePage={() => setFeedSection("pages")}
+            friendRequests={friendRequests.filter((entry) => entry.direction === "incoming").length}
+            birthdays={birthdayCount}
+          />
+        )}
+
+        <div className="task-list" hidden={feedActive}>
           {messageHits.length > 0 && (
             <div className="task-section">
               <div className="task-section-head static" aria-hidden="true">
@@ -4768,6 +4806,16 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
             viewerId={user?.id}
             cloudUrl={CLOUD_URL}
             refreshKey={feedRefresh}
+            section={feedSection}
+            onSectionChange={setFeedSection}
+            viewer={user ?? undefined}
+            onOpenDm={openDmWith}
+            onEditProfile={() => {
+              setSettingsTab("profile");
+              setShowSettings(true);
+            }}
+            onProfileSaved={setUser}
+            onActPage={(page) => setActingAs(page ? page.id : null)}
             defaultPostAs={actingAs ?? undefined}
             pageHandle={feedPage}
             onOpenPage={openFeedPage}
@@ -6163,7 +6211,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
           </aside>
         )}
 
-      {feedActive && (
+      {feedActive && feedSection === "feed" && (
         <aside className="bot-panel feed-rail">
           <div className="feed-rail-title">Discover</div>
           <FeedRail

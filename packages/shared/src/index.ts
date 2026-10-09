@@ -492,6 +492,8 @@ export interface User {
   avatarScheme?: number;
   /** Uploaded profile photo (small base64 data URL). */
   avatarUrl?: string;
+  /** Optional date of birth (YYYY-MM-DD), used by Feed birthdays. */
+  birthday?: string;
 }
 
 export interface AuthResponse {

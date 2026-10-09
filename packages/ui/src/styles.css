@@ -12701,3 +12701,500 @@ a.feed-follow-btn {
   flex: 0 1 var(--chat-pane-width, 543px);
   min-width: 300px;
 }
+
+/* Feed workspace: left navigation + destination pages --------------------- */
+
+/* The chat list is parked while the Feed sidebar is shown. */
+.sidebar .task-list[hidden] {
+  display: none;
+}
+
+.feed-side {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-1) 0;
+}
+
+.feed-side-identity {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+
+.feed-side-identity:hover {
+  background: var(--hover);
+}
+
+.feed-side-identity.active {
+  border-color: var(--accent);
+}
+
+.feed-side-identity-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.feed-side-identity-name {
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.feed-side-identity-sub {
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.feed-side-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.feed-side-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.feed-side-item:hover {
+  background: var(--hover);
+}
+
+.feed-side-item.active {
+  background: var(--hover);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.feed-side-ico {
+  display: inline-flex;
+  width: 20px;
+  justify-content: center;
+  color: inherit;
+}
+
+.feed-side-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.feed-side-badge {
+  background: var(--accent);
+  color: #fff;
+  border-radius: var(--radius-pill);
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.feed-side-caret {
+  display: inline-flex;
+  color: var(--muted);
+  transition: transform 120ms ease;
+}
+
+.feed-side-caret.open {
+  transform: rotate(90deg);
+}
+
+.feed-side-pages {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: 0 0 var(--space-2) var(--space-4);
+}
+
+.feed-side-page-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.feed-side-page {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-2);
+  border: none;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+  text-align: left;
+}
+
+.feed-side-page:hover {
+  background: var(--hover);
+}
+
+.feed-side-page.current {
+  background: var(--hover);
+  font-weight: 600;
+}
+
+.feed-side-page-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.feed-side-page-tag {
+  margin-left: auto;
+  font-size: var(--text-4xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent);
+}
+
+.feed-side-page-view {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  padding: var(--space-1);
+  border-radius: var(--radius-xs);
+}
+
+.feed-side-page-view:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.feed-side-page-plus {
+  display: inline-flex;
+  width: 22px;
+  justify-content: center;
+  color: var(--muted);
+}
+
+.feed-side-page-new {
+  color: var(--muted);
+}
+
+/* Feed destination pages (Profile / Friends / Dashboard / Pages / …). */
+.feed-section-head {
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: 16px var(--space-5) 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.feed-section-title {
+  margin: 0;
+  font-size: var(--text-3xl, 20px);
+  font-weight: 700;
+  color: var(--text);
+}
+
+.feed-section-sub {
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+
+.feed-section-subtitle {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-lg, 15px);
+  font-weight: 600;
+  color: var(--text);
+  width: 100%;
+}
+
+.feed-scroll.feed-section > * {
+  max-width: 680px;
+}
+
+.feed-scroll.feed-section.wide > * {
+  max-width: 900px;
+}
+
+.feed-seg {
+  display: flex;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+.feed-seg-btn {
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.feed-seg-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.feed-people,
+.feed-pages-list,
+.feed-birthdays,
+.feed-insights {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.feed-people-row,
+.feed-pages-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-bubble);
+}
+
+.feed-people-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.feed-people-name {
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.feed-people-sub {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.feed-people-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.feed-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: var(--space-3);
+  width: 100%;
+}
+
+.feed-stat-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-bubble);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.feed-stat-card strong {
+  font-size: var(--text-3xl, 22px);
+  color: var(--text);
+}
+
+.feed-stat-card span {
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.feed-insights-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-bubble);
+  padding: var(--space-3);
+}
+
+.feed-insights-body {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.feed-insights-metrics {
+  display: flex;
+  gap: var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--muted);
+  flex-wrap: wrap;
+}
+
+.feed-profile-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: var(--space-4);
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.feed-profile-top {
+  display: flex;
+  gap: var(--space-4);
+  align-items: center;
+}
+
+.feed-profile-meta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.feed-profile-name {
+  margin: 0;
+  font-size: var(--text-3xl, 22px);
+  color: var(--text);
+}
+
+.feed-profile-handle {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.feed-profile-birthday {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.feed-profile-actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.feed-profile-editor {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-3);
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-3);
+}
+
+.feed-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.feed-field input {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.feed-profile-stats {
+  display: flex;
+  gap: var(--space-5);
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-3);
+}
+
+.feed-stat {
+  display: flex;
+  flex-direction: column;
+}
+
+.feed-stat strong {
+  font-size: var(--text-2xl, 18px);
+  color: var(--text);
+}
+
+.feed-stat span {
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.feed-page-create {
+  display: flex;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+.feed-page-create input {
+  flex: 1;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.feed-page-create .feed-post-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.feed-memory-group {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}

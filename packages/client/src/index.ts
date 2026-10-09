@@ -310,6 +310,49 @@ export interface AdminReport {
   postAuthor: string | null;
 }
 
+/** Aggregate engagement stats for the viewer's own profile (Dashboard). */
+export interface DashboardStats {
+  posts: number;
+  /** Total reactions received on the viewer's own posts. */
+  reactions: number;
+  comments: number;
+  shares: number;
+  saves: number;
+  /** Unique people who have seen the viewer's posts. */
+  reach: number;
+  friends: number;
+  /** Pages the viewer manages. */
+  pages: number;
+  /** Followers across the viewer's Pages. */
+  followers: number;
+  /** Per-post breakdown, newest first. */
+  recent: Array<{
+    id: string;
+    body: string;
+    createdAt: string;
+    likes: number;
+    comments: number;
+    shares: number;
+    reach: number;
+  }>;
+}
+
+/** A year-group of past posts (Feed sidebar ▸ Memories). */
+export interface MemoryGroup {
+  key: string;
+  label: string;
+  posts: FeedPost[];
+}
+
+/** A friend's upcoming birthday (Feed sidebar ▸ Birthdays). */
+export interface BirthdayEntry {
+  person: Person;
+  /** The next occurrence, YYYY-MM-DD. */
+  date: string;
+  /** 0 = today, 1 = tomorrow, … */
+  daysUntil: number;
+}
+
 /** Thrown when the token is missing, invalid, or expired. */
 export class AuthError extends Error {}
 
@@ -1348,6 +1391,8 @@ export class BotifyrClient {
     avatarScheme?: number;
     /** null removes the uploaded photo. */
     avatarUrl?: string | null;
+    /** Date of birth YYYY-MM-DD; null clears it. */
+    birthday?: string | null;
   }): Promise<User> {
     return this.request("/v1/profile", { method: "PATCH", json: true, body: JSON.stringify(input) });
   }
@@ -1700,6 +1745,26 @@ export class BotifyrClient {
 
   listSaved(): Promise<FeedPost[]> {
     return this.request("/v1/saved");
+  }
+
+  /** Your own engagement stats (Feed sidebar ▸ Dashboard). */
+  getDashboard(): Promise<DashboardStats> {
+    return this.request("/v1/dashboard");
+  }
+
+  /** "On this day" posts from previous years (Feed sidebar ▸ Memories). */
+  listMemories(): Promise<MemoryGroup[]> {
+    return this.request("/v1/memories");
+  }
+
+  /** Friends' birthdays in the next 7 days (Feed sidebar ▸ Birthdays). */
+  listBirthdays(): Promise<BirthdayEntry[]> {
+    return this.request("/v1/birthdays");
+  }
+
+  /** Record that the viewer saw a post (impressions/reach). */
+  viewPost(id: string): Promise<void> {
+    return this.request(`/v1/posts/${id}/view`, { method: "POST" });
   }
 
   /** Albums: your post photo collections. */
