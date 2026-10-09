@@ -760,6 +760,8 @@ function makePageClient(
     listPagePosts: vi.fn().mockResolvedValue({ items: posts, nextCursor: null }),
     listPageMedia: vi.fn().mockResolvedValue({ items: [], nextCursor: null }),
     listPageRoles: vi.fn().mockResolvedValue([]),
+    listPageBotRoles: vi.fn().mockResolvedValue([]),
+    listBots: vi.fn().mockResolvedValue([]),
     followPage: vi.fn().mockResolvedValue({ ok: true }),
     unfollowPage: vi.fn().mockResolvedValue(undefined),
     ...overrides,
@@ -880,6 +882,38 @@ describe("Pages experience", () => {
     await screen.findByRole("heading", { name: /Acme Coffee/ });
     expect(screen.getByRole("button", { name: "Follow" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Settings" })).toBeNull();
+  });
+
+  it("lets an admin assign a bot as a Page role (FR-15)", async () => {
+    const bot = {
+      id: "bot1",
+      userId: "viewer-1",
+      name: "Helper",
+      emoji: "🤖",
+      scheme: 0,
+      instructions: "",
+      sessionId: "s1",
+      createdAt: new Date().toISOString(),
+    };
+    const setPageBotRole = vi.fn().mockResolvedValue(undefined);
+    const client = makePageClient(makePage({ role: "admin" }), [], {
+      listBots: vi.fn().mockResolvedValue([bot]),
+      listPageBotRoles: vi
+        .fn()
+        .mockResolvedValue([
+          { botId: "bot1", role: "moderator", bot: { id: "bot1", name: "Helper", emoji: "🤖", scheme: 0 } },
+        ]),
+      setPageBotRole,
+    });
+    renderPage(client);
+    await screen.findByRole("heading", { name: /Acme Coffee/ });
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    expect(screen.getByText("Bots")).toBeTruthy();
+    expect(screen.getByText("moderator")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Pick a bot to add"), { target: { value: "bot1" } });
+    fireEvent.change(screen.getByLabelText("Pick a role for the bot"), { target: { value: "editor" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    await waitFor(() => expect(setPageBotRole).toHaveBeenCalledWith("page-1", "bot1", "editor"));
   });
 
   it("updates follow state on success and surfaces failures (PG-13)", async () => {

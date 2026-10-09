@@ -39,6 +39,7 @@ import {
   type Conversation,
   type DeviceKeyPair,
   type MediaItem,
+  type Page,
   type Person,
   type SealedMessage,
 } from "@botifyr/client";
@@ -457,6 +458,9 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     const stored = localStorage.getItem(WORKSPACE_FILTER_KEY);
     return stored === "feed" || stored === "startups" ? stored : "personal";
   });
+  /** Facebook-style "acting as a Page": the id of the Page the account is switched into. */
+  const [actingAs, setActingAs] = useState<string | null>(null);
+  const [myPages, setMyPages] = useState<Page[]>([]);
   /** Permalink target from `#post=<id>`; the Feed scrolls to and highlights it. */
   const [feedFocusPost, setFeedFocusPost] = useState<string | null>(null);
 
@@ -1412,6 +1416,22 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
   }, [showAccountMenu]);
+
+  // Pages the account manages, for the "switch to Page" menu.
+  useEffect(() => {
+    let active = true;
+    client
+      .listMyPages()
+      .then((list) => {
+        if (active) setMyPages(list);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [client]);
+
+  const actingPage = actingAs ? (myPages.find((page) => page.id === actingAs) ?? null) : null;
 
   const getDmKey = useCallback(
     async (session: { id: string; participants?: string[] }): Promise<CryptoKey | null> => {
@@ -4460,6 +4480,65 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
 
         {showAccountMenu && (
           <div className="account-menu" ref={accountMenuRef}>
+            {actingPage && (
+              <button
+                className="account-item account-switch-back"
+                type="button"
+                onClick={() => setActingAs(null)}
+              >
+                <span className="account-ico">
+                  <LogoutIcon size={16} />
+                </span>
+                <span className="account-label">
+                  {`Switch back to ${user.displayName || user.email}`}
+                </span>
+              </button>
+            )}
+            {myPages.length > 0 && (
+              <>
+                <div className="account-menu-head">Pages</div>
+                {myPages.map((page) => (
+                  <button
+                    key={page.id}
+                    className="account-item"
+                    type="button"
+                    onClick={() => {
+                      setActingAs(page.id);
+                      setWorkspaceFilter("feed");
+                      setShowAccountMenu(false);
+                    }}
+                  >
+                    <span className="account-ico">
+                      <span className="account-page-emoji" aria-hidden="true">
+                        {page.avatarEmoji ?? "📄"}
+                      </span>
+                    </span>
+                    <span className="account-label">
+                      {page.name}
+                      {actingAs === page.id ? " · acting" : ""}
+                    </span>
+                    <span className="account-chev">›</span>
+                  </button>
+                ))}
+                <button
+                  className="account-item"
+                  type="button"
+                  onClick={() => {
+                    const page = myPages[0];
+                    setShowAccountMenu(false);
+                    setWorkspaceFilter("feed");
+                    if (page) openFeedPage(page.handle);
+                  }}
+                >
+                  <span className="account-ico">
+                    <GearIcon size={16} />
+                  </span>
+                  <span className="account-label">Manage pages</span>
+                  <span className="account-chev">›</span>
+                </button>
+                <div className="account-sep" />
+              </>
+            )}
             <button
               className="account-item"
               type="button"
@@ -4591,12 +4670,26 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       </aside>
 
       <main className="main">
+        {actingPage && (
+          <div className="acting-banner" role="status">
+            <span className="acting-banner-emoji" aria-hidden="true">
+              {actingPage.avatarEmoji ?? "📄"}
+            </span>
+            <span className="acting-banner-text">
+              You&apos;re acting as <strong>{actingPage.name}</strong>
+            </span>
+            <button type="button" className="ghost small" onClick={() => setActingAs(null)}>
+              Switch back to {user?.displayName || user?.email || "your profile"}
+            </button>
+          </div>
+        )}
         {feedActive && (
           <FeedView
             client={client}
             viewerId={user?.id}
             cloudUrl={CLOUD_URL}
             refreshKey={feedRefresh}
+            defaultPostAs={actingAs ?? undefined}
             pageHandle={feedPage}
             onOpenPage={openFeedPage}
             groupHandle={feedGroup}

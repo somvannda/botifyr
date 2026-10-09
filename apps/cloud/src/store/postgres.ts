@@ -22,6 +22,7 @@ import type {
   ModelPricingRecord,
   NotificationRecord,
   PageRecord,
+  PageBotRoleRecord,
   PageRoleRecord,
   Plan,
   PlatformSettings,
@@ -2146,6 +2147,35 @@ export class PostgresStore implements Store {
     const result = await this.pool.query("DELETE FROM page_roles WHERE page_id = $1 AND user_id = $2", [
       pageId,
       userId,
+    ]);
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async setPageBotRole(record: PageBotRoleRecord): Promise<void> {
+    await this.pool.query(
+      "INSERT INTO page_bot_roles (page_id, bot_id, role) VALUES ($1,$2,$3) ON CONFLICT (page_id, bot_id) DO UPDATE SET role = EXCLUDED.role",
+      [record.pageId, record.botId, record.role],
+    );
+  }
+
+  async getPageBotRole(pageId: string, botId: string): Promise<PageBotRoleRecord | null> {
+    const { rows } = await this.pool.query(
+      "SELECT * FROM page_bot_roles WHERE page_id = $1 AND bot_id = $2",
+      [pageId, botId],
+    );
+    const row = rows[0];
+    return row ? { pageId: row.page_id, botId: row.bot_id, role: row.role } : null;
+  }
+
+  async listPageBotRoles(pageId: string): Promise<PageBotRoleRecord[]> {
+    const { rows } = await this.pool.query("SELECT * FROM page_bot_roles WHERE page_id = $1", [pageId]);
+    return rows.map((row) => ({ pageId: row.page_id, botId: row.bot_id, role: row.role }));
+  }
+
+  async deletePageBotRole(pageId: string, botId: string): Promise<boolean> {
+    const result = await this.pool.query("DELETE FROM page_bot_roles WHERE page_id = $1 AND bot_id = $2", [
+      pageId,
+      botId,
     ]);
     return (result.rowCount ?? 0) > 0;
   }

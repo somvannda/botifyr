@@ -262,6 +262,16 @@ export interface PageRoleRecord {
   role: PageRole;
 }
 
+/**
+ * A bot's role on a Page. A bot has no `users` row of its own (it shares its
+ * owner's account), so bot roles live in their own table, keyed by bot id.
+ */
+export interface PageBotRoleRecord {
+  pageId: string;
+  botId: string;
+  role: PageRole;
+}
+
 /** A conversation: id + owner + title + transcript. */
 export interface SessionRecord {
   id: string;
@@ -648,6 +658,11 @@ export interface Store {
   getPageRole(pageId: string, userId: string): Promise<PageRoleRecord | null>;
   listPageRoles(pageId: string): Promise<PageRoleRecord[]>;
   deletePageRole(pageId: string, userId: string): Promise<boolean>;
+  /** Page roles for bots (a bot has no user row of its own). */
+  setPageBotRole(record: PageBotRoleRecord): Promise<void>;
+  getPageBotRole(pageId: string, botId: string): Promise<PageBotRoleRecord | null>;
+  listPageBotRoles(pageId: string): Promise<PageBotRoleRecord[]>;
+  deletePageBotRole(pageId: string, botId: string): Promise<boolean>;
   followPage(pageId: string, userId: string): Promise<void>;
   unfollowPage(pageId: string, userId: string): Promise<boolean>;
   isFollowingPage(pageId: string, userId: string): Promise<boolean>;

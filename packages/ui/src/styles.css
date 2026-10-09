@@ -5621,6 +5621,43 @@ body {
   margin: var(--space-1) var(--space-2);
 }
 
+/* Page switcher: Facebook-style "act as a Page" -------------------------- */
+.account-menu-head {
+  padding: var(--space-1) var(--space-3);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.account-page-emoji {
+  font-size: var(--text-lg);
+}
+
+.account-switch-back {
+  color: var(--accent);
+}
+
+.acting-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-size: var(--text-md);
+}
+
+.acting-banner-emoji {
+  font-size: var(--text-xl);
+}
+
+.acting-banner-text {
+  flex: 1;
+  min-width: 0;
+}
+
 /* Settings modal --------------------------------------------------------- */
 .settings-overlay {
   position: fixed;

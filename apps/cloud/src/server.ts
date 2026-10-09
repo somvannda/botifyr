@@ -5497,7 +5497,7 @@ export async function buildServer(options: ServerOptions) {
     },
   );
 
-  app.get<{ Params: { id: string } }>(
+  app.get<{ Params: { id: string }; Querystring: { kind?: string } }>(
     "/v1/pages/:id/roles",
     { preHandler: requireAuth },
     async (request, reply) => {
@@ -5506,6 +5506,19 @@ export async function buildServer(options: ServerOptions) {
       const userId = request.userId as string;
       const role = page.ownerId === userId ? "admin" : (await store.getPageRole(page.id, userId))?.role;
       if (role !== "admin") return reply.code(403).send({ error: "not allowed" });
+      // `?kind=bot` lists bot roles (docs/feed-next.md FR-15); default is people.
+      if (request.query?.kind === "bot") {
+        const botRoles = await store.listPageBotRoles(page.id);
+        const bots = new Map((await store.listBots(userId)).map((bot) => [bot.id, bot]));
+        return botRoles.map((entry) => {
+          const bot = bots.get(entry.botId);
+          return {
+            botId: entry.botId,
+            role: entry.role,
+            bot: bot ? { id: bot.id, name: bot.name, emoji: bot.emoji, scheme: bot.scheme } : null,
+          };
+        });
+      }
       const roles = await store.listPageRoles(page.id);
       const people = await store.listUsersByIds(roles.map((entry) => entry.userId));
       const byId = new Map(people.map((person) => [person.id, person]));
@@ -5517,7 +5530,7 @@ export async function buildServer(options: ServerOptions) {
     },
   );
 
-  app.put<{ Params: { id: string }; Body: { userId?: string; role?: string } }>(
+  app.put<{ Params: { id: string }; Body: { userId?: string; botId?: string; role?: string } }>(
     "/v1/pages/:id/roles",
     { preHandler: requireAuth },
     async (request, reply) => {
@@ -5526,18 +5539,26 @@ export async function buildServer(options: ServerOptions) {
       const userId = request.userId as string;
       const callerRole = page.ownerId === userId ? "admin" : (await store.getPageRole(page.id, userId))?.role;
       if (callerRole !== "admin") return reply.code(403).send({ error: "not allowed" });
-      const targetId = request.body?.userId?.trim();
-      if (!targetId) return reply.code(400).send({ error: "userId is required" });
+      const botId = request.body?.botId?.trim();
+      const targetId = botId || request.body?.userId?.trim();
+      if (!targetId) return reply.code(400).send({ error: "userId or botId is required" });
+      if (botId) {
+        const bot = await store.getBot(botId);
+        if (!bot || bot.userId !== userId) return reply.code(404).send({ error: "bot not found" });
+      } else if (targetId === page.ownerId) {
+        return reply.code(400).send({ error: "the owner is always admin" });
+      }
       const role = request.body?.role;
       if (role !== "admin" && role !== "editor" && role !== "moderator" && role !== "analyst") {
         if (!role) {
-          await store.deletePageRole(page.id, targetId);
+          if (botId) await store.deletePageBotRole(page.id, botId);
+          else await store.deletePageRole(page.id, targetId);
           return reply.code(204).send();
         }
         return reply.code(400).send({ error: "invalid role" });
       }
-      if (targetId === page.ownerId) return reply.code(400).send({ error: "the owner is always admin" });
-      await store.setPageRole({ pageId: page.id, userId: targetId, role });
+      if (botId) await store.setPageBotRole({ pageId: page.id, botId, role });
+      else await store.setPageRole({ pageId: page.id, userId: targetId, role });
       return { ok: true };
     },
   );
