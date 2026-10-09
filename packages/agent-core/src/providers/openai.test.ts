@@ -86,4 +86,66 @@ describe("createOpenAIProvider reasoning echo", () => {
     await provider.complete({ messages: [{ role: "assistant", content: "On it." }], tools: [] });
     expect("reasoning_content" in bodies[0].messages[0]).toBe(false);
   });
+
+  it("downgrades a forced tool choice to auto in thinking mode", async () => {
+    const { bodies } = captureFetch({ choices: [{ message: { content: "ok" } }] });
+    const provider = createOpenAIProvider({
+      baseUrl: "https://api.deepseek.com/v1",
+      model: "deepseek-flash",
+      apiKey: "k",
+      echoReasoning: true,
+    });
+    await provider.complete({
+      messages: [{ role: "user", content: "hi" }],
+      tools: [{ name: "browser.goto", description: "go", parameters: { type: "object" } }],
+      toolChoice: "required",
+    });
+    expect(bodies[0].tool_choice).toBe("auto");
+  });
+
+  it("retries with a reasoning placeholder when thinking mode rejects a reasoning-less turn", async () => {
+    const bodies: Array<Record<string, any>> = [];
+    let calls = 0;
+    vi.stubGlobal("fetch", async (_url: string, init: { body: string }) => {
+      bodies.push(JSON.parse(init.body));
+      calls += 1;
+      if (calls === 1) {
+        return {
+          ok: false,
+          status: 400,
+          text: async () =>
+            '{"error":{"message":"The `reasoning_content` in the thinking mode must be passed back to the API."}}',
+          json: async () => ({}),
+          body: null,
+        } as unknown as Response;
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ choices: [{ message: { content: "ok" } }] }),
+        text: async () => "",
+        body: null,
+      } as unknown as Response;
+    });
+
+    const provider = createOpenAIProvider({
+      baseUrl: "https://api.deepseek.com/v1",
+      model: "deepseek-flash",
+      apiKey: "k",
+      echoReasoning: true,
+    });
+    const result = await provider.complete({
+      messages: [
+        { role: "user", content: "hi" },
+        { role: "assistant", content: "On it." },
+        { role: "user", content: "again" },
+      ],
+      tools: [],
+    });
+
+    expect(result.text).toBe("ok");
+    expect(bodies).toHaveLength(2);
+    expect(bodies[0].messages[1].reasoning_content).toBe("");
+    expect(bodies[1].messages[1].reasoning_content).toBe("(none)");
+  });
 });

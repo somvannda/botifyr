@@ -232,13 +232,16 @@ export async function runAgent(options: RunAgentOptions): Promise<AgentResult> {
         status: "running",
       });
 
+      // On the final step, withhold the tools so the model must answer with
+      // text — a run ends with a summary instead of a hard "step budget" stop.
+      const stepTools = iteration === maxSteps - 1 ? [] : tools.map(toSpec);
       try {
         response =
           options.onToken && provider.completeStream
             ? await provider.completeStream(
                 {
                   messages,
-                  tools: tools.map(toSpec),
+                  tools: stepTools,
                   maxTokens: options.maxTokens,
                   toolChoice: forceToolCall ? "required" : undefined,
                 },
@@ -246,7 +249,7 @@ export async function runAgent(options: RunAgentOptions): Promise<AgentResult> {
               )
             : await provider.complete({
                 messages,
-                tools: tools.map(toSpec),
+                tools: stepTools,
                 maxTokens: options.maxTokens,
                 toolChoice: forceToolCall ? "required" : undefined,
               });

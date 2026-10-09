@@ -7470,13 +7470,21 @@ export async function buildServer(options: ServerOptions) {
               info &&
               (!shouldRunSchedule(info.status) || !withinOperatingHours(info.operatingHours, new Date(now)))
             ) {
+              // Leave nextRunAt untouched so the run fires as soon as the company
+              // is back inside its hours — but record why nothing is happening.
+              app.log.debug(
+                { botId: bot.id, userId: bot.userId, status: info.status, hours: info.operatingHours },
+                "scheduler: skipped (paused or outside operating hours)",
+              );
               continue;
             }
           }
-          // Advance first so a slow run can't double-fire.
+          // Advance first so a slow run can't double-fire. A little jitter spreads
+          // employees that share a cadence so they don't all fire on one tick.
+          const jitterMs = Math.floor(Math.random() * 90_000);
           bot.schedule = {
             ...schedule,
-            nextRunAt: new Date(now + schedule.everyMinutes * 60_000).toISOString(),
+            nextRunAt: new Date(now + schedule.everyMinutes * 60_000 + jitterMs).toISOString(),
           };
           await store.updateBot(bot);
           const session = await store.getSession(bot.sessionId);

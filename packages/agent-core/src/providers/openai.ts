@@ -39,7 +39,21 @@ function safeJson(value: string | undefined): Record<string, unknown> {
   }
 }
 
-function toOpenAIMessage(message: AgentMessage, echoReasoning: boolean): Record<string, unknown> {
+/**
+ * Some DeepSeek thinking-mode endpoints reject an empty `reasoning_content`
+ * when tools are present (notably a tool-call turn the model answered with no
+ * reasoning). When `stubReasoning` is set we send a short placeholder instead
+ * of an empty string, which satisfies the validator without polluting context.
+ */
+const REASONING_PLACEHOLDER = "(none)";
+
+function toOpenAIMessage(
+  message: AgentMessage,
+  echoReasoning: boolean,
+  stubReasoning = false,
+): Record<string, unknown> {
+  const reasoning = (): string | undefined =>
+    message.reasoningContent || (stubReasoning ? REASONING_PLACEHOLDER : "");
   if (message.role === "tool") {
     return { role: "tool", tool_call_id: message.toolCallId, content: message.content };
   }
@@ -53,22 +67,65 @@ function toOpenAIMessage(message: AgentMessage, echoReasoning: boolean): Record<
         function: { name: call.name, arguments: JSON.stringify(call.arguments) },
       })),
     };
-    if (echoReasoning) out.reasoning_content = message.reasoningContent ?? "";
+    if (echoReasoning) out.reasoning_content = reasoning();
     return out;
   }
   if (message.role === "assistant" && echoReasoning) {
     return {
       role: "assistant",
       content: message.content || null,
-      reasoning_content: message.reasoningContent ?? "",
+      reasoning_content: reasoning(),
     };
   }
   return { role: message.role, content: message.content };
 }
 
+/**
+ * DeepSeek thinking mode rejects `tool_choice: "required"`. When the caller
+ * forces a tool call we fall back to "auto"; the agent already nudges the model
+ * with a redirect message, so this only relaxes a hard constraint.
+ */
+function effectiveToolChoice(
+  toolChoice: "auto" | "none" | "required" | undefined,
+  echoReasoning: boolean,
+): "auto" | "none" | "required" {
+  if (echoReasoning && toolChoice === "required") return "auto";
+  return toolChoice ?? "auto";
+}
+
 export function createOpenAIProvider(options: OpenAIProviderOptions): ModelProvider {
   const endpoint = `${options.baseUrl.replace(/\/$/, "")}/chat/completions`;
   const echoReasoning = options.echoReasoning === true;
+
+  /**
+   * POST a chat-completions request. If thinking mode rejects the request
+   * because a replayed assistant turn carried no reasoning (a zero-reasoning
+   * tool-call turn), retry once with a non-empty reasoning placeholder.
+   */
+  async function post(messages: AgentMessage[], body: Record<string, unknown>): Promise<Response> {
+    const send = (stubReasoning: boolean): Promise<Response> =>
+      fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(options.apiKey ? { authorization: `Bearer ${options.apiKey}` } : {}),
+        },
+        body: JSON.stringify({
+          ...body,
+          messages: messages.map((message) => toOpenAIMessage(message, echoReasoning, stubReasoning)),
+        }),
+      });
+    const response = await send(false);
+    if (response.ok) return response;
+    const detail = await response.text();
+    if (echoReasoning && /reasoning_content/i.test(detail)) {
+      const retry = await send(true);
+      if (retry.ok) return retry;
+      const retryDetail = await retry.text();
+      throw new Error(`model request failed (${retry.status}): ${retryDetail.slice(0, 500)}`);
+    }
+    throw new Error(`model request failed (${response.status}): ${detail.slice(0, 500)}`);
+  }
 
   return {
     name: `openai-compatible:${options.model}`,
@@ -85,7 +142,6 @@ export function createOpenAIProvider(options: OpenAIProviderOptions): ModelProvi
     }): Promise<ModelResponse> {
       const body: Record<string, unknown> = {
         model: options.model,
-        messages: messages.map((message) => toOpenAIMessage(message, echoReasoning)),
         temperature: 0.2,
       };
       if (maxTokens && maxTokens > 0) body.max_tokens = maxTokens;
@@ -109,22 +165,10 @@ export function createOpenAIProvider(options: OpenAIProviderOptions): ModelProvi
             parameters: tool.parameters,
           },
         }));
-        body.tool_choice = toolChoice ?? "auto";
+        body.tool_choice = effectiveToolChoice(toolChoice, echoReasoning);
       }
 
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          ...(options.apiKey ? { authorization: `Bearer ${options.apiKey}` } : {}),
-        },
-        body: JSON.stringify(body),
-      });
-
-      if (!response.ok) {
-        const detail = await response.text();
-        throw new Error(`model request failed (${response.status}): ${detail.slice(0, 500)}`);
-      }
+      const response = await post(messages, body);
 
       const json = (await response.json()) as {
         choices?: Array<{ message?: OpenAIChoiceMessage }>;
@@ -158,7 +202,6 @@ export function createOpenAIProvider(options: OpenAIProviderOptions): ModelProvi
     async completeStream({ messages, tools, maxTokens, toolChoice }, onDelta) {
       const body: Record<string, unknown> = {
         model: options.model,
-        messages: messages.map((message) => toOpenAIMessage(message, echoReasoning)),
         temperature: 0.2,
         stream: true,
         stream_options: { include_usage: true },
@@ -180,20 +223,12 @@ export function createOpenAIProvider(options: OpenAIProviderOptions): ModelProvi
             parameters: tool.parameters,
           },
         }));
-        body.tool_choice = toolChoice ?? "auto";
+        body.tool_choice = effectiveToolChoice(toolChoice, echoReasoning);
       }
 
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          ...(options.apiKey ? { authorization: `Bearer ${options.apiKey}` } : {}),
-        },
-        body: JSON.stringify(body),
-      });
-      if (!response.ok || !response.body) {
-        const detail = await response.text().catch(() => "");
-        throw new Error(`model request failed (${response.status}): ${detail.slice(0, 500)}`);
+      const response = await post(messages, body);
+      if (!response.body) {
+        throw new Error(`model request failed (${response.status}): no response body`);
       }
 
       const reader = response.body.getReader();
