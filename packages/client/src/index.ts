@@ -686,15 +686,73 @@ export class BotifyrClient {
     });
   }
 
-  /** Upload a file as raw bytes (preferred for large media; no base64 inflation). */
-  uploadFileRaw(input: { name: string; mime?: string; blob: Blob }): Promise<MediaItem> {
+  /** Upload a file as raw bytes (preferred for large media; no base64 inflation).
+   *  Pass `onProgress` for byte-level progress (uses XHR; fetch has no upload
+   *  progress event). Without it, the plain fetch path is used. */
+  uploadFileRaw(
+    input: { name: string; mime?: string; blob: Blob },
+    onProgress?: (loaded: number, total: number) => void,
+  ): Promise<MediaItem> {
     const params = new URLSearchParams({ name: input.name });
     if (input.mime) params.set("mime", input.mime);
-    return this.request(`/v1/uploads/raw?${params.toString()}`, {
+    const path = `/v1/uploads/raw?${params.toString()}`;
+    if (onProgress && typeof XMLHttpRequest !== "undefined") {
+      return this.uploadRawWithProgress(path, input.blob, onProgress);
+    }
+    return this.request(path, {
       method: "POST",
       body: input.blob,
       // Always octet-stream on the wire; the real MIME travels in `mime=`.
       contentType: "application/octet-stream",
+    });
+  }
+
+  /** POST raw bytes via XHR so upload progress can be reported, with one
+   *  refresh-and-retry on an expired token (mirrors `request`). */
+  private uploadRawWithProgress(
+    path: string,
+    blob: Blob,
+    onProgress: (loaded: number, total: number) => void,
+    allowRetry = true,
+  ): Promise<MediaItem> {
+    return new Promise<MediaItem>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", this.url(path));
+      if (this.token) xhr.setRequestHeader("authorization", `Bearer ${this.token}`);
+      xhr.setRequestHeader("content-type", "application/octet-stream");
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) onProgress(event.loaded, event.total);
+      };
+      xhr.onload = () => {
+        if (xhr.status === 401 && allowRetry && this.refreshToken) {
+          this.refresh()
+            .then((ok) => {
+              if (!ok) throw new AuthError("unauthorized");
+              return this.uploadRawWithProgress(path, blob, onProgress, false);
+            })
+            .then(resolve, reject);
+          return;
+        }
+        if (xhr.status < 200 || xhr.status >= 300) {
+          let detail = `upload failed (${xhr.status})`;
+          try {
+            const body = JSON.parse(xhr.responseText) as { error?: string };
+            if (body?.error) detail = body.error;
+          } catch {
+            // keep the status-based message
+          }
+          reject(xhr.status === 401 ? new AuthError(detail) : new Error(detail));
+          return;
+        }
+        try {
+          resolve(JSON.parse(xhr.responseText || "{}") as MediaItem);
+        } catch {
+          reject(new Error("invalid upload response"));
+        }
+      };
+      xhr.onerror = () => reject(new Error("upload failed"));
+      xhr.onabort = () => reject(new Error("upload cancelled"));
+      xhr.send(blob);
     });
   }
 
@@ -1583,8 +1641,24 @@ export class BotifyrClient {
     return this.request(`/v1/pages/${id}`, { method: "DELETE" });
   }
 
-  listPagePosts(handle: string): Promise<FeedPost[]> {
-    return this.request(`/v1/pages/${encodeURIComponent(handle)}/posts`);
+  /** A Page's timeline, keyset-paged (`docs/pages-implementation-plan.md`). */
+  listPagePosts(handle: string, cursor?: string, limit = 20): Promise<FeedPage> {
+    const params = new URLSearchParams();
+    if (cursor) params.set("cursor", cursor);
+    params.set("limit", String(limit));
+    return this.request(`/v1/pages/${encodeURIComponent(handle)}/posts?${params.toString()}`);
+  }
+
+  /** Image attachments across a Page's posts, newest first. */
+  listPageMedia(
+    handle: string,
+    cursor?: string,
+    limit = 30,
+  ): Promise<{ items: Array<{ id: string; imageUrl: string }>; nextCursor: string | null }> {
+    const params = new URLSearchParams();
+    if (cursor) params.set("cursor", cursor);
+    params.set("limit", String(limit));
+    return this.request(`/v1/pages/${encodeURIComponent(handle)}/media?${params.toString()}`);
   }
 
   followPage(id: string): Promise<{ ok: boolean }> {

@@ -18,11 +18,23 @@ const BASE_BRANCH = "main";
 const NPM = process.platform === "win32" ? "npm.cmd" : "npm";
 
 function run(bin, args, { cwd, capture = false, allowFail = false } = {}) {
-  const res = spawnSync(bin, args, {
-    cwd,
-    encoding: "utf8",
-    stdio: capture ? "pipe" : "inherit",
-  });
+  // Node refuses to spawn `.cmd`/`.bat` (e.g. npm.cmd) without a shell on
+  // Windows (EINVAL), and passing an args array with `shell: true` triggers
+  // DEP0190. Run those through cmd.exe as a single command string — npm's args
+  // are simple tokens, so joining them is safe and warning-free.
+  const viaShell = process.platform === "win32" && /\.(cmd|bat)$/i.test(bin);
+  const res = viaShell
+    ? spawnSync([bin, ...args].join(" "), {
+        cwd,
+        encoding: "utf8",
+        stdio: capture ? "pipe" : "inherit",
+        shell: true,
+      })
+    : spawnSync(bin, args, {
+        cwd,
+        encoding: "utf8",
+        stdio: capture ? "pipe" : "inherit",
+      });
   if (res.error) throw res.error;
   if (res.status !== 0 && !allowFail) {
     const detail = capture ? `\n${res.stdout ?? ""}${res.stderr ?? ""}` : "";
@@ -39,8 +51,7 @@ function repoRoot() {
   return out.replace(/\//g, path.sep);
 }
 
-const worktreeDir = (root, slug) =>
-  path.join(path.dirname(root), `${path.basename(root)}-wt-${slug}`);
+const worktreeDir = (root, slug) => path.join(path.dirname(root), `${path.basename(root)}-wt-${slug}`);
 const branchFor = (slug) => `agent/${slug}`;
 
 function assertSlug(slug) {
@@ -97,9 +108,7 @@ function cmdFinish(root, slug, flags) {
   const dirty = gitOut(["status", "--porcelain"], dir);
   if (dirty) {
     if (!flags.message) {
-      throw new Error(
-        `worktree has uncommitted changes; commit them or pass --message "type: summary"`,
-      );
+      throw new Error(`worktree has uncommitted changes; commit them or pass --message "type: summary"`);
     }
     git(["add", "-A"], { cwd: dir });
     git(["commit", "-m", flags.message], { cwd: dir });

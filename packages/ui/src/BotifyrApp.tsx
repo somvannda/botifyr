@@ -477,6 +477,35 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [feedGroup, setFeedGroup] = useState<string | null>(null);
   /** When set, the Feed area shows this album instead of the feed. */
   const [feedAlbum, setFeedAlbum] = useState<string | null>(null);
+
+  /**
+   * Pages deep-link routing: `#/pages/:handle` (refresh, share, back/forward).
+   * Hash-based so it needs no server rewrite and works on desktop + portal.
+   */
+  useEffect(() => {
+    const applyHash = () => {
+      const match = window.location.hash.match(/^#\/pages\/([^/?#]+)/);
+      if (match) {
+        setWorkspaceFilter("feed");
+        setFeedPage(decodeURIComponent(match[1]));
+      } else if (window.location.hash === "" || window.location.hash === "#") {
+        setFeedPage(null);
+      }
+    };
+    applyHash();
+    window.addEventListener("hashchange", applyHash);
+    return () => window.removeEventListener("hashchange", applyHash);
+  }, []);
+
+  const openFeedPage = useCallback((handle: string | null) => {
+    setFeedPage(handle);
+    if (handle) {
+      const next = `#/pages/${encodeURIComponent(handle)}`;
+      if (window.location.hash !== next) window.location.hash = next;
+    } else if (window.location.hash.startsWith("#/pages/")) {
+      window.location.hash = "";
+    }
+  }, []);
   const [groupMembers, setGroupMembers] = useState<string[]>([]);
   const [autonomous, setAutonomous] = useState(false);
   const [autoApprove, setAutoApprove] = useState(false);
@@ -4531,7 +4560,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
             cloudUrl={CLOUD_URL}
             refreshKey={feedRefresh}
             pageHandle={feedPage}
-            onOpenPage={setFeedPage}
+            onOpenPage={openFeedPage}
             groupHandle={feedGroup}
             onOpenGroup={setFeedGroup}
             albumName={feedAlbum}
@@ -5898,7 +5927,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
           <div className="feed-rail-title">Discover</div>
           <FeedRail
             client={client}
-            onOpenPage={setFeedPage}
+            onOpenPage={openFeedPage}
             onOpenGroup={setFeedGroup}
             onOpenAlbum={setFeedAlbum}
           />

@@ -30,24 +30,26 @@ action column) and fix the identity/resilience gaps:
 
 ## B. Page navigation
 
-A **two-tab** model, using only data/endpoints that exist:
+A **three-tab** model, using only data/endpoints that exist:
 
 | Tab | Backing data | Notes |
 | --- | --- | --- |
-| **Posts** | `GET /v1/pages/:handle/posts` | Reuses the shared `PostCard`. |
+| **Posts** | `GET /v1/pages/:handle/posts?cursor=&limit=` | Reuses the shared `PostCard`; "Load more". |
 | **About** | `page.about`, `category`, `followers`, `cta`, `createdAt` | Always available. |
+| **Photos** | `GET /v1/pages/:handle/media` | Grid + shared lightbox; lazy-loaded. |
 
-Tabs are `<button aria-pressed>` with a visible active state, keyboard focus,
-and no tab for an unsupported section. Photos/Videos/Reels/Stories/Reviews are
+Tabs are `<button role="tab">` with a visible active state, keyboard focus, and
+no tab for an unsupported section. Videos/Reels/Stories/Reviews are still
 **not** shown (no Page-scoped read endpoints).
 
 ## C. Page feed
 
 - Reuse `PostCard` unchanged (owned by the Post Manager). `PageView` only maps
   the list, handles delete-visibility, pin labels, and block removal.
-- Respect the server's ordering: pinned first, then newest (server.ts ~5181).
+- Respect the server's ordering: pinned first (first page only), then newest,
+  keyset-paged by `(createdAt, id)`; dedupe on append.
 - Empty state is explained per viewer (§D below).
-- No fake pagination (backend limitation documented in the audit).
+- **Load more** appends the next cursor page; "You're all caught up" at the end.
 
 ## D. Follow / engagement
 
@@ -92,9 +94,9 @@ emoji/CTA), **Roles**, **Community** (comment moderation), **Insights** (+ CSV),
 | Shared `PostCard` interface (props unchanged) | Post Manager | Reused as-is |
 | `.page-*` styles + tokens | Design System Manager | Additive classes only |
 | `cta_url` schema field | Cloud | **Shipped** (schema + API + UI + tests) |
-| Page-scoped media/story endpoints | Cloud | **Needed** for Photos/Reels/Stories tabs |
-| Timeline cursor pagination | Cloud | **Needed** for "load more" |
-| URL routing for Pages | Feed Experience Lead | Recommendation only |
+| Page-scoped media endpoint | Cloud | **Shipped** (`GET /v1/pages/:handle/media`) |
+| Timeline cursor pagination | Cloud | **Shipped** (`?cursor=&limit=`) |
+| URL routing for Pages | Feed Experience Lead | **Shipped** (`#/pages/:handle`) |
 | Page navigation/E2E regression tests | Feed QA & E2E Manager | Tests added here; extend if desired |
 
 ## J. Test plan
