@@ -14,7 +14,9 @@ import { expect, request, test } from "@playwright/test";
  */
 const TOKEN = process.env.E2E_PAGES_TOKEN ?? "";
 const CLOUD = process.env.E2E_CLOUD_URL ?? "http://localhost:8787";
-const PAGE_NAME = `E2E Studio ${Date.now().toString(36)}`;
+// Unique per worker: Playwright runs the four tests in parallel, so a
+// millisecond-only stamp can collide and make two workers race for one handle.
+const PAGE_NAME = `E2E Studio ${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 let pageHandle = "";
 
 test.describe("Pages experience", () => {
