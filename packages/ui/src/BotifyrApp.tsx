@@ -89,6 +89,7 @@ import { Markdown } from "./Markdown";
 import { FeedRail, FeedView } from "./FeedView";
 import { Select } from "./Select";
 import { CompanyWorkspace } from "./CompanyWorkspace";
+import { ChatDock } from "./ChatDock";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { P2P, deviceId, saveBlob, setIceServers } from "./p2p";
 import { defaultBridge, type BotBridge } from "./bridge";
@@ -4140,7 +4141,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
 
   return (
     <div
-      className={`app${feedActive || (!startupsActive && showBotPanel && (activeBot || (activeSession && (activeSession.kind === "dm" || activeSession.kind === "group")))) ? " with-panel" : ""}${officeDocked ? " with-office" : ""}${density === "compact" ? " density-compact" : ""}${mobileNavOpen ? " mobile-nav-open" : ""}`}
+      className={`app${feedActive || startupsActive || (showBotPanel && (activeBot || (activeSession && (activeSession.kind === "dm" || activeSession.kind === "group")))) ? " with-panel" : ""}${officeDocked ? " with-office" : ""}${density === "compact" ? " density-compact" : ""}${mobileNavOpen ? " mobile-nav-open" : ""}`}
     >
       {titlebarSlot &&
         createPortal(
@@ -4716,6 +4717,27 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
             onCreated={handleCompanyCreated}
           />
         )}
+        {startupsActive &&
+          (() => {
+            const employees = bots.filter((bot) =>
+              workspaces.some((workspace) =>
+                workspace.roles.some((role) => role.botId === bot.id),
+              ),
+            );
+            return (
+              <aside className="bot-panel cws-chat-aside">
+                <ChatDock
+                  client={client}
+                  bots={employees}
+                  selectedBotId={activeBotId}
+                  onSelect={(id) => {
+                    const bot = bots.find((entry) => entry.id === id);
+                    if (bot) selectBot(bot);
+                  }}
+                />
+              </aside>
+            );
+          })()}
         {((!feedActive && !startupsActive) || showNewChat) && (
           <>
             {showNewChat && (
