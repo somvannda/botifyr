@@ -4,9 +4,11 @@
 > conventions used by the Feed experience (Feed, Posts, Reels, Stories, Pages,
 > Composer). Last updated: Oct 2026.
 >
-> Companion docs: [`design-system-plan.md`](design-system-plan.md),
+> Companion docs: [`design-system-spec.md`](design-system-spec.md) (specification),
+> [`design-system-plan.md`](design-system-plan.md),
 > [`design-system-components.md`](design-system-components.md),
-> [`design-system-progress.md`](design-system-progress.md).
+> [`design-system-progress.md`](design-system-progress.md),
+> [`agent-progress/design-system-manager.md`](agent-progress/design-system-manager.md).
 
 ## 1. Method
 
@@ -54,13 +56,17 @@ typography or elevation. Those values were inlined per rule.
 | DS-3 | No semantic interaction tints (`--accent-soft`, `--danger-soft`, …); every rule invented its own alpha. | Medium | 6 distinct alphas for the accent tint | **Fixed** |
 | DS-4 | `--muted` in light theme (`#6b7280`) = **4.47:1** on `--bg` — just under AA. | Medium | Measured in-app | **Fixed** (`#616875`, 5.19:1) |
 | DS-5 | Reduced-motion honoured only for skeletons + story progress; `.reaction-btn` hover scale still animated. | Low | `styles.css` | **Fixed** |
-| DS-6 | Radii ungoverned: 54× `999px`, then `8/9/10/11/12/14/16px` — no scale. | Low | `grep border-radius` | **Fixed** (275 declarations → `--radius-*`; 10 legacy one-offs documented) |
+| DS-6 | Radii ungoverned: 54× `999px`, then `8/9/10/11/12/14/16px` — no scale. | Low | `grep border-radius` | **Fixed** (all `border-radius` now uses `--radius-*`; tail normalised onto the scale) |
 | DS-7 | Type scale inlined: 74× `12.5px`, 73× `12px`, 64× `13px`, … 26 distinct sizes. | Low | `grep font-size` | **Fixed** (12 `--text-*` steps; 433 declarations adopted) |
-| DS-8 | Spacing inlined; no scale. | Low | `grep gap/padding` | Documented (8-pt-ish grid) |
+| DS-8 | Spacing inlined; no scale. | Low | `grep gap/padding` | **Fixed** (4-pt grid `--space-1..6`; 1,001 values migrated app-wide) |
 | DS-9 | Global accent literals remained outside the Feed (chat, workspace, page composer). | Low | 12× `rgba(109,139,255,…)` outside Feed | **Fixed** (all → tokens/`color-mix`) |
 | DS-10 | Red family drift app-wide: `#f0556b`, `#f87171`, `#ef4444`, `#e5484d`, `--danger #ff6b6b`. | Low | `grep` counts | **Fixed** (all unified to `--danger*`) |
 | DS-11 | Solid destructive button used `#f0556b` with white text — **3.4:1** (fails AA); switching to `--danger` would worsen it. | Medium | `.feed-confirm-danger` | **Fixed** via `--danger-solid` (4.8:1) |
 | DS-12 | Solid **accent** buttons (Post, comment send, story reply/send, reel sheet) put white text on `--accent` — **3.09:1** in dark (fails AA). Only visible once the composer is enabled, so the first axe pass missed it. | High | `.feed-post-btn`, `.feed-comment-send`, `.story-*`, `.reel-sheet-send` | **Fixed** via `--accent-solid` (4.7–6.6:1) |
+| DS-13 | Input/search surfaces hardcoded `#0e0e10` (9×) with a scattered `[data-theme="light"]` override block — duplicated theming. | Low | `styles.css` | **Fixed** via `--input-bg`; override block removed |
+| DS-14 | The same white-on-`--accent` AA failure (DS-12) exists in **13 non-Feed** solid-accent elements (HQ tabs/icons, workspace tab, grant chip, badges, `.btn.primary`, CWS composer). | High | `styles.css` | **Fixed** via `--accent-solid` app-wide |
+| DS-15 | Reels empty state (`No reels yet`) used light-theme text on the black Reels backdrop — **1.23:1**. | Medium | `.reels-scroll .feed-empty-*` | **Fixed** via `--on-media` / `--on-media-muted` |
+| DS-16 | `--ok`/`--warn` tints inlined as `rgba(…)` across components. | Low | `styles.css` | **Fixed** via `--ok-soft/-border`, `--warn-soft/-border` (11 values) |
 
 ## 4. Accessibility
 
@@ -92,14 +98,18 @@ was tuned to `#3d52c2` for exactly this reason (the earlier `#4b64d8` measured
 - **Semantics:** media lightbox and story viewer are `role="dialog"`
   `aria-modal`; icon-only controls carry `aria-label`; emoji avatars are
   `aria-hidden`.
-- **Automated a11y (axe-core 4.10.2, scoped to `.feed`):** **0 violations** in
-  both themes — including with the composer enabled (Post button active). Three
-  findings were fixed to get there: the light-theme accent on the tinted pills
-  (above), a `label-title-only` on the composer's schedule input (added
-  `aria-label="Schedule for later"`), and white-on-accent on the solid primary
-  buttons (added `--accent-solid`).
-- **Not verified:** a full screen-reader pass, axe on non-Feed surfaces
-  (chat/workspace still show findings, e.g. `.connect-apps-label` in light).
+- **Automated a11y (axe-core 4.10.2):** using the app's real theme switch,
+  `.feed` and the shell report **0 violations** in both themes (composer
+  enabled; Startup Workspace clean in light). Four findings were fixed to get
+  there: the light accent on tinted pills, a `label-title-only` on the schedule
+  input, white-on-accent on the solid primary buttons (Feed **and 13 app-wide**),
+  and the workspace tab.
+- **Method note:** toggling `data-theme` directly is unreliable — some
+  components key off React theme state, not the attribute — so axe audits must
+  use the app's switch (or set `botifyr.theme` and reload). The earlier
+  `.connect-apps-label` finding was such an artifact (real bg `#eef0f3`, no
+  violation).
+- **Not verified:** a full screen-reader pass.
 
 ## 5. Risks / caveats
 

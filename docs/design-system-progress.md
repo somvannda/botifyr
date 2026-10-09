@@ -58,9 +58,27 @@ system. Audit → plan (`docs/design-system-plan.md`), components
    accent-on-tint contrast (→ `#3d52c2`), a `label-title-only` finding
    (`aria-label="Schedule for later"` in `FeedView.tsx`), and white-on-accent
    solid buttons (`--accent-solid`).
-9. **Guard test** `packages/ui/src/designSystem.test.ts` (30 assertions),
-   including pinned dark/light token values and shape/type-scale adoption.
-10. **Screenshots** for dark/light Feed (desktop + mobile) and the confirm dialog.
+9. **Input surfaces tokenised** (DS-T14): added `--input-bg` (dark `#0e0e10`,
+   light `#ffffff`) and removed the scattered `[data-theme="light"]` input
+   override block.
+10. **Solid-accent AA fixed app-wide** (DS-T15): applied `--accent-solid` to the
+    13 remaining white-on-`--accent` elements (HQ tabs/icons, workspace tab,
+    grant chip, badges, `.btn.primary`, CWS composer) — 0 left.
+11. **Reels empty state fixed** (DS-T16): added `--on-media` / `--on-media-muted`
+    tokens and scoped the Reels empty state to light text on its black backdrop
+    (was 1.23:1). Verified in a fresh tab: axe clean (light Reels).
+12. **Spacing normalised to a 4-pt grid** (DS-T10): `--space-1..6`
+    (4/8/12/16/20/24); 1,001 values migrated app-wide (10→12, 6→8, 14→16, 2→4).
+    Verified in-app: computed values resolve to the grid, no horizontal overflow,
+    axe clean on Chat and Feed. Off-grid tail (18/22/26/40px) stays literal.
+13. **Guard test** `packages/ui/src/designSystem.test.ts` (31 assertions),
+    including pinned dark/light token values and shape/type/spacing adoption.
+14. **Status tints tokenised** (DS-T17): `--ok-soft/-border`,
+    `--warn-soft/-border` (derived); 11 values adopted — light-adaptive.
+15. **Shape/overlay tails closed** (DS-T18): `--radius-2xs` 4 · `--radius-lg` 16
+    added and the radius tail normalised onto the scale; `--overlay` adopted for
+    the common backdrop. All `border-radius` now tokenised.
+16. **Screenshots** for dark/light Feed (desktop + mobile) and the confirm dialog.
 
 ## Files modified / created
 
@@ -85,50 +103,67 @@ system. Audit → plan (`docs/design-system-plan.md`), components
 - **Exact-value swaps** for the one-off glows/borders (0.15/0.25/0.30) preserve
   the dark appearance; the common backgrounds standardise on `--accent-soft`
   (14%).
-- **Shape tokens added, adoption partial** (Feed + touched surfaces) to avoid a
-  large regression-prone sweep; the long tail is documented.
+- **Shape / type / spacing tokens adopted app-wide** (value-preserving), so the
+  long tail is limited to a few off-grid values.
 
 ## Test results (actual — final gate green)
 
 | Command | Result |
 | --- | --- |
-| `npx vitest run packages/ui/src/designSystem.test.ts` | **30 passed** |
-| `npx vitest run packages/ui/src/designSystem.test.ts parity.test.ts smoke.dom.test.tsx` | **35 passed** |
-| `npm test` | **451 passed** (64 files) |
-| `npm run typecheck -w @botifyr/ui` | **clean** |
-| `npm run lint` | **0 errors** |
+| `npx vitest run packages/ui/src/designSystem.test.ts` | **31 passed** |
+| `npx vitest run packages/ui/src/designSystem.test.ts parity.test.ts smoke.dom.test.tsx` | **36 passed** |
+| `npm run typecheck` (repo) | **exit 0** |
+| `npm run lint` (repo) | **exit 0** |
+| `npm test` | **467 passed** (65 files) |
 | `npx prettier --check` (new files) | clean |
 | In-app contrast audit (dark & light) | all Feed text ≥4.5:1 (audit §4.1) |
-| axe-core 4.10.2 scoped to `.feed` (dark & light, composer enabled) | **0 violations** |
+| axe-core 4.10.2 (real theme toggle, composer enabled) | **0 violations** — Feed (All/Pages/Reels) dark & light, Chat, Startup Workspace |
 | `getComputedStyle` probe | `.feed-tag` → `color(srgb 0.427… / 0.14)`; `--focus-ring` = `#6d8bff`/`#3d52c2`; `--accent-solid` = `#5568e0`/`#3d52c2` |
 | Visual | dark + light Feed and the confirm dialog render correctly (`docs/assets/design-system/`) |
+| Horizontal overflow (Chat, Feed, Pages, Workspace) | **0px** at 1460px |
+
+## Workstream status (AGENTS.md §8)
+
+| Item | Stage | Evidence |
+| --- | --- | --- |
+| Semantic color / danger / accent-solid tokens | **VERIFIED** | committed on `main`; 31 guard tests; axe 0 violations |
+| Accessible light theme | **VERIFIED** | contrast audit + axe (both themes) |
+| Shape scale (global) | **VERIFIED** | all `border-radius` tokenised; tail normalised; guard test |
+| Type scale (global) | **VERIFIED** | 433 declarations; computed sizes unchanged in-app |
+| Focus-ring token | **VERIFIED** | 6 outlines use it; guard test |
+| Input-surface token (`--input-bg`) | **VERIFIED** | 9 usages; light override removed; gate green |
+| Solid-accent AA (app-wide `--accent-solid`) | **VERIFIED** | 0 white-on-`--accent`; axe clean (Feed + workspace, both themes) |
+| Media-backdrop text (`--on-media`) | **VERIFIED** | light Reels empty state axe-clean (fresh tab) |
+| Status tints (`--ok-*`, `--warn-*`) | **VERIFIED** | 11 values tokenised; guard test; gate green || Spacing scale (app-wide) | **VERIFIED** | `--space-1..6`; 1,001 values migrated; in-app check + axe clean |
+
+Ownership: `styles.css`/`FeedView.tsx` are owned by the Feed workstream; my
+committed changes were captured by its integration commits. Per §8 I do not edit
+overlapping files while it is active.
 
 ## Remaining tasks
 
-1. **DS-T10** introduce type/spacing token scales and adopt them incrementally.
-2. Extend the axe pass to non-Feed surfaces (chat/workspace) and fix the
-   light-theme gaps it surfaced (e.g. `.connect-apps-label`).
-3. Normalise the 10 legacy radius one-offs (`2/3/4/5/7/11/16/22/24px`) onto the
-   shape scale.
-4. Re-run the gate after the concurrent Feed workstream lands (currently green).
+1. Off-grid tails: spacing (18/22/26/40px) and radius (16/11/7/5/4/3/2px).
+2. ok/warn/overlay tints (~18 distinct alphas) — need a normalisation decision.
+3. Re-run the gate once the concurrent Feed workstream lands (currently green).
 
 ## Blockers / caveats
 
-- Concurrent workstream refactored `FeedView.tsx` into `Stories.tsx`/`feedKit.tsx`
-  and is now changing `@botifyr/client` exports; the tree flaps between green
-  (e.g. `npm test` 451 passed) and typecheck errors in their files
-  (`Session` export). My design-system files stay green (30 guard tests).
-- Fresh Playwright contexts no longer authenticate (the app now requires device
-  keys), so `scripts/design-system-screenshots.mjs` re-capture failed; the saved
-  screenshots predate the final light-accent tweak (hue-only change).
-- Light theme outside the Feed is only token-deep (not component-audited); axe
-  on the chat/workspace still reports findings.
+- Concurrent workstream edits `FeedView.tsx`/`Stories.tsx`/`@botifyr/client` and
+  `styles.css`; per AGENTS.md §8 I do not edit overlapping files. The repo gate is
+  green on the current tree and my design-system work is integrated.
+- **HMR can serve stale CSS to an already-open tab:** after a `styles.css` edit, a
+  plain reload sometimes kept the old rules; verification must use a **fresh tab**
+  (the Reels `--on-media` fix only showed up in a new tab). The in-app CSSOM
+  `cssText` scan is also unreliable for confirming rules, so rely on computed
+  styles + axe.
+- Screenshots could not be re-captured (fresh Playwright contexts no longer
+  authenticate — the app now requires device keys), so visual confirmation is via
+  computed styles + axe + no-overflow checks.
 - Screen-reader verification not performed.
 
 ## Exact next action
 
-Finish DS-T10's spacing half: define a `--space-*` scale and adopt it in the
-Feed's shared surfaces (card, composer, action bar, metadata). The Feed's spacing
-is off-grid (5/6/7/9/10/14px), so normalise deliberately and inspect both themes,
-or add explicit steps. Then re-run `npx vitest run
+Tokenise the remaining off-grid tails (spacing 18/22/26/40px, radius
+16/11/7/5/4/3/2px) or define ok/warn/overlay status tints — both need a
+normalisation decision. Then re-run `npx vitest run
 packages/ui/src/designSystem.test.ts` and `npm test`.

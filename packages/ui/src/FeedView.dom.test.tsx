@@ -1543,7 +1543,9 @@ describe("Post interactions", () => {
       />,
     );
     await screen.findByText("A quiet feed is a happy feed.");
-    expect(container.querySelector("article.feed-post.feed-post-focus")).toBeTruthy();
+    await waitFor(() =>
+      expect(container.querySelector("article.feed-post.feed-post-focus")).toBeTruthy(),
+    );
   });
 
   it("opens a person profile from an @mention (POST-14)", async () => {
