@@ -74,6 +74,7 @@ await page.setViewportSize({ width: 1440, height: 900 });
 await page.goto(APP, { waitUntil: "domcontentloaded" });
 await page.getByRole("tab", { name: "Feed" }).click();
 await page.locator(".feed-post").first().waitFor({ timeout: 20000 });
+await page.screenshot({ path: `${OUT}/discovery-feed-order.png` });
 
 async function probeBodies() {
   return page.$$eval(".feed-body", (els) =>
@@ -153,6 +154,16 @@ await page.waitForTimeout(600);
 const scrollAfter = await page.locator(".feed-scroll").evaluate((el) => el.scrollTop);
 results.push(`scroll restoration: before=${scrollBefore}, after=${scrollAfter}`);
 await page.screenshot({ path: `${OUT}/discovery-restored.png` });
+
+// Timeline order: composer → Stories → posts (Agent 3 Phase 2).
+const order = await page.evaluate(() => {
+  const composer = document.querySelector(".feed-composer");
+  const stories = document.querySelector(".stories-strip");
+  const post = document.querySelector(".feed-post");
+  const following = (a, b) => !!a && !!b && (a.compareDocumentPosition(b) & 4) !== 0;
+  return `composer<stories=${following(composer, stories)}, stories<post=${following(stories, post)}`;
+});
+results.push(`timeline order: ${order}`);
 
 // Accessibility: the new controls must be reachable and named.
 const refreshLabel = await page

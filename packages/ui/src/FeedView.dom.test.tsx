@@ -701,6 +701,23 @@ describe("Feed timeline & discovery", () => {
     await screen.findByText("second page post");
     expect(screen.getByText("1 more post loaded")).toBeTruthy();
   });
+
+  it("orders the timeline as composer → Stories → posts (FEED-ORDER)", async () => {
+    const client = makeClient([makePost({ body: "order post" })], {
+      stories: [makeStory("s1", "Alice")],
+    });
+    const { container } = render(<FeedView client={client} cloudUrl="http://cloud" viewerId="viewer-1" />);
+    await screen.findByText("order post");
+    await waitFor(() => expect(container.querySelector(".stories-strip")).toBeTruthy());
+
+    const composer = container.querySelector(".feed-composer") as HTMLElement;
+    const stories = container.querySelector(".stories-strip") as HTMLElement;
+    const post = container.querySelector(".feed-post") as HTMLElement;
+    const FOLLOWING = 4; // Node.DOCUMENT_POSITION_FOLLOWING
+    // Composer first, then Stories, then the post.
+    expect(composer.compareDocumentPosition(stories) & FOLLOWING).toBeTruthy();
+    expect(stories.compareDocumentPosition(post) & FOLLOWING).toBeTruthy();
+  });
 });
 
 /**

@@ -4400,12 +4400,6 @@ export function FeedView({
             <RefreshIcon size={14} /> New activity — tap to refresh
           </button>
         )}
-        <StoriesStrip
-          client={client}
-          cloudUrl={cloudUrl}
-          viewerId={viewerId}
-          onReplySent={onStoryReplySent}
-        />
         <form className="feed-composer" onSubmit={publish}>
           <div className="feed-composer-row">
             <Avatar name="You" />
@@ -4710,6 +4704,13 @@ export function FeedView({
             onChange={pickImages}
           />
         </form>
+
+        <StoriesStrip
+          client={client}
+          cloudUrl={cloudUrl}
+          viewerId={viewerId}
+          onReplySent={onStoryReplySent}
+        />
 
         {error && (
           <div className="feed-error" role="alert">
