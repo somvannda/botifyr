@@ -264,4 +264,40 @@ describe("CompanyWorkspace (DOM)", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Verify" }));
     await waitFor(() => expect(updateWorkItem).toHaveBeenCalledWith("w1", { verified: true }));
   });
+
+  it("assigns a task to a chosen employee from the Team tab", async () => {
+    const employee = {
+      workspaceId: "ws1",
+      botId: "bot2",
+      title: "Head of Marketing",
+      department: "marketing",
+      hiredAt: "",
+    };
+    const withTeam = { ...company, roles: [employee, ...company.roles] } as WorkspaceWithRoles;
+    const createWorkItem = vi.fn().mockResolvedValue(work);
+    const client = fakeClient({ createWorkItem });
+    render(
+      <CompanyWorkspace
+        client={client}
+        companies={[withTeam]}
+        bots={[{ id: "bot2", name: "Andres" } as never]}
+        onOpenOffice={() => {}}
+        onCreated={() => {}}
+      />,
+    );
+    fireEvent.click(await screen.findByRole("tab", { name: "Team" }));
+    fireEvent.change(screen.getByLabelText("Task for the employee"), {
+      target: { value: "Write the positioning" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Assign" }));
+    await waitFor(() =>
+      expect(createWorkItem).toHaveBeenCalledWith("ws1", {
+        title: "Write the positioning",
+        detail: "Directive from the founder.",
+        phase: "ongoing",
+        department: "marketing",
+        assigneeBotId: "bot2",
+      }),
+    );
+  });
 });
