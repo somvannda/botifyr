@@ -121,31 +121,33 @@ complements §1–§3, it does not replace them.
 - Browser flows: `npm run test:e2e`.
 
 ## 9. Parallel work: branch + worktree per task
-Chmaba-style flow adapted to this repo (no remote, no CI). Use **one branch and
-one worktree per task** so parallel agents never share a git index or a working
-directory. The helper in `scripts/worktree.mjs` (aliased as `npm run wt`) does the
-mechanics.
+Use **one branch per task** so parallel agents never collide, and **one worktree
+per task** when you need real directory isolation. The helper in
+`scripts/worktree.mjs` (aliased as `npm run wt`) automates the local path. CI
+(`.github/workflows/ci.yml`) runs typecheck + lint + test + the cloud image build
+on every PR.
 
 **Start**
-- One task = one `agent/<slug>` branch off `main`, checked out in its own worktree
-  **outside** the primary checkout: `npm run wt -- new <slug>`.
-- Never work on `main`, and never edit the primary checkout while a task is in
-  flight. From a worktree, never edit files in the primary repo directory.
-- Do not run `npm install` inside a worktree — `wt new` provisions dependencies
-  already. Change dependencies in the primary checkout and re-create the worktree.
+- One task = one `<type>/<slug>` branch off `main`.
+- For directory isolation: `npm run wt -- new <slug>` (branch `agent/<slug>` in a
+  sibling worktree). Otherwise a plain `git switch -c <type>/<slug> main`.
+- Never work directly on `main`, and never edit the primary checkout while another
+  task is in flight. From a worktree, never edit files in the primary repo directory.
+- Do not run `npm install` inside a worktree — `wt new` provisions dependencies.
 
 **Work**
-- Commit small, focused changes with Conventional Commits on the `agent/<slug>`
-  branch. `wt finish` can commit leftovers with `--message`.
+- Commit small, focused changes with Conventional Commits. `wt finish` can commit
+  leftovers with `--message`.
 
-**Finish — one integrator at a time, never concurrent merges**
-1. Integrate only from a clean primary checkout on `main`.
-2. `npm run wt -- finish <slug> --message "feat: …"` runs the gate in the worktree
-   (`typecheck` → `lint` → `test`), merges `agent/<slug>` into `main`, then
-   **deletes the worktree and branch**. End state is exactly one source tree on `main`.
-3. On a merge conflict `finish` aborts and keeps the worktree — do not hand-resolve
-   in the merge. Rebase the worktree onto `main` and retry, or abandon it with
-   `npm run wt -- remove <slug>`. Never revert another agent's work.
-4. Never force-push, never commit directly to `main`, and never run destructive git
-   (`reset --hard`, `clean -fd`) outside your own worktree. `npm run wt -- list`
-   shows active worktrees.
+**Finish — pick one; never merge concurrently**
+- **Default (has remote):** push → PR → wait for CI → merge. CI is the gate; never
+  merge red.
+  `git push -u origin <branch>` → `gh pr create --fill` → `gh pr checks --watch` →
+  `gh pr merge --squash --delete-branch` → `git switch main && git pull --ff-only`.
+- **Offline (no PR):** `npm run wt -- finish <slug> --message "feat: …"` runs the
+  local gate, merges into `main`, and deletes the worktree + branch.
+- On conflict: preserve work, rebase onto `main`, retry or abandon — never
+  hand-resolve in the merge, never revert another agent's work.
+- Never force-push, never commit directly to `main`, and never run destructive git
+  (`reset --hard`, `clean -fd`) outside your own worktree. `npm run wt -- list`
+  shows active worktrees.
