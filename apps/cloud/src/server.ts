@@ -314,6 +314,8 @@ export function decodeFeedCursor(cursor: string): { createdAt: string; id: strin
 
 /** Image media ids end with a known image extension (mirrors `feedPostOf`). */
 const isImageMedia = (id: string): boolean => /\.(png|jpe?g|webp|gif|avif)$/i.test(id);
+/** Video media ids end with a known video extension (mirrors `feedPostOf`). */
+const isVideoMedia = (id: string): boolean => /\.(mp4|m4v|webm|mov)$/i.test(id);
 
 export async function buildServer(options: ServerOptions) {
   const { store, vaultKey, localChannel } = options;
@@ -5348,52 +5350,53 @@ export async function buildServer(options: ServerOptions) {
     },
   );
 
-  /* A Page's photos: image attachments across its posts, newest first. */
-  app.get<{ Params: { handle: string }; Querystring: { cursor?: string; limit?: string } }>(
-    "/v1/pages/:handle/media",
-    { preHandler: requireAuth },
-    async (request, reply) => {
-      const page = await store.getPageByHandle(request.params.handle);
-      if (!page) return reply.code(404).send({ error: "page not found" });
-      const limit = Math.max(1, Math.min(60, Number(request.query?.limit ?? 30) || 30));
-      const cursor = request.query?.cursor?.trim() || undefined;
-      let before = cursor ? decodeFeedCursor(cursor) : undefined;
-      const items: Array<{ id: string; imageUrl: string }> = [];
-      let last: PostRecord | undefined;
-      let exhausted = false;
-      // Walk posts in batches, collecting image media until a full page is built.
-      while (items.length < limit) {
-        const batch = await store.listFeedPosts([page.id], 50, before);
-        if (batch.length === 0) {
-          exhausted = true;
-          break;
-        }
-        for (const record of batch) {
-          last = record;
-          const attached = await store.listPostMedia(record.id);
-          const mediaIds =
-            attached.length > 0
-              ? attached.map((entry) => entry.mediaId)
-              : record.mediaId
-                ? [record.mediaId]
-                : [];
-          for (const mediaId of mediaIds) {
-            if (!isImageMedia(mediaId)) continue;
-            items.push({ id: mediaId, imageUrl: `/v1/feed/image?t=${signImage(mediaId)}` });
-            if (items.length >= limit) break;
-          }
+  /* A Page's photos (or videos): media attachments across its posts, newest first. */
+  app.get<{
+    Params: { handle: string };
+    Querystring: { cursor?: string; limit?: string; kind?: string };
+  }>("/v1/pages/:handle/media", { preHandler: requireAuth }, async (request, reply) => {
+    const page = await store.getPageByHandle(request.params.handle);
+    if (!page) return reply.code(404).send({ error: "page not found" });
+    const limit = Math.max(1, Math.min(60, Number(request.query?.limit ?? 30) || 30));
+    const cursor = request.query?.cursor?.trim() || undefined;
+    const kind = request.query?.kind === "video" ? "video" : "image";
+    const matches = kind === "video" ? isVideoMedia : isImageMedia;
+    let before = cursor ? decodeFeedCursor(cursor) : undefined;
+    const items: Array<{ id: string; url: string }> = [];
+    let last: PostRecord | undefined;
+    let exhausted = false;
+    // Walk posts in batches, collecting matching media until a full page is built.
+    while (items.length < limit) {
+      const batch = await store.listFeedPosts([page.id], 50, before);
+      if (batch.length === 0) {
+        exhausted = true;
+        break;
+      }
+      for (const record of batch) {
+        last = record;
+        const attached = await store.listPostMedia(record.id);
+        const mediaIds =
+          attached.length > 0
+            ? attached.map((entry) => entry.mediaId)
+            : record.mediaId
+              ? [record.mediaId]
+              : [];
+        for (const mediaId of mediaIds) {
+          if (!matches(mediaId)) continue;
+          items.push({ id: mediaId, url: `/v1/feed/image?t=${signImage(mediaId)}` });
           if (items.length >= limit) break;
         }
-        if (batch.length < 50) {
-          exhausted = items.length < limit;
-          break;
-        }
-        before = { createdAt: batch[batch.length - 1].createdAt, id: batch[batch.length - 1].id };
+        if (items.length >= limit) break;
       }
-      const hasMore = !exhausted && items.length >= limit;
-      return { items, nextCursor: hasMore && last ? encodeFeedCursor(last) : null };
-    },
-  );
+      if (batch.length < 50) {
+        exhausted = items.length < limit;
+        break;
+      }
+      before = { createdAt: batch[batch.length - 1].createdAt, id: batch[batch.length - 1].id };
+    }
+    const hasMore = !exhausted && items.length >= limit;
+    return { items, nextCursor: hasMore && last ? encodeFeedCursor(last) : null };
+  });
 
   app.post<{ Params: { id: string } }>(
     "/v1/pages/:id/follow",

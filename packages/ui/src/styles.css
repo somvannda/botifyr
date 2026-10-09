@@ -7499,6 +7499,14 @@ body {
   padding: var(--space-4) var(--space-4);
 }
 
+.feed-post {
+  transition: border-color 120ms ease;
+}
+
+.feed-post:hover {
+  border-color: var(--accent-border);
+}
+
 .feed-composer {
   display: flex;
   flex-direction: column;
@@ -7626,7 +7634,7 @@ body {
 
 .feed-body {
   margin: var(--space-3) 0 0;
-  font-size: var(--text-xl);
+  font-size: var(--text-2xl);
   line-height: 1.55;
   color: var(--text);
   white-space: pre-wrap;
@@ -8552,7 +8560,7 @@ body {
 }
 
 .feed-action.active {
-  color: var(--danger);
+  color: var(--accent);
 }
 
 .feed-action-emoji {
@@ -9144,6 +9152,28 @@ body {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+/* Page Videos */
+.page-videos {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.page-video-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-3);
+}
+
+.page-video {
+  display: block;
+  width: 100%;
+  max-height: 480px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--panel-2);
 }
 
 /* Page loading skeleton */
@@ -9868,18 +9898,22 @@ a.feed-follow-btn {
 
 /* POST-8: keyboard-focusable reaction summary. */
 .feed-reaction-summary {
-  border: none;
-  background: transparent;
-  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
   font: inherit;
   font-size: var(--text-xs);
-  padding: 0;
+  font-weight: 600;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-pill);
   cursor: pointer;
 }
 
 .feed-reaction-summary:hover {
-  text-decoration: underline;
-  color: var(--text);
+  border-color: var(--accent-border);
 }
 
 /* POST-3: destructive-action confirmation dialog. */
