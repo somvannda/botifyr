@@ -4,15 +4,15 @@ Reference model: **Facebook Feed** (the ranked stream) and **Facebook Pages**
 (public entities distinct from personal Profiles). This document compares those to
 what Botifyr ships today and specifies the next improvements in detail.
 
-- **Shipped today:** friends-only Feed (see [`docs/feed.md`](feed.md)) — posts with
-  a single image, post reactions, comments, shares, a per-user Wall, notifications,
-  "Who to follow", realtime, report/block, admin review, Top posts.
-- **Pages:** backend (tables, `Store`, `/v1/pages*`, post-as-Page,
-  followed-Pages-in-feed) and UI (timeline, follow, composer "Post as",
-  "Your Pages" rail, settings, roles) are **done**; only insights / community
-  inbox / discovery / scheduling remain. See *Implementation status* below.
-- **This document:** what to build next, with requirements, data model, API, UI,
-  priorities, and phases.
+- **Status:** most of this document is built — see *Implementation status* below
+  and [`docs/feed.md`](feed.md).
+  - **Open:** post **Save / Hide / Snooze / Unfollow** (FR-10), a "**Pages to
+    follow**" discovery surface (FR-21), **albums** (FR-5 variant), the reaction
+    **summary/hover** affordances, and Page **CTA-button** rendering.
+  - **Deferred:** live streaming (realtime media infra).
+  - **Non-goals:** ads / marketplace / events / shops.
+- **This document:** the requirements, data model, API, UI, priorities, and phases
+  behind that build.
 
 Priority legend: **P0** = next release · **P1** = soon after · **P2** = later.
 
@@ -30,8 +30,8 @@ Priority legend: **P0** = next release · **P1** = soon after · **P2** = later.
   creator, a **"Your Pages"** rail section linking to each timeline, a **View
   page** action on page-authored posts, and a **Page settings** panel (edit
   identity) with **role management** (assign Editor/Moderator/Analyst, remove).
-  **Remaining:** Page **insights** and **community-inbox** screens, a "Pages to
-  follow" discovery surface, and scheduled/pinned posts.
+  Page **insights** (+ CSV export), the **community inbox**, and **pinned posts**
+  are done too — see their bullets below.
 
 **Reactions (FR-1) — done.** Likes are now a full reaction set
 (`like/love/care/haha/wow/sad/angry`): `post_reactions` table +
@@ -112,7 +112,12 @@ posts) with membership-gated posting. The UI has a **Your Groups** rail section
 and a **Group view** (join/leave + in-group composer + post stream), covered by
 `server.groups.test.ts`.
 
-**Everything else** in this document (live, analytics export, …) is **not started**.
+**Reels — done.** `GET /v1/reels` returns a vertical feed of video posts (reusing
+the video pipeline); the UI has a **Reels** view. **Live streaming is out of
+scope** (needs realtime media infrastructure).
+
+**Everything else** in this document (ads / marketplace / events / shops, …) is
+explicitly **out of scope**.
 
 > **Reconciled with the product as of Oct 2026.** Facebook's reference section
 > (§1) reflects its 2026 behaviour; §2 and §5 note where Botifyr has already moved
@@ -554,8 +559,8 @@ Events to emit: `feed.reaction`, `feed.repost`, `page.post`, `page.followed`,
 ### 7.3 Page experience
 - **Page timeline** (public), cover + avatar + follower count + Follow button, and a
   **View page** action — **shipped** (`PageView`). Remaining: CTA-button rendering.
-- **Page management** (admins): **settings** and **roles** rails are shipped;
-  scheduled/pinned posts, insights, and community inbox — **not started**.
+- **Page management** (admins): **settings**, **roles**, **scheduled/pinned
+  posts**, **insights (+ CSV export)**, and a **community inbox** are all shipped.
 
 ### 7.4 Post/author menus
 - Save, Hide, Snooze 30 days, Unfollow, Report, Block, "Why am I seeing this?".

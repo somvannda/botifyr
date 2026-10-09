@@ -1511,6 +1511,65 @@ export class PostgresStore implements Store {
     return rows.map(toGroupMember);
   }
 
+  async setPostSaved(postId: string, userId: string, saved: boolean): Promise<void> {
+    if (saved) {
+      await this.pool.query("INSERT INTO post_saves (post_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING", [
+        postId,
+        userId,
+      ]);
+    } else {
+      await this.pool.query("DELETE FROM post_saves WHERE post_id = $1 AND user_id = $2", [postId, userId]);
+    }
+  }
+
+  async listSavedPostIds(userId: string): Promise<string[]> {
+    const { rows } = await this.pool.query(
+      "SELECT post_id FROM post_saves WHERE user_id = $1 ORDER BY created_at DESC",
+      [userId],
+    );
+    return rows.map((row) => row.post_id as string);
+  }
+
+  async setPostHidden(postId: string, userId: string, hidden: boolean): Promise<void> {
+    if (hidden) {
+      await this.pool.query("INSERT INTO post_hides (post_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING", [
+        postId,
+        userId,
+      ]);
+    } else {
+      await this.pool.query("DELETE FROM post_hides WHERE post_id = $1 AND user_id = $2", [postId, userId]);
+    }
+  }
+
+  async listHiddenPostIds(userId: string): Promise<string[]> {
+    const { rows } = await this.pool.query("SELECT post_id FROM post_hides WHERE user_id = $1", [userId]);
+    return rows.map((row) => row.post_id as string);
+  }
+
+  async setAuthorMute(userId: string, authorId: string, until: string | null): Promise<void> {
+    await this.pool.query(
+      "INSERT INTO author_mutes (user_id, author_id, until) VALUES ($1,$2,$3) " +
+        "ON CONFLICT (user_id, author_id) DO UPDATE SET until = EXCLUDED.until",
+      [userId, authorId, until],
+    );
+  }
+
+  async deleteAuthorMute(userId: string, authorId: string): Promise<boolean> {
+    const result = await this.pool.query("DELETE FROM author_mutes WHERE user_id = $1 AND author_id = $2", [
+      userId,
+      authorId,
+    ]);
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async listMutedAuthorIds(userId: string, nowIso: string): Promise<string[]> {
+    const { rows } = await this.pool.query(
+      "SELECT author_id FROM author_mutes WHERE user_id = $1 AND (until IS NULL OR until > $2)",
+      [userId, nowIso],
+    );
+    return rows.map((row) => row.author_id as string);
+  }
+
   async listGroupPosts(groupId: string, limit: number): Promise<PostRecord[]> {
     const { rows } = await this.pool.query(
       "SELECT * FROM posts WHERE group_id = $1 ORDER BY created_at DESC LIMIT $2",

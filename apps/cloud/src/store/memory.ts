@@ -89,6 +89,11 @@ export class MemoryStore implements Store {
   private groups = new Map<string, GroupRecord>();
   /** Keyed by `${groupId}:${userId}`. */
   private groupMembers = new Map<string, GroupMemberRecord>();
+  /** Keyed by `${userId}:${postId}`. */
+  private postSaves = new Set<string>();
+  private postHides = new Set<string>();
+  /** Keyed by `${userId}:${authorId}` → mute-until (null = unfollow). */
+  private authorMutes = new Map<string, string | null>();
   /** Keyed by `${postId}:${userId}` → optionId. */
   private pollVotes = new Map<string, string>();
   /** Keyed by `${commentId}:${userId}` → the viewer's reaction. */
@@ -925,6 +930,54 @@ export class MemoryStore implements Store {
 
   async isGroupMember(groupId: string, userId: string): Promise<boolean> {
     return this.groupMembers.has(`${groupId}:${userId}`);
+  }
+
+  async setPostSaved(postId: string, userId: string, saved: boolean): Promise<void> {
+    const key = `${userId}:${postId}`;
+    if (saved) this.postSaves.add(key);
+    else this.postSaves.delete(key);
+  }
+
+  async listSavedPostIds(userId: string): Promise<string[]> {
+    const ids: string[] = [];
+    for (const key of this.postSaves) {
+      const [user, post] = key.split(":");
+      if (user === userId && post) ids.push(post);
+    }
+    return ids;
+  }
+
+  async setPostHidden(postId: string, userId: string, hidden: boolean): Promise<void> {
+    const key = `${userId}:${postId}`;
+    if (hidden) this.postHides.add(key);
+    else this.postHides.delete(key);
+  }
+
+  async listHiddenPostIds(userId: string): Promise<string[]> {
+    const ids: string[] = [];
+    for (const key of this.postHides) {
+      const [user, post] = key.split(":");
+      if (user === userId && post) ids.push(post);
+    }
+    return ids;
+  }
+
+  async setAuthorMute(userId: string, authorId: string, until: string | null): Promise<void> {
+    this.authorMutes.set(`${userId}:${authorId}`, until);
+  }
+
+  async deleteAuthorMute(userId: string, authorId: string): Promise<boolean> {
+    return this.authorMutes.delete(`${userId}:${authorId}`);
+  }
+
+  async listMutedAuthorIds(userId: string, nowIso: string): Promise<string[]> {
+    const ids: string[] = [];
+    for (const [key, until] of this.authorMutes) {
+      const [user, author] = key.split(":");
+      if (user !== userId || !author) continue;
+      if (until === null || until > nowIso) ids.push(author);
+    }
+    return ids;
   }
 
   async listGroupPosts(groupId: string, limit: number): Promise<PostRecord[]> {

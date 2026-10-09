@@ -4357,7 +4357,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
 
   return (
     <div
-      className={`app${feedActive || (showBotPanel && (activeBot || (activeSession && (activeSession.kind === "dm" || activeSession.kind === "group")))) ? " with-panel" : ""}${officeDocked ? " with-office" : ""}${density === "compact" ? " density-compact" : ""}`}
+      className={`app${feedActive || (!startupsActive && showBotPanel && (activeBot || (activeSession && (activeSession.kind === "dm" || activeSession.kind === "group")))) ? " with-panel" : ""}${officeDocked ? " with-office" : ""}${density === "compact" ? " density-compact" : ""}`}
     >
       {titlebarSlot && createPortal(notificationCentre, titlebarSlot)}
       {modelNotice && (
@@ -5759,6 +5759,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       )}
 
       {!feedActive &&
+        !startupsActive &&
         showBotPanel &&
         !activeBot &&
         activeSession &&
@@ -6015,7 +6016,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
         </aside>
       )}
 
-      {!feedActive && showBotPanel && activeBot && (
+      {!feedActive && !startupsActive && showBotPanel && activeBot && (
         <aside className="bot-panel">
           <div className="bot-panel-head">
             <BotLogo size={96} scheme={activeScheme} />

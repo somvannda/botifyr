@@ -400,6 +400,26 @@ CREATE TABLE IF NOT EXISTS post_shares (
   PRIMARY KEY (post_id, user_id)
 );
 
+/* Post controls: saved, hidden, and muted (snoozed/unfollowed) authors. */
+CREATE TABLE IF NOT EXISTS post_saves (
+  post_id    TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+  user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (post_id, user_id)
+);
+CREATE TABLE IF NOT EXISTS post_hides (
+  post_id    TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+  user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (post_id, user_id)
+);
+CREATE TABLE IF NOT EXISTS author_mutes (
+  user_id   TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  author_id TEXT NOT NULL,
+  until     TIMESTAMPTZ,
+  PRIMARY KEY (user_id, author_id)
+);
+
 /* Groups: communities with their own post stream. */
 CREATE TABLE IF NOT EXISTS groups (
   id           TEXT PRIMARY KEY,

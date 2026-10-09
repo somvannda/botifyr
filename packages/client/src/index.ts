@@ -131,6 +131,8 @@ export interface FeedPost {
   audience?: string;
   /** Future publish time (ISO); hidden from others until then. */
   scheduledAt?: string;
+  /** True when the viewer has saved this post. */
+  savedByMe?: boolean;
   /** Hashtags in the post (lower-case, no `#`). */
   hashtags?: string[];
   /** An attached poll, resolved for the viewer. */
@@ -1348,6 +1350,36 @@ export class BotifyrClient {
 
   leaveGroup(id: string): Promise<void> {
     return this.request(`/v1/groups/${id}/join`, { method: "DELETE" });
+  }
+
+  /* Post controls (FR-10). */
+  savePost(id: string, saved = true): Promise<void> {
+    return this.request(`/v1/posts/${id}/save`, { method: saved ? "PUT" : "DELETE" });
+  }
+
+  hidePost(id: string, hidden = true): Promise<void> {
+    return this.request(`/v1/posts/${id}/hide`, { method: hidden ? "PUT" : "DELETE" });
+  }
+
+  /** Mute/snooze an author (days), or unfollow with `null`. */
+  muteAuthor(id: string, days: number | null = 30): Promise<{ ok: boolean }> {
+    return this.request(`/v1/authors/${id}/mute`, { method: "POST", json: true, body: JSON.stringify({ days }) });
+  }
+
+  unmuteAuthor(id: string): Promise<void> {
+    return this.request(`/v1/authors/${id}/mute`, { method: "DELETE" });
+  }
+
+  listSaved(): Promise<FeedPost[]> {
+    return this.request("/v1/saved");
+  }
+
+  /** A vertical feed of video posts (reels). */
+  listReels(cursor?: string, limit = 12): Promise<FeedPage> {
+    const params = new URLSearchParams();
+    if (cursor) params.set("cursor", cursor);
+    params.set("limit", String(limit));
+    return this.request(`/v1/reels?${params.toString()}`);
   }
 
   /** Vote for an option in a post's poll. */

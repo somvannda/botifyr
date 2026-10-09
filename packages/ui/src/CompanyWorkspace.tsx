@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import type {
   Bot,
@@ -140,6 +140,10 @@ export function CompanyWorkspace({
   const [planBusy, setPlanBusy] = useState(false);
   const [planError, setPlanError] = useState<string | null>(null);
   const [budgetInput, setBudgetInput] = useState("");
+  const [guidance, setGuidance] = useState("");
+  const [refineBusy, setRefineBusy] = useState(false);
+  const [refined, setRefined] = useState(false);
+  const composerRef = useRef<HTMLInputElement | null>(null);
 
   // Keep the selected company valid as the list loads/refreshes.
   useEffect(() => {
@@ -356,6 +360,80 @@ export function CompanyWorkspace({
     });
   }
 
+  /** The ranked decision queue — reused by Home and the Inbox tab. */
+  const renderNeedList = () => (
+    <ul className="cws-list">
+      {promotions.map((grant) => (
+        <li key={`${grant.subject}|${grant.capability}`} className="cws-need">
+          <span className="cws-need-text">
+            Promote <strong>{grant.capability}</strong> to{" "}
+            {(grant.state ?? "gated") === "probation" ? "trusted" : "probation"}
+          </span>
+          <span className="cws-muted">{grant.successes ?? 0} clean runs</span>
+          <button
+            className="btn primary small"
+            type="button"
+            disabled={busy}
+            onClick={() =>
+              void setGrantState(
+                grant.subject,
+                grant.capability,
+                (grant.state ?? "gated") === "probation" ? "trusted" : "probation",
+              )
+            }
+          >
+            Promote
+          </button>
+        </li>
+      ))}
+      {proposedQuests.map((quest) => (
+        <li key={quest.id} className="cws-need">
+          <span className="cws-need-text">
+            Start mission: <strong>{quest.title}</strong>
+          </span>
+          <span className="cws-muted">{quest.objective}</span>
+          <button
+            className="btn primary small"
+            type="button"
+            disabled={busy}
+            onClick={() => void activateQuest(quest.id)}
+          >
+            Start
+          </button>
+        </li>
+      ))}
+      {needs.map((task) => (
+        <li key={task.id} className="cws-need">
+          <span className="cws-need-text">{task.goal}</span>
+          <div className="cws-need-actions">
+            <button
+              className="ghost small"
+              type="button"
+              disabled={busy}
+              onClick={() => void resolveNeed(task, "deny")}
+            >
+              Deny
+            </button>
+            <button
+              className="btn primary small"
+              type="button"
+              disabled={busy}
+              onClick={() => void resolveNeed(task, "allow")}
+            >
+              Allow
+            </button>
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+
+  /** Send the founder to the CEO composer, optionally prefilling a lead-in. */
+  function askCeo(prefix = "") {
+    if (prefix) setDraft(prefix);
+    window.setTimeout(() => composerRef.current?.focus(), 0);
+  }
+
   async function setAutonomy(level: "manual" | "supervised" | "autonomous") {
     await withBusy(async () => {
       const updated =
@@ -382,6 +460,31 @@ export function CompanyWorkspace({
     setDirectionId(null);
     setPlanError(null);
     setPlanBusy(false);
+    setGuidance("");
+    setRefined(false);
+  }
+
+  /** Rewrite a rough idea into a concrete brief the agents can act on. */
+  async function refineIdea() {
+    const idea = sourceText.trim();
+    if (!idea || refineBusy || looksLikeUrl(idea)) return;
+    setRefineBusy(true);
+    setPlanError(null);
+    try {
+      const { brief } = await client.rewriteCompanyBrief({
+        kind: "idea",
+        value: idea,
+        guidance: guidance.trim() || undefined,
+      });
+      if (brief) {
+        setSourceText(brief);
+        setRefined(true);
+      }
+    } catch (err) {
+      setPlanError(err instanceof Error ? err.message : "Couldn't refine the brief.");
+    } finally {
+      setRefineBusy(false);
+    }
   }
 
   function chooseDirection(direction: CompanyDirection) {
@@ -501,9 +604,24 @@ export function CompanyWorkspace({
             <>
               <SparkIcon size={22} />
               <h2 className="cws-onboard-title">What do you want to build?</h2>
-              <p className="cws-muted">
-                Describe your idea or paste your existing website. We&rsquo;ll figure out the team and plan.
-              </p>
+              <div className="cws-desc-row">
+                <p className="cws-muted">
+                  Describe your idea or paste your existing website. We&rsquo;ll figure out the team and plan.
+                </p>
+                <button
+                  className="cws-refine-btn"
+                  type="button"
+                  disabled={refineBusy || !sourceText.trim() || looksLikeUrl(sourceText.trim())}
+                  title={
+                    looksLikeUrl(sourceText.trim())
+                      ? "Paste website URLs in the field below instead"
+                      : "Rewrite the idea into a concrete brief"
+                  }
+                  onClick={() => void refineIdea()}
+                >
+                  <SparkIcon size={14} /> {refineBusy ? "Rewriting…" : "Refine with AI"}
+                </button>
+              </div>
               <textarea
                 className="cws-onboard-input"
                 rows={3}
@@ -511,6 +629,18 @@ export function CompanyWorkspace({
                 value={sourceText}
                 onChange={(event) => setSourceText(event.target.value)}
               />
+              {refined && (
+                <span className="cws-muted">Brief rewritten — review and edit it above.</span>
+              )}
+              <label className="cws-guidance">
+                <span className="cws-muted">What should the company optimise for? (optional)</span>
+                <input
+                  className="cws-onboard-url"
+                  placeholder="e.g. fastest MVP, best quality, lowest cost"
+                  value={guidance}
+                  onChange={(event) => setGuidance(event.target.value)}
+                />
+              </label>
               <input
                 className="cws-onboard-url"
                 placeholder="Website URL (optional)"
@@ -860,6 +990,49 @@ export function CompanyWorkspace({
               )}
             </div>
 
+            {inboxCount > 0 && (
+              <div className="cws-card">
+                <div className="cws-card-head">
+                  <h3>Needs you</h3>
+                  <span className="cws-muted">
+                    {inboxCount} decision{inboxCount === 1 ? "" : "s"}
+                  </span>
+                </div>
+                {renderNeedList()}
+              </div>
+            )}
+
+            <div className="cws-card">
+              <div className="cws-card-head">
+                <h3>What would you like to do?</h3>
+              </div>
+              <div className="cws-actions">
+                <button className="cws-action" type="button" onClick={() => setTab("board")}>
+                  Review today&rsquo;s progress
+                </button>
+                <button
+                  className="cws-action"
+                  type="button"
+                  disabled={busy}
+                  onClick={() =>
+                    proposedQuests[0] ? void activateQuest(proposedQuests[0].id) : askCeo()
+                  }
+                >
+                  Approve the company plan
+                </button>
+                <button
+                  className="cws-action"
+                  type="button"
+                  onClick={() => askCeo("Change direction: ")}
+                >
+                  Change the company direction
+                </button>
+                <button className="cws-action" type="button" onClick={() => askCeo()}>
+                  Tell the AI CEO what to do
+                </button>
+              </div>
+            </div>
+
             <div className="cws-card">
               <div className="cws-card-head">
                 <h3>Since you were last here</h3>
@@ -900,70 +1073,7 @@ export function CompanyWorkspace({
               </span>
             </div>
             {inboxCount === 0 && <p className="cws-muted">Nothing needs you right now.</p>}
-            <ul className="cws-list">
-              {promotions.map((grant) => (
-                <li key={`${grant.subject}|${grant.capability}`} className="cws-need">
-                  <span className="cws-need-text">
-                    Promote <strong>{grant.capability}</strong> to{" "}
-                    {(grant.state ?? "gated") === "probation" ? "trusted" : "probation"}
-                  </span>
-                  <span className="cws-muted">{grant.successes ?? 0} clean runs</span>
-                  <button
-                    className="btn primary small"
-                    type="button"
-                    disabled={busy}
-                    onClick={() =>
-                      void setGrantState(
-                        grant.subject,
-                        grant.capability,
-                        (grant.state ?? "gated") === "probation" ? "trusted" : "probation",
-                      )
-                    }
-                  >
-                    Promote
-                  </button>
-                </li>
-              ))}
-              {proposedQuests.map((quest) => (
-                <li key={quest.id} className="cws-need">
-                  <span className="cws-need-text">
-                    Start mission: <strong>{quest.title}</strong>
-                  </span>
-                  <span className="cws-muted">{quest.objective}</span>
-                  <button
-                    className="btn primary small"
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void activateQuest(quest.id)}
-                  >
-                    Start
-                  </button>
-                </li>
-              ))}
-              {needs.map((task) => (
-                <li key={task.id} className="cws-need">
-                  <span className="cws-need-text">{task.goal}</span>
-                  <div className="cws-need-actions">
-                    <button
-                      className="ghost small"
-                      type="button"
-                      disabled={busy}
-                      onClick={() => void resolveNeed(task, "deny")}
-                    >
-                      Deny
-                    </button>
-                    <button
-                      className="btn primary small"
-                      type="button"
-                      disabled={busy}
-                      onClick={() => void resolveNeed(task, "allow")}
-                    >
-                      Allow
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
+            {renderNeedList()}
           </div>
         )}
 
@@ -1083,13 +1193,18 @@ export function CompanyWorkspace({
               The office mirrors the same board — every employee at their desk, live.
             </p>
             <ul className="cws-list">
-              {members.map((role) => (
-                <li key={role.botId} className="cws-work">
-                  <span className="cws-work-title">{botName(role.botId)}</span>
-                  <span className="cws-muted">{role.title}</span>
-                  <span className="cws-muted">{role.department}</span>
-                </li>
-              ))}
+              {members.map((role) => {
+                const current = items.find(
+                  (item) => item.assigneeBotId === role.botId && item.status !== "done",
+                );
+                return (
+                  <li key={role.botId} className="cws-work">
+                    <span className="cws-work-title">{botName(role.botId)}</span>
+                    <span className="cws-muted">{role.title}</span>
+                    <span className="cws-muted">{current ? current.title : "Idle"}</span>
+                  </li>
+                );
+              })}
             </ul>
           </div>
         )}
@@ -1194,6 +1309,7 @@ export function CompanyWorkspace({
 
       <form className="cws-composer" onSubmit={tellCeo}>
         <input
+          ref={composerRef}
           className="cws-composer-input"
           placeholder="Tell the AI CEO what to do…"
           value={draft}

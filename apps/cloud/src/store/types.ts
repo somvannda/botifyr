@@ -460,6 +460,17 @@ export interface Store {
   /** Set/replace the viewer's reaction, or clear it with `null`. */
   setPostReaction(postId: string, userId: string, reaction: ReactionType | null): Promise<void>;
   setCommentReaction(commentId: string, userId: string, reaction: ReactionType | null): Promise<void>;
+  /* Post controls (FR-10): save / hide / mute */
+  setPostSaved(postId: string, userId: string, saved: boolean): Promise<void>;
+  listSavedPostIds(userId: string): Promise<string[]>;
+  setPostHidden(postId: string, userId: string, hidden: boolean): Promise<void>;
+  listHiddenPostIds(userId: string): Promise<string[]>;
+  /** Mute (until=null → unfollow) or clear an author for the user. */
+  setAuthorMute(userId: string, authorId: string, until: string | null): Promise<void>;
+  deleteAuthorMute(userId: string, authorId: string): Promise<boolean>;
+  /** Author ids currently muted by the user (unfollow is indefinite). */
+  listMutedAuthorIds(userId: string, nowIso: string): Promise<string[]>;
+
   /* Groups */
   createGroup(record: GroupRecord): Promise<void>;
   getGroup(id: string): Promise<GroupRecord | null>;

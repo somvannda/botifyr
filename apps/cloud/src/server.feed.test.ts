@@ -708,6 +708,74 @@ describe("feed", () => {
     await app.close();
   });
 
+  it("serves video posts through the reels feed", async () => {
+    const previous = process.env.BOTIFYR_DOWNLOADS_DIR;
+    const dir = join(tmpdir(), `botifyr-feed-${randomUUID()}`);
+    process.env.BOTIFYR_DOWNLOADS_DIR = dir;
+    const { app, signUp, auth, createPost } = await setup();
+    try {
+      const alice = await signUp("alice-reels@example.com");
+      await createPost(alice.token, "just text, not a reel");
+      const data = `data:video/mp4;base64,${Buffer.from("reel-clip").toString("base64")}`;
+      const upload = await app.inject({
+        method: "POST",
+        url: "/v1/uploads",
+        headers: auth(alice.token),
+        payload: { name: "reel.mp4", mime: "video/mp4", data },
+      });
+      const mediaId = (upload.json() as { id: string }).id;
+      const video = await app.inject({
+        method: "POST",
+        url: "/v1/posts",
+        headers: auth(alice.token),
+        payload: { body: "my reel", mediaIds: [mediaId] },
+      });
+      const videoId = (video.json() as { id: string }).id;
+
+      const reels = await app.inject({ method: "GET", url: "/v1/reels", headers: auth(alice.token) });
+      expect(reels.statusCode).toBe(200);
+      const ids = (reels.json() as { items: Array<{ id: string }> }).items.map((entry) => entry.id);
+      expect(ids).toContain(videoId);
+      expect(ids).toHaveLength(1);
+    } finally {
+      await app.close();
+      if (previous === undefined) delete process.env.BOTIFYR_DOWNLOADS_DIR;
+      else process.env.BOTIFYR_DOWNLOADS_DIR = previous;
+      await rm(dir, { recursive: true, force: true }).catch(() => {});
+    }
+  });
+
+  it("supports save, hide, and author mute", async () => {
+    const { app, store, signUp, auth, createPost, feed } = await setup();
+    const alice = await signUp("alice-ctrl@example.com");
+    const bob = await signUp("bob-ctrl@example.com");
+    await store.createFriendship(alice.user.id, bob.user.id);
+    const post = await createPost(bob.token, "bob post");
+
+    await app.inject({ method: "PUT", url: `/v1/posts/${post.id}/save`, headers: auth(alice.token) });
+    const saved = await app.inject({ method: "GET", url: "/v1/saved", headers: auth(alice.token) });
+    expect((saved.json() as Array<{ id: string }>).map((entry) => entry.id)).toContain(post.id);
+
+    // Hide removes it from the feed.
+    await app.inject({ method: "PUT", url: `/v1/posts/${post.id}/hide`, headers: auth(alice.token) });
+    expect((await feed(alice.token)).items.map((entry) => entry.id)).not.toContain(post.id);
+
+    // Unhide restores it.
+    await app.inject({ method: "DELETE", url: `/v1/posts/${post.id}/hide`, headers: auth(alice.token) });
+    expect((await feed(alice.token)).items.map((entry) => entry.id)).toContain(post.id);
+
+    // Muting the author removes their posts from the feed.
+    await app.inject({
+      method: "POST",
+      url: `/v1/authors/${bob.user.id}/mute`,
+      headers: auth(alice.token),
+      payload: { days: 30 },
+    });
+    expect((await feed(alice.token)).items.map((entry) => entry.id)).not.toContain(post.id);
+
+    await app.close();
+  });
+
   it("supports reactions on comments", async () => {
     const { app, store, signUp, auth, createPost } = await setup();
     const alice = await signUp("alice-creact@example.com");

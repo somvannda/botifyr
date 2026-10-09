@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { BotifyrClient } from "@botifyr/client";
 import type { Quest, WorkItem, WorkspaceWithRoles } from "@botifyr/shared";
 import { CompanyWorkspace } from "./CompanyWorkspace";
@@ -118,6 +118,8 @@ describe("CompanyWorkspace (DOM)", () => {
     // The founder-home sections the guidance calls for.
     expect(screen.getByText(/today.s priorities/i)).toBeTruthy();
     expect(screen.getByText(/since you were last here/i)).toBeTruthy();
+    expect(screen.getByText(/what would you like to do\?/i)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /tell the ai ceo what to do/i })).toBeTruthy();
   });
 
   it("defaults an un-activated company to Delegated (supervised)", () => {
@@ -132,5 +134,28 @@ describe("CompanyWorkspace (DOM)", () => {
       />,
     );
     expect(screen.getByRole("button", { name: /activate/i })).toBeTruthy();
+  });
+
+  it("rewrites the idea with AI before planning", async () => {
+    const brief =
+      "Build Chmaba, a cloud POS for Cambodian SMEs, targeting cafés and retail; launch an MVP in 90 days.";
+    const client = fakeClient({
+      rewriteCompanyBrief: vi.fn().mockResolvedValue({ brief }),
+    });
+    render(
+      <CompanyWorkspace
+        client={client}
+        companies={[]}
+        bots={[]}
+        onOpenOffice={() => {}}
+        onCreated={() => {}}
+      />,
+    );
+    const box = screen.getByPlaceholderText(/build a cloud pos/i) as HTMLTextAreaElement;
+    fireEvent.change(box, { target: { value: "cloud pos for cambodia" } });
+    fireEvent.click(screen.getByRole("button", { name: /refine with ai/i }));
+    await waitFor(() => expect(box.value).toBe(brief));
+    expect(screen.getByText(/brief rewritten/i)).toBeTruthy();
+    expect(client.rewriteCompanyBrief).toHaveBeenCalledTimes(1);
   });
 });

@@ -201,6 +201,7 @@ function PostCard({
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [pickOpen, setPickOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [replyTo, setReplyTo] = useState<string | null>(null);
 
   const updateComment = (next: FeedComment) =>
@@ -236,6 +237,43 @@ function PostCard({
       onChange({ ...post, shares: post.shares + 1, sharedByMe: true });
     } catch {
       // Ignore a failed repost.
+    }
+  }
+
+  async function save() {
+    const saved = !post.savedByMe;
+    onChange({ ...post, savedByMe: saved });
+    try {
+      await client.savePost(post.id, saved);
+    } catch {
+      onChange(post);
+    }
+  }
+
+  async function hide() {
+    try {
+      await client.hidePost(post.id, true);
+      onDelete(post.id);
+    } catch {
+      // ignore
+    }
+  }
+
+  async function snooze() {
+    try {
+      await client.muteAuthor(post.author.id, 30);
+      onBlock(post.author.id);
+    } catch {
+      // ignore
+    }
+  }
+
+  async function unfollow() {
+    try {
+      await client.muteAuthor(post.author.id, null);
+      onBlock(post.author.id);
+    } catch {
+      // ignore
     }
   }
 
@@ -408,6 +446,19 @@ function PostCard({
         {post.shares > 0 && <span>{post.shares} share{post.shares === 1 ? "" : "s"}</span>}
       </div>
 
+      {moreOpen && (
+        <div className="reaction-picker">
+          <button type="button" className="feed-composer-tool" onClick={() => void hide()}>
+            Hide this post
+          </button>
+          <button type="button" className="feed-composer-tool" onClick={() => void snooze()}>
+            Snooze 30 days
+          </button>
+          <button type="button" className="feed-composer-tool" onClick={() => void unfollow()}>
+            Unfollow
+          </button>
+        </div>
+      )}
       {pickOpen && (
         <div className="reaction-picker">
           {REACTIONS.map((reaction) => (
@@ -444,6 +495,19 @@ function PostCard({
         <button type="button" className="feed-action" onClick={() => void share()} aria-pressed={post.sharedByMe}>
           <ForwardIcon size={17} /> Share
         </button>
+        <button
+          type="button"
+          className={`feed-action${post.savedByMe ? " active" : ""}`}
+          onClick={() => void save()}
+          aria-pressed={post.savedByMe}
+        >
+          Save
+        </button>
+        {!canDelete && (
+          <button type="button" className="feed-action" onClick={() => setMoreOpen((value) => !value)}>
+            ⋯
+          </button>
+        )}
         {post.author.page && post.author.handle && onOpenPage && (
           <button type="button" className="feed-action" onClick={() => onOpenPage(post.author.handle as string)}>
             View page
@@ -1077,6 +1141,65 @@ function TagView({
   );
 }
 
+function ReelsView({
+  client,
+  cloudUrl,
+  onBack,
+}: {
+  client: BotifyrClient;
+  cloudUrl: string;
+  onBack: () => void;
+}) {
+  const [reels, setReels] = useState<FeedPost[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    client
+      .listReels()
+      .then((page) => {
+        if (active) setReels(page.items);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [client]);
+
+  return (
+    <div className="feed">
+      <div className="feed-topbar">
+        <button type="button" className="ghost small" onClick={onBack}>
+          ← Back
+        </button>
+        <span className="feed-topbar-title">Reels</span>
+      </div>
+      <div className="reels-scroll">
+        {loading ? (
+          <div className="feed-state">Loading…</div>
+        ) : reels.length === 0 ? (
+          <div className="feed-state">No reels yet.</div>
+        ) : (
+          reels.map((post) => (
+            <div key={post.id} className="reel">
+              {post.videos?.[0] && (
+                <video className="reel-video" src={`${cloudUrl}${post.videos[0]}`} controls loop playsInline />
+              )}
+              <div className="reel-meta">
+                {authorEmoji(post.author)} {authorName(post.author)}
+                {post.body ? ` · ${post.body}` : ""}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
 function GroupView({
   client,
   cloudUrl,
@@ -1263,6 +1386,7 @@ export function FeedView({
   const [mentionResults, setMentionResults] = useState<Person[]>([]);
   const [stories, setStories] = useState<Story[]>([]);
   const [storyView, setStoryView] = useState<Story | null>(null);
+  const [reelsOpen, setReelsOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const storyRef = useRef<HTMLInputElement | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
@@ -1462,6 +1586,10 @@ export function FeedView({
     );
   }
 
+  if (reelsOpen) {
+    return <ReelsView client={client} cloudUrl={cloudUrl} onBack={() => setReelsOpen(false)} />;
+  }
+
   if (groupHandle) {
     return (
       <GroupView
@@ -1521,6 +1649,9 @@ export function FeedView({
           onClick={() => setSort((value) => (value === "top" ? "recent" : "top"))}
         >
           {sort === "top" ? "Top" : "Most recent"}
+        </button>
+        <button type="button" className="feed-composer-tool" onClick={() => setReelsOpen(true)}>
+          Reels
         </button>
       </div>
 

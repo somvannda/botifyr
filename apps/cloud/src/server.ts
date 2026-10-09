@@ -4100,6 +4100,7 @@ export async function buildServer(options: ServerOptions) {
     repostOf?: string;
     audience?: "public" | "friends" | "only_me";
     scheduledAt?: string;
+    savedByMe?: boolean;
     poll?: PollRecord;
     hashtags?: string[];
     imageUrl?: string;
@@ -4197,6 +4198,7 @@ export async function buildServer(options: ServerOptions) {
     viewerId: string,
     cache: Map<string, FeedAuthorDto>,
     depth = 0,
+    savedIds?: Set<string>,
   ): Promise<FeedPostDto> {
     const author = record.pageId
       ? await pageAuthorOf(record.pageId, cache)
@@ -4227,6 +4229,7 @@ export async function buildServer(options: ServerOptions) {
       repostOf: record.repostOf,
       audience: record.audience ?? "friends",
       scheduledAt: record.scheduledAt,
+      savedByMe: savedIds ? savedIds.has(record.id) : undefined,
       poll: (await store.getPoll(record.id, viewerId)) ?? undefined,
       hashtags: await store.listPostTags(record.id),
       imageUrl: images[0],
@@ -4312,15 +4315,20 @@ export async function buildServer(options: ServerOptions) {
       }
 
       const nowIso = new Date().toISOString();
+      const hidden = new Set(await store.listHiddenPostIds(userId));
+      const muted = new Set(await store.listMutedAuthorIds(userId, nowIso));
+      const savedIds = new Set(await store.listSavedPostIds(userId));
       const posts = (await store.listFeedPosts(authorIds, limit + 1, cursor)).filter(
         (post) =>
           !post.groupId &&
+          !hidden.has(post.id) &&
+          !muted.has(post.authorId) &&
           canSeePost(post, userId) &&
           (!isFutureScheduled(post, nowIso) || post.authorId === userId),
       );
       const hasMore = posts.length > limit;
       const page = hasMore ? posts.slice(0, limit) : posts;
-      for (const record of page) items.push(await feedPostOf(record, userId, cache));
+      for (const record of page) items.push(await feedPostOf(record, userId, cache, 0, savedIds));
       return { items, nextCursor: hasMore ? (page[page.length - 1]?.createdAt ?? null) : null };
     },
   );
@@ -4658,6 +4666,70 @@ export async function buildServer(options: ServerOptions) {
       return { ok: true };
     },
   );
+
+  /* Post controls: save / hide / mute (docs/feed-next.md §FR-10). */
+  for (const [method, saved] of [
+    ["PUT", true],
+    ["DELETE", false],
+  ] as const) {
+    app.route<{ Params: { id: string } }>({
+      method,
+      url: "/v1/posts/:id/save",
+      preHandler: requireAuth,
+      handler: async (request) => {
+        await store.setPostSaved(request.params.id, request.userId as string, saved);
+        return { ok: true };
+      },
+    });
+  }
+
+  for (const [method, hidden] of [
+    ["PUT", true],
+    ["DELETE", false],
+  ] as const) {
+    app.route<{ Params: { id: string } }>({
+      method,
+      url: "/v1/posts/:id/hide",
+      preHandler: requireAuth,
+      handler: async (request) => {
+        await store.setPostHidden(request.params.id, request.userId as string, hidden);
+        return { ok: true };
+      },
+    });
+  }
+
+  app.post<{ Params: { id: string }; Body: { days?: number | null } }>(
+    "/v1/authors/:id/mute",
+    { preHandler: requireAuth },
+    async (request) => {
+      const days = typeof request.body?.days === "number" ? request.body.days : null;
+      const until = days && days > 0 ? new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString() : null;
+      await store.setAuthorMute(request.userId as string, request.params.id, until);
+      return { ok: true };
+    },
+  );
+
+  app.delete<{ Params: { id: string } }>(
+    "/v1/authors/:id/mute",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      await store.deleteAuthorMute(request.userId as string, request.params.id);
+      return reply.code(204).send();
+    },
+  );
+
+  app.get("/v1/saved", { preHandler: requireAuth }, async (request) => {
+    const userId = request.userId as string;
+    const ids = await store.listSavedPostIds(userId);
+    const savedIds = new Set(ids);
+    const cache = new Map<string, FeedAuthorDto>();
+    const items = [];
+    for (const id of ids) {
+      const post = await store.getPost(id);
+      if (post && canSeePost(post, userId)) items.push(await feedPostOf(post, userId, cache, 0, savedIds));
+    }
+    return items;
+  });
 
   /* Vote in a post's poll (docs/feed-next.md §FR-12). */
   app.post<{ Params: { id: string }; Body: { optionId?: string } }>(
@@ -5231,6 +5303,38 @@ export async function buildServer(options: ServerOptions) {
       expiresAt: story.expiresAt,
     }));
   });
+
+  /* Reels: a vertical feed of video posts (docs/feed-next.md §6). */
+  app.get<{ Querystring: { cursor?: string; limit?: string } }>(
+    "/v1/reels",
+    { preHandler: requireAuth },
+    async (request) => {
+      const userId = request.userId as string;
+      const cursor = request.query?.cursor?.trim() || undefined;
+      const limit = Math.max(1, Math.min(30, Number(request.query?.limit ?? 12) || 12));
+      const blocked = new Set(await store.listBlockedEither(userId));
+      const friendIds = (await store.listFriends(userId)).filter((id) => !blocked.has(id));
+      const followedPages = (await store.listFollowedPageIds(userId)).filter((id) => !blocked.has(id));
+      const nowIso = new Date().toISOString();
+      const isVideo = (id: string) => /\.(mp4|m4v|webm|mov)$/i.test(id);
+      const posts = await store.listFeedPosts([userId, ...friendIds, ...followedPages], (limit + 1) * 3, cursor);
+      const cache = new Map<string, FeedAuthorDto>();
+      const items = [];
+      let last: string | null = null;
+      for (const record of posts) {
+        if (record.groupId) continue;
+        if (!canSeePost(record, userId)) continue;
+        if (isFutureScheduled(record, nowIso) && record.authorId !== userId) continue;
+        const media = await store.listPostMedia(record.id);
+        const ids = media.length > 0 ? media : record.mediaId ? [record.mediaId] : [];
+        if (!ids.some(isVideo)) continue;
+        items.push(await feedPostOf(record, userId, cache));
+        last = record.createdAt;
+        if (items.length >= limit) break;
+      }
+      return { items, nextCursor: items.length >= limit ? last : null };
+    },
+  );
 
   /* Posts carrying a hashtag (docs/feed-next.md §FR-11). */
   app.get<{ Params: { tag: string } }>(
