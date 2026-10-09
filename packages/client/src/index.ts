@@ -1649,15 +1649,17 @@ export class BotifyrClient {
     return this.request(`/v1/pages/${encodeURIComponent(handle)}/posts?${params.toString()}`);
   }
 
-  /** Image attachments across a Page's posts, newest first. */
+  /** Image or video attachments across a Page's posts, newest first. */
   listPageMedia(
     handle: string,
     cursor?: string,
     limit = 30,
-  ): Promise<{ items: Array<{ id: string; imageUrl: string }>; nextCursor: string | null }> {
+    kind: "image" | "video" = "image",
+  ): Promise<{ items: Array<{ id: string; url: string }>; nextCursor: string | null }> {
     const params = new URLSearchParams();
     if (cursor) params.set("cursor", cursor);
     params.set("limit", String(limit));
+    if (kind !== "image") params.set("kind", kind);
     return this.request(`/v1/pages/${encodeURIComponent(handle)}/media?${params.toString()}`);
   }
 

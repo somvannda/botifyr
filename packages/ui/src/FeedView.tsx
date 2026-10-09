@@ -1550,17 +1550,22 @@ function PageView({
   const [insightsOpen, setInsightsOpen] = useState(false);
   const [inbox, setInbox] = useState<Awaited<ReturnType<BotifyrClient["pageInbox"]>> | null>(null);
   const [inboxOpen, setInboxOpen] = useState(false);
-  const [section, setSection] = useState<"posts" | "about" | "photos">("posts");
+  const [section, setSection] = useState<"posts" | "about" | "photos" | "videos">("posts");
   const [error, setError] = useState<string | null>(null);
   const [followError, setFollowError] = useState<string | null>(null);
   const [nonce, setNonce] = useState(0);
   const [cursor, setCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [media, setMedia] = useState<Array<{ id: string; imageUrl: string }>>([]);
+  const [media, setMedia] = useState<Array<{ id: string; url: string }>>([]);
   const [mediaCursor, setMediaCursor] = useState<string | null>(null);
   const [mediaLoading, setMediaLoading] = useState(false);
   const [mediaLoadingMore, setMediaLoadingMore] = useState(false);
   const [mediaLoaded, setMediaLoaded] = useState(false);
+  const [videos, setVideos] = useState<Array<{ id: string; url: string }>>([]);
+  const [videosCursor, setVideosCursor] = useState<string | null>(null);
+  const [videosLoading, setVideosLoading] = useState(false);
+  const [videosLoadingMore, setVideosLoadingMore] = useState(false);
+  const [videosLoaded, setVideosLoaded] = useState(false);
   const [lightbox, setLightbox] = useState<number | null>(null);
 
   useEffect(() => {
@@ -1610,6 +1615,30 @@ function PageView({
     };
   }, [section, mediaLoaded, page, client]);
 
+  // The Videos section loads lazily, only when first opened.
+  useEffect(() => {
+    if (section !== "videos" || videosLoaded || !page) return;
+    let active = true;
+    setVideosLoading(true);
+    client
+      .listPageMedia(page.handle, undefined, 30, "video")
+      .then((feed) => {
+        if (!active) return;
+        setVideos(feed.items);
+        setVideosCursor(feed.nextCursor);
+        setVideosLoaded(true);
+      })
+      .catch(() => {
+        if (active) setVideosLoaded(true);
+      })
+      .finally(() => {
+        if (active) setVideosLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [section, videosLoaded, page, client]);
+
   async function loadMore() {
     if (!cursor || loadingMore) return;
     setLoadingMore(true);
@@ -1641,6 +1670,23 @@ function PageView({
       // Keep the cursor so the reader can retry.
     } finally {
       setMediaLoadingMore(false);
+    }
+  }
+
+  async function loadMoreVideos() {
+    if (!videosCursor || videosLoadingMore) return;
+    setVideosLoadingMore(true);
+    try {
+      const feed = await client.listPageMedia(handle, videosCursor, 30, "video");
+      setVideos((prev) => {
+        const seen = new Set(prev.map((item) => item.id));
+        return [...prev, ...feed.items.filter((item) => !seen.has(item.id))];
+      });
+      setVideosCursor(feed.nextCursor);
+    } catch {
+      // Keep the cursor so the reader can retry.
+    } finally {
+      setVideosLoadingMore(false);
     }
   }
 
@@ -2004,6 +2050,15 @@ function PageView({
               >
                 Photos
               </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={section === "videos"}
+                className={`page-tab${section === "videos" ? " active" : ""}`}
+                onClick={() => setSection("videos")}
+              >
+                Videos
+              </button>
             </div>
           </>
         ) : null}
@@ -2263,7 +2318,7 @@ function PageView({
                         onClick={() => setLightbox(index)}
                         aria-label={`Open photo ${index + 1}`}
                       >
-                        <img src={`${cloudUrl}${item.imageUrl}`} alt="" loading="lazy" />
+                        <img src={`${cloudUrl}${item.url}`} alt="" loading="lazy" />
                       </button>
                     ))}
                   </div>
@@ -2275,6 +2330,40 @@ function PageView({
                       disabled={mediaLoadingMore}
                     >
                       {mediaLoadingMore ? "Loading…" : "Load more photos"}
+                    </button>
+                  ) : (
+                    <div className="feed-end">You're all caught up</div>
+                  )}
+                </>
+              )}
+            </div>
+          ) : section === "videos" ? (
+            <div className="page-videos">
+              {videosLoading ? (
+                <div className="feed-state">Loading…</div>
+              ) : videos.length === 0 ? (
+                <div className="feed-state">No videos yet.</div>
+              ) : (
+                <>
+                  <div className="page-video-grid">
+                    {videos.map((item) => (
+                      <video
+                        key={item.id}
+                        className="page-video"
+                        src={`${cloudUrl}${item.url}`}
+                        controls
+                        preload="metadata"
+                      />
+                    ))}
+                  </div>
+                  {videosCursor ? (
+                    <button
+                      type="button"
+                      className="feed-more"
+                      onClick={() => void loadMoreVideos()}
+                      disabled={videosLoadingMore}
+                    >
+                      {videosLoadingMore ? "Loading…" : "Load more videos"}
                     </button>
                   ) : (
                     <div className="feed-end">You're all caught up</div>
@@ -2326,7 +2415,7 @@ function PageView({
 
         {lightbox !== null && (
           <MediaLightbox
-            images={media.map((item) => item.imageUrl)}
+            images={media.map((item) => item.url)}
             index={lightbox}
             cloudUrl={cloudUrl}
             onClose={() => setLightbox(null)}

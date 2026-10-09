@@ -9133,6 +9133,28 @@ body {
   object-fit: cover;
 }
 
+/* Page Videos */
+.page-videos {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.page-video-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.page-video {
+  display: block;
+  width: 100%;
+  max-height: 480px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--panel-2);
+}
+
 /* Page loading skeleton */
 .page-skel {
   position: relative;
