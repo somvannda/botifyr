@@ -433,6 +433,8 @@ export function CompanyWorkspace({
     await withBusy(async () => {
       await client.retryTask(runId).catch(() => {});
       setActivity(await client.listWorkspaceActivity(selectedId).catch(() => activity));
+      // The board item moves to "in progress" when the run restarts.
+      setItems(await client.listWorkItems(selectedId).catch(() => items));
     });
   }
 

@@ -1,14 +1,63 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createLocalChannel } from "@botifyr/channels";
 import { MemoryStore } from "./store/memory.js";
+import { runTask } from "./runner.js";
 import { buildServer } from "./server.js";
 
-// Don't actually execute the agent: this file only asserts that a failed task is
-// re-queued in place (the primitive behind the workspace "Retry" button).
+// Don't actually execute the agent: this file only asserts how a failed task is
+// re-queued in place and how the board follows it (the workspace "Retry" button).
 vi.mock("./runner.js", async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
-  return { ...actual, runTask: vi.fn().mockResolvedValue(undefined) };
+  return {
+    ...actual,
+    // Simulate a successful run by default; a run only closes the board item when
+    // it actually completes.
+    runTask: vi.fn(async (_deps: unknown, task: { status: string }) => {
+      task.status = "completed";
+    }),
+  };
 });
+
+/** A workspace with one bot (owning `sessionId`) and one item assigned to it. */
+async function seedCompany(store: MemoryStore, userId: string, sessionId: string): Promise<void> {
+  const now = new Date().toISOString();
+  await store.createWorkspace({
+    id: "ws1",
+    ownerId: userId,
+    name: "Acme",
+    source: { kind: "idea", value: "cloud pos" },
+    mission: "Sell things",
+    status: "active",
+    createdAt: now,
+    updatedAt: now,
+  });
+  await store.createBot({
+    id: "bot1",
+    userId,
+    name: "Bea",
+    emoji: "🤖",
+    scheme: 0,
+    instructions: "",
+    workspace: "Acme",
+    sessionId,
+    createdAt: now,
+  });
+  const session = await store.getSession(sessionId);
+  if (!session) throw new Error("session missing");
+  session.botId = "bot1";
+  await store.updateSession(session);
+  await store.createWorkItem({
+    id: "wi1",
+    workspaceId: "ws1",
+    title: "Do the thing",
+    phase: "ongoing",
+    status: "todo",
+    department: "exec",
+    assigneeBotId: "bot1",
+    createdAt: now,
+    updatedAt: now,
+  });
+}
 
 /**
  * `POST /v1/tasks/:id/retry` re-runs a failed task's own goal in place. Company
@@ -29,7 +78,7 @@ describe("task retry", () => {
       url: "/auth/signup",
       payload: { email: "retry@example.com", password: "password123" },
     });
-    const { token } = signup.json() as { token: string };
+    const { token, user } = signup.json() as { token: string; user: { id: string } };
     const session = await app.inject({
       method: "POST",
       url: "/v1/sessions",
@@ -47,7 +96,7 @@ describe("task retry", () => {
       createdAt: now,
       updatedAt: now,
     });
-    return { store, app, token };
+    return { store, app, token, userId: user.id, sessionId };
   }
 
   it("re-queues a failed task in place and clears the error", async () => {
@@ -99,6 +148,46 @@ describe("task retry", () => {
       payload: {},
     });
     expect(response.statusCode).toBe(404);
+    await app.close();
+  });
+
+  it("advances the assignee's board item when the retried run completes", async () => {
+    const { store, app, token, userId, sessionId } = await setup();
+    await seedCompany(store, userId, sessionId);
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/tasks/task-1/retry",
+      headers: { authorization: `Bearer ${token}` },
+      payload: {},
+    });
+    expect(response.statusCode).toBe(200);
+
+    // todo → in_progress (when the retry starts) → done (when it finishes).
+    await vi.waitFor(async () => {
+      const [item] = await store.listWorkItems("ws1");
+      expect(item?.status).toBe("done");
+    });
+    await app.close();
+  });
+
+  it("leaves the item in progress when the retried run fails", async () => {
+    vi.mocked(runTask).mockImplementationOnce(async (_deps, task) => {
+      task.status = "failed";
+    });
+    const { store, app, token, userId, sessionId } = await setup();
+    await seedCompany(store, userId, sessionId);
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/tasks/task-1/retry",
+      headers: { authorization: `Bearer ${token}` },
+      payload: {},
+    });
+    expect(response.statusCode).toBe(200);
+
+    await vi.waitFor(async () => {
+      const [item] = await store.listWorkItems("ws1");
+      expect(item?.status).toBe("in_progress");
+    });
     await app.close();
   });
 });
