@@ -318,10 +318,69 @@ textarea:focus-visible {
 
 input[type="checkbox"],
 input[type="radio"] {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: none;
   width: var(--space-4);
   height: var(--space-4);
-  accent-color: var(--accent);
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-2xs);
+  background-color: var(--input-bg);
   cursor: pointer;
+  position: relative;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease;
+}
+
+input[type="radio"] {
+  border-radius: var(--radius-round);
+}
+
+input[type="checkbox"]:hover,
+input[type="radio"]:hover {
+  border-color: var(--accent-border);
+}
+
+input[type="checkbox"]:checked,
+input[type="radio"]:checked {
+  background-color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Checkmark for a checked checkbox (a rotated border tick). */
+input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 0;
+  width: 5px;
+  height: 9px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+/* Inner dot for a checked radio. */
+input[type="radio"]:checked::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border-radius: var(--radius-round);
+  background: #fff;
+}
+
+input[type="checkbox"]:focus-visible,
+input[type="radio"]:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+input[type="checkbox"]:disabled,
+input[type="radio"]:disabled {
+  opacity: 0.55;
+  cursor: default;
 }
 
 html,
