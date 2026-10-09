@@ -12604,10 +12604,11 @@ a.feed-follow-btn {
 
 .main-split > .cws {
   flex: 1 1 0;
-  min-width: 0;
+  min-width: 360px;
 }
 
 .main-split > .chat-pane {
-  flex: 0 0 494px;
+  flex: 0 1 494px;
+  min-width: 300px;
   border-left: 1px solid var(--border);
 }
