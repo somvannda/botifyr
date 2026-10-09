@@ -1035,6 +1035,10 @@ export async function buildServer(options: ServerOptions) {
     rememberTask(task.id, session.id, userId);
     emit({ type: "task.updated", task });
 
+    // Mirror a fresh scheduled run so the board reflects the retry: the
+    // employee's item moves to "in progress" now, and to "done" when it finishes.
+    if (bot) await advanceAssignedItems(bot, "todo", "in_progress").catch(() => {});
+
     const { mediaTask, initialToolCall, initialToolOnly } = confidentPlan(task.goal);
     void runTask(
       {
@@ -1052,7 +1056,11 @@ export async function buildServer(options: ServerOptions) {
         initialToolOnly,
       },
       task,
-    ).catch((error) => app.log.error({ err: error, taskId: task.id }, "rerun task failed"));
+    )
+      .then(() =>
+        bot && task.status === "completed" ? advanceAssignedItems(bot, "in_progress", "done") : undefined,
+      )
+      .catch((error) => app.log.error({ err: error, taskId: task.id }, "rerun task failed"));
 
     return task;
   }
