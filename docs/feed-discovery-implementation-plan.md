@@ -47,7 +47,8 @@ Constraints honoured:
 - **P2 — done:** end state, manual refresh, new-activity banner, labelled sort,
   pagination a11y, freshness fallback.
 - **P3:** `FEED-D8` paginate the `Top` sort — **done** (offset cursor; see §B);
-  `FEED-D9` list virtualization only if profiling shows a real cost.
+  `FEED-D9` list virtualization — **not needed**: measured 120 and 300 posts
+  (3.3k / 8.1k DOM nodes) with 0 and 1 long task (73ms) and correct pagination.
 - **Backend follow-up:** deliver friends' *new posts* over realtime (DB-1
   extension) — **done** (`feed.post.toUserIds`; the recipient list is stripped
   before it reaches any client).
@@ -66,9 +67,10 @@ Constraints honoured:
 
 - **Unit/component:** ordering, de-dup, pagination, end state, refresh, a11y
   announcements (`FeedView.dom.test.tsx`).
-- **Integration:** feed + reels API, websocket delivery, keyset pagination
-  (`apps/cloud/src/{server.feed,feed-realtime,feed-pagination,events}.test.ts`).
+- **Integration:** feed + reels API, websocket delivery, keyset + offset
+  pagination (`apps/cloud/src/{server.feed,feed-realtime,feed-pagination,feed-top-pagination,events}.test.ts`).
 - **E2E / visual:** `scripts/feed-discovery-verify.mjs` (order, pagination,
-  refresh, scroll restoration, a11y, responsive) and `feed-discovery-perf.mjs`
-  (request de-dup, no loop, tablet/wide). Screenshots in `docs/assets/feed/`.
+  refresh, scroll restoration, a11y, responsive), `feed-discovery-perf.mjs`
+  (request de-dup, no loop, tablet/wide) and `feed-discovery-scale.mjs`
+  (large-feed DOM/long-task evidence). Screenshots in `docs/assets/feed/`.
 - **Gate:** `npm run typecheck && npm run lint && npm test`.

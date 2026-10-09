@@ -63,7 +63,12 @@ and E2E checks passing.
 - **Done since:** **FEED-D8** (`Top`-sort offset pagination) and the **DB-1
   follow-up** (friends' new posts over realtime) — both implemented with tests
   (`feed-top-pagination.test.ts`, extended `feed-realtime.test.ts`).
-- **FEED-D9** — virtualization only if profiling shows a real long-list cost.
+- **FEED-D9 — decided: not needed.** Measured with
+  `node scripts/feed-discovery-scale.mjs`:
+  - 120 posts → 3,284 DOM nodes, **0 long tasks**, 6 `/v1/feed` calls.
+  - 300 posts → 8,144 DOM nodes, **1 long task (73ms)**, 15 `/v1/feed` calls.
+  No scroll jank at current scale, so introducing virtualization would add
+  complexity without evidence.
 - **Known flaky test (not ours):** `FeedView.dom.test.tsx > Post interactions >
   highlights the permalink-focused post (POST-13)` fails only under a loaded
   full-suite run (it asserts on a class removed by a 2.5s timer); it passes when
