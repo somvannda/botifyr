@@ -59,7 +59,7 @@ no horizontal overflow at 390/900/1680px; media now reserves space (Agent 4).
 3. **Scroll continuity** across sub-views — every post/page visit. *Fixed.*
 4. **Freshness** (realtime + fallback) — new-content discovery. *Fixed.*
 5. **States** (skeletons/empty/error/end/pagination a11y) — reliability. *Fixed.*
-6. **`Top`-sort pagination** — power users. *Open (backend, P3).*
+6. **`Top`-sort pagination** — power users. *Fixed (FEED-D8, offset cursor).*
 
 ## 4. Backend dependencies
 
