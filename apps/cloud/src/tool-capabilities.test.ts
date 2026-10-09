@@ -10,6 +10,13 @@ describe("tool capabilities", () => {
     expect(capabilityForTool("design.poster")).toBe("files.write");
     expect(capabilityForTool("email.send")).toBe("email.send");
     expect(capabilityForTool("company.delegate")).toBeNull();
+    expect(capabilityForTool("feed.read")).toBe("social.read_insights");
+    expect(capabilityForTool("feed.insights")).toBe("social.read_insights");
+    expect(capabilityForTool("feed.post")).toBe("social.publish");
+    expect(capabilityForTool("feed.reel")).toBe("social.publish");
+    expect(capabilityForTool("feed.thread")).toBe("social.reply");
+    expect(capabilityForTool("group.post")).toBe("social.publish");
+    expect(capabilityForTool("page.manage")).toBe("social.publish");
   });
 
   it("removes only tools whose capability is denied", () => {

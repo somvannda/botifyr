@@ -47,6 +47,19 @@ export const SKILLS: SkillDefinition[] = [
     ].join(" "),
   },
   {
+    id: "feed",
+    name: "Feed & social (Botifyr)",
+    description: "Read and act on Botifyr's own Feed: posts, reels, Pages, and Groups.",
+    content: [
+      "Feed — Botifyr's own social surface (the top-level 'Feed' tab). It is NOT an external network; the social.* tools are for connected third-party pages, while feed.*/group.*/page.* act inside Botifyr.",
+      "Surfaces: Posts (text + up to 4 images or a video, audience public | friends | only_me, default friends, optional poll and schedule); Reels (vertical video posts); Stories (24h); Pages (public, followable; a Page maps to a company workspace or bot); Groups (public or private, membership-gated posting).",
+      "Interactions: 7 reactions (like|love|care|haha|wow|sad|angry), threaded comments, reposts/shares, @handle mentions, #hashtags, save/hide.",
+      "How to act: read first with feed.read (or feed.insights for a Page you manage) to get real post ids; never invent ids. Publish with feed.post (or group.post), publish videos with feed.reel, reply with feed.thread, react/repost with feed.engage.",
+      "Identity: a bot shares the owner's account, so a post with no page/group is the OWNER's own profile — prefer posting as a Page you manage (pass page) and always keep it approval-gated. Put audience:public only when the user explicitly wants it public.",
+      "Publishing, replying, joining, and moderating are consequential and need the owner's approval. Reads are free (no model spend). Never run an auto-post loop. 'Marketplace' in the app is the Connect-apps panel, not a store.",
+    ].join(" "),
+  },
+  {
     id: "video",
     name: "Video processing (ffmpeg)",
     description: "Trim, convert, compress and caption video with ffmpeg.",
