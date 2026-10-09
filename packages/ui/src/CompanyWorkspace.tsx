@@ -161,6 +161,8 @@ export function CompanyWorkspace({
   const [planError, setPlanError] = useState<string | null>(null);
   const [budgetInput, setBudgetInput] = useState("");
   const [guidance, setGuidance] = useState("");
+  const [newQuestTitle, setNewQuestTitle] = useState("");
+  const [newQuestObjective, setNewQuestObjective] = useState("");
   const [refineBusy, setRefineBusy] = useState(false);
   const [refined, setRefined] = useState(false);
   const composerRef = useRef<HTMLInputElement | null>(null);
@@ -436,6 +438,25 @@ export function CompanyWorkspace({
     );
     await withBusy(async () => {
       await client.updateQuest(quest.id, { budgetTokens: tokens || null }).catch(() => {});
+    });
+  }
+
+  /** Grow: start the company's next mission (one active at a time). */
+  async function startQuest() {
+    const title = newQuestTitle.trim();
+    if (!title || busy) return;
+    await withBusy(async () => {
+      await client
+        .createQuest(selectedId, {
+          title,
+          objective: newQuestObjective.trim() || title,
+          activate: true,
+        })
+        .catch(() => null);
+      setNewQuestTitle("");
+      setNewQuestObjective("");
+      setQuests(await client.listQuests(selectedId).catch(() => quests));
+      setItems(await client.listWorkItems(selectedId).catch(() => items));
     });
   }
 
@@ -1302,7 +1323,36 @@ export function CompanyWorkspace({
         )}
 
         {tab === "board" && (
-          <div className="cws-card">
+          <>
+            <div className="cws-card">
+              <div className="cws-card-head">
+                <h3>Start a mission</h3>
+                <span className="cws-muted">one active at a time</span>
+              </div>
+              <input
+                className="cws-onboard-url"
+                placeholder="Mission title (e.g. Launch the MVP)"
+                value={newQuestTitle}
+                onChange={(event) => setNewQuestTitle(event.target.value)}
+                aria-label="Mission title"
+              />
+              <input
+                className="cws-onboard-url"
+                placeholder="Objective — what does done deliver?"
+                value={newQuestObjective}
+                onChange={(event) => setNewQuestObjective(event.target.value)}
+                aria-label="Mission objective"
+              />
+              <button
+                className="btn primary small cws-onboard-btn"
+                type="button"
+                disabled={busy || !newQuestTitle.trim()}
+                onClick={() => void startQuest()}
+              >
+                Start mission
+              </button>
+            </div>
+            <div className="cws-card">
             <div className="cws-card-head">
               <h3>Board</h3>
               <span className="cws-muted">{items.length} items</span>
@@ -1333,6 +1383,7 @@ export function CompanyWorkspace({
               ))}
             </ul>
           </div>
+          </>
         )}
 
         {tab === "office" && (
