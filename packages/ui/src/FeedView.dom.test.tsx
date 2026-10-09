@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import type { BotifyrClient, FeedPost, Page, Story } from "@botifyr/client";
-import { FeedView } from "./FeedView";
+import type { BotifyrClient, FeedPost, Page, Person, Story } from "@botifyr/client";
+import { FeedRail, FeedView } from "./FeedView";
 
 /**
  * Feed action hierarchy (docs/feed-improvement-plan.md FEED-1): primary actions
@@ -79,6 +79,8 @@ function makeClient(
     }),
     followPage: vi.fn().mockResolvedValue({ ok: true }),
     unfollowPage: vi.fn().mockResolvedValue(undefined),
+    listFriendRequests: vi.fn().mockResolvedValue([]),
+    respondFriendRequest: vi.fn().mockResolvedValue({ ok: true, friend: true }),
     listComments: vi.fn().mockResolvedValue([]),
     listCommentsPage: vi.fn().mockResolvedValue({ items: [], nextCursor: null }),
     addComment: vi.fn().mockImplementation((_id: string, body: string) =>
@@ -1448,5 +1450,30 @@ describe("Post reuse across contexts", () => {
     await screen.findByText("Album photo caption");
     expect(container.querySelectorAll(".feed-image-grid .feed-image-img")).toHaveLength(2);
     expect(screen.getByRole("button", { name: "More options" })).toBeTruthy();
+  });
+});
+
+describe("Feed sidebar — friend requests (Agent 1)", () => {
+  it("lists incoming requests and accepts one", async () => {
+    const person: Person = { id: "p1", handle: "newbie", displayName: "Newbie", online: false };
+    const respond = vi.fn().mockResolvedValue({ ok: true, friend: true });
+    const client = {
+      ...makeClient([]),
+      suggestPeople: vi.fn().mockResolvedValue([]),
+      listBlocks: vi.fn().mockResolvedValue([]),
+      listTrending: vi.fn().mockResolvedValue([]),
+      listGroups: vi.fn().mockResolvedValue([]),
+      suggestPages: vi.fn().mockResolvedValue([]),
+      listAlbums: vi.fn().mockResolvedValue([]),
+      listFriendRequests: vi.fn().mockResolvedValue([{ id: "r1", direction: "incoming", person }]),
+      respondFriendRequest: respond,
+    } as unknown as BotifyrClient;
+
+    render(<FeedRail client={client} />);
+    await screen.findByText("Friend requests");
+    expect(screen.getByText("Newbie")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Accept" }));
+    await waitFor(() => expect(respond).toHaveBeenCalledWith("r1", "accept"));
   });
 });
