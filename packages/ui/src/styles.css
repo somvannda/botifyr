@@ -8565,6 +8565,7 @@ body {
 }
 
 .feed-actions {
+  position: relative;
   display: flex;
   gap: var(--space-1);
   flex-wrap: wrap;
@@ -8572,6 +8573,16 @@ body {
   margin-top: var(--space-2);
   padding-top: var(--space-2);
   border-top: 1px solid var(--border);
+}
+
+/* The post reaction picker floats above the Like button (overlay, no layout shift). */
+.feed-actions > .reaction-picker {
+  position: absolute;
+  bottom: calc(100% + var(--space-1));
+  left: 0;
+  margin-top: 0;
+  z-index: 6;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
 }
 
 .feed-action {

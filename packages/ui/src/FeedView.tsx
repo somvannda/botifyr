@@ -1158,28 +1158,28 @@ function PostCard({
         )}
       </div>
 
-      {pickOpen && (
-        <div
-          className="reaction-picker"
-          ref={pickerRef}
-          onMouseEnter={openPicker}
-          onMouseLeave={schedulePickerClose}
-        >
-          {REACTIONS.map((reaction) => (
-            <button
-              key={reaction.key}
-              type="button"
-              className={`reaction-btn${post.myReaction === reaction.key ? " active" : ""}`}
-              title={reaction.label}
-              aria-label={reaction.label}
-              onClick={() => void react(reaction.key)}
-            >
-              {reaction.emoji}
-            </button>
-          ))}
-        </div>
-      )}
       <div className="feed-actions">
+        {pickOpen && (
+          <div
+            className="reaction-picker"
+            ref={pickerRef}
+            onMouseEnter={openPicker}
+            onMouseLeave={schedulePickerClose}
+          >
+            {REACTIONS.map((reaction) => (
+              <button
+                key={reaction.key}
+                type="button"
+                className={`reaction-btn${post.myReaction === reaction.key ? " active" : ""}`}
+                title={reaction.label}
+                aria-label={reaction.label}
+                onClick={() => void react(reaction.key)}
+              >
+                {reaction.emoji}
+              </button>
+            ))}
+          </div>
+        )}
         <button
           ref={likeBtnRef}
           type="button"
