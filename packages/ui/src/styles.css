@@ -1120,6 +1120,22 @@ body {
   color: #fff;
 }
 
+.grant-chip-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.grant-state {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: 10px;
+  padding: 2px 4px;
+  cursor: pointer;
+}
+
 .standup-text {
   margin: 0;
   white-space: pre-wrap;
@@ -5808,6 +5824,29 @@ body {
   padding: 4px 6px;
 }
 
+.group-admin {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.group-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.contact-input {
+  flex: 1;
+  min-width: 0;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 13px;
+  padding: 6px 8px;
+}
+
 .msg-translation {
   margin-top: 6px;
   padding-top: 6px;
@@ -7615,6 +7654,46 @@ body {
 
 .feed-composer-as-input:focus {
   border-color: var(--accent);
+}
+
+/* @mention autocomplete (docs/feed-next.md §FR-11) */
+.mention-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-2);
+  padding: 4px;
+}
+
+.mention-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.mention-item:hover {
+  background: var(--hover);
+}
+
+.mention-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.mention-handle {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 /* Page settings + roles */

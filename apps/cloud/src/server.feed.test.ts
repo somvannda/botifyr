@@ -590,6 +590,43 @@ describe("feed", () => {
     await app.close();
   });
 
+  it("hides scheduled posts from others until their time", async () => {
+    const { app, store, signUp, auth, feed } = await setup();
+    const alice = await signUp("alice-sched@example.com");
+    const bob = await signUp("bob-sched@example.com");
+    await store.createFriendship(alice.user.id, bob.user.id);
+
+    const future = new Date(Date.now() + 3_600_000).toISOString();
+    const created = await app.inject({
+      method: "POST",
+      url: "/v1/posts",
+      headers: auth(alice.token),
+      payload: { body: "later", scheduledAt: future },
+    });
+    expect(created.statusCode).toBe(201);
+    const dto = created.json() as { id: string; scheduledAt?: string };
+    expect(dto.scheduledAt).toBe(future);
+
+    // Bob (a friend) doesn't see it; Alice (author) does.
+    expect((await feed(bob.token)).items.map((entry) => entry.id)).not.toContain(dto.id);
+    expect((await feed(alice.token)).items.map((entry) => entry.id)).toContain(dto.id);
+
+    // Alice's scheduled list shows it.
+    const queued = await app.inject({ method: "GET", url: "/v1/posts/scheduled", headers: auth(alice.token) });
+    expect((queued.json() as Array<{ id: string }>).map((entry) => entry.id)).toContain(dto.id);
+
+    // A past time is treated as published now.
+    const past = await app.inject({
+      method: "POST",
+      url: "/v1/posts",
+      headers: auth(alice.token),
+      payload: { body: "already", scheduledAt: new Date(Date.now() - 3_600_000).toISOString() },
+    });
+    expect((past.json() as { scheduledAt?: string }).scheduledAt).toBeUndefined();
+
+    await app.close();
+  });
+
   it("supports reactions on comments", async () => {
     const { app, store, signUp, auth, createPost } = await setup();
     const alice = await signUp("alice-creact@example.com");

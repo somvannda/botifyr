@@ -611,7 +611,7 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
     const grant = ladderGrants.find(
       (entry) => ladderSubjects.has(entry.subject) && entry.granted && entry.capability === capability,
     );
-    if (!grant || (grant.state ?? "gated") === "gated") return;
+    if (!grant) return;
     applyCapabilityUse(grant, ok);
     await store.setCapabilityGrant(grant).catch(() => {});
   };

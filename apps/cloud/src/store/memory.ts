@@ -970,6 +970,21 @@ export class MemoryStore implements Store {
     return true;
   }
 
+  async setCommentHidden(commentId: string, hidden: boolean): Promise<void> {
+    const record = this.postComments.get(commentId);
+    if (record) record.hidden = hidden;
+  }
+
+  async listPageComments(pageId: string, limit: number): Promise<PostCommentRecord[]> {
+    const postIds = new Set<string>();
+    for (const post of this.posts.values()) if (post.pageId === pageId) postIds.add(post.id);
+    return [...this.postComments.values()]
+      .filter((comment) => postIds.has(comment.postId))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, Math.max(1, Math.min(200, limit)))
+      .map((comment) => ({ ...comment }));
+  }
+
   async setPostShare(postId: string, userId: string, shared: boolean): Promise<void> {
     const key = `${postId}:${userId}`;
     if (shared) this.postShares.add(key);

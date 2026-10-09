@@ -97,6 +97,8 @@ export interface PostCommentRecord {
   body: string;
   /** Set for a reply to another comment (one level deep). */
   parentId?: string;
+  /** Hidden by a Page moderator (excluded from public reads). */
+  hidden?: boolean;
   createdAt: string;
 }
 
@@ -415,6 +417,10 @@ export interface Store {
   /** Set/replace the viewer's reaction, or clear it with `null`. */
   setPostReaction(postId: string, userId: string, reaction: ReactionType | null): Promise<void>;
   setCommentReaction(commentId: string, userId: string, reaction: ReactionType | null): Promise<void>;
+  /** Page moderation: hide/unhide a comment. */
+  setCommentHidden(commentId: string, hidden: boolean): Promise<void>;
+  /** Recent comments on a Page's posts (its community inbox). */
+  listPageComments(pageId: string, limit: number): Promise<PostCommentRecord[]>;
   getCommentStats(
     commentId: string,
     viewerId: string,

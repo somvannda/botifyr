@@ -11,7 +11,7 @@ Status legend: ✅ done · 🚧 in progress · ⬜ not started
 | --- | --- | --- | --- |
 | 1 | Model-status banner (credit/provider failures) | Improvement | ✅ |
 | 2 | Chat search (across chats + within a chat) | Feature | 🚧 |
-| 3 | Group management (rename, add/remove, leave) | Feature | ⬜ |
+| 3 | Group management (rename, add/remove, leave) | Feature | ✅ |
 | 4 | Read receipts + message reactions | Feature | ⬜ |
 | 5 | Light-theme audit of the new chat surfaces | Improvement | ⬜ |
 | 6 | Cached transcripts (persist transcription on the message) | Improvement | ⬜ |
@@ -43,11 +43,13 @@ the first failure.
   (`findOpen`/`findQuery`) filters messages; still to add match highlighting and
   next/previous navigation.
 
-## 3. Group management
+## 3. Group management (done)
 
-- Rename a group (PATCH conversation title).
-- Add/remove members (friends only), leave group.
-- Surface in the DM/group contact panel (`.contact-panel`).
+- `PATCH /v1/conversations/:id` — rename; `POST/DELETE
+  /v1/conversations/:id/members[/:userId]` — add/remove (remove self = leave).
+- Contact panel group-admin section: rename input, member list with Remove, an
+  "Add a friend…" picker, and Leave group (`.group-admin`, `.contact-input`).
+- Verified live: create group → rename to "Renamed Group" → remove member (200).
 
 ## 4. Read receipts + reactions
 

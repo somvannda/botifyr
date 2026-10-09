@@ -107,6 +107,8 @@ export interface FeedComment {
   /** Count per reaction type on the comment. */
   reactions?: Record<string, number>;
   myReaction?: string | null;
+  /** Hidden by a Page moderator. */
+  hidden?: boolean;
 }
 
 /** A post in the Feed. */
@@ -127,6 +129,8 @@ export interface FeedPost {
   repostOf?: string;
   /** Who can see the post: public | friends | only_me. */
   audience?: string;
+  /** Future publish time (ISO); hidden from others until then. */
+  scheduledAt?: string;
   /** Hashtags in the post (lower-case, no `#`). */
   hashtags?: string[];
   /** The reposted original, embedded (one level deep). */
@@ -1042,6 +1046,31 @@ export class BotifyrClient {
     return this.request(`/v1/conversations/${encodeURIComponent(id)}`, { method: "DELETE" });
   }
 
+  /** Rename a group conversation. */
+  renameConversation(id: string, title: string): Promise<Session> {
+    return this.request(`/v1/conversations/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      json: true,
+      body: JSON.stringify({ title }),
+    });
+  }
+
+  /** Add a friend to a group. */
+  addConversationMember(id: string, userId: string): Promise<Session> {
+    return this.request(`/v1/conversations/${encodeURIComponent(id)}/members`, {
+      method: "POST",
+      json: true,
+      body: JSON.stringify({ userId }),
+    });
+  }
+
+  /** Remove a member from a group (removing yourself leaves the group). */
+  removeConversationMember(id: string, userId: string): Promise<Session> {
+    return this.request(`/v1/conversations/${encodeURIComponent(id)}/members/${encodeURIComponent(userId)}`, {
+      method: "DELETE",
+    });
+  }
+
   createFriendGroup(participantIds: string[], title: string): Promise<Session> {
     return this.request("/v1/conversations", {
       method: "POST",
@@ -1123,6 +1152,7 @@ export class BotifyrClient {
     mediaIds?: string[];
     pageId?: string;
     audience?: "public" | "friends" | "only_me";
+    scheduledAt?: string;
   }): Promise<FeedPost> {
     return this.request("/v1/posts", { method: "POST", json: true, body: JSON.stringify(input) });
   }
@@ -1158,6 +1188,21 @@ export class BotifyrClient {
 
   unreactComment(id: string): Promise<void> {
     return this.request(`/v1/comments/${id}/reaction`, { method: "DELETE" });
+  }
+
+  hideComment(id: string): Promise<{ ok: boolean }> {
+    return this.request(`/v1/comments/${id}/hide`, { method: "POST", json: true, body: "{}" });
+  }
+
+  unhideComment(id: string): Promise<void> {
+    return this.request(`/v1/comments/${id}/hide`, { method: "DELETE" });
+  }
+
+  /** A Page's community inbox: recent comments on its posts. */
+  pageInbox(id: string): Promise<
+    Array<{ id: string; postId: string; body: string; hidden: boolean; createdAt: string; author: FeedAuthor }>
+  > {
+    return this.request(`/v1/pages/${id}/inbox`);
   }
 
   listComments(id: string): Promise<FeedComment[]> {
@@ -1196,6 +1241,11 @@ export class BotifyrClient {
   /** Posts carrying a hashtag (no leading `#` needed). */
   listTagPosts(tag: string): Promise<FeedPost[]> {
     return this.request(`/v1/tags/${encodeURIComponent(tag.replace(/^#/, ""))}/posts`);
+  }
+
+  /** The viewer's own upcoming (scheduled) posts. */
+  listScheduled(): Promise<FeedPost[]> {
+    return this.request("/v1/posts/scheduled");
   }
 
   /** Engagement-ranked posts from you and your friends (last 7 days). */
@@ -1261,7 +1311,11 @@ export class BotifyrClient {
 
   /** Pin or unpin (postId = null) a post on a Page timeline. */
   pinPagePost(id: string, postId: string | null): Promise<{ ok: boolean }> {
-    return this.request(`/v1/pages/${id}/pin`, { method: "POST", json: true, body: JSON.stringify({ postId }) });
+    return this.request(`/v1/pages/${id}/pin`, {
+      method: "POST",
+      json: true,
+      body: JSON.stringify({ postId }),
+    });
   }
 
   pageInsights(id: string): Promise<{

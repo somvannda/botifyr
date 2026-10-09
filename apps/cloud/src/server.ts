@@ -2879,7 +2879,8 @@ export async function buildServer(options: ServerOptions) {
       workspaceId: workspace.id,
       subject,
       capability,
-      granted: typeof request.body?.granted === "boolean" ? request.body.granted : (existing?.granted ?? false),
+      granted:
+        typeof request.body?.granted === "boolean" ? request.body.granted : (existing?.granted ?? false),
       state,
       successes: existing?.successes,
       failures: existing?.failures,
@@ -3551,6 +3552,67 @@ export async function buildServer(options: ServerOptions) {
     },
   );
 
+  // Rename a group (any participant).
+  app.patch<{ Params: { id: string }; Body: { title?: string } }>(
+    "/v1/conversations/:id",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const session = await store.getSession(request.params.id);
+      if (!session || session.kind !== "group" || !(session.participants ?? []).includes(userId)) {
+        return reply.code(404).send({ error: "group not found" });
+      }
+      const title = (request.body?.title ?? "").trim().slice(0, 60);
+      if (!title) return reply.code(400).send({ error: "title is required" });
+      session.title = title;
+      await store.updateSession(session);
+      emit({ type: "session.created", session });
+      return session;
+    },
+  );
+
+  // Add a friend to a group.
+  app.post<{ Params: { id: string }; Body: { userId?: string } }>(
+    "/v1/conversations/:id/members",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const session = await store.getSession(request.params.id);
+      if (!session || session.kind !== "group" || !(session.participants ?? []).includes(userId)) {
+        return reply.code(404).send({ error: "group not found" });
+      }
+      const newId = (request.body?.userId ?? "").trim();
+      if (!newId) return reply.code(400).send({ error: "userId is required" });
+      if (!(await store.areFriends(userId, newId))) {
+        return reply.code(403).send({ error: "you can only add friends" });
+      }
+      const participants = new Set(session.participants ?? []);
+      participants.add(newId);
+      session.participants = [...participants];
+      await store.updateSession(session);
+      emit({ type: "session.created", session });
+      return session;
+    },
+  );
+
+  // Remove a member from a group (removing yourself = leave the group).
+  app.delete<{ Params: { id: string; userId: string } }>(
+    "/v1/conversations/:id/members/:userId",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const session = await store.getSession(request.params.id);
+      if (!session || session.kind !== "group" || !(session.participants ?? []).includes(userId)) {
+        return reply.code(404).send({ error: "group not found" });
+      }
+      const target = request.params.userId;
+      session.participants = (session.participants ?? []).filter((id) => id !== target);
+      await store.updateSession(session);
+      emit({ type: "session.created", session });
+      return session;
+    },
+  );
+
   app.post<{ Params: { id: string }; Body: { text?: string } }>(
     "/v1/dm/:id/messages",
     { preHandler: requireAuth },
@@ -4153,6 +4215,16 @@ export async function buildServer(options: ServerOptions) {
   const isFutureScheduled = (post: PostRecord, nowIso: string): boolean =>
     Boolean(post.scheduledAt && post.scheduledAt > nowIso);
 
+  /** Can this user moderate comments on a Page's post? */
+  const canModerateComment = async (comment: PostCommentRecord, userId: string): Promise<boolean> => {
+    const post = await store.getPost(comment.postId);
+    if (!post?.pageId) return false;
+    const page = await store.getPage(post.pageId);
+    if (!page) return false;
+    const role = page.ownerId === userId ? "admin" : (await store.getPageRole(page.id, userId))?.role;
+    return role === "admin" || role === "editor" || role === "moderator";
+  };
+
   const feedCommentOf = async (
     record: PostCommentRecord,
     viewerId: string,
@@ -4195,15 +4267,17 @@ export async function buildServer(options: ServerOptions) {
       // "Top": engagement-ranked over the last 30 days (no cursor).
       if (sort === "top") {
         const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-        const ranked = (await store.listTrendingPosts(authorIds, since, limit)).filter((post) =>
-          canSeePost(post, userId),
+        const nowIso = new Date().toISOString();
+        const ranked = (await store.listTrendingPosts(authorIds, since, limit)).filter(
+          (post) => canSeePost(post, userId) && !isFutureScheduled(post, nowIso),
         );
         for (const record of ranked) items.push(await feedPostOf(record, userId, cache));
         return { items, nextCursor: null };
       }
 
-      const posts = (await store.listFeedPosts(authorIds, limit + 1, cursor)).filter((post) =>
-        canSeePost(post, userId),
+      const nowIso = new Date().toISOString();
+      const posts = (await store.listFeedPosts(authorIds, limit + 1, cursor)).filter(
+        (post) => canSeePost(post, userId) && (!isFutureScheduled(post, nowIso) || post.authorId === userId),
       );
       const hasMore = posts.length > limit;
       const page = hasMore ? posts.slice(0, limit) : posts;
@@ -4251,6 +4325,11 @@ export async function buildServer(options: ServerOptions) {
       request.body?.audience === "public" || request.body?.audience === "only_me"
         ? request.body.audience
         : "friends";
+    const scheduledRaw = typeof request.body?.scheduledAt === "string" ? request.body.scheduledAt.trim() : "";
+    const scheduledAt =
+      scheduledRaw && new Date(scheduledRaw).getTime() > Date.now()
+        ? new Date(scheduledRaw).toISOString()
+        : undefined;
     const now = new Date().toISOString();
     const record: PostRecord = {
       id: randomUUID(),
@@ -4259,6 +4338,7 @@ export async function buildServer(options: ServerOptions) {
       mediaId: provided[0] || undefined,
       pageId: page?.id,
       audience,
+      scheduledAt,
       createdAt: now,
       updatedAt: now,
     };
@@ -4382,7 +4462,7 @@ export async function buildServer(options: ServerOptions) {
       const cache = new Map<string, FeedAuthorDto>();
       const items = [];
       for (const record of comments) {
-        if (blocked.has(record.authorId)) continue;
+        if (record.hidden || blocked.has(record.authorId)) continue;
         items.push(await feedCommentOf(record, request.userId as string, cache));
       }
       return items;
@@ -4444,6 +4524,60 @@ export async function buildServer(options: ServerOptions) {
     },
   );
 
+  /* Page community inbox: recent comments on the Page's posts. */
+  app.get<{ Params: { id: string } }>(
+    "/v1/pages/:id/inbox",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const page = await store.getPage(request.params.id);
+      if (!page) return reply.code(404).send({ error: "page not found" });
+      const role = page.ownerId === userId ? "admin" : (await store.getPageRole(page.id, userId))?.role;
+      if (role !== "admin" && role !== "editor" && role !== "moderator") {
+        return reply.code(403).send({ error: "not allowed" });
+      }
+      const comments = await store.listPageComments(page.id, 100);
+      const people = await store.listUsersByIds([...new Set(comments.map((entry) => entry.authorId))]);
+      const byId = new Map(people.map((person) => [person.id, personOf(person)]));
+      return comments.map((comment) => ({
+        id: comment.id,
+        postId: comment.postId,
+        body: comment.body,
+        hidden: comment.hidden === true,
+        createdAt: comment.createdAt,
+        author: byId.get(comment.authorId) ?? {
+          id: comment.authorId,
+          handle: undefined,
+          displayName: "Unknown",
+          avatarEmoji: undefined,
+          avatarScheme: undefined,
+          avatarUrl: undefined,
+          online: false,
+        },
+      }));
+    },
+  );
+
+  for (const [method, hidden] of [
+    ["POST", true],
+    ["DELETE", false],
+  ] as const) {
+    app.route<{ Params: { id: string } }>({
+      method,
+      url: "/v1/comments/:id/hide",
+      preHandler: requireAuth,
+      handler: async (request, reply) => {
+        const comment = await store.getPostComment(request.params.id);
+        if (!comment) return reply.code(404).send({ error: "comment not found" });
+        if (!(await canModerateComment(comment, request.userId as string))) {
+          return reply.code(403).send({ error: "not allowed" });
+        }
+        await store.setCommentHidden(comment.id, hidden);
+        return { ok: true };
+      },
+    });
+  }
+
   app.put<{ Params: { id: string }; Querystring: { reaction?: string } }>(
     "/v1/comments/:id/reaction",
     { preHandler: requireAuth },
@@ -4497,6 +4631,19 @@ export async function buildServer(options: ServerOptions) {
     });
   }
 
+  /* The author's own upcoming (scheduled) posts. */
+  app.get("/v1/posts/scheduled", { preHandler: requireAuth }, async (request) => {
+    const userId = request.userId as string;
+    const nowIso = new Date().toISOString();
+    const posts = (await store.listPostsByAuthor(userId, 100)).filter((post) =>
+      isFutureScheduled(post, nowIso),
+    );
+    const cache = new Map<string, FeedAuthorDto>();
+    const items = [];
+    for (const record of posts) items.push(await feedPostOf(record, userId, cache));
+    return items;
+  });
+
   /* Repost (share) with an optional caption. Creates a new post that links back
      to the original and bumps the original's share count. */
   app.post<{ Params: { id: string }; Body: { caption?: string } }>(
@@ -4547,7 +4694,11 @@ export async function buildServer(options: ServerOptions) {
       if (user.id !== viewerId && !(await store.areFriends(viewerId, user.id))) {
         return reply.code(403).send({ error: "not allowed" });
       }
-      const posts = (await store.listPostsByAuthor(user.id, 20)).filter((post) => canSeePost(post, viewerId));
+      const nowIso = new Date().toISOString();
+      const posts = (await store.listPostsByAuthor(user.id, 20)).filter(
+        (post) =>
+          canSeePost(post, viewerId) && (!isFutureScheduled(post, nowIso) || post.authorId === viewerId),
+      );
       const cache = new Map<string, FeedAuthorDto>();
       const items = [];
       for (const record of posts) items.push(await feedPostOf(record, viewerId, cache));
@@ -4805,7 +4956,8 @@ export async function buildServer(options: ServerOptions) {
       const postId = typeof request.body?.postId === "string" ? request.body.postId.trim() : "";
       if (postId) {
         const post = await store.getPost(postId);
-        if (!post || post.pageId !== page.id) return reply.code(400).send({ error: "post is not on this page" });
+        if (!post || post.pageId !== page.id)
+          return reply.code(400).send({ error: "post is not on this page" });
         await store.setPagePinnedPost(page.id, postId);
       } else {
         await store.setPagePinnedPost(page.id, null);
@@ -4865,7 +5017,10 @@ export async function buildServer(options: ServerOptions) {
     async (request) => {
       const userId = request.userId as string;
       const tag = request.params.tag.replace(/^#/, "").toLowerCase();
-      const posts = (await store.listPostsByTag(tag, 50)).filter((post) => canSeePost(post, userId));
+      const nowIso = new Date().toISOString();
+      const posts = (await store.listPostsByTag(tag, 50)).filter(
+        (post) => canSeePost(post, userId) && !isFutureScheduled(post, nowIso),
+      );
       const cache = new Map<string, FeedAuthorDto>();
       const items = [];
       for (const record of posts) items.push(await feedPostOf(record, userId, cache));

@@ -402,6 +402,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     }
   });
   const [translations, setTranslations] = useState<Record<string, string>>({});
+  const [groupTitleDraft, setGroupTitleDraft] = useState("");
+  const [addMemberId, setAddMemberId] = useState("");
   const [lightbox, setLightbox] = useState<{
     items: { token: string; name: string }[];
     index: number;
@@ -429,6 +431,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const recorderRef = useRef<MediaRecorder | null>(null);
   /** Message ids that already failed to translate (don't retry — avoids hammering). */
   const translateFailedRef = useRef<Set<string>>(new Set());
+  /** The group whose title was last seeded into the rename input. */
+  const seededGroupRef = useRef<string | null>(null);
   const [decrypted, setDecrypted] = useState<Record<string, string>>({});
   // When the host renders an OS title bar with a slot, the notification centre
   // is teleported there; otherwise it renders inline in the chat topbar.
@@ -1931,6 +1935,16 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     setHqGrants(await client.listCapabilityGrants(workspace.id).catch(() => []));
   }
 
+  /** Move a capability up/down the trust ladder (docs/product-plan.md §3). */
+  async function setGrantState(subject: string, capability: string, state: CapabilityGrant["state"]) {
+    const workspace = boardWorkspace;
+    if (!workspace) return;
+    await client
+      .setCapabilityGrant(workspace.id, { subject, capability, granted: true, state })
+      .catch(() => {});
+    setHqGrants(await client.listCapabilityGrants(workspace.id).catch(() => []));
+  }
+
   /** Pause/resume the company: paused companies stop their autonomous schedules. */
   async function setCompanyStatus(status: "active" | "paused") {
     const workspace = boardWorkspace;
@@ -3412,6 +3426,63 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     contactMediaFilter === "all"
       ? activeSharedFiles
       : activeSharedFiles.filter((file) => attachmentBucket(file.name) === contactMediaFilter);
+  const addableFriends =
+    activeSession && activeSession.kind === "group"
+      ? friends.filter((person) => !(activeSession.participants ?? []).includes(person.id))
+      : [];
+
+  // Seed the rename input when the open group changes (not on every message).
+  useEffect(() => {
+    if (!activeSession || activeSession.kind !== "group") return;
+    if (seededGroupRef.current === activeSession.id) return;
+    seededGroupRef.current = activeSession.id;
+    setGroupTitleDraft(activeSession.title);
+  }, [activeSession]);
+
+  async function renameGroup(): Promise<void> {
+    if (!activeSession || activeSession.kind !== "group") return;
+    const title = groupTitleDraft.trim();
+    if (!title) return;
+    try {
+      const updated = await client.renameConversation(activeSession.id, title);
+      setSessions((prev) => prev.map((entry) => (entry.id === updated.id ? updated : entry)));
+    } catch (err: unknown) {
+      setError(messageOf(err));
+    }
+  }
+
+  async function addGroupMember(): Promise<void> {
+    if (!activeSession || !addMemberId) return;
+    try {
+      const updated = await client.addConversationMember(activeSession.id, addMemberId);
+      setSessions((prev) => prev.map((entry) => (entry.id === updated.id ? updated : entry)));
+      setAddMemberId("");
+    } catch (err: unknown) {
+      setError(messageOf(err));
+    }
+  }
+
+  async function removeGroupMember(userId: string): Promise<void> {
+    if (!activeSession) return;
+    try {
+      const updated = await client.removeConversationMember(activeSession.id, userId);
+      setSessions((prev) => prev.map((entry) => (entry.id === updated.id ? updated : entry)));
+    } catch (err: unknown) {
+      setError(messageOf(err));
+    }
+  }
+
+  async function leaveGroup(): Promise<void> {
+    if (!activeSession || !user) return;
+    const id = activeSession.id;
+    try {
+      await client.removeConversationMember(id, user.id);
+      setSessions((prev) => prev.filter((entry) => entry.id !== id));
+      setActiveSessionId(null);
+    } catch (err: unknown) {
+      setError(messageOf(err));
+    }
+  }
 
   /** Signed, owner/recipient-scoped URL for a shared file. */
   function sharedUrl(shareToken: string): string {
@@ -3543,8 +3614,15 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   // badge as that work lands).
   void hqShippedSince;
   void hqNewReports;
-  /** The whole decision queue: approvals + proposed quests. */
-  const hqInboxCount = hqNeeds.length + hqPendingQuests.length;
+  /** Capabilities that have earned a promotion review (docs/product-plan.md §3). */
+  const hqPromotions = hqGrants.filter((grant) => {
+    const state = grant.state ?? "gated";
+    if (state === "trusted") return false;
+    const needed = grant.capability.startsWith("ads.") || grant.capability.startsWith("payments.") ? 10 : 5;
+    return (grant.successes ?? 0) >= needed && (grant.failures ?? 0) === 0;
+  });
+  /** The whole decision queue: approvals + proposed quests + promotion reviews. */
+  const hqInboxCount = hqNeeds.length + hqPendingQuests.length + hqPromotions.length;
   const roleByBotId = new Map<string, BotRole>();
   const workspaceIdByBotId = new Map<string, string>();
   for (const workspace of workspaces) {
@@ -5676,6 +5754,74 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
               )}
             </div>
 
+            {activeSession.kind === "group" && (
+              <div className="group-admin">
+                <div className="bot-panel-section-head">Group</div>
+                <div className="group-row">
+                  <input
+                    className="contact-input"
+                    value={groupTitleDraft}
+                    onChange={(event) => setGroupTitleDraft(event.target.value)}
+                    placeholder="Group name"
+                    maxLength={60}
+                  />
+                  <button className="ghost small" type="button" onClick={() => void renameGroup()}>
+                    Rename
+                  </button>
+                </div>
+                <ul className="downloads-list">
+                  {(activeSession.participants ?? [])
+                    .filter((id) => id !== user?.id)
+                    .map((id) => {
+                      const person = friends.find((entry) => entry.id === id);
+                      return (
+                        <li key={id} className="download-row">
+                          <div className="download-main">
+                            <div className="download-name">
+                              {person?.displayName || (person?.handle ? `@${person.handle}` : "Member")}
+                            </div>
+                          </div>
+                          <button
+                            className="ghost small"
+                            type="button"
+                            onClick={() => void removeGroupMember(id)}
+                          >
+                            Remove
+                          </button>
+                        </li>
+                      );
+                    })}
+                </ul>
+                {addableFriends.length > 0 && (
+                  <div className="group-row">
+                    <select
+                      className="contact-select"
+                      value={addMemberId}
+                      onChange={(event) => setAddMemberId(event.target.value)}
+                    >
+                      <option value="">Add a friend…</option>
+                      {addableFriends.map((person) => (
+                        <option key={person.id} value={person.id}>
+                          {person.displayName || person.handle || "Friend"}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      className="ghost small"
+                      type="button"
+                      disabled={!addMemberId}
+                      onClick={() => void addGroupMember()}
+                    >
+                      Add
+                    </button>
+                  </div>
+                )}
+                <button className="btn danger small" type="button" onClick={() => void leaveGroup()}>
+                  Leave group
+                </button>
+              </div>
+            )}
+
             <div className="contact-media">
               {[
                 { id: "all", label: "All", icon: <PanelIcon size={18} />, count: activeSharedFiles.length },
@@ -6751,6 +6897,32 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                     Needs you{hqInboxCount ? ` (${hqInboxCount})` : ""}
                   </div>
                   {hqInboxCount === 0 && <p className="company-hint">Nothing needs you right now.</p>}
+                  {hqPromotions.length > 0 && (
+                    <ul className="board-list">
+                      {hqPromotions.map((grant) => (
+                        <li key={`${grant.subject}|${grant.capability}`} className="board-item">
+                          <span className="board-title">
+                            Promote {grant.capability} →{" "}
+                            {(grant.state ?? "gated") === "probation" ? "trusted" : "probation"}
+                          </span>
+                          <span className="hq-shipped-tag">{grant.successes ?? 0} clean runs</span>
+                          <button
+                            className="btn primary small"
+                            type="button"
+                            onClick={() =>
+                              void setGrantState(
+                                grant.subject,
+                                grant.capability,
+                                (grant.state ?? "gated") === "probation" ? "trusted" : "probation",
+                              )
+                            }
+                          >
+                            Promote
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                   {hqPendingQuests.length > 0 && (
                     <ul className="board-list">
                       {hqPendingQuests.map((quest) => (
@@ -6795,8 +6967,34 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
 
               {hqTab === "need" && (
                 <>
-                  {hqNeeds.length === 0 && hqPendingQuests.length === 0 && (
+                  {hqNeeds.length === 0 && hqPendingQuests.length === 0 && hqPromotions.length === 0 && (
                     <p className="company-hint">Nothing needs you right now.</p>
+                  )}
+                  {hqPromotions.length > 0 && (
+                    <ul className="board-list">
+                      {hqPromotions.map((grant) => (
+                        <li key={`${grant.subject}|${grant.capability}`} className="board-item">
+                          <span className="board-title">
+                            Promote {grant.capability} →{" "}
+                            {(grant.state ?? "gated") === "probation" ? "trusted" : "probation"}
+                          </span>
+                          <span className="hq-shipped-tag">{grant.successes ?? 0} clean runs</span>
+                          <button
+                            className="btn primary small"
+                            type="button"
+                            onClick={() =>
+                              void setGrantState(
+                                grant.subject,
+                                grant.capability,
+                                (grant.state ?? "gated") === "probation" ? "trusted" : "probation",
+                              )
+                            }
+                          >
+                            Promote
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
                   )}
                   {hqPendingQuests.length > 0 && (
                     <ul className="board-list">
@@ -6899,22 +7097,39 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                           {caps.length > 0 && (
                             <div className="grant-chips">
                               {caps.map((capability) => {
-                                const granted = hqGrants.some(
-                                  (grant) =>
-                                    grant.subject === subject &&
-                                    grant.capability === capability &&
-                                    grant.granted,
+                                const grant = hqGrants.find(
+                                  (entry) => entry.subject === subject && entry.capability === capability,
                                 );
+                                const granted = Boolean(grant?.granted);
                                 return (
-                                  <button
-                                    key={capability}
-                                    className={`grant-chip${granted ? " granted" : ""}`}
-                                    type="button"
-                                    title="Toggle this capability"
-                                    onClick={() => void toggleGrant(subject, capability, !granted)}
-                                  >
-                                    {capability}
-                                  </button>
+                                  <span key={capability} className="grant-chip-wrap">
+                                    <button
+                                      className={`grant-chip${granted ? " granted" : ""}`}
+                                      type="button"
+                                      title="Toggle this capability"
+                                      onClick={() => void toggleGrant(subject, capability, !granted)}
+                                    >
+                                      {capability}
+                                    </button>
+                                    {granted && (
+                                      <select
+                                        className="grant-state"
+                                        value={grant?.state ?? "gated"}
+                                        onChange={(event) =>
+                                          void setGrantState(
+                                            subject,
+                                            capability,
+                                            event.target.value as CapabilityGrant["state"],
+                                          )
+                                        }
+                                        aria-label={`Trust level for ${capability}`}
+                                      >
+                                        <option value="gated">gated</option>
+                                        <option value="probation">probation</option>
+                                        <option value="trusted">trusted</option>
+                                      </select>
+                                    )}
+                                  </span>
                                 );
                               })}
                             </div>

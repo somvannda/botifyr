@@ -389,6 +389,8 @@ CREATE TABLE IF NOT EXISTS post_comments (
 CREATE INDEX IF NOT EXISTS post_comments_post_idx ON post_comments (post_id, created_at);
 /* Replies: one level. Deleting a parent removes its replies. */
 ALTER TABLE post_comments ADD COLUMN IF NOT EXISTS parent_id TEXT REFERENCES post_comments(id) ON DELETE CASCADE;
+/* Page moderation: hidden comments are excluded from public reads. */
+ALTER TABLE post_comments ADD COLUMN IF NOT EXISTS hidden BOOLEAN NOT NULL DEFAULT false;
 CREATE INDEX IF NOT EXISTS post_comments_parent_idx ON post_comments (parent_id);
 
 CREATE TABLE IF NOT EXISTS post_shares (

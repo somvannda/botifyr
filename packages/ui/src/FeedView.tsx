@@ -303,6 +303,9 @@ function PostCard({
       <AuthorLine author={post.author} when={post.createdAt} />
 
       {post.audience === "only_me" && <div className="feed-audience-badge">🔒 Only me</div>}
+      {post.scheduledAt && new Date(post.scheduledAt).getTime() > Date.now() && (
+        <div className="feed-audience-badge">🕒 Scheduled</div>
+      )}
       {post.repostOf && <div className="feed-repost-label">🔁 Shared a post</div>}
       {post.body && <p className="feed-body">{post.body}</p>}
 
@@ -970,6 +973,7 @@ export function FeedView({
   const [posting, setPosting] = useState(false);
   const [attachments, setAttachments] = useState<Array<{ name: string; mime: string; data: string }>>([]);
   const [audience, setAudience] = useState<"public" | "friends" | "only_me">("friends");
+  const [scheduledAt, setScheduledAt] = useState("");
   const [tab, setTab] = useState<"all" | "friends" | "pages">("all");
   const [sort, setSort] = useState<"recent" | "top">("recent");
   const [openTag, setOpenTag] = useState<string | null>(null);
@@ -977,7 +981,40 @@ export function FeedView({
   const [postAs, setPostAs] = useState("");
   const [creatingPage, setCreatingPage] = useState(false);
   const [newPageName, setNewPageName] = useState("");
+  const [mentionResults, setMentionResults] = useState<Person[]>([]);
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const composerRef = useRef<HTMLTextAreaElement | null>(null);
+
+  /** As the user types `@name`, offer people to insert. */
+  async function updateMentions(event: ChangeEvent<HTMLTextAreaElement>) {
+    const value = event.target.value;
+    setDraft(value);
+    const caret = event.target.selectionStart ?? value.length;
+    const match = /(?:^|\s)@([A-Za-z0-9_]*)$/.exec(value.slice(0, caret));
+    if (!match) {
+      setMentionResults([]);
+      return;
+    }
+    const query = match[1];
+    if (query.length === 0) {
+      setMentionResults([]);
+      return;
+    }
+    try {
+      setMentionResults(await client.searchPeople(query));
+    } catch {
+      setMentionResults([]);
+    }
+  }
+
+  function insertMention(person: Person) {
+    if (!person.handle) return;
+    const element = composerRef.current;
+    const caret = element?.selectionStart ?? draft.length;
+    const before = draft.slice(0, caret).replace(/(^|\s)@([A-Za-z0-9_]*)$/, `$1@${person.handle} `);
+    setDraft(before + draft.slice(caret));
+    setMentionResults([]);
+  }
 
   function pickImages(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []);
@@ -1068,10 +1105,17 @@ export function FeedView({
         const media = await client.uploadFile({ name: file.name, mime: file.mime, data: file.data });
         mediaIds.push(media.id);
       }
-      const post = await client.createPost({ body, mediaIds, pageId: postAs || undefined, audience });
+      const post = await client.createPost({
+        body,
+        mediaIds,
+        pageId: postAs || undefined,
+        audience,
+        scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : undefined,
+      });
       setPosts((prev) => [post, ...prev]);
       setDraft("");
       setAttachments([]);
+      setScheduledAt("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't post that");
     } finally {
@@ -1155,13 +1199,32 @@ export function FeedView({
           <div className="feed-composer-row">
             <Avatar name="You" />
             <textarea
+              ref={composerRef}
               className="feed-composer-input"
               placeholder="Share an update…"
               rows={2}
               value={draft}
-              onChange={(event) => setDraft(event.target.value)}
+              onChange={(event) => void updateMentions(event)}
             />
           </div>
+          {mentionResults.length > 0 && (
+            <div className="mention-menu">
+              {mentionResults.slice(0, 6).map((person) => (
+                <button
+                  key={person.id}
+                  type="button"
+                  className="mention-item"
+                  onClick={() => insertMention(person)}
+                >
+                  <Avatar emoji={person.avatarEmoji} name={person.displayName} size={24} />
+                  <span className="mention-name">
+                    {person.displayName || (person.handle ? `@${person.handle}` : "Someone")}
+                  </span>
+                  {person.handle && <span className="mention-handle">@{person.handle}</span>}
+                </button>
+              ))}
+            </div>
+          )}
           {attachments.length > 0 && (
             <div className="feed-composer-grid">
               {attachments.map((file, index) => (
@@ -1228,6 +1291,13 @@ export function FeedView({
               <option value="friends">Friends</option>
               <option value="only_me">Only me</option>
             </select>
+            <input
+              type="datetime-local"
+              className="feed-composer-as-input"
+              value={scheduledAt}
+              onChange={(event) => setScheduledAt(event.target.value)}
+              title="Schedule for later"
+            />
           </div>
           <div className="feed-composer-actions">
             <button type="button" className="feed-composer-tool" onClick={() => fileRef.current?.click()}>
@@ -1241,7 +1311,7 @@ export function FeedView({
               <SmileyIcon size={16} /> Mood
             </button>
             <button className="feed-post-btn" type="submit" disabled={(!draft.trim() && attachments.length === 0) || posting}>
-              {posting ? "Posting…" : "Post"}
+              {posting ? "Saving…" : scheduledAt ? "Schedule" : "Post"}
             </button>
           </div>
           <input

@@ -1404,6 +1404,19 @@ export class PostgresStore implements Store {
     }
   }
 
+  async setCommentHidden(commentId: string, hidden: boolean): Promise<void> {
+    await this.pool.query("UPDATE post_comments SET hidden = $2 WHERE id = $1", [commentId, hidden]);
+  }
+
+  async listPageComments(pageId: string, limit: number): Promise<PostCommentRecord[]> {
+    const { rows } = await this.pool.query(
+      "SELECT c.* FROM post_comments c JOIN posts p ON p.id = c.post_id " +
+        "WHERE p.page_id = $1 ORDER BY c.created_at DESC LIMIT $2",
+      [pageId, Math.max(1, Math.min(200, limit))],
+    );
+    return rows.map(toPostComment);
+  }
+
   async getCommentStats(
     commentId: string,
     viewerId: string,
@@ -1831,6 +1844,7 @@ function toPostComment(row: any): PostCommentRecord {
     authorId: row.author_id,
     body: row.body,
     parentId: row.parent_id ?? undefined,
+    hidden: row.hidden === true,
     createdAt: new Date(row.created_at).toISOString(),
   };
 }

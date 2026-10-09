@@ -73,7 +73,8 @@ DTO, `PUT`/`DELETE /v1/comments/:id/reaction`, `BotifyrClient.reactComment` /
 extracted from a post body on create, returned as `hashtags` on the feed DTO,
 listed via `GET /v1/tags/:tag/posts`, and rendered as clickable chips that open a
 tag view. `@handle` mentions emit a `feed.mention` event (never self) that raises
-a "New mention" toast.
+a "New mention" toast, and the composer offers an **@mention autocomplete**
+(search people as you type, insert the handle).
 
 **Video (FR-6) — done.** Video uploads reuse the media pipeline; the feed DTO
 classifies attachments into `images` / `videos`, and `GET /v1/feed/image?t=…`
@@ -84,12 +85,14 @@ image/video files and posts render `<video controls>`.
 returns followers, post count, 30-day reactions/comments/shares, and top posts;
 the Page view shows an **Insights** panel.
 
-**Pinned posts (FR-19, partial) — done.** `pages.pinned_post_id` +
-`POST /v1/pages/:id/pin` (editor/admin; must be the page's own post); the Page
-timeline shows the pinned post first with a **📌 Pinned** label, and managers get
-a pin control. **Scheduled posts are still open.**
+**Pinned + scheduled posts (FR-19) — done.** `pages.pinned_post_id` +
+`POST /v1/pages/:id/pin` (editor/admin) shows a pinned post first with a **📌
+Pinned** label. `posts.scheduled_at` gives scheduled posts: the composer has a
+datetime control, future posts are hidden from others until their time (author
+sees them via the feed + `GET /v1/posts/scheduled`), with a **🕒 Scheduled**
+label.
 
-**Everything else** in this document (scheduling, stories, groups, …) is **not started**.
+**Everything else** in this document (stories, groups, …) is **not started**.
 
 > **Reconciled with the product as of Oct 2026.** Facebook's reference section
 > (§1) reflects its 2026 behaviour; §2 and §5 note where Botifyr has already moved
