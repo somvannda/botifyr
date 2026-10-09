@@ -18,6 +18,7 @@ import type {
   ChatMessage,
   CompanyReport,
   ConnectionInfo,
+  Department,
   LearnedSkill,
   Quest,
   RuntimeConfig,
@@ -2334,6 +2335,36 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     setMentionQuery(null);
   }
 
+  /**
+   * Assign whatever is in the composer to this employee's company board. The
+   * board is the asynchronous "assign work" path (the same `WorkItem` the CEO
+   * flow creates), distinct from sending them a chat message.
+   */
+  async function assignComposerToBoard(role: BotRole): Promise<void> {
+    const title = text.trim();
+    if (!title) {
+      setError(`Write the task for ${activeBotName} first, then add it to the board.`);
+      return;
+    }
+    try {
+      await client.createWorkItem(role.workspaceId, {
+        title,
+        detail: "Directive from the founder.",
+        phase: "ongoing",
+        department: role.department,
+        assigneeBotId: role.botId,
+      });
+      setText("");
+      pushToast({
+        kind: "task",
+        title: "Assigned",
+        body: `${activeBotName} will pick up “${truncate(title, 60)}”.`,
+      });
+    } catch (err: unknown) {
+      setError(messageOf(err));
+    }
+  }
+
   /** Aggregate a message's reactions into chips (emoji + count + whether ours). */
   function reactionChips(message: ChatMessage): { emoji: string; count: number; mine: boolean }[] {
     const byEmoji = new Map<string, { count: number; mine: boolean }>();
@@ -3956,8 +3987,10 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
             <span className="conv-preview">
               {last
                 ? displayText(decrypted, last.content ?? "", last.id).slice(0, 42) ||
-                  "No messages yet — say hello"
-                : "No messages yet — say hello"}
+                  (roleByBotId.get(bot.id) ? "No messages yet — assign a task" : "No messages yet — say hello")
+                : roleByBotId.get(bot.id)
+                  ? "No messages yet — assign a task"
+                  : "No messages yet — say hello"}
             </span>
           </span>
         </button>
@@ -5079,12 +5112,49 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
 
               {activeSession && (
                 <div className="thread">
-                  {activeSession.messages.length === 0 && (
-                    <div className="hero">
-                      <h1>What should Botifyr do?</h1>
-                      <p>Try “summarize the top story on news.ycombinator.com” or “hello”.</p>
-                    </div>
-                  )}
+                  {activeSession.messages.length === 0 &&
+                    (() => {
+                      const role = activeBot ? roleByBotId.get(activeBot.id) : undefined;
+                      const hero = activeBot && role ? employeeHero(activeBot.name, role) : null;
+                      if (!activeBot || !role || !hero) {
+                        return (
+                          <div className="hero">
+                            <h1>What should Botifyr do?</h1>
+                            <p>Try “summarize the top story on news.ycombinator.com” or “hello”.</p>
+                          </div>
+                        );
+                      }
+                      return (
+                        <div className="hero hero-employee">
+                          <h1>{hero.heading}</h1>
+                          <p>{hero.subtitle}</p>
+                          {hero.suggestions.length > 0 && (
+                            <div className="hero-suggestions">
+                              {hero.suggestions.map((suggestion) => (
+                                <button
+                                  key={suggestion}
+                                  type="button"
+                                  className="hero-suggestion"
+                                  onClick={() => onComposerChange(suggestion)}
+                                >
+                                  {suggestion}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                          <button
+                            type="button"
+                            className="ghost small hero-assign"
+                            onClick={() => void assignComposerToBoard(role)}
+                          >
+                            Add to the board
+                          </button>
+                          <p className="hero-hint">
+                            Tap a suggestion to start a chat, or write a task above and add it to the board.
+                          </p>
+                        </div>
+                      );
+                    })()}
 
                   {findTerm && visibleMessages.length === 0 && (
                     <div className="bot-panel-empty">No matches in this chat.</div>
@@ -8404,6 +8474,69 @@ function stepDetail(title: string, detail: string | undefined): string | null {
   // Raw tool arguments (JSON objects/arrays) are noise in the activity card.
   if (/^\s*[{[][\s\S]*[}\]]\s*$/.test(detail)) return null;
   return truncate(detail, 220);
+}
+
+/** Human labels for a company department (docs/company-os.md §6). */
+export const DEPARTMENT_LABELS: Record<Department, string> = {
+  exec: "Executive",
+  product: "Product",
+  engineering: "Engineering",
+  design: "Design",
+  data: "Data",
+  ai: "AI",
+  growth: "Growth",
+  marketing: "Marketing",
+  sales: "Sales",
+  support: "Support",
+  success: "Customer Success",
+  ops: "Operations",
+  finance: "Finance",
+  legal: "Legal",
+  people: "People",
+  logistics: "Logistics",
+};
+
+/**
+ * Suggested tasks per department, shown on an employee's empty chat so the
+ * thread reads as "assign work here" rather than a generic prompt. Tapping one
+ * fills the composer; it is never sent automatically.
+ */
+export const DEPARTMENT_PROMPTS: Record<Department, string[]> = {
+  exec: ["Write this week's company plan", "Summarize progress and blockers", "Review today's priorities"],
+  product: ["Draft the next release plan", "Prioritize the backlog", "Write the feature spec"],
+  engineering: ["Fix the top open bug", "Review the latest pull request", "Plan the next sprint"],
+  design: ["Draft the landing page design", "Review the UI for consistency", "Write a design brief"],
+  data: ["Build this week's metrics report", "Analyze the funnel", "Find the key growth lever"],
+  ai: ["Prototype the next AI feature", "Evaluate the current model", "Draft the prompt strategy"],
+  growth: ["Design a growth experiment", "Analyze the acquisition funnel", "Plan the next campaign"],
+  marketing: ["Draft the launch plan", "Write the positioning", "Build the marketing site"],
+  sales: ["Build the outreach list", "Write the sales pitch", "Follow up with warm leads"],
+  support: ["Draft a help center article", "Triage the support inbox", "Write the FAQ"],
+  success: ["Draft the onboarding email", "Review churn-risk accounts", "Write the QBR outline"],
+  ops: ["Document the key process", "Audit the current tools", "Plan the weekly standup"],
+  finance: ["Update the budget forecast", "Review this month's spend", "Draft the pricing model"],
+  legal: ["Review the latest contract", "Draft the privacy policy", "Summarize compliance risks"],
+  people: ["Draft the hiring plan", "Write the role description", "Plan the team offsite"],
+  logistics: ["Optimize the delivery plan", "Track the current shipments", "Review vendor options"],
+};
+
+export interface EmployeeHero {
+  heading: string;
+  subtitle: string;
+  suggestions: string[];
+}
+
+/**
+ * Copy for a company employee's empty chat. Returns null when the bot is not an
+ * employee (personal bots keep the generic "What should Botifyr do?" hero).
+ */
+export function employeeHero(botName: string, role: BotRole | undefined): EmployeeHero | null {
+  if (!role) return null;
+  return {
+    heading: `Assign a task to ${botName}`,
+    subtitle: `${role.title} · ${DEPARTMENT_LABELS[role.department]}`,
+    suggestions: DEPARTMENT_PROMPTS[role.department] ?? [],
+  };
 }
 
 /** Parse "6/20 …" download progress from a task step's detail. */
