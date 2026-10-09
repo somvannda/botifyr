@@ -83,7 +83,7 @@ image/video files and posts render `<video controls>`.
 
 **Page insights (FR-20) — done.** `GET /v1/pages/:id/insights` (managers only)
 returns followers, post count, 30-day reactions/comments/shares, and top posts;
-the Page view shows an **Insights** panel.
+the Page view shows an **Insights** panel with a **CSV export** (analytics download).
 
 **Pinned + scheduled posts (FR-19) — done.** `pages.pinned_post_id` +
 `POST /v1/pages/:id/pin` (editor/admin) shows a pinned post first with a **📌
@@ -106,9 +106,11 @@ with percentages + the viewer's vote.
 `listActiveStories`, `POST`/`GET /v1/stories`, and a feed **stories strip** with a
 viewer overlay. Image/text stories; expiration is enforced on read.
 
-**Groups — backend done.** `groups` / `group_members` tables, `Store` methods,
-`posts.group_id`, and `/v1/groups…` routes (create, list, get, join/leave,
-group posts) with membership-gated posting (`server.groups.test.ts`). **UI open.**
+**Groups — done.** `groups` / `group_members` tables, `Store` methods,
+`posts.group_id`, and `/v1/groups…` routes (create, list, get, join/leave, group
+posts) with membership-gated posting. The UI has a **Your Groups** rail section
+and a **Group view** (join/leave + in-group composer + post stream), covered by
+`server.groups.test.ts`.
 
 **Everything else** in this document (live, analytics export, …) is **not started**.
 

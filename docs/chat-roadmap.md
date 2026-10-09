@@ -39,9 +39,9 @@ the first failure.
 - ✅ **Across chats:** typing in the sidebar search scans every conversation's
   messages and shows a **"Messages"** section of hits (title + snippet); clicking
   a hit opens that conversation. (Verified: "hi" → 3 hits.)
-- ⬜ **Within a chat:** the composer's "Search this chat" find bar
-  (`findOpen`/`findQuery`) filters messages; still to add match highlighting and
-  next/previous navigation.
+- ✅ **Within a chat:** the composer's "Search this chat" find bar filters
+  messages and the toolbar shows `<pos>/<total>` with **prev/next** buttons that
+  scroll the current match into view (wraps around).
 
 ## 3. Group management (done)
 

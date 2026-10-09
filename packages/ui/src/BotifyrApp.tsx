@@ -664,6 +664,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [showAudit, setShowAudit] = useState(false);
   const [findOpen, setFindOpen] = useState(false);
   const [findQuery, setFindQuery] = useState("");
+  const [findPos, setFindPos] = useState(0);
 
   const activeIdRef = useRef<string | null>(null);
   activeIdRef.current = activeSessionId;
@@ -3013,6 +3014,19 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       : activeSession.messages
     : [];
   const findMatches = findTerm ? visibleMessages.length : 0;
+
+  // Reset the match position whenever the query changes.
+  useEffect(() => {
+    setFindPos(0);
+  }, [findQuery]);
+
+  // Scroll the current match into view while searching within the open chat.
+  useEffect(() => {
+    if (!findOpen || !findTerm || findMatches === 0) return;
+    const nodes = document.querySelectorAll(".msg-user, .msg-assistant");
+    const node = nodes[Math.min(findPos, nodes.length - 1)];
+    node?.scrollIntoView({ block: "center" });
+  }, [findPos, findTerm, findOpen, findMatches]);
   const sessionTasks = Object.values(tasks).filter((t) => t.sessionId === activeSessionId);
   const liveTask =
     sessionTasks
@@ -4976,7 +4990,31 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                       onChange={(event) => setFindQuery(event.target.value)}
                       autoFocus
                     />
-                    {findQuery.trim() && <span className="thread-search-count">{findMatches}</span>}
+                    {findQuery.trim() && (
+                      <span className="thread-search-count">
+                        {findMatches ? `${findPos + 1}/${findMatches}` : 0}
+                      </span>
+                    )}
+                    {findMatches > 0 && (
+                      <>
+                        <button
+                          className="icon-btn sm"
+                          type="button"
+                          aria-label="Previous match"
+                          onClick={() => setFindPos((pos) => (pos - 1 + findMatches) % findMatches)}
+                        >
+                          <ChevronIcon size={13} />
+                        </button>
+                        <button
+                          className="icon-btn sm"
+                          type="button"
+                          aria-label="Next match"
+                          onClick={() => setFindPos((pos) => (pos + 1) % findMatches)}
+                        >
+                          <ChevronIcon size={13} />
+                        </button>
+                      </>
+                    )}
                     <button
                       className="icon-btn sm"
                       type="button"

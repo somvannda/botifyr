@@ -621,6 +621,33 @@ function PageView({
     }
   }
 
+  function exportInsights() {
+    if (!insights) return;
+    const rows: string[][] = [
+      ["Metric", "Value"],
+      ["Followers", String(insights.followers)],
+      ["Posts", String(insights.posts)],
+      ["Reactions", String(insights.reactions)],
+      ["Comments", String(insights.comments)],
+      ["Shares", String(insights.shares)],
+      [],
+      ["Top post", "Engagement"],
+      ...insights.topPosts.map((post) => [
+        (post.body || "(photo)").replace(/\s+/g, " ").slice(0, 80),
+        String(post.engagement),
+      ]),
+    ];
+    const csv = rows
+      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `page-${page?.handle ?? "insights"}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
   async function openInsights() {
     if (!page) return;
     setInsightsOpen(true);
@@ -909,6 +936,9 @@ function PageView({
               </>
             )}
             <div className="page-settings-actions">
+              <button type="button" className="ghost small" onClick={exportInsights}>
+                Export CSV
+              </button>
               <button type="button" className="ghost small" onClick={() => setInsightsOpen(false)}>
                 Close
               </button>
