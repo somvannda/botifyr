@@ -9230,19 +9230,13 @@ body {
   color: var(--muted);
 }
 
-/* Separator between the destination and audience groups in the compact row. */
-.feed-composer-divider {
-  align-self: stretch;
-  width: 1px;
-  min-height: 18px;
-  margin: 0 var(--space-1);
-  background: var(--border);
-}
-
-/* Keep the schedule picker to its natural width so the meta row stays one line. */
-.feed-composer-schedule {
-  flex: 0 0 auto;
-  max-width: 210px;
+/* Advanced composer options (destination / audience / schedule) are disclosed on demand. */
+.feed-composer-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-top: 1px dashed var(--border);
 }
 
 .feed-composer-as select {
@@ -10326,8 +10320,6 @@ a.feed-follow-btn {
 
 /* Composer reliability surfaces (docs/composer-implementation-plan.md) */
 .feed-composer-destination {
-  flex: 1 1 140px;
-  min-width: 0;
   font-size: var(--text-xs);
   font-weight: 600;
   color: var(--muted);

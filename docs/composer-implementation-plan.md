@@ -121,10 +121,13 @@
   and is not duplicated; the E2E publish test checks the action bar.
 
 ### W18 — Composer horizontal compaction (fourth pass) · Done
-- The **Post as** and **Audience + schedule** rows are merged into a single
-  horizontal row (`.feed-composer-as` with a `.feed-composer-divider`), reducing
-  the composer from four stacked rows to three. Delegated by the Feed Experience
-  Lead (`docs/feed-page-redesign-report.md`).
+- Delegated by the Feed Experience Lead (`docs/feed-page-redesign-report.md`).
+  The initial merge folded destination/audience/schedule into one row; the final
+  reconciled design (adopting the concurrent `agent/feed-composer-ux` work)
+  instead hides them behind an **Options** disclosure so the composer defaults to
+  two rows, with the destination summary always visible. `Options` is a
+  `GearIcon` toggle with `aria-expanded`/`aria-controls`; the schedule gets its
+  own labelled row inside the panel.
 
 ### Backlog
 - Collapsed composer state (further than compaction); `listScheduled` management

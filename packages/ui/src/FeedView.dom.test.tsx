@@ -224,6 +224,7 @@ describe("FeedView action hierarchy", () => {
   it("gives the composer controls accessible names (FEED-9)", async () => {
     render(<FeedView client={makeClient([makePost()])} cloudUrl="http://cloud" viewerId="viewer-1" />);
     await screen.findByText("A quiet feed is a happy feed.");
+    fireEvent.click(screen.getByRole("button", { name: "Options" }));
     expect(screen.getByRole("combobox", { name: "Post as" })).toBeTruthy();
     expect(screen.getByRole("combobox", { name: "Audience" })).toBeTruthy();
   });
@@ -1543,9 +1544,7 @@ describe("Post interactions", () => {
       />,
     );
     await screen.findByText("A quiet feed is a happy feed.");
-    await waitFor(() =>
-      expect(container.querySelector("article.feed-post.feed-post-focus")).toBeTruthy(),
-    );
+    await waitFor(() => expect(container.querySelector("article.feed-post.feed-post-focus")).toBeTruthy());
   });
 
   it("opens a person profile from an @mention (POST-14)", async () => {

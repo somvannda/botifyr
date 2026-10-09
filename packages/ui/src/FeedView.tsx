@@ -9,6 +9,7 @@ import {
   CubeIcon,
   ForwardIcon,
   FullscreenIcon,
+  GearIcon,
   HomeIcon,
   MenuIcon,
   MessageIcon,
@@ -3980,6 +3981,8 @@ export function FeedView({
   );
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [moodOpen, setMoodOpen] = useState(false);
+  /** Advanced composer options (destination, audience, schedule) are hidden until asked for. */
+  const [optionsOpen, setOptionsOpen] = useState(false);
   const [audience, setAudience] = useState<"public" | "friends" | "only_me">("friends");
   const [scheduledAt, setScheduledAt] = useState("");
   const [album, setAlbum] = useState("");
@@ -4773,60 +4776,74 @@ export function FeedView({
               onChange={(event) => setAlbum(event.target.value)}
             />
           )}
-          {/* Compaction: destination, audience and schedule share one horizontal
-              row instead of stacking, so the composer stays short. */}
-          <div className="feed-composer-as">
-            <select aria-label="Post as" value={postAs} onChange={(event) => setPostAs(event.target.value)}>
-              <option value="">You</option>
-              {pages.map((page) => (
-                <option key={page.id} value={page.id}>
-                  {page.name}
-                </option>
-              ))}
-            </select>
-            {creatingPage ? (
-              <>
+          {/* Compaction: advanced options stay hidden until asked for, so the
+              composer defaults to two rows. */}
+          {optionsOpen && (
+            <div id="feed-composer-options" className="feed-composer-options">
+              <div className="feed-composer-as">
+                <span>Post as</span>
+                <select
+                  aria-label="Post as"
+                  value={postAs}
+                  onChange={(event) => setPostAs(event.target.value)}
+                >
+                  <option value="">You</option>
+                  {pages.map((page) => (
+                    <option key={page.id} value={page.id}>
+                      {page.name}
+                    </option>
+                  ))}
+                </select>
+                {creatingPage ? (
+                  <>
+                    <input
+                      className="feed-composer-as-input"
+                      placeholder="New Page name"
+                      value={newPageName}
+                      autoFocus
+                      onChange={(event) => setNewPageName(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          void createPage();
+                        }
+                      }}
+                    />
+                    <button type="button" className="feed-composer-tool" onClick={() => void createPage()}>
+                      Create
+                    </button>
+                  </>
+                ) : (
+                  <button type="button" className="feed-composer-tool" onClick={() => setCreatingPage(true)}>
+                    + New Page
+                  </button>
+                )}
+              </div>
+              <div className="feed-composer-as">
+                <span>Audience</span>
+                <select
+                  aria-label="Audience"
+                  value={audience}
+                  onChange={(event) => setAudience(event.target.value as "public" | "friends" | "only_me")}
+                >
+                  <option value="public">Public</option>
+                  <option value="friends">Friends</option>
+                  <option value="only_me">Only me</option>
+                </select>
+              </div>
+              <div className="feed-composer-as">
+                <span>Schedule</span>
                 <input
+                  type="datetime-local"
                   className="feed-composer-as-input"
-                  placeholder="New Page name"
-                  value={newPageName}
-                  autoFocus
-                  onChange={(event) => setNewPageName(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      void createPage();
-                    }
-                  }}
+                  value={scheduledAt}
+                  onChange={(event) => setScheduledAt(event.target.value)}
+                  title="Schedule for later"
+                  aria-label="Schedule for later"
                 />
-                <button type="button" className="feed-composer-tool" onClick={() => void createPage()}>
-                  Create
-                </button>
-              </>
-            ) : (
-              <button type="button" className="feed-composer-tool" onClick={() => setCreatingPage(true)}>
-                + New Page
-              </button>
-            )}
-            <span className="feed-composer-divider" aria-hidden="true" />
-            <select
-              aria-label="Audience"
-              value={audience}
-              onChange={(event) => setAudience(event.target.value as "public" | "friends" | "only_me")}
-            >
-              <option value="public">Public</option>
-              <option value="friends">Friends</option>
-              <option value="only_me">Only me</option>
-            </select>
-            <input
-              type="datetime-local"
-              className="feed-composer-as-input feed-composer-schedule"
-              value={scheduledAt}
-              onChange={(event) => setScheduledAt(event.target.value)}
-              title="Schedule for later"
-              aria-label="Schedule for later"
-            />
-          </div>
+              </div>
+            </div>
+          )}
           {pollOpen && (
             <div className="feed-poll-editor">
               {pollOptions.map((option, index) => (
@@ -4883,14 +4900,23 @@ export function FeedView({
               {notice}
             </div>
           )}
+          <span className="feed-composer-destination">
+            {postAs
+              ? `Posting as ${pages.find((page) => page.id === postAs)?.name ?? "Page"}`
+              : "Posting to your profile"}
+            {" · "}
+            {audience === "public" ? "Public" : audience === "only_me" ? "Only me" : "Friends"}
+          </span>
           <div className="feed-composer-actions">
-            <span className="feed-composer-destination">
-              {postAs
-                ? `Posting as ${pages.find((page) => page.id === postAs)?.name ?? "Page"}`
-                : "Posting to your profile"}
-              {" · "}
-              {audience === "public" ? "Public" : audience === "only_me" ? "Only me" : "Friends"}
-            </span>
+            <button
+              type="button"
+              className={`feed-composer-tool${optionsOpen ? " active" : ""}`}
+              aria-expanded={optionsOpen}
+              aria-controls="feed-composer-options"
+              onClick={() => setOptionsOpen((value) => !value)}
+            >
+              <GearIcon size={16} /> Options
+            </button>
             <button type="button" className="feed-composer-tool" onClick={() => fileRef.current?.click()}>
               <CameraIcon size={16} /> Photo
             </button>
