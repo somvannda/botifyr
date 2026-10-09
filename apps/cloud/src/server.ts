@@ -1110,6 +1110,42 @@ export async function buildServer(options: ServerOptions) {
     return bot;
   }
 
+  /**
+   * A bot can outlive its thread: a partial store reset, a stray conversation
+   * delete, or an interrupted write can leave a `bot` row whose `sessionId` has
+   * no matching `sessions` row. The client then selects a phantom session, shows
+   * "session not found", and every message 404s before reaching the model.
+   * Recreate the missing empty thread so the bot stays usable. Returns the
+   * sessions created so the caller can include them in the same response.
+   */
+  async function healOrphanBotSessions(userId: string, sessions: Session[]): Promise<Session[]> {
+    const bots = await store.listBots(userId);
+    if (bots.length === 0) return [];
+    const known = new Set(sessions.map((session) => session.id));
+    const created: Session[] = [];
+    for (const bot of bots) {
+      if (known.has(bot.sessionId)) continue;
+      const session: Session = {
+        id: bot.sessionId,
+        userId,
+        title: bot.name,
+        messages: [],
+        createdAt: bot.createdAt ?? new Date().toISOString(),
+        botId: bot.id,
+      };
+      try {
+        await store.createSession(session);
+      } catch {
+        // The id is already taken (unexpected owner): never surface a session we
+        // did not create, since the client's ownership check would reject it.
+        continue;
+      }
+      rememberSession(session.id, userId);
+      created.push(session);
+    }
+    return created;
+  }
+
   /* ------------------------------------------------------------------------ */
   /* Public                                                                   */
   /* ------------------------------------------------------------------------ */
@@ -3489,7 +3525,12 @@ export async function buildServer(options: ServerOptions) {
   });
 
   app.get("/v1/sessions", { preHandler: requireAuth }, async (request) => {
-    return store.listSessions(request.userId as string);
+    const userId = request.userId as string;
+    const sessions = await store.listSessions(userId);
+    // Self-heal: make sure every bot has a thread before handing the list to the
+    // client, so a bot whose session went missing can't strand the UI.
+    const healed = await healOrphanBotSessions(userId, sessions);
+    return healed.length > 0 ? [...sessions, ...healed] : sessions;
   });
 
   app.get<{ Params: { id: string } }>(
