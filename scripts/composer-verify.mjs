@@ -142,6 +142,8 @@ console.log(`saved ${OUT}/composer-desktop.png`);
 
 // Past-schedule guard.
 await page.getByLabel("Post text").fill("schedule guard");
+await page.getByRole("button", { name: "Options" }).click();
+await page.getByRole("button", { name: "Schedule for later" }).click();
 await page.locator('input[type="datetime-local"]').fill("2020-01-01T10:00");
 await page.getByRole("button", { name: "Schedule" }).click();
 const guard = await page

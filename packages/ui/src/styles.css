@@ -9258,6 +9258,15 @@ body {
   border-color: var(--accent);
 }
 
+/* Advanced composer options (destination / audience / schedule) are disclosed on demand. */
+.feed-composer-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-top: 1px dashed var(--border);
+}
+
 /* @mention autocomplete (docs/feed-next.md §FR-11) */
 .mention-menu {
   display: flex;
@@ -10579,8 +10588,6 @@ a.feed-follow-btn {
 
 /* Composer reliability surfaces (docs/composer-implementation-plan.md) */
 .feed-composer-destination {
-  flex: 1 1 140px;
-  min-width: 0;
   font-size: var(--text-xs);
   font-weight: 600;
   color: var(--muted);
@@ -10822,10 +10829,13 @@ a.feed-follow-btn {
   background: var(--danger-soft);
 }
 
-/* FEED-5: keep the Feed comfortable on narrow viewports. */
-.feed-topbar .mobile-nav-btn {
-  align-self: center;
-  flex: none;
+/* FEED-5: keep the Feed comfortable on narrow viewports. The floating toggle
+   replaces the Feed top bar (removed) on narrow screens. */
+.feed-mobile-nav {
+  position: fixed;
+  top: calc(var(--titlebar, 0px) + var(--space-3));
+  left: var(--space-3);
+  z-index: 120;
 }
 
 /* Feed at phone widths: match the shell's drawer breakpoint. */
