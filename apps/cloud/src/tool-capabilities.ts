@@ -8,6 +8,12 @@ const TOOL_CAPABILITIES: Array<[RegExp, string]> = [
   [/^social\.read_insights$/, "social.read_insights"],
   [/^social\.publish$/, "social.publish"],
   [/^social\.reply$/, "social.reply"],
+  // Botifyr's own Feed (docs/feed.md): reads are free; publishing, replying,
+  // joining, and moderating reuse the social capabilities (approval-gated).
+  [/^feed\.(read|insights)$/, "social.read_insights"],
+  [/^feed\.thread$/, "social.reply"],
+  [/^feed\.(post|reel|engage|moderate)$/, "social.publish"],
+  [/^(group|page)\./, "social.publish"],
   [/^email\./, "email.send"],
   [/^ads\.manage$/, "ads.manage"],
   [/^library\.(read|list)$/, "files.read"],

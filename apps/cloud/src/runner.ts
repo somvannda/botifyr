@@ -26,6 +26,7 @@ import { createSocialTools, notConnectedSocial } from "./social-tools.js";
 import { createTelegramSocialClient } from "./social-telegram.js";
 import { createPostizSocialClient } from "./social-postiz.js";
 import { createDesignTools } from "./design-tools.js";
+import { createFeedTools } from "./feed-tools.js";
 import { createEmailTools, resendSender } from "./email-tools.js";
 import { createEscalationTools } from "./escalation-tools.js";
 import { createHireTools } from "./hire-tools.js";
@@ -428,6 +429,12 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
     ? (await store.listWorkspaces(userId).catch(() => [])).find((entry) => entry.name === authorBot.workspace)
     : undefined;
   if (company?.dna) companyBrief = companyContext(company.dna);
+  // Feed hands: opt-in via the "feed" skill, so an operator teaches the bot
+  // about Botifyr's social surface before it can act on it. Reads are free;
+  // publish/thread/join/moderate are approval-gated (docs/feed.md).
+  if (authorBot?.skills?.includes("feed")) {
+    tools.push(...createFeedTools(store, { userId, botId: authorBot.id }));
+  }
   if (company) {
     const budget = await store.getWorkspaceBudget(company.id).catch(() => null);
     if (isBudgetExhausted(budget)) {
