@@ -5039,12 +5039,18 @@ export function FeedView({
           type="button"
           className={`bottom-nav-item${tab === "pages" ? "" : " active"}`}
           aria-current={tab === "pages" ? undefined : "page"}
+          aria-label="Feed home"
           onClick={() => setTab("all")}
         >
           <HomeIcon size={20} />
           <span>Feed</span>
         </button>
-        <button type="button" className="bottom-nav-item" onClick={() => setReelsOpen(true)}>
+        <button
+          type="button"
+          className="bottom-nav-item"
+          aria-label="Open Reels"
+          onClick={() => setReelsOpen(true)}
+        >
           <PlayIcon size={20} />
           <span>Reels</span>
         </button>
@@ -5052,18 +5058,25 @@ export function FeedView({
           type="button"
           className={`bottom-nav-item${tab === "pages" ? " active" : ""}`}
           aria-current={tab === "pages" ? "page" : undefined}
+          aria-label="Open Pages"
           onClick={() => setTab("pages")}
         >
           <PanelIcon size={20} />
           <span>Pages</span>
         </button>
-        <button type="button" className="bottom-nav-item" onClick={() => setGroupsOpen(true)}>
+        <button
+          type="button"
+          className="bottom-nav-item"
+          aria-label="Open Groups"
+          onClick={() => setGroupsOpen(true)}
+        >
           <UsersIcon size={20} />
           <span>Groups</span>
         </button>
         <button
           type="button"
           className="bottom-nav-item"
+          aria-label="Open Marketplace"
           onClick={() => onOpenMarketplace?.()}
           disabled={!onOpenMarketplace}
         >

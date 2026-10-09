@@ -39,7 +39,7 @@ styles were changed.
 | Post survives first Delete click | **false** | **true** |
 | Horizontal overflow at 390px | false | false |
 | Failed reaction rolls back + inline error | (silent) | **true** ("Couldn't update your reaction…") |
-| Video post renders `<video aria-label>` | n/a | **0 (backend gap — see caveat)** |
+| Video post renders `<video aria-label>` | n/a | **true** (`aria-label="Video"`, injected feed) |
 | Unexpected console errors | [] | [] (1 intentional aborted request) |
 
 ## Files changed (this assignment)
@@ -121,13 +121,13 @@ scope**:
   `removeAttachment` around lines 3625–3756) — **not** Post code. `@botifyr/ui`
   typechecks clean. Do not "fix" the composer without coordinating with its
   owner; it is expected to be cleaned up by that workstream.
-- **Live video rendering not verified (backend/container):** an uploaded
-  `.mp4` came back with an empty `videos[]` from the running `botifyr-cloud`
-  (`videoPosts: 0`), even though `feedPostOf` in source splits `videos` by
-  extension. The cloud container was being **rebuilt concurrently** (`server.ts`
-  modified after the container start), so it is likely stale. The UI path is
-  covered by a unit test (`<video aria-label>`); re-verify live after the cloud
-  settles.
+- **Live video rendering:** the running `botifyr-cloud` returned an empty
+  `videos[]` for an uploaded `.mp4` (likely a stale container — it was rebuilt
+  concurrently), so the audit now **injects** a `videos[]` entry into the feed
+  response to exercise the UI end-to-end. That verifies the component
+  (`videoPosts: 1`, `aria-label="Video"`, `card-video.png`); the **backend
+  classification of uploaded videos remains unverified** and should be
+  re-checked after a clean cloud rebuild.
 
 ## Exact next actions
 

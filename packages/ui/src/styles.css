@@ -189,7 +189,7 @@ body {
 }
 
 .feed-bottom-nav .bottom-nav-item:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: -3px;
 }
 
@@ -1149,7 +1149,7 @@ body {
 }
 
 .hq-icon-btn:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
 
@@ -2115,7 +2115,7 @@ body {
 }
 
 .icon-btn:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
 
@@ -8295,7 +8295,7 @@ body {
 }
 
 .reel-sheet-input:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
 
@@ -9470,7 +9470,7 @@ a.feed-follow-btn {
 }
 
 .feed-image-img:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -10142,7 +10142,7 @@ a.feed-follow-btn {
 .feed input:focus-visible,
 .feed textarea:focus-visible,
 .feed select:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 

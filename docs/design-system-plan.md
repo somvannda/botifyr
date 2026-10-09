@@ -10,11 +10,20 @@ foundation: semantic tokens the Feed shares with the rest of the app, a light
 theme that meets WCAG AA, and documented component conventions — without
 forking the UI or changing brand identity.
 
-## 2. Principles applied
+## 2. Principles → decisions
 
-Consistency · Clarity · Hierarchy · Simplicity · Accessibility · Responsiveness ·
-Reusability · Maintainability · Performance · Product identity. See the audit for
-how each maps to a finding.
+| Principle | How this work honours it |
+| --- | --- |
+| Consistency | One red role (`--danger*`), one accent-tint set, one shape scale, one focus ring. |
+| Clarity | Solid buttons use `--accent-solid`/`--danger-solid` so labels stay legible. |
+| Visual hierarchy | Existing Feed hierarchy kept; only token plumbing changed. |
+| Simplicity | No new dependencies; tints derived with `color-mix` instead of duplicated rgba. |
+| Accessibility | Light theme meets AA; axe-clean Feed; visible `--focus-ring`; reduced motion. |
+| Responsiveness | Verified at 1440/900/390 widths (screenshots); no layout change. |
+| Reusability | Semantic tokens consumed by Feed, Post, Pages, Stories, Reels, Composer. |
+| Maintainability | Values live in `:root`/`[data-theme=light]`; pinned by `designSystem.test.ts`. |
+| Performance | CSS-only; `color-mix` computed once; no extra JS. |
+| Product identity | Brand hues preserved (indigo/red) — darkened only where AA required. |
 
 ## 3. Research (Oct 2026)
 

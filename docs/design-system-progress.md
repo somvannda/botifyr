@@ -46,6 +46,8 @@ system. Audit → plan (`docs/design-system-plan.md`), components
    `.reel-sheet-send`, `.feed-new-banner`, `.story-own-add`, `.story-reply-send`).
    The Post button only fails AA when enabled, which the first axe pass missed.
 6. **Reduced motion** (DS-5) for the reaction picker pop/scale.
+7. **Semantic focus ring:** all six keyboard-focus outlines now use
+   `--focus-ring` (was `var(--accent)`), so the ring is a single token.
 7. **Shape scale adopted app-wide** (DS-T5): 275 `border-radius` declarations
    now use `--radius-*` (value-preserving). A few legacy one-offs remain.
 8. **Automated a11y (DS-T11):** axe-core on `.feed` reports **0 violations** in
@@ -53,7 +55,7 @@ system. Audit → plan (`docs/design-system-plan.md`), components
    accent-on-tint contrast (→ `#3d52c2`), a `label-title-only` finding
    (`aria-label="Schedule for later"` in `FeedView.tsx`), and white-on-accent
    solid buttons (`--accent-solid`).
-9. **Guard test** `packages/ui/src/designSystem.test.ts` (26 assertions).
+9. **Guard test** `packages/ui/src/designSystem.test.ts` (27 assertions).
 10. **Screenshots** for dark/light Feed (desktop + mobile) and the confirm dialog.
 
 ## Files modified / created
@@ -86,9 +88,9 @@ system. Audit → plan (`docs/design-system-plan.md`), components
 
 | Command | Result |
 | --- | --- |
-| `npx vitest run packages/ui/src/designSystem.test.ts` | **26 passed** |
-| `npx vitest run packages/ui/src` | **147 passed** (12 files) |
-| `npm test` | **429 passed** (61 files) |
+| `npx vitest run packages/ui/src/designSystem.test.ts` | **27 passed** |
+| `npx vitest run packages/ui/src/designSystem.test.ts parity.test.ts smoke.dom.test.tsx` | **31 passed** |
+| `npm test` | **420 passed, 16 failed** — the 16 are `FeedView.dom.test.tsx` Reels tests from the concurrent workstream (mid-edit); last full-green run was 429 |
 | `npm run typecheck -w @botifyr/ui` | **clean** |
 | `npm run lint` | **0 errors** |
 | `npx prettier --check` (new files) | clean |
@@ -108,8 +110,10 @@ system. Audit → plan (`docs/design-system-plan.md`), components
 
 ## Blockers / caveats
 
-- Concurrent workstream edits `FeedView.tsx`/`styles.css`/`server.ts`; the full
-  gate is green as of the last run (`npm test` 429 passed).
+- Concurrent workstream is actively editing `FeedView.tsx`/`styles.css`; the full
+  gate was green (`npm test` 429 passed) but `FeedView.dom.test.tsx` (their
+  Reels tests) is currently mid-edit and flapping. My files
+  (`designSystem`/`parity`/`smoke`) stay green.
 - Fresh Playwright contexts no longer authenticate (the app now requires device
   keys), so `scripts/design-system-screenshots.mjs` re-capture failed; the saved
   screenshots predate the final light-accent tweak (hue-only change).

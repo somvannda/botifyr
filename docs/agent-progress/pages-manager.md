@@ -6,11 +6,11 @@
 
 ## Current status
 
-**Complete and green.** Pages tests 8/8; cloud Pages tests 9/9; visual E2E
-captured; whole-repo gate green (`typecheck` 0, `lint` 0, `npm test` 427/427).
-Two live-only bugs fixed (PG-18 Postgres post-as-Page, PG-19 mobile clipping),
-plus a coordination fix for media consumers after another manager's
-`listPostMedia` interface change.
+**Complete and fully green.** Pages tests 8/8; cloud Pages tests 9/9; E2E 4/4;
+visual E2E captured; whole-repo gate green (`typecheck` 0, `lint` 0,
+`npm test` 436/436). Three live-only bugs fixed (PG-18 Postgres post-as-Page,
+PG-19 mobile clipping, PG-20 role-inaccurate controls), plus a coordination fix
+for media consumers after another manager's `listPostMedia` interface change.
 
 ## Problem statement
 
@@ -83,10 +83,11 @@ supported sections — not core functionality. See the audit for the ranked list
 
 ### Final full gate (actual)
 
+- `npm test` → **436 passed / 436** (62 files). ✅
 - `npm run typecheck` (all workspaces) → **exit 0**. ✅
-- `npm test` → **427 passed / 427** (61 files). ✅
-- `npm run lint` → **exit 0**, 0 problems. ✅
+- `npm run lint` → **exit 0**, 0 errors. ✅
 - `npx vitest run apps/cloud/src/server.pages.test.ts` → **9 passed / 9**. ✅
+- Pages component tests → **8 passed / 8** (incl. role coverage).
 - `prettier --check` on Pages-authored files → **clean**. (`FeedView.tsx` is
   shared and concurrently edited; its remaining churn is in other managers'
   regions, not the `PageView` code.)
@@ -96,12 +97,12 @@ supported sections — not core functionality. See the audit for the ranked list
   → **4 passed**: discover/open, identity + posts, Posts/About nav, owner
   controls, mobile visibility. ✅
 
-> The repo was churning under concurrent edits during this session: several
-> gate runs went transiently red from other managers' in-flight changes
-> (Story viewer, Composer, design tokens, `listPostMedia` interface). Those
-> settled or were completed; the run above is the settled state. If the gate
-> goes red again, re-run `npm run typecheck && npm run lint && npm test` — the
-> failures will be outside Pages unless stated otherwise.
+> The repo churned heavily under concurrent edits during this session: gate runs
+> went transiently red from other managers' in-flight changes (Story viewer,
+> Composer, design tokens, Reels suite, `listPostMedia` interface,
+> Marketplace/Discovery). All settled; the numbers above are the settled state.
+> If the gate goes red again, re-run `npm run typecheck && npm run lint && npm test`
+> — failures will be outside Pages unless stated otherwise.
 
 
 

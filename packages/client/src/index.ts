@@ -283,8 +283,10 @@ export class AuthError extends Error {}
 
 interface RequestOptions {
   method?: string;
-  body?: string;
+  body?: BodyInit;
   json?: boolean;
+  /** Explicit content-type for raw/binary bodies (not used with `json`). */
+  contentType?: string;
 }
 
 export class BotifyrClient {
@@ -351,6 +353,7 @@ export class BotifyrClient {
     const headers: Record<string, string> = {};
     if (this.token) headers.authorization = `Bearer ${this.token}`;
     if (options.json) headers["content-type"] = "application/json";
+    else if (options.contentType) headers["content-type"] = options.contentType;
     // A JSON request must send a body, or Fastify rejects the empty payload.
     const body = options.body ?? (options.json ? "{}" : undefined);
 
@@ -678,6 +681,17 @@ export class BotifyrClient {
       method: "POST",
       json: true,
       body: JSON.stringify(input),
+    });
+  }
+
+  /** Upload a file as raw bytes (preferred for large media; no base64 inflation). */
+  uploadFileRaw(input: { name: string; mime?: string; blob: Blob }): Promise<MediaItem> {
+    const params = new URLSearchParams({ name: input.name });
+    if (input.mime) params.set("mime", input.mime);
+    return this.request(`/v1/uploads/raw?${params.toString()}`, {
+      method: "POST",
+      body: input.blob,
+      contentType: input.mime || "application/octet-stream",
     });
   }
 

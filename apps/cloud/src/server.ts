@@ -32,7 +32,7 @@ import type {
 } from "@botifyr/shared";
 import { DEPARTMENTS } from "@botifyr/shared";
 import type { LocalChannel } from "@botifyr/channels";
-import { emit, subscribe } from "./events.js";
+import { emit, feedEventRecipient, subscribe } from "./events.js";
 import {
   getComputerSandbox,
   setComputerSandbox,
@@ -525,6 +525,14 @@ export async function buildServer(options: ServerOptions) {
     },
   );
 
+  // Raw binary bodies for large media uploads (`POST /v1/uploads/raw`), which
+  // avoid the ~33% base64 inflation of the JSON endpoint.
+  app.addContentTypeParser(
+    "application/octet-stream",
+    { parseAs: "buffer" },
+    (_request, body, done) => done(null, body),
+  );
+
   // The desktop app (and website) call this API cross-origin, so allow the
   // full set of verbs we actually use — the default omits PUT/PATCH/DELETE,
   // which silently broke Edit/Delete bot with a CORS "Failed to fetch".
@@ -686,9 +694,8 @@ export async function buildServer(options: ServerOptions) {
       case "feed.like":
       case "feed.comment":
       case "feed.share":
-        return event.toUserId === userId;
       case "feed.post":
-        return event.authorId === userId;
+        return feedEventRecipient(event) === userId;
       default:
         return false;
     }
@@ -4490,12 +4497,14 @@ export async function buildServer(options: ServerOptions) {
     const mediaId = typeof request.body?.mediaId === "string" ? request.body.mediaId.trim() : "";
     const extra = Array.isArray(request.body?.mediaIds) ? request.body.mediaIds : [];
     const rawAlts = Array.isArray(request.body?.alts) ? request.body.alts : [];
-    // Dedupe/filter while keeping each media id paired with its alt text, so a
-    // dropped duplicate doesn't shift the alt of the next attachment.
+    // `alts` is index-aligned with the media sequence. Only include the legacy
+    // single `mediaId` when it is actually present, so an empty value can't
+    // shift every alt text by one.
+    const mediaSequence = mediaId ? [mediaId, ...extra] : extra;
     const provided: string[] = [];
     const mediaAlts: Array<string | undefined> = [];
     const seenMedia = new Set<string>();
-    [mediaId, ...extra].forEach((raw, index) => {
+    mediaSequence.forEach((raw, index) => {
       const id = typeof raw === "string" ? raw.trim() : "";
       if (!id || seenMedia.has(id) || provided.length >= 4) return;
       seenMedia.add(id);
@@ -5808,44 +5817,69 @@ export async function buildServer(options: ServerOptions) {
     },
   );
 
-  /* Upload a local file so it can be attached to a conversation. Stored in the
-     downloads volume under its own folder, then shared via the signed-link flow. */
-  app.post<{ Body: { name?: string; mime?: string; data?: string } }>(
-    "/v1/uploads",
-    { preHandler: requireAuth, bodyLimit: 25 * 1024 * 1024 },
-    async (request, reply) => {
-      const userId = request.userId as string;
-      const rawName = (request.body?.name ?? "").trim();
-      const data = request.body?.data ?? "";
-      if (!rawName || !data) return reply.code(400).send({ error: "name and data are required" });
-      const base64 = data.includes(",") ? data.slice(data.indexOf(",") + 1) : data;
-      const buffer = Buffer.from(base64, "base64");
-      if (buffer.length === 0) return reply.code(400).send({ error: "empty file" });
-      if (buffer.length > 15 * 1024 * 1024) {
-        return reply.code(413).send({ error: "file is too large (max 15MB)" });
+  /* Maximum decoded size accepted per upload. The JSON endpoint is bounded by
+     its base64 body limit; the raw endpoint can carry more. */
+  const MAX_BASE64_UPLOAD = 15 * 1024 * 1024;
+  const MAX_RAW_UPLOAD = 50 * 1024 * 1024;
+
+  /** Strip path traversal / unsafe characters from a client-supplied filename. */
+  const safeUploadName = (rawName: string): string =>
+    basename(rawName)
+      .replace(/[^\w.\- ()]+/g, "_")
+      .slice(0, 120) || "file";
+
+  /** Write bytes to the downloads volume and record them in the media manifest.
+   *  Shared by the base64 and raw-binary upload routes. */
+  async function persistUpload(
+    userId: string,
+    rawName: string,
+    mime: string,
+    buffer: Buffer,
+    maxBytes: number,
+  ): Promise<
+    | {
+        ok: true;
+        media: {
+          id: string;
+          taskId: string;
+          name: string;
+          size: number;
+          mime: string;
+          location: string;
+          createdAt: string;
+        };
       }
-      const safeName =
-        basename(rawName)
-          .replace(/[^\w.\- ()]+/g, "_")
-          .slice(0, 120) || "file";
-      const uploadId = randomUUID();
-      const dir = join(downloadsRoot, uploadId);
-      await mkdir(dir, { recursive: true });
-      await writeFile(join(dir, safeName), buffer);
-      const now = new Date().toISOString();
-      const record = {
-        id: `${uploadId}:${safeName}`,
-        userId,
-        taskId: uploadId,
-        name: safeName,
-        size: buffer.length,
-        mime: (request.body?.mime ?? "").trim() || "application/octet-stream",
-        location: "server" as const,
-        createdAt: now,
-        updatedAt: now,
+    | { ok: false; status: number; error: string }
+  > {
+    if (!rawName.trim() || buffer.length === 0) return { ok: false, status: 400, error: "empty file" };
+    if (buffer.length > maxBytes) {
+      return {
+        ok: false,
+        status: 413,
+        error: `file is too large (max ${Math.round(maxBytes / 1024 / 1024)}MB)`,
       };
-      await store.upsertMedia(record);
-      return reply.code(201).send({
+    }
+    const name = safeUploadName(rawName);
+    const taskId = randomUUID();
+    const dir = join(downloadsRoot, taskId);
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, name), buffer);
+    const now = new Date().toISOString();
+    const record = {
+      id: `${taskId}:${name}`,
+      userId,
+      taskId,
+      name,
+      size: buffer.length,
+      mime: mime.trim() || "application/octet-stream",
+      location: "server" as const,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await store.upsertMedia(record);
+    return {
+      ok: true,
+      media: {
         id: record.id,
         taskId: record.taskId,
         name: record.name,
@@ -5853,7 +5887,51 @@ export async function buildServer(options: ServerOptions) {
         mime: record.mime,
         location: record.location,
         createdAt: record.createdAt,
-      });
+      },
+    };
+  }
+
+  /* Upload a local file so it can be attached to a conversation. Stored in the
+     downloads volume under its own folder, then shared via the signed-link flow. */
+  app.post<{ Body: { name?: string; mime?: string; data?: string } }>(
+    "/v1/uploads",
+    { preHandler: requireAuth, bodyLimit: 25 * 1024 * 1024 },
+    async (request, reply) => {
+      const rawName = (request.body?.name ?? "").trim();
+      const data = request.body?.data ?? "";
+      if (!rawName || !data) return reply.code(400).send({ error: "name and data are required" });
+      const base64 = data.includes(",") ? data.slice(data.indexOf(",") + 1) : data;
+      const result = await persistUpload(
+        request.userId as string,
+        rawName,
+        request.body?.mime ?? "",
+        Buffer.from(base64, "base64"),
+        MAX_BASE64_UPLOAD,
+      );
+      if (!result.ok) return reply.code(result.status).send({ error: result.error });
+      return reply.code(201).send(result.media);
+    },
+  );
+
+  /* Raw-binary upload for large media (the composer uses this). Sending the
+     bytes directly avoids base64's ~33% inflation, so larger files fit without
+     inflating the body limit. `name`/`mime` travel in the query string. */
+  app.post<{ Querystring: { name?: string; mime?: string } }>(
+    "/v1/uploads/raw",
+    { preHandler: requireAuth, bodyLimit: MAX_RAW_UPLOAD + 1024 * 1024 },
+    async (request, reply) => {
+      const buffer = Buffer.isBuffer(request.body)
+        ? request.body
+        : Buffer.from((request.body as string | undefined) ?? "");
+      const result = await persistUpload(
+        request.userId as string,
+        (request.query?.name ?? "").trim(),
+        request.query?.mime ?? "",
+        buffer,
+        MAX_RAW_UPLOAD,
+      );
+      if (!result.ok) return reply.code(result.status).send({ error: result.error });
+      return reply.code(201).send(result.media);
     },
   );
 

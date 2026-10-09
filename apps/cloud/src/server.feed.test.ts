@@ -463,6 +463,44 @@ describe("feed", () => {
     }
   });
 
+  it("stores and returns per-image alt text", async () => {
+    const previous = process.env.BOTIFYR_DOWNLOADS_DIR;
+    const dir = join(tmpdir(), `botifyr-alt-${randomUUID()}`);
+    process.env.BOTIFYR_DOWNLOADS_DIR = dir;
+    const { app, signUp, auth } = await setup();
+    try {
+      const alice = await signUp("alice-alt@example.com");
+      const upload = await app.inject({
+        method: "POST",
+        url: "/v1/uploads",
+        headers: auth(alice.token),
+        payload: { name: "sunset.png", mime: "image/png", data: PNG },
+      });
+      expect(upload.statusCode).toBe(201);
+      const mediaId = (upload.json() as { id: string }).id;
+
+      const created = await app.inject({
+        method: "POST",
+        url: "/v1/posts",
+        headers: auth(alice.token),
+        payload: { body: "golden hour", mediaIds: [mediaId], alts: ["A sunset over the sea"] },
+      });
+      expect(created.statusCode).toBe(201);
+      expect((created.json() as { imageAlts?: string[] }).imageAlts).toEqual(["A sunset over the sea"]);
+
+      const feed = await app.inject({ method: "GET", url: "/v1/feed", headers: auth(alice.token) });
+      const item = (feed.json() as { items: Array<{ body: string; imageAlts?: string[] }> }).items.find(
+        (entry) => entry.body === "golden hour",
+      );
+      expect(item?.imageAlts).toEqual(["A sunset over the sea"]);
+    } finally {
+      await app.close();
+      if (previous === undefined) delete process.env.BOTIFYR_DOWNLOADS_DIR;
+      else process.env.BOTIFYR_DOWNLOADS_DIR = previous;
+      await rm(dir, { recursive: true, force: true }).catch(() => {});
+    }
+  });
+
   it("creates a repost that links back to the original", async () => {
     const { app, store, signUp, auth, createPost } = await setup();
     const alice = await signUp("alice-repost@example.com");

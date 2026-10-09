@@ -109,6 +109,33 @@ describe("design tokens", () => {
       );
     }
   });
+
+  it("routes keyboard focus outlines through --focus-ring", () => {
+    expect(css).toContain("var(--focus-ring)");
+    expect(css).not.toMatch(/outline:\s*2px solid var\(--accent\)/);
+  });
+});
+
+describe("token values are pinned (visual-regression guard)", () => {
+  it("dark semantic colors", () => {
+    expect(dark["--bg"]).toBe("#0a0a0b");
+    expect(dark["--accent"]).toBe("#6d8bff");
+    expect(dark["--accent-2"]).toBe("#8f6dff");
+    expect(dark["--ok"]).toBe("#3fd18b");
+    expect(dark["--warn"]).toBe("#f2b544");
+    expect(dark["--danger"]).toBe("#ff6b6b");
+    expect(dark["--accent-solid"]).toBe("#5568e0");
+    expect(dark["--danger-solid"]).toBe("#c8324a");
+  });
+
+  it("light semantic colors", () => {
+    expect(light["--accent"]).toBe("#3d52c2");
+    expect(light["--accent-2"]).toBe("#6d4ad6");
+    expect(light["--ok"]).toBe("#0b7a44");
+    expect(light["--warn"]).toBe("#8a5a00");
+    expect(light["--danger"]).toBe("#c8324a");
+    expect(light["--muted"]).toBe("#616875");
+  });
 });
 
 describe("WCAG AA text contrast (both themes)", () => {

@@ -214,6 +214,24 @@ page.on("console", (msg) => {
 });
 page.on("pageerror", (err) => consoleErrors.push(`pageerror: ${err.message}`));
 
+// The dev cloud does not reliably classify uploaded videos, so inject a
+// `videos[]` entry to exercise the UI's <video> rendering + accessible name
+// end-to-end (the media path may 404, but the element must still render).
+let videoInjected = false;
+await page.route(/\/v1\/feed(\?|$)/, async (route) => {
+  const response = await route.fetch();
+  const json = await response.json().catch(() => null);
+  if (json?.items) {
+    for (const post of json.items) {
+      if (post.body === "A short clip from the trip.") {
+        post.videos = ["/v1/feed/image?t=audit-video"];
+        videoInjected = true;
+      }
+    }
+  }
+  await route.fulfill({ response, json });
+});
+
 await page.goto(APP, { waitUntil: "domcontentloaded" });
 await page.getByRole("tab", { name: "Feed" }).click();
 await page.locator(".feed-post").first().waitFor({ timeout: 20000 });
@@ -234,6 +252,7 @@ async function cardOf(text) {
 }
 
 const report = {};
+report.videoInjected = videoInjected;
 report.actionButtons = await page.locator(".feed-post").first().locator(".feed-actions button").count();
 report.actionLabels = await page
   .locator(".feed-post")
