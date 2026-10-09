@@ -1324,7 +1324,7 @@ describe("Post interactions", () => {
     const { container } = render(<FeedView client={client} cloudUrl="http://cloud" viewerId="viewer-1" />);
     await screen.findByText("A quiet feed is a happy feed.");
 
-    fireEvent.click(screen.getByRole("button", { name: "Like" }));
+    fireEvent.mouseEnter(screen.getByRole("button", { name: "Like" }));
     fireEvent.click(await screen.findByRole("button", { name: "Love" }));
 
     await waitFor(() => expect(container.querySelector(".feed-post-feedback.error")).toBeTruthy());
@@ -1883,5 +1883,22 @@ describe("Post share / reaction hover / repost layout (Agent 1)", () => {
     fireEvent.change(await screen.findByLabelText("Share audience"), { target: { value: "public" } });
     fireEvent.click(screen.getByRole("button", { name: "Share now" }));
     await waitFor(() => expect(repost).toHaveBeenCalledWith("post-1", undefined, "public"));
+  });
+});
+
+describe("Post quick-like (Agent 1)", () => {
+  it("likes on click and unlikes on a second click", async () => {
+    const reactPost = vi.fn().mockResolvedValue(undefined);
+    const unreactPost = vi.fn().mockResolvedValue(undefined);
+    const client = { ...makeClient([makePost()]), reactPost, unreactPost } as unknown as BotifyrClient;
+    const { container } = render(<FeedView client={client} cloudUrl="http://cloud" viewerId="viewer-1" />);
+    await screen.findByText("A quiet feed is a happy feed.");
+
+    const likeBtn = () => container.querySelector(".feed-actions .feed-action") as HTMLButtonElement;
+    fireEvent.click(likeBtn());
+    await waitFor(() => expect(reactPost).toHaveBeenCalledWith("post-1", "like"));
+
+    fireEvent.click(likeBtn());
+    await waitFor(() => expect(unreactPost).toHaveBeenCalledWith("post-1"));
   });
 });

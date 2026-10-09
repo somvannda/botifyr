@@ -1185,7 +1185,7 @@ function PostCard({
           ref={likeBtnRef}
           type="button"
           className={`feed-action${post.myReaction ? " active" : ""}`}
-          onClick={() => setPickOpen(true)}
+          onClick={() => void react("like")}
           onMouseEnter={openPicker}
           onMouseLeave={schedulePickerClose}
           aria-pressed={post.myReaction !== null}
