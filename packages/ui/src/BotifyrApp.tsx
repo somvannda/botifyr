@@ -1,9 +1,11 @@
 import { Fragment, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type {
+  CSSProperties,
   FormEvent,
   KeyboardEvent as ReactKeyboardEvent,
   MouseEvent as ReactMouseEvent,
+  PointerEvent as ReactPointerEvent,
   ReactNode,
   WheelEvent as ReactWheelEvent,
 } from "react";
@@ -412,6 +414,41 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [boardWorkspace, setBoardWorkspace] = useState<{ id: string; name: string } | null>(null);
   /** Company the Startup Workspace should focus (set by the sidebar board button). */
   const [startupFocusId, setStartupFocusId] = useState<string | null>(null);
+  /** Width of the docked chat column in the workspace split (drag to resize). */
+  const [chatPaneWidth, setChatPaneWidth] = useState<number>(() => {
+    try {
+      const saved = Number(localStorage.getItem("botifyr.chatPaneWidth"));
+      return Number.isFinite(saved) && saved >= 300 ? saved : 543;
+    } catch {
+      return 543;
+    }
+  });
+  const paneDragRef = useRef<{ startX: number; startWidth: number } | null>(null);
+
+  function onResizeStart(event: ReactPointerEvent<HTMLDivElement>) {
+    paneDragRef.current = { startX: event.clientX, startWidth: chatPaneWidth };
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // synthetic events have no active pointer; drag still works via move events
+    }
+  }
+  function onResizeMove(event: ReactPointerEvent<HTMLDivElement>) {
+    const drag = paneDragRef.current;
+    if (!drag) return;
+    const next = Math.min(960, Math.max(300, drag.startWidth - (event.clientX - drag.startX)));
+    setChatPaneWidth(next);
+  }
+  function onResizeEnd() {
+    if (paneDragRef.current) {
+      try {
+        localStorage.setItem("botifyr.chatPaneWidth", String(chatPaneWidth));
+      } catch {
+        // ignore
+      }
+    }
+    paneDragRef.current = null;
+  }
   // The Company HQ opens as a full main area by default; "Float" turns it into a
   // smaller, movable panel over the chat.
   const [, setHqFloating] = useState(false);
@@ -4671,7 +4708,14 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
         )}
       </aside>
 
-      <main className={`main${startupsActive ? " main-split" : ""}`}>
+      <main
+        className={`main${startupsActive ? " main-split" : ""}`}
+        style={
+          startupsActive
+            ? ({ "--chat-pane-width": `${chatPaneWidth}px` } as CSSProperties)
+            : undefined
+        }
+      >
         {actingPage && (
           <div className="acting-banner" role="status">
             <span className="acting-banner-emoji" aria-hidden="true">
@@ -4715,6 +4759,18 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
             onOpenOffice={openOffice}
             renderOfficeEmbedded={renderOfficeEmbedded}
             onCreated={handleCompanyCreated}
+          />
+        )}
+        {startupsActive && (
+          <div
+            className="pane-resizer"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize chat panel"
+            onPointerDown={onResizeStart}
+            onPointerMove={onResizeMove}
+            onPointerUp={onResizeEnd}
+            onPointerCancel={onResizeEnd}
           />
         )}
         {(!feedActive || showNewChat) && (
