@@ -274,6 +274,13 @@ body {
   color: var(--muted);
 }
 
+/* Feed sidebar: friend-request actions (Agent 1). */
+.feed-rail-request-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
 /* Right-rail section headings get a subtle separator (Agent 1 polish). */
 .feed-rail-section .feed-rail-head {
   padding-bottom: 6px;

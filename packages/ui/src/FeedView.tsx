@@ -20,6 +20,7 @@ import {
   SendIcon,
   SmileyIcon,
   SparkIcon,
+  UserPlusIcon,
   UsersIcon,
   VolumeIcon,
 } from "./Icons";
@@ -4550,6 +4551,7 @@ export function FeedRail({
   const [albums, setAlbums] = useState<Array<{ name: string; count: number }>>([]);
   const [requested, setRequested] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState<string | null>(null);
+  const [requests, setRequests] = useState<Array<{ id: string; person: Person }>>([]);
 
   useEffect(() => {
     let active = true;
@@ -4665,6 +4667,24 @@ export function FeedRail({
     };
   }, [client]);
 
+  useEffect(() => {
+    let active = true;
+    client
+      .listFriendRequests()
+      .then((list) => {
+        if (!active) return;
+        setRequests(
+          list
+            .filter((entry) => entry.direction === "incoming")
+            .map((entry) => ({ id: entry.id, person: entry.person })),
+        );
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [client]);
+
   async function followSuggestedPage(page: Page) {
     try {
       await client.followPage(page.id);
@@ -4674,8 +4694,56 @@ export function FeedRail({
     }
   }
 
+  async function respondRequest(id: string, action: "accept" | "decline") {
+    try {
+      await client.respondFriendRequest(id, action);
+      setRequests((prev) => prev.filter((entry) => entry.id !== id));
+    } catch {
+      // Leave the row so the user can retry.
+    }
+  }
+
   return (
     <>
+      {requests.length > 0 && (
+        <div className="feed-rail-section">
+          <div className="feed-rail-head">
+            <UserPlusIcon size={15} /> Friend requests
+          </div>
+          <ul className="feed-rail-people">
+            {requests.map((entry) => (
+              <li key={entry.id} className="feed-rail-person">
+                <Avatar emoji={entry.person.avatarEmoji} name={entry.person.displayName} size={36} />
+                <div className="feed-rail-person-meta">
+                  <span className="feed-rail-person-name">
+                    {entry.person.displayName ||
+                      (entry.person.handle ? `@${entry.person.handle}` : "Someone")}
+                  </span>
+                  <span className="feed-rail-person-sub">
+                    {entry.person.handle ? `@${entry.person.handle}` : "New here"}
+                  </span>
+                </div>
+                <div className="feed-rail-request-actions">
+                  <button
+                    type="button"
+                    className="feed-follow-btn"
+                    onClick={() => void respondRequest(entry.id, "accept")}
+                  >
+                    Accept
+                  </button>
+                  <button
+                    type="button"
+                    className="feed-follow-btn"
+                    onClick={() => void respondRequest(entry.id, "decline")}
+                  >
+                    Decline
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {groups.length > 0 && (
         <div className="feed-rail-section">
           <div className="feed-rail-head">
