@@ -87,7 +87,12 @@ function fullDate(iso: string): string {
  */
 const RICH_TOKEN_RE = /(https?:\/\/[^\s<>()]+|#[\p{L}\p{N}_]+|@[A-Za-z0-9_]+)/gu;
 
-function renderRichText(text: string, onOpenTag?: (tag: string) => void, keyPrefix = "rich"): ReactNode[] {
+function renderRichText(
+  text: string,
+  onOpenTag?: (tag: string) => void,
+  keyPrefix = "rich",
+  onOpenMention?: (handle: string) => void,
+): ReactNode[] {
   const nodes: ReactNode[] = [];
   let last = 0;
   let index = 0;
@@ -119,10 +124,22 @@ function renderRichText(text: string, onOpenTag?: (tag: string) => void, keyPref
         ),
       );
     } else {
+      const handle = token.slice(1);
       nodes.push(
-        <span key={key} className="feed-mention">
-          {token}
-        </span>,
+        onOpenMention ? (
+          <button
+            key={key}
+            type="button"
+            className="feed-mention feed-mention-btn"
+            onClick={() => onOpenMention(handle)}
+          >
+            {token}
+          </button>
+        ) : (
+          <span key={key} className="feed-mention">
+            {token}
+          </span>
+        ),
       );
     }
     last = match.index + token.length;
@@ -136,13 +153,21 @@ function renderRichText(text: string, onOpenTag?: (tag: string) => void, keyPref
  * Post body with a "See more" clamp for long posts, so one wall of text can't
  * dominate the feed. Short posts render exactly as before.
  */
-function PostBody({ text, onOpenTag }: { text: string; onOpenTag?: (tag: string) => void }) {
+function PostBody({
+  text,
+  onOpenTag,
+  onOpenMention,
+}: {
+  text: string;
+  onOpenTag?: (tag: string) => void;
+  onOpenMention?: (handle: string) => void;
+}) {
   const [expanded, setExpanded] = useState(false);
   const long = text.length > 520 || (text.match(/\n/g)?.length ?? 0) > 6;
   return (
     <>
       <p className={`feed-body${long && !expanded ? " feed-body-clamped" : ""}`}>
-        {renderRichText(text, onOpenTag, "body")}
+        {renderRichText(text, onOpenTag, "body", onOpenMention)}
       </p>
       {long && (
         <button
@@ -574,12 +599,14 @@ interface PostCardProps {
   cloudUrl: string;
   canDelete: boolean;
   viewerId?: string;
+  focus?: boolean;
   onChange: (next: FeedPost) => void;
   onDelete: (id: string) => void;
   onBlock: (authorId: string) => void;
   onOpenPage?: (handle: string) => void;
   onRepost: (post: FeedPost) => void;
   onOpenTag?: (tag: string) => void;
+  onOpenMention?: (handle: string) => void;
 }
 
 function PostCard({
@@ -588,12 +615,14 @@ function PostCard({
   cloudUrl,
   canDelete,
   viewerId,
+  focus,
   onChange,
   onDelete,
   onBlock,
   onOpenPage,
   onRepost,
   onOpenTag,
+  onOpenMention,
 }: PostCardProps) {
   const [comments, setComments] = useState<FeedComment[] | null>(null);
   const [commentsOpen, setCommentsOpen] = useState(false);
@@ -611,11 +640,24 @@ function PostCard({
   const [confirm, setConfirm] = useState<null | "delete" | "block">(null);
   const [commentError, setCommentError] = useState<string | null>(null);
   const [allCommentsShown, setAllCommentsShown] = useState(false);
+  const [highlight, setHighlight] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editDraft, setEditDraft] = useState(post.body);
   const inFlight = useRef(new Set<string>());
   const moreBtnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
   const likeBtnRef = useRef<HTMLButtonElement>(null);
+  const articleRef = useRef<HTMLElement>(null);
+
+  // Permalink focus: when this card is the URL target, scroll to it and flash.
+  useEffect(() => {
+    if (!focus) return;
+    articleRef.current?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+    setHighlight(true);
+    const timer = window.setTimeout(() => setHighlight(false), 2500);
+    return () => window.clearTimeout(timer);
+  }, [focus]);
 
   /** Run an optimistic action once; roll back + surface failures in the UI. */
   async function guard(key: string, task: () => Promise<void>): Promise<void> {
@@ -828,6 +870,29 @@ function PostCard({
     }
   }
 
+  async function copyLink() {
+    const url = `${window.location.origin}${window.location.pathname}#post=${post.id}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setFeedback({ kind: "info", text: "Link copied to clipboard." });
+    } catch {
+      setFeedback({ kind: "error", text: "Couldn't copy the link." });
+    }
+  }
+
+  async function saveEdit() {
+    const body = editDraft.trim();
+    if (!body) return;
+    try {
+      const updated = await client.editPost(post.id, body);
+      onChange(updated);
+      setEditing(false);
+      setFeedback({ kind: "info", text: "Post updated." });
+    } catch {
+      setFeedback({ kind: "error", text: "Couldn't save your changes. Please try again." });
+    }
+  }
+
   // Dismiss the overflow menu and reaction picker on Escape or an outside click;
   // move focus into the menu and support arrow-key navigation.
   useEffect(() => {
@@ -881,9 +946,14 @@ function PostCard({
   const gallery = post.images && post.images.length > 0 ? post.images : post.imageUrl ? [post.imageUrl] : [];
   const topLevelComments = (comments ?? []).filter((comment) => !comment.parentId);
   const visibleThreads = allCommentsShown ? topLevelComments : topLevelComments.slice(0, 2);
+  const mine = Boolean(viewerId && post.author.id === viewerId && !post.pageId);
 
   return (
-    <article className="feed-post">
+    <article
+      ref={articleRef}
+      className={`feed-post${highlight ? " feed-post-focus" : ""}`}
+      data-post-id={post.id}
+    >
       <AuthorLine author={post.author} when={post.createdAt} cloudUrl={cloudUrl} />
 
       {post.audience === "only_me" && <div className="feed-audience-badge">🔒 Only me</div>}
@@ -891,7 +961,40 @@ function PostCard({
         <div className="feed-audience-badge">🕒 Scheduled</div>
       )}
       {post.repostOf && <div className="feed-repost-label">🔁 Shared a post</div>}
-      {post.body && <PostBody text={post.body} onOpenTag={onOpenTag} />}
+      {editing ? (
+        <div className="feed-post-edit">
+          <textarea
+            className="feed-post-edit-input"
+            value={editDraft}
+            onChange={(event) => setEditDraft(event.target.value)}
+            aria-label="Edit post"
+            rows={3}
+            maxLength={4000}
+          />
+          <div className="feed-post-edit-actions">
+            <button
+              type="button"
+              className="ghost small"
+              onClick={() => {
+                setEditing(false);
+                setEditDraft(post.body);
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="feed-post-btn"
+              onClick={() => void saveEdit()}
+              disabled={!editDraft.trim()}
+            >
+              Save changes
+            </button>
+          </div>
+        </div>
+      ) : (
+        post.body && <PostBody text={post.body} onOpenTag={onOpenTag} onOpenMention={onOpenMention} />
+      )}
 
       {post.hashtags && post.hashtags.length > 0 && (
         <div className="feed-tags">
@@ -907,7 +1010,9 @@ function PostCard({
         <div className="feed-repost">
           <AuthorLine author={post.original.author} when={post.original.createdAt} cloudUrl={cloudUrl} />
           {post.original.body && (
-            <p className="feed-body">{renderRichText(post.original.body, onOpenTag, "orig")}</p>
+            <p className="feed-body">
+              {renderRichText(post.original.body, onOpenTag, "orig", onOpenMention)}
+            </p>
           )}
           <PostMedia
             images={post.original.images}
@@ -1087,6 +1192,17 @@ function PostCard({
               View page
             </button>
           )}
+          <button
+            type="button"
+            role="menuitem"
+            className="feed-menu-item"
+            onClick={() => {
+              setMoreOpen(false);
+              void copyLink();
+            }}
+          >
+            Copy link
+          </button>
           {!canDelete && (
             <>
               <button
@@ -1150,6 +1266,20 @@ function PostCard({
           {canDelete && (
             <>
               <div className="feed-menu-sep" />
+              {mine && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="feed-menu-item"
+                  onClick={() => {
+                    setMoreOpen(false);
+                    setEditDraft(post.body);
+                    setEditing(true);
+                  }}
+                >
+                  Edit post
+                </button>
+              )}
               <button
                 type="button"
                 role="menuitem"
@@ -1280,6 +1410,106 @@ function PostCard({
         />
       )}
     </article>
+  );
+}
+
+/** Mention routing: a person's mini-profile resolved from an `@handle`. */
+function MentionProfile({
+  client,
+  cloudUrl,
+  viewerId,
+  handle,
+  onClose,
+}: {
+  client: BotifyrClient;
+  cloudUrl: string;
+  viewerId?: string;
+  handle: string;
+  onClose: () => void;
+}) {
+  const [data, setData] = useState<{ person: Person; posts: FeedPost[] } | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    setData(null);
+    setFailed(false);
+    client
+      .getPersonByHandle(handle)
+      .then((result) => {
+        if (active) setData(result);
+      })
+      .catch(() => {
+        if (active) setFailed(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [client, handle]);
+
+  useEffect(() => {
+    function onKey(event: globalThis.KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div className="feed-profile-backdrop" onClick={onClose}>
+      <div
+        className="feed-profile"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Profile for ${handle}`}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <button type="button" className="feed-profile-close" aria-label="Close profile" onClick={onClose}>
+          ✕
+        </button>
+        {failed ? (
+          <div className="feed-state" role="alert">
+            Couldn't load this profile.
+          </div>
+        ) : !data ? (
+          <div className="feed-state">Loading profile…</div>
+        ) : (
+          <>
+            <div className="feed-profile-head">
+              <Avatar
+                emoji={authorEmoji(data.person)}
+                name={authorName(data.person)}
+                url={resolveAvatar(data.person.avatarUrl, cloudUrl)}
+              />
+              <div className="feed-author-meta">
+                <span className="feed-author-name">{authorName(data.person)}</span>
+                <span className="feed-author-sub">{data.person.handle ? `@${data.person.handle}` : ""}</span>
+              </div>
+            </div>
+            <div className="feed-profile-posts">
+              {data.posts.length === 0 ? (
+                <div className="feed-state">No posts yet.</div>
+              ) : (
+                data.posts.map((post) => (
+                  <PostCard
+                    key={post.id}
+                    post={post}
+                    client={client}
+                    cloudUrl={cloudUrl}
+                    canDelete={false}
+                    viewerId={viewerId}
+                    onChange={() => {}}
+                    onDelete={() => {}}
+                    onBlock={() => {}}
+                    onRepost={() => {}}
+                  />
+                ))
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -3600,6 +3830,7 @@ export function FeedView({
   onOpenNav,
   onOpenMarketplace,
   onStoryReplySent,
+  focusPostId,
 }: {
   client: BotifyrClient;
   viewerId?: string;
@@ -3621,6 +3852,8 @@ export function FeedView({
   onOpenMarketplace?: () => void;
   /** After a story reply is sent, open the DM conversation (FR-13). */
   onStoryReplySent?: (session: Session) => void;
+  /** Permalink target: scroll to and highlight this post when it loads. */
+  focusPostId?: string | null;
 }) {
   const [posts, setPosts] = useState<FeedPost[]>([]);
   const [loading, setLoading] = useState(true);
@@ -3629,6 +3862,10 @@ export function FeedView({
   const [cursor, setCursor] = useState<string | null>(null);
   const [pendingNew, setPendingNew] = useState(false);
   const [exhausted, setExhausted] = useState(false);
+  /** Polite live-region text announced to screen readers after pagination. */
+  const [liveMessage, setLiveMessage] = useState("");
+  /** `@handle` whose mini-profile is open (mention routing). */
+  const [mentionHandle, setMentionHandle] = useState<string | null>(null);
   const [errorMode, setErrorMode] = useState<"reset" | "more">("reset");
   const [draft, setDraft] = useState(() => localStorage.getItem(FEED_DRAFT_KEY) ?? "");
   const [posting, setPosting] = useState(false);
@@ -3797,6 +4034,25 @@ export function FeedView({
   viewKeyRef.current = `${tab}:${sort}`;
   draftRef.current = draft;
 
+  // Permalink: if the focused post isn't in the loaded timeline, fetch it once.
+  const focusTriedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!focusPostId) return;
+    if (posts.some((post) => post.id === focusPostId)) return;
+    if (focusTriedRef.current === focusPostId) return;
+    focusTriedRef.current = focusPostId;
+    let active = true;
+    client
+      .getPost(focusPostId)
+      .then((post) => {
+        if (active) setPosts((prev) => (prev.some((p) => p.id === post.id) ? prev : [post, ...prev]));
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [client, focusPostId, posts]);
+
   /** Load a page of the timeline. `reset` replaces the list; `more` appends. */
   const load = useCallback(
     async (mode: "reset" | "more") => {
@@ -3833,6 +4089,10 @@ export function FeedView({
           setPosts((prev) => [...prev, ...fresh.filter((post) => !prev.some((p) => p.id === post.id))]);
           // If a page added nothing new, stop auto-loading to avoid a loop.
           if (fresh.length === 0) setExhausted(true);
+          // Announce how much arrived, so screen-reader users know more loaded.
+          setLiveMessage(
+            fresh.length > 0 ? `${fresh.length} more ${fresh.length === 1 ? "post" : "posts"} loaded` : "",
+          );
         }
         setCursor(page.nextCursor);
       } catch (err) {
@@ -4657,12 +4917,14 @@ export function FeedView({
               cloudUrl={cloudUrl}
               canDelete={!post.pageId && post.author.id === viewerId}
               viewerId={viewerId}
+              focus={post.id === focusPostId}
               onChange={updatePost}
               onDelete={removePost}
               onBlock={removeAuthorPosts}
               onOpenPage={onOpenPage}
               onRepost={prependPost}
               onOpenTag={setOpenTag}
+              onOpenMention={setMentionHandle}
             />
           ))
         )}
@@ -4684,10 +4946,24 @@ export function FeedView({
             </div>
           ))}
 
+        <p className="visually-hidden" aria-live="polite">
+          {liveMessage}
+        </p>
+
         {!loading && posts.length > 0 && cursor && !exhausted && (
           <div ref={sentinelRef} className="feed-sentinel" aria-hidden="true" />
         )}
       </div>
+
+      {mentionHandle && (
+        <MentionProfile
+          client={client}
+          cloudUrl={cloudUrl}
+          viewerId={viewerId}
+          handle={mentionHandle}
+          onClose={() => setMentionHandle(null)}
+        />
+      )}
 
       {feedNav}
     </div>

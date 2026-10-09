@@ -1272,6 +1272,11 @@ export class BotifyrClient {
     return this.request(`/v1/people?q=${encodeURIComponent(query)}`);
   }
 
+  /** Resolve an `@handle` to a person and their recent posts (mention routing). */
+  getPersonByHandle(handle: string): Promise<{ person: Person; posts: FeedPost[] }> {
+    return this.request(`/v1/people/by-handle/${encodeURIComponent(handle)}`);
+  }
+
   /** "Who to follow": people who aren't friends or already pending. */
   suggestPeople(limit = 8): Promise<Person[]> {
     return this.request(`/v1/people/suggestions?limit=${limit}`);
@@ -1336,6 +1341,20 @@ export class BotifyrClient {
 
   deletePost(id: string): Promise<void> {
     return this.request(`/v1/posts/${id}`, { method: "DELETE" });
+  }
+
+  /** Fetch a single post (permalink / detail view). */
+  getPost(id: string): Promise<FeedPost> {
+    return this.request(`/v1/posts/${id}`);
+  }
+
+  /** Edit an owned post's body. */
+  editPost(id: string, body: string): Promise<FeedPost> {
+    return this.request(`/v1/posts/${id}`, {
+      method: "PATCH",
+      json: true,
+      body: JSON.stringify({ body }),
+    });
   }
 
   likePost(id: string, liked = true): Promise<void> {

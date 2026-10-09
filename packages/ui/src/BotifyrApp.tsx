@@ -452,6 +452,23 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [botWorkspace, setBotWorkspace] = useState("");
   const [collapsedWorkspaces, setCollapsedWorkspaces] = useState<Record<string, boolean>>({});
   const [workspaceFilter, setWorkspaceFilter] = useState("personal");
+  /** Permalink target from `#post=<id>`; the Feed scrolls to and highlights it. */
+  const [feedFocusPost, setFeedFocusPost] = useState<string | null>(null);
+
+  // Open a shared post link (`#post=<id>`) directly in the Feed.
+  useEffect(() => {
+    function readHash() {
+      const match = /(?:^#|[#&])post=([^&]+)/.exec(window.location.hash);
+      if (!match) return;
+      const id = decodeURIComponent(match[1]);
+      if (!id) return;
+      setWorkspaceFilter("feed");
+      setFeedFocusPost(id);
+    }
+    readHash();
+    window.addEventListener("hashchange", readHash);
+    return () => window.removeEventListener("hashchange", readHash);
+  }, []);
   /** Bumped on any feed event so an open Feed reloads (Phase 3 realtime). */
   const [feedRefresh, setFeedRefresh] = useState(0);
   /** When set, the Feed area shows this Page's timeline instead of the feed. */
@@ -4551,6 +4568,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
             onOpenNav={() => setMobileNavOpen(true)}
             onOpenMarketplace={() => setShowConnectApps(true)}
             onStoryReplySent={openStoryConversation}
+            focusPostId={feedFocusPost}
           />
         )}
         {startupsActive && (

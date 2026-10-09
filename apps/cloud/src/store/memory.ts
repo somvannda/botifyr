@@ -882,6 +882,13 @@ export class MemoryStore implements Store {
     return record ? { ...record } : null;
   }
 
+  async updatePostBody(authorId: string, id: string, body: string, updatedAt: string): Promise<boolean> {
+    const record = this.posts.get(id);
+    if (!record || record.authorId !== authorId) return false;
+    this.posts.set(id, { ...record, body, updatedAt });
+    return true;
+  }
+
   async deletePost(authorId: string, id: string): Promise<boolean> {
     const record = this.posts.get(id);
     if (!record || record.authorId !== authorId) return false;

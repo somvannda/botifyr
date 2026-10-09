@@ -4038,6 +4038,31 @@ export async function buildServer(options: ServerOptions) {
     }));
   });
 
+  /* Resolve an `@handle` to a person and their recent posts (mention routing). */
+  app.get<{ Params: { handle: string } }>(
+    "/v1/people/by-handle/:handle",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const handle = slugify(request.params.handle);
+      const record = await store.getUserByHandle(handle);
+      if (!record) return reply.code(404).send({ error: "person not found" });
+      if (await store.isBlockedEither(userId, record.id))
+        return reply.code(403).send({ error: "not allowed" });
+      const friendIds = new Set(await store.listFriends(userId));
+      const savedIds = new Set(await store.listSavedPostIds(userId));
+      const cache = new Map<string, FeedAuthorDto>();
+      const nowIso = new Date().toISOString();
+      const items = [];
+      for (const post of await store.listPostsByAuthor(record.id, 20)) {
+        if (!canSeePost(post, userId)) continue;
+        if (post.scheduledAt && post.scheduledAt > nowIso) continue;
+        items.push(await feedPostOf(post, userId, cache, 0, savedIds));
+      }
+      return { person: { ...personOf(record), friend: friendIds.has(record.id) }, posts: items };
+    },
+  );
+
   app.get("/v1/friends", { preHandler: requireAuth }, async (request) => {
     const userId = request.userId as string;
     const ids = await store.listFriends(userId);
@@ -4638,6 +4663,39 @@ export async function buildServer(options: ServerOptions) {
     await store.deletePostDraft(request.userId as string);
     return { ok: true };
   });
+
+  app.get<{ Params: { id: string } }>(
+    "/v1/posts/:id",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const record = await store.getPost(request.params.id);
+      if (!record) return reply.code(404).send({ error: "post not found" });
+      const userId = request.userId as string;
+      if (!canSeePost(record, userId) || (await store.isBlockedEither(userId, record.authorId))) {
+        return reply.code(403).send({ error: "not allowed" });
+      }
+      const savedIds = new Set(await store.listSavedPostIds(userId));
+      return feedPostOf(record, userId, new Map(), 0, savedIds);
+    },
+  );
+
+  app.patch<{ Params: { id: string }; Body: { body?: string } }>(
+    "/v1/posts/:id",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const record = await store.getPost(request.params.id);
+      if (!record) return reply.code(404).send({ error: "post not found" });
+      // Only the (human) author may edit; Page posts keep their original author id.
+      if (record.authorId !== userId) return reply.code(403).send({ error: "not allowed" });
+      const body = typeof request.body?.body === "string" ? request.body.body.trim() : "";
+      if (!body) return reply.code(400).send({ error: "post needs text" });
+      if (body.length > MAX_POST_BODY) return reply.code(413).send({ error: "post is too long" });
+      const now = new Date().toISOString();
+      await store.updatePostBody(userId, record.id, body, now);
+      return feedPostOf({ ...record, body, updatedAt: now }, userId, new Map());
+    },
+  );
 
   app.delete<{ Params: { id: string } }>(
     "/v1/posts/:id",
