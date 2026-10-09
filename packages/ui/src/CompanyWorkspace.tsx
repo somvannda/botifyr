@@ -573,6 +573,18 @@ export function CompanyWorkspace({
     });
   }
 
+  /** Toggle between running around the clock and a 9–17 working day. */
+  async function setAroundTheClock(alwaysOn: boolean) {
+    await withBusy(async () => {
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const hours = alwaysOn ? { start: 0, end: 24, timezone } : { start: 9, end: 17, timezone };
+      const updated = await client
+        .updateWorkspace(selectedId, { operatingHours: hours })
+        .catch(() => null);
+      if (updated) setMeta(updated);
+    });
+  }
+
   function tellCeo(event: FormEvent) {
     event.preventDefault();
     void addBoardItem();
@@ -914,6 +926,9 @@ export function CompanyWorkspace({
   }
 
   const autonomy = view.autonomy ?? "manual";
+  const hours = view.operatingHours;
+  // No hours set means the scheduler never blocks on time — i.e. always on.
+  const alwaysOn = !hours || (hours.start === 0 && hours.end >= 24);
   const paused = (view.status ?? "active") === "paused";
   void paused; // referenced; wired into the UI as that work lands
 
@@ -975,6 +990,19 @@ export function CompanyWorkspace({
               <PlayIcon size={14} /> Run
             </button>
           )}
+          <button
+            className={`ghost small${alwaysOn ? " on" : ""}`}
+            type="button"
+            disabled={busy}
+            title={
+              alwaysOn
+                ? "Running around the clock — click for a 9–17 working day"
+                : "Running a 9–17 working day — click to run around the clock"
+            }
+            onClick={() => void setAroundTheClock(!alwaysOn)}
+          >
+            {alwaysOn ? "24/7" : "9–17"}
+          </button>
           <label className="cws-autonomy" title="How much the company may do on its own">
             <Select
               className="cws-select"
