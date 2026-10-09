@@ -1500,7 +1500,7 @@ body {
 }
 
 .topbar {
-  height: 52px;
+  height: 120px;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -7050,7 +7050,7 @@ body {
   display: flex;
   align-items: baseline;
   gap: 10px;
-  height: 52px;
+  height: 120px;
   padding: 0 20px;
   border-bottom: 1px solid var(--border);
   flex: none;
@@ -7197,6 +7197,11 @@ body {
   background: var(--panel-2);
   border: 1px solid var(--border);
   line-height: 1;
+}
+
+.feed-avatar-photo {
+  display: block;
+  object-fit: cover;
 }
 
 .feed-author {
@@ -8534,7 +8539,7 @@ a.feed-follow-btn {
   display: flex;
   align-items: center;
   gap: 10px;
-  height: 52px;
+  height: 120px;
   padding: 0 20px;
   border-bottom: 1px solid var(--border);
   flex: none;
@@ -8726,6 +8731,20 @@ a.feed-follow-btn {
   background: var(--accent);
   border-radius: 999px;
   transition: width 0.3s ease;
+}
+
+.cws-quest-controls {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.cws-quest-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
 }
 
 .cws-list {

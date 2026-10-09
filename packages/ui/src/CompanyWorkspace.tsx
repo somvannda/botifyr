@@ -414,6 +414,31 @@ export function CompanyWorkspace({
     });
   }
 
+  /** Per-quest autonomy dial (defaults to the workspace setting). */
+  async function setQuestTrust(trust: Quest["trust"]) {
+    const quest = activeQuest;
+    if (!quest) return;
+    setQuests((prev) => prev.map((entry) => (entry.id === quest.id ? { ...entry, trust } : entry)));
+    await withBusy(async () => {
+      await client.updateQuest(quest.id, { trust }).catch(() => {});
+    });
+  }
+
+  /** Per-quest token cap (0 = inherit the workspace cap). */
+  async function setQuestBudget(value: string) {
+    const quest = activeQuest;
+    if (!quest) return;
+    const tokens = Math.max(0, Math.floor(Number(value) || 0));
+    setQuests((prev) =>
+      prev.map((entry) =>
+        entry.id === quest.id ? { ...entry, budgetTokens: tokens || undefined } : entry,
+      ),
+    );
+    await withBusy(async () => {
+      await client.updateQuest(quest.id, { budgetTokens: tokens || null }).catch(() => {});
+    });
+  }
+
   /** The ranked decision queue — reused by Home and the Inbox tab. */
   const renderNeedList = () => (
     <ul className="cws-list">
@@ -1021,6 +1046,40 @@ export function CompanyWorkspace({
                         width: `${questItems.length ? Math.round((questDone / questItems.length) * 100) : 0}%`,
                       }}
                     />
+                  </div>
+                  <div className="cws-quest-controls">
+                    <label className="cws-quest-field">
+                      <span className="cws-muted">Trust</span>
+                      <select
+                        className="cws-select"
+                        value={activeQuest.trust}
+                        disabled={busy}
+                        onChange={(event) =>
+                          void setQuestTrust(event.target.value as Quest["trust"])
+                        }
+                        aria-label="Quest trust"
+                      >
+                        <option value="manual">Assisted</option>
+                        <option value="supervised">Delegated</option>
+                        <option value="autonomous">Autonomous</option>
+                      </select>
+                    </label>
+                    <label className="cws-quest-field">
+                      <span className="cws-muted">Budget</span>
+                      <input
+                        className="cws-onboard-url"
+                        type="number"
+                        min={0}
+                        placeholder="inherit"
+                        defaultValue={
+                          activeQuest.budgetTokens && activeQuest.budgetTokens > 0
+                            ? String(activeQuest.budgetTokens)
+                            : ""
+                        }
+                        onBlur={(event) => void setQuestBudget(event.target.value)}
+                        aria-label="Quest token budget"
+                      />
+                    </label>
                   </div>
                 </>
               ) : proposedQuests[0] ? (
