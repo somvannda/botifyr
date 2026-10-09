@@ -40,3 +40,6 @@ blob-report/
 # 3D office assets — fetched by scripts/fetch-office-assets.mjs (CC0/MIT, large
 # binaries; not committed). Run that script after cloning.
 apps/*/public/office3d/
+
+# Personal downloads under apps/node (large media; never commit)
+apps/node/**/Downloads/
