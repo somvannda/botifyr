@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
-import { clockOf, dayKeyOf, dayLabelOf } from "./BotifyrApp";
+import { clockOf, dayKeyOf, dayLabelOf, firstUnreadIndex } from "./BotifyrApp";
 
 /** Regression tests for the thread date/time helpers (separators + message times). */
 describe("chat date/time helpers", () => {
@@ -36,5 +36,26 @@ describe("chat date/time helpers", () => {
     expect(dayLabelOf("not-a-date")).toBe("");
     expect(clockOf("not-a-date")).toBe("");
     expect(clockOf(undefined)).toMatch(/\d{1,2}:\d{2}/);
+  });
+});
+
+describe("firstUnreadIndex (New messages divider)", () => {
+  const messages = [
+    { senderId: "me", createdAt: "2026-01-01T10:00:00.000Z" },
+    { senderId: "them", createdAt: "2026-01-01T09:00:00.000Z" },
+    { senderId: "them", createdAt: "2026-01-01T11:00:00.000Z" },
+  ];
+
+  it("returns -1 when there is no read boundary", () => {
+    expect(firstUnreadIndex(messages, undefined, "me")).toBe(-1);
+  });
+
+  it("points at the first incoming message after the boundary", () => {
+    expect(firstUnreadIndex(messages, "2026-01-01T10:30:00.000Z", "me")).toBe(2);
+  });
+
+  it("ignores the reader's own messages", () => {
+    const onlyMine = [{ senderId: "me", createdAt: "2026-01-01T12:00:00.000Z" }];
+    expect(firstUnreadIndex(onlyMine, "2026-01-01T10:00:00.000Z", "me")).toBe(-1);
   });
 });

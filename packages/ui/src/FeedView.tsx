@@ -1,15 +1,26 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { ChangeEvent, FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ChangeEvent, FormEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode, UIEvent } from "react";
 import type { BotifyrClient, FeedComment, FeedPost, Group, Page, Person, Story } from "@botifyr/client";
 import {
+  BookmarkIcon,
   CameraIcon,
   ChartIcon,
+  CubeIcon,
   ForwardIcon,
+  FullscreenIcon,
+  HomeIcon,
+  MenuIcon,
   MessageIcon,
   MoreIcon,
+  PanelIcon,
+  PauseIcon,
+  PlayIcon,
+  RefreshIcon,
   SendIcon,
   SmileyIcon,
   SparkIcon,
+  UsersIcon,
+  VolumeIcon,
 } from "./Icons";
 
 /**
@@ -74,8 +85,37 @@ function reactionEmoji(key: string | null | undefined): string {
   return REACTIONS.find((entry) => entry.key === key)?.emoji ?? "👍";
 }
 
-function Avatar({ emoji, name, size = 40 }: { emoji?: string; name?: string; size?: number }) {
+/** Resolve an author avatar path to a loadable URL (absolute URLs pass through). */
+function resolveAvatar(url: string | undefined, cloudUrl?: string): string | undefined {
+  if (!url) return undefined;
+  if (/^(https?:|data:|blob:)/.test(url)) return url;
+  if (!cloudUrl) return undefined;
+  return `${cloudUrl}${url.startsWith("/") ? "" : "/"}${url}`;
+}
+
+function Avatar({
+  emoji,
+  name,
+  url,
+  size = 40,
+}: {
+  emoji?: string;
+  name?: string;
+  url?: string;
+  size?: number;
+}) {
   const glyph = emoji?.trim() || name?.trim().charAt(0).toUpperCase() || "🙂";
+  if (url) {
+    return (
+      <img
+        className="feed-avatar feed-avatar-photo"
+        style={{ width: size, height: size }}
+        src={url}
+        alt={name ?? ""}
+        loading="lazy"
+      />
+    );
+  }
   return (
     <span
       className="feed-avatar"
@@ -96,16 +136,76 @@ function reactionBreakdown(reactions?: Record<string, number>): string {
     .join("\n");
 }
 
+/** Full local timestamp for the `<time>` tooltip. */
+function fullDate(iso: string): string {
+  const date = new Date(iso);
+  return Number.isFinite(date.getTime()) ? date.toLocaleString() : "";
+}
+
+/**
+ * Render post text as live content: `http(s)://` URLs become anchors, inline
+ * `#hashtags` open the tag view, and `@mentions` are styled distinctly. A tiny
+ * tokenizer (no innerHTML) so text can never inject markup.
+ */
+const RICH_TOKEN_RE = /(https?:\/\/[^\s<>()]+|#[\p{L}\p{N}_]+|@[A-Za-z0-9_]+)/gu;
+
+function renderRichText(text: string, onOpenTag?: (tag: string) => void, keyPrefix = "rich"): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  let last = 0;
+  let index = 0;
+  let match: RegExpExecArray | null;
+  RICH_TOKEN_RE.lastIndex = 0;
+  while ((match = RICH_TOKEN_RE.exec(text))) {
+    if (match.index > last) nodes.push(text.slice(last, match.index));
+    const token = match[0];
+    const key = `${keyPrefix}-${index}`;
+    if (/^https?:\/\//i.test(token)) {
+      const label = token.replace(/[.,;:!?)\]]+$/, "");
+      nodes.push(
+        <a key={key} className="feed-link" href={label} target="_blank" rel="noreferrer noopener">
+          {label}
+        </a>,
+      );
+      if (label.length < token.length) nodes.push(token.slice(label.length));
+    } else if (token.startsWith("#")) {
+      const tag = token.slice(1).toLowerCase();
+      nodes.push(
+        onOpenTag ? (
+          <button key={key} type="button" className="feed-inline-tag" onClick={() => onOpenTag(tag)}>
+            {token}
+          </button>
+        ) : (
+          <span key={key} className="feed-inline-tag">
+            {token}
+          </span>
+        ),
+      );
+    } else {
+      nodes.push(
+        <span key={key} className="feed-mention">
+          {token}
+        </span>,
+      );
+    }
+    last = match.index + token.length;
+    index += 1;
+  }
+  if (last < text.length) nodes.push(text.slice(last));
+  return nodes;
+}
+
 /**
  * Post body with a "See more" clamp for long posts, so one wall of text can't
  * dominate the feed. Short posts render exactly as before.
  */
-function PostBody({ text }: { text: string }) {
+function PostBody({ text, onOpenTag }: { text: string; onOpenTag?: (tag: string) => void }) {
   const [expanded, setExpanded] = useState(false);
   const long = text.length > 520 || (text.match(/\n/g)?.length ?? 0) > 6;
   return (
     <>
-      <p className={`feed-body${long && !expanded ? " feed-body-clamped" : ""}`}>{text}</p>
+      <p className={`feed-body${long && !expanded ? " feed-body-clamped" : ""}`}>
+        {renderRichText(text, onOpenTag, "body")}
+      </p>
       {long && (
         <button
           type="button"
@@ -120,15 +220,288 @@ function PostBody({ text }: { text: string }) {
   );
 }
 
-function AuthorLine({ author, when }: { author: FeedPost["author"]; when: string }) {
+/** Full-screen image viewer for a post's media (click an image to open). */
+function MediaLightbox({
+  images,
+  index,
+  cloudUrl,
+  onClose,
+  onNavigate,
+}: {
+  images: string[];
+  index: number;
+  cloudUrl: string;
+  onClose: () => void;
+  onNavigate: (next: number) => void;
+}) {
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+      else if (event.key === "ArrowRight") onNavigate((index + 1) % images.length);
+      else if (event.key === "ArrowLeft") onNavigate((index - 1 + images.length) % images.length);
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [index, images.length, onClose, onNavigate]);
+
+  return (
+    <div
+      className="feed-lightbox"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Image viewer"
+      onClick={onClose}
+    >
+      <img
+        className="feed-lightbox-img"
+        src={`${cloudUrl}${images[index]}`}
+        alt=""
+        onClick={(event) => event.stopPropagation()}
+      />
+      {images.length > 1 && (
+        <>
+          <button
+            type="button"
+            className="feed-lightbox-nav prev"
+            aria-label="Previous image"
+            onClick={(event) => {
+              event.stopPropagation();
+              onNavigate((index - 1 + images.length) % images.length);
+            }}
+          >
+            ‹
+          </button>
+          <button
+            type="button"
+            className="feed-lightbox-nav next"
+            aria-label="Next image"
+            onClick={(event) => {
+              event.stopPropagation();
+              onNavigate((index + 1) % images.length);
+            }}
+          >
+            ›
+          </button>
+          <div className="feed-lightbox-count">
+            {index + 1} / {images.length}
+          </div>
+        </>
+      )}
+      <button
+        type="button"
+        className="feed-lightbox-close"
+        aria-label="Close image viewer"
+        onClick={(event) => {
+          event.stopPropagation();
+          onClose();
+        }}
+      >
+        ✕
+      </button>
+    </div>
+  );
+}
+
+/** A post image that degrades gracefully when the asset fails to load. */
+function FeedImage({
+  src,
+  alt,
+  interactive,
+  label,
+  onActivate,
+}: {
+  src: string;
+  alt: string;
+  interactive?: boolean;
+  label?: string;
+  onActivate?: () => void;
+}) {
+  const [failed, setFailed] = useState(false);
+  if (failed) {
+    return (
+      <div className="feed-image-img feed-media-broken" role="img" aria-label="Image unavailable">
+        <span aria-hidden="true">🖼️</span> Image unavailable
+      </div>
+    );
+  }
+  return (
+    <img
+      className="feed-image-img"
+      src={src}
+      alt={alt}
+      loading="lazy"
+      role={interactive ? "button" : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      aria-label={label}
+      onClick={interactive ? onActivate : undefined}
+      onKeyDown={
+        interactive
+          ? (event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onActivate?.();
+              }
+            }
+          : undefined
+      }
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
+/** Render a post's attachments: videos, a multi-image grid, or a single image. */
+function PostMedia({
+  images,
+  videos,
+  imageUrl,
+  imageAlts,
+  cloudUrl,
+  onOpenImage,
+}: {
+  images?: string[];
+  videos?: string[];
+  imageUrl?: string;
+  /** Per-image accessibility descriptions, parallel to the rendered gallery. */
+  imageAlts?: string[];
+  cloudUrl: string;
+  onOpenImage?: (index: number) => void;
+}) {
+  const gallery = images && images.length > 0 ? images : imageUrl ? [imageUrl] : [];
+  if (videos && videos.length > 0) {
+    return (
+      <div className="feed-videos">
+        {videos.map((src, index) => (
+          <video
+            key={src}
+            className="feed-video"
+            src={`${cloudUrl}${src}`}
+            controls
+            preload="metadata"
+            aria-label={videos.length > 1 ? `Video ${index + 1} of ${videos.length}` : "Video"}
+          />
+        ))}
+      </div>
+    );
+  }
+  if (gallery.length > 1) {
+    return (
+      <div className={`feed-image-grid feed-image-grid-${Math.min(gallery.length, 4)}`}>
+        {gallery.map((src, index) => (
+          <FeedImage
+            key={src}
+            src={`${cloudUrl}${src}`}
+            alt={`Post attachment ${index + 1}`}
+            interactive={Boolean(onOpenImage)}
+            label={`Open image ${index + 1} of ${gallery.length}`}
+            onActivate={() => onOpenImage?.(index)}
+          />
+        ))}
+      </div>
+    );
+  }
+  if (gallery.length === 1) {
+    return (
+      <FeedImage
+        src={`${cloudUrl}${gallery[0] as string}`}
+        alt="Post attachment"
+        interactive={Boolean(onOpenImage)}
+        label="Open image"
+        onActivate={() => onOpenImage?.(0)}
+      />
+    );
+  }
+  return null;
+}
+
+/** Accessible confirmation for destructive post/comment actions. */
+function ConfirmDialog({
+  title,
+  message,
+  confirmLabel,
+  onConfirm,
+  onCancel,
+}: {
+  title: string;
+  message: string;
+  confirmLabel: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    cancelRef.current?.focus();
+    function onKey(event: globalThis.KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        onCancel();
+      } else if (event.key === "Tab" && dialogRef.current) {
+        const items = Array.from(dialogRef.current.querySelectorAll<HTMLButtonElement>("button"));
+        if (items.length === 0) return;
+        const first = items[0];
+        const last = items[items.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last?.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first?.focus();
+        }
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onCancel]);
+
+  return (
+    <div className="feed-confirm-backdrop" onClick={onCancel}>
+      <div
+        ref={dialogRef}
+        className="feed-confirm"
+        role="alertdialog"
+        aria-modal="true"
+        aria-label={title}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <p className="feed-confirm-title">{title}</p>
+        <p className="feed-confirm-message">{message}</p>
+        <div className="feed-confirm-actions">
+          <button ref={cancelRef} type="button" className="feed-confirm-cancel" onClick={onCancel}>
+            Cancel
+          </button>
+          <button type="button" className="feed-confirm-danger" onClick={onConfirm}>
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AuthorLine({
+  author,
+  when,
+  cloudUrl,
+}: {
+  author: FeedPost["author"];
+  when: string;
+  cloudUrl?: string;
+}) {
   return (
     <div className="feed-author">
-      <Avatar emoji={authorEmoji(author)} name={authorName(author)} />
+      <Avatar
+        emoji={authorEmoji(author)}
+        name={authorName(author)}
+        url={resolveAvatar(author.avatarUrl, cloudUrl)}
+      />
       <div className="feed-author-meta">
         <span className="feed-author-name">{authorName(author)}</span>
         <span className="feed-author-sub">
           {author.handle ? `@${author.handle} · ` : ""}
-          {relativeTime(when)}
+          <time dateTime={when} title={fullDate(when)}>
+            {relativeTime(when)}
+          </time>
         </span>
       </div>
     </div>
@@ -138,16 +511,24 @@ function AuthorLine({ author, when }: { author: FeedPost["author"]; when: string
 function CommentRow({
   comment,
   client,
+  cloudUrl,
+  viewerId,
   onChange,
   onReply,
+  onDelete,
 }: {
   comment: FeedComment;
   client: BotifyrClient;
+  cloudUrl?: string;
+  viewerId?: string;
   onChange?: (next: FeedComment) => void;
   onReply?: () => void;
+  onDelete?: (id: string) => void;
 }) {
   const [pickOpen, setPickOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const total = Object.values(comment.reactions ?? {}).reduce((sum, count) => sum + count, 0);
+  const mine = Boolean(viewerId && comment.author.id === viewerId);
 
   async function react(reaction: string) {
     if (!onChange) return;
@@ -168,13 +549,26 @@ function CommentRow({
 
   return (
     <div className="feed-comment">
-      <Avatar emoji={authorEmoji(comment.author)} name={authorName(comment.author)} size={30} />
+      <Avatar
+        emoji={authorEmoji(comment.author)}
+        name={authorName(comment.author)}
+        url={resolveAvatar(comment.author.avatarUrl, cloudUrl)}
+        size={30}
+      />
       <div className="feed-comment-main">
         <span className="feed-comment-head">
           {authorName(comment.author)}
-          <span className="feed-comment-when">{relativeTime(comment.createdAt)}</span>
+          <time
+            className="feed-comment-when"
+            dateTime={comment.createdAt}
+            title={fullDate(comment.createdAt)}
+          >
+            {relativeTime(comment.createdAt)}
+          </time>
         </span>
-        <span className="feed-comment-body">{comment.body}</span>
+        <span className="feed-comment-body">
+          {renderRichText(comment.body, undefined, `c-${comment.id}`)}
+        </span>
         <div className="feed-comment-foot">
           <button
             type="button"
@@ -187,6 +581,11 @@ function CommentRow({
           {onReply && (
             <button type="button" className="feed-comment-reply-btn" onClick={onReply}>
               Reply
+            </button>
+          )}
+          {mine && onDelete && (
+            <button type="button" className="feed-comment-reply-btn" onClick={() => setConfirmDelete(true)}>
+              Delete
             </button>
           )}
         </div>
@@ -207,6 +606,18 @@ function CommentRow({
           </div>
         )}
       </div>
+      {confirmDelete && (
+        <ConfirmDialog
+          title="Delete comment?"
+          message="This can't be undone."
+          confirmLabel="Delete"
+          onConfirm={() => {
+            setConfirmDelete(false);
+            onDelete?.(comment.id);
+          }}
+          onCancel={() => setConfirmDelete(false)}
+        />
+      )}
     </div>
   );
 }
@@ -216,6 +627,7 @@ interface PostCardProps {
   client: BotifyrClient;
   cloudUrl: string;
   canDelete: boolean;
+  viewerId?: string;
   onChange: (next: FeedPost) => void;
   onDelete: (id: string) => void;
   onBlock: (authorId: string) => void;
@@ -229,6 +641,7 @@ function PostCard({
   client,
   cloudUrl,
   canDelete,
+  viewerId,
   onChange,
   onDelete,
   onBlock,
@@ -244,51 +657,95 @@ function PostCard({
   const [pickOpen, setPickOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [replyTo, setReplyTo] = useState<string | null>(null);
+  const [viewer, setViewer] = useState<number | null>(null);
+  const [feedback, setFeedback] = useState<{ kind: "error" | "info"; text: string } | null>(null);
+  const [confirm, setConfirm] = useState<null | "delete" | "block">(null);
+  const [commentError, setCommentError] = useState<string | null>(null);
+  const inFlight = useRef(new Set<string>());
+  const moreBtnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const pickerRef = useRef<HTMLDivElement>(null);
+  const likeBtnRef = useRef<HTMLButtonElement>(null);
+
+  /** Run an optimistic action once; roll back + surface failures in the UI. */
+  async function guard(key: string, task: () => Promise<void>): Promise<void> {
+    if (inFlight.current.has(key)) return;
+    inFlight.current.add(key);
+    setFeedback(null);
+    try {
+      await task();
+    } catch {
+      setFeedback({ kind: "error", text: "Something went wrong. Please try again." });
+    } finally {
+      inFlight.current.delete(key);
+    }
+  }
 
   const updateComment = (next: FeedComment) =>
     setComments((prev) => (prev ?? []).map((comment) => (comment.id === next.id ? next : comment)));
 
-  async function react(reaction: string) {
-    const next = post.myReaction === reaction ? null : reaction;
-    const reactions = { ...(post.reactions ?? {}) };
-    const prev = post.myReaction ?? null;
-    let likes = post.likes;
-    if (prev) {
-      reactions[prev] = Math.max(0, (reactions[prev] ?? 1) - 1);
-      likes = Math.max(0, likes - 1);
-    }
-    if (next) {
-      reactions[next] = (reactions[next] ?? 0) + 1;
-      likes += 1;
-    }
-    onChange({ ...post, reactions, likes, myReaction: next, likedByMe: next !== null });
-    setPickOpen(false);
+  async function removeComment(id: string) {
+    const before = comments ?? [];
+    setComments((prev) => (prev ?? []).filter((comment) => comment.id !== id && comment.parentId !== id));
+    onChange({ ...post, comments: Math.max(0, post.comments - 1) });
     try {
-      if (next) await client.reactPost(post.id, next);
-      else await client.unreactPost(post.id);
+      await client.deleteComment(id);
     } catch {
+      setComments(before);
       onChange(post);
+      setFeedback({ kind: "error", text: "Couldn't delete that comment. Please try again." });
     }
   }
 
-  async function share() {
-    try {
-      const repost = await client.repost(post.id);
-      onRepost(repost);
-      onChange({ ...post, shares: post.shares + 1, sharedByMe: true });
-    } catch {
-      // Ignore a failed repost.
-    }
+  function react(reaction: string) {
+    void guard("react", async () => {
+      const next = post.myReaction === reaction ? null : reaction;
+      const reactions = { ...(post.reactions ?? {}) };
+      const prev = post.myReaction ?? null;
+      let likes = post.likes;
+      if (prev) {
+        reactions[prev] = Math.max(0, (reactions[prev] ?? 1) - 1);
+        likes = Math.max(0, likes - 1);
+      }
+      if (next) {
+        reactions[next] = (reactions[next] ?? 0) + 1;
+        likes += 1;
+      }
+      onChange({ ...post, reactions, likes, myReaction: next, likedByMe: next !== null });
+      setPickOpen(false);
+      try {
+        if (next) await client.reactPost(post.id, next);
+        else await client.unreactPost(post.id);
+      } catch {
+        onChange(post);
+        setFeedback({ kind: "error", text: "Couldn't update your reaction. Please try again." });
+      }
+    });
   }
 
-  async function save() {
-    const saved = !post.savedByMe;
-    onChange({ ...post, savedByMe: saved });
-    try {
-      await client.savePost(post.id, saved);
-    } catch {
-      onChange(post);
-    }
+  function share() {
+    void guard("share", async () => {
+      try {
+        const repost = await client.repost(post.id);
+        onRepost(repost);
+        onChange({ ...post, shares: post.shares + 1, sharedByMe: true });
+      } catch {
+        setFeedback({ kind: "error", text: "Couldn't share this post. Please try again." });
+      }
+    });
+  }
+
+  function save() {
+    void guard("save", async () => {
+      const saved = !post.savedByMe;
+      onChange({ ...post, savedByMe: saved });
+      try {
+        await client.savePost(post.id, saved);
+      } catch {
+        onChange(post);
+        setFeedback({ kind: "error", text: "Couldn't update your saved posts. Please try again." });
+      }
+    });
   }
 
   async function hide() {
@@ -296,7 +753,7 @@ function PostCard({
       await client.hidePost(post.id, true);
       onDelete(post.id);
     } catch {
-      // ignore
+      setFeedback({ kind: "error", text: "Couldn't hide this post. Please try again." });
     }
   }
 
@@ -305,7 +762,7 @@ function PostCard({
       await client.muteAuthor(post.author.id, 30);
       onBlock(post.author.id);
     } catch {
-      // ignore
+      setFeedback({ kind: "error", text: "Couldn't snooze this author. Please try again." });
     }
   }
 
@@ -314,24 +771,26 @@ function PostCard({
       await client.muteAuthor(post.author.id, null);
       onBlock(post.author.id);
     } catch {
-      // ignore
+      setFeedback({ kind: "error", text: "Couldn't unfollow this author. Please try again." });
     }
   }
 
-  async function vote(optionId: string) {
+  function vote(optionId: string) {
     if (!post.poll) return;
-    try {
-      await client.votePoll(post.id, optionId);
-      const previous = post.poll.myVote;
-      const options = post.poll.options.map((option) => ({
-        ...option,
-        votes: option.votes + (option.id === optionId ? 1 : 0) - (option.id === previous ? 1 : 0),
-      }));
-      const total = options.reduce((sum, option) => sum + option.votes, 0);
-      onChange({ ...post, poll: { ...post.poll, options, total, myVote: optionId } });
-    } catch {
-      // Ignore a failed vote.
-    }
+    void guard("vote", async () => {
+      try {
+        await client.votePoll(post.id, optionId);
+        const previous = post.poll?.myVote;
+        const options = (post.poll?.options ?? []).map((option) => ({
+          ...option,
+          votes: option.votes + (option.id === optionId ? 1 : 0) - (option.id === previous ? 1 : 0),
+        }));
+        const total = options.reduce((sum, option) => sum + option.votes, 0);
+        onChange({ ...post, poll: { ...post.poll!, options, total, myVote: optionId } });
+      } catch {
+        setFeedback({ kind: "error", text: "Couldn't record your vote. Please try again." });
+      }
+    });
   }
 
   async function toggleComments() {
@@ -343,6 +802,7 @@ function PostCard({
         setComments(await client.listComments(post.id));
       } catch {
         setComments([]);
+        setFeedback({ kind: "error", text: "Couldn't load comments. Please try again." });
       } finally {
         setCommentsLoading(false);
       }
@@ -354,6 +814,7 @@ function PostCard({
     const body = draft.trim();
     if (!body || busy) return;
     setBusy(true);
+    setCommentError(null);
     try {
       const comment = await client.addComment(post.id, body, replyTo ?? undefined);
       setComments((prev) => [...(prev ?? []), comment]);
@@ -362,47 +823,103 @@ function PostCard({
       setReplyTo(null);
     } catch {
       // Leave the draft so the user can retry.
+      setCommentError("Couldn't post your comment. Please try again.");
     } finally {
       setBusy(false);
     }
   }
 
   async function remove() {
+    setConfirm(null);
     try {
       await client.deletePost(post.id);
       onDelete(post.id);
     } catch {
-      // Ignore: the post stays in place if the server refused.
+      setFeedback({ kind: "error", text: "Couldn't delete this post. Please try again." });
     }
   }
 
   async function report() {
     try {
       await client.reportPost(post.id);
+      setFeedback({ kind: "info", text: "Thanks — we'll review this post." });
     } catch {
-      // Ignore: a failed report is silent.
+      setFeedback({ kind: "error", text: "Couldn't submit your report. Please try again." });
     }
   }
 
   async function blockAuthor() {
+    setConfirm(null);
     try {
       await client.blockUser(post.author.id);
       onBlock(post.author.id);
     } catch {
-      // Ignore: leave the post if the server refused.
+      setFeedback({ kind: "error", text: "Couldn't block this author. Please try again." });
     }
   }
 
+  // Dismiss the overflow menu and reaction picker on Escape or an outside click;
+  // move focus into the menu and support arrow-key navigation.
+  useEffect(() => {
+    if (!moreOpen) return;
+    const menu = menuRef.current;
+    menu?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
+    function onKey(event: globalThis.KeyboardEvent) {
+      if (event.key === "Escape") {
+        setMoreOpen(false);
+        moreBtnRef.current?.focus();
+        return;
+      }
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        const items = Array.from(menu?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? []);
+        if (items.length === 0) return;
+        event.preventDefault();
+        const current = items.indexOf(document.activeElement as HTMLButtonElement);
+        const delta = event.key === "ArrowDown" ? 1 : -1;
+        items[(current + delta + items.length) % items.length]?.focus();
+      }
+    }
+    function onDown(event: globalThis.MouseEvent) {
+      const target = event.target as Node;
+      if (!menu?.contains(target) && !moreBtnRef.current?.contains(target)) setMoreOpen(false);
+    }
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("mousedown", onDown);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("mousedown", onDown);
+    };
+  }, [moreOpen]);
+
+  useEffect(() => {
+    if (!pickOpen) return;
+    function onKey(event: globalThis.KeyboardEvent) {
+      if (event.key === "Escape") setPickOpen(false);
+    }
+    function onDown(event: globalThis.MouseEvent) {
+      const target = event.target as Node;
+      if (!pickerRef.current?.contains(target) && !likeBtnRef.current?.contains(target)) setPickOpen(false);
+    }
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("mousedown", onDown);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("mousedown", onDown);
+    };
+  }, [pickOpen]);
+
+  const gallery = post.images && post.images.length > 0 ? post.images : post.imageUrl ? [post.imageUrl] : [];
+
   return (
     <article className="feed-post">
-      <AuthorLine author={post.author} when={post.createdAt} />
+      <AuthorLine author={post.author} when={post.createdAt} cloudUrl={cloudUrl} />
 
       {post.audience === "only_me" && <div className="feed-audience-badge">🔒 Only me</div>}
       {post.scheduledAt && new Date(post.scheduledAt).getTime() > Date.now() && (
         <div className="feed-audience-badge">🕒 Scheduled</div>
       )}
       {post.repostOf && <div className="feed-repost-label">🔁 Shared a post</div>}
-      {post.body && <PostBody text={post.body} />}
+      {post.body && <PostBody text={post.body} onOpenTag={onOpenTag} />}
 
       {post.hashtags && post.hashtags.length > 0 && (
         <div className="feed-tags">
@@ -416,45 +933,39 @@ function PostCard({
 
       {post.original ? (
         <div className="feed-repost">
-          <AuthorLine author={post.original.author} when={post.original.createdAt} />
-          {post.original.body && <p className="feed-body">{post.original.body}</p>}
-          {post.original.imageUrl && (
-            <img
-              className="feed-image-img"
-              src={`${cloudUrl}${post.original.imageUrl}`}
-              alt="Post attachment"
-              loading="lazy"
-            />
+          <AuthorLine author={post.original.author} when={post.original.createdAt} cloudUrl={cloudUrl} />
+          {post.original.body && (
+            <p className="feed-body">{renderRichText(post.original.body, onOpenTag, "orig")}</p>
+          )}
+          <PostMedia
+            images={post.original.images}
+            videos={post.original.videos}
+            imageUrl={post.original.imageUrl}
+            cloudUrl={cloudUrl}
+          />
+          {post.original.hashtags && post.original.hashtags.length > 0 && (
+            <div className="feed-tags">
+              {post.original.hashtags.map((tag) => (
+                <button key={tag} type="button" className="feed-tag" onClick={() => onOpenTag?.(tag)}>
+                  #{tag}
+                </button>
+              ))}
+            </div>
           )}
         </div>
-      ) : post.videos && post.videos.length > 0 ? (
-        <div className="feed-videos">
-          {post.videos.map((src) => (
-            <video key={src} className="feed-video" src={`${cloudUrl}${src}`} controls preload="metadata" />
-          ))}
-        </div>
-      ) : post.images && post.images.length > 1 ? (
-        <div className={`feed-image-grid feed-image-grid-${Math.min(post.images.length, 4)}`}>
-          {post.images.map((src) => (
-            <img
-              key={src}
-              className="feed-image-img"
-              src={`${cloudUrl}${src}`}
-              alt="Post attachment"
-              loading="lazy"
-            />
-          ))}
-        </div>
-      ) : post.imageUrl ? (
-        <img
-          className="feed-image-img"
-          src={`${cloudUrl}${post.imageUrl}`}
-          alt="Post attachment"
-          loading="lazy"
+      ) : (
+        <PostMedia
+          images={post.images}
+          videos={post.videos}
+          imageUrl={post.imageUrl}
+          cloudUrl={cloudUrl}
+          onOpenImage={(index) => setViewer(index)}
         />
-      ) : post.mediaId ? (
+      )}
+
+      {!post.original && !post.videos?.length && gallery.length === 0 && post.mediaId && (
         <div className="feed-image feed-image-placeholder">📷 Image</div>
-      ) : null}
+      )}
 
       {post.poll && (
         <div className="feed-poll">
@@ -486,14 +997,21 @@ function PostCard({
 
       <div className="feed-stats">
         {post.likes > 0 && (
-          <span className="feed-reaction-summary" title={reactionBreakdown(post.reactions)}>
+          <button
+            type="button"
+            className="feed-reaction-summary"
+            title={reactionBreakdown(post.reactions)}
+            aria-label={`${post.likes} reaction${post.likes === 1 ? "" : "s"}: ${reactionBreakdown(post.reactions).replace(/\n/g, ", ")}`}
+            onClick={() => setPickOpen((value) => !value)}
+            aria-expanded={pickOpen}
+          >
             {Object.entries(post.reactions ?? {})
               .filter(([, count]) => count > 0)
               .slice(0, 3)
               .map(([key]) => reactionEmoji(key))
               .join(" ")}{" "}
             {post.likes}
-          </span>
+          </button>
         )}
         <span className="feed-stats-spacer" />
         {post.comments > 0 && (
@@ -509,7 +1027,7 @@ function PostCard({
       </div>
 
       {pickOpen && (
-        <div className="reaction-picker">
+        <div className="reaction-picker" ref={pickerRef}>
           {REACTIONS.map((reaction) => (
             <button
               key={reaction.key}
@@ -526,9 +1044,10 @@ function PostCard({
       )}
       <div className="feed-actions">
         <button
+          ref={likeBtnRef}
           type="button"
           className={`feed-action${post.myReaction ? " active" : ""}`}
-          onClick={() => setPickOpen((value) => !value)}
+          onClick={() => setPickOpen(true)}
           onMouseEnter={() => setPickOpen(true)}
           aria-pressed={post.myReaction !== null}
           aria-expanded={pickOpen}
@@ -567,6 +1086,7 @@ function PostCard({
           Save
         </button>
         <button
+          ref={moreBtnRef}
           type="button"
           className={`feed-action feed-action-more${moreOpen ? " active" : ""}`}
           onClick={() => setMoreOpen((value) => !value)}
@@ -579,7 +1099,7 @@ function PostCard({
       </div>
 
       {moreOpen && (
-        <div className="feed-menu" role="menu">
+        <div className="feed-menu" role="menu" ref={menuRef}>
           {post.author.page && post.author.handle && onOpenPage && (
             <button
               type="button"
@@ -646,7 +1166,7 @@ function PostCard({
                 className="feed-menu-item feed-menu-danger"
                 onClick={() => {
                   setMoreOpen(false);
-                  void blockAuthor();
+                  setConfirm("block");
                 }}
               >
                 Block {authorName(post.author)}
@@ -662,7 +1182,7 @@ function PostCard({
                 className="feed-menu-item feed-menu-danger"
                 onClick={() => {
                   setMoreOpen(false);
-                  void remove();
+                  setConfirm("delete");
                 }}
               >
                 Delete post
@@ -682,14 +1202,24 @@ function PostCard({
                 <CommentRow
                   comment={comment}
                   client={client}
+                  cloudUrl={cloudUrl}
+                  viewerId={viewerId}
                   onChange={updateComment}
                   onReply={() => setReplyTo(comment.id)}
+                  onDelete={removeComment}
                 />
                 {(comments ?? [])
                   .filter((reply) => reply.parentId === comment.id)
                   .map((reply) => (
                     <div key={reply.id} className="feed-comment-reply">
-                      <CommentRow comment={reply} client={client} onChange={updateComment} />
+                      <CommentRow
+                        comment={reply}
+                        client={client}
+                        cloudUrl={cloudUrl}
+                        viewerId={viewerId}
+                        onChange={updateComment}
+                        onDelete={removeComment}
+                      />
                     </div>
                   ))}
               </div>
@@ -702,10 +1232,16 @@ function PostCard({
               </button>
             </div>
           )}
+          {commentError && (
+            <div className="feed-comment-error" role="alert">
+              {commentError}
+            </div>
+          )}
           <form className="feed-comment-form" onSubmit={addComment}>
             <input
               className="feed-comment-input"
               placeholder={replyTo ? "Write a reply…" : "Write a comment…"}
+              aria-label={replyTo ? "Write a reply" : "Write a comment"}
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
             />
@@ -713,12 +1249,48 @@ function PostCard({
               className="feed-comment-send"
               type="submit"
               disabled={!draft.trim() || busy}
+              aria-busy={busy}
               aria-label="Send comment"
             >
               <SendIcon size={15} />
             </button>
           </form>
         </div>
+      )}
+      {feedback && (
+        <div
+          className={`feed-post-feedback${feedback.kind === "error" ? " error" : ""}`}
+          role={feedback.kind === "error" ? "alert" : "status"}
+        >
+          {feedback.text}
+        </div>
+      )}
+      {gallery.length > 0 && viewer !== null && (
+        <MediaLightbox
+          images={gallery}
+          index={viewer}
+          cloudUrl={cloudUrl}
+          onClose={() => setViewer(null)}
+          onNavigate={setViewer}
+        />
+      )}
+      {confirm === "delete" && (
+        <ConfirmDialog
+          title="Delete post?"
+          message="This can't be undone. The post and its comments will be removed."
+          confirmLabel="Delete"
+          onConfirm={() => void remove()}
+          onCancel={() => setConfirm(null)}
+        />
+      )}
+      {confirm === "block" && (
+        <ConfirmDialog
+          title={`Block ${authorName(post.author)}?`}
+          message="They won't be able to see or interact with your posts, and you won't see theirs."
+          confirmLabel="Block"
+          onConfirm={() => void blockAuthor()}
+          onCancel={() => setConfirm(null)}
+        />
       )}
     </article>
   );
@@ -760,24 +1332,32 @@ function PageView({
   const [insightsOpen, setInsightsOpen] = useState(false);
   const [inbox, setInbox] = useState<Awaited<ReturnType<BotifyrClient["pageInbox"]>> | null>(null);
   const [inboxOpen, setInboxOpen] = useState(false);
+  const [section, setSection] = useState<"posts" | "about">("posts");
+  const [error, setError] = useState<string | null>(null);
+  const [followError, setFollowError] = useState<string | null>(null);
+  const [nonce, setNonce] = useState(0);
 
   useEffect(() => {
     let active = true;
     setLoading(true);
+    setError(null);
     Promise.all([client.getPage(handle), client.listPagePosts(handle)])
       .then(([record, list]) => {
         if (!active) return;
         setPage(record);
         setPosts(list);
       })
-      .catch(() => {})
+      .catch(() => {
+        if (active)
+          setError("We couldn't load this Page. It may have been removed, or the connection dropped.");
+      })
       .finally(() => {
         if (active) setLoading(false);
       });
     return () => {
       active = false;
     };
-  }, [client, handle]);
+  }, [client, handle, nonce]);
 
   const isAdmin = page?.role === "admin";
 
@@ -940,20 +1520,39 @@ function PageView({
   }
 
   async function toggleFollow() {
-    if (!page) return;
+    if (!page || busy) return;
+    const wasFollowing = page.following;
     setBusy(true);
+    setFollowError(null);
     try {
-      if (page.following) await client.unfollowPage(page.id);
+      if (wasFollowing) await client.unfollowPage(page.id);
       else await client.followPage(page.id);
-      setPage({ ...page, following: !page.following, followers: page.followers + (page.following ? -1 : 1) });
+      setPage((prev) =>
+        prev
+          ? {
+              ...prev,
+              following: !wasFollowing,
+              followers: Math.max(0, prev.followers + (wasFollowing ? -1 : 1)),
+            }
+          : prev,
+      );
     } catch {
-      // Leave the state as-is on failure.
+      setFollowError(
+        wasFollowing ? "Couldn't unfollow. Please try again." : "Couldn't follow. Please try again.",
+      );
     } finally {
       setBusy(false);
     }
   }
 
   const canManage = page?.role === "admin" || page?.role === "editor";
+  /** Backend gates: pin/settings = admin|editor; community = +moderator; insights = +analyst. */
+  const canModerate = canManage || page?.role === "moderator";
+  const canViewInsights = canManage || page?.role === "analyst";
+  const isStaff = canManage || canModerate || canViewInsights;
+  const cta = page?.cta?.trim() ?? "";
+  const ctaHref = /^(https?:|mailto:|tel:)/i.test(cta) ? cta : "";
+  const createdLabel = page ? new Date(page.createdAt).toLocaleDateString() : "";
   const updatePost = (next: FeedPost) => setPosts((prev) => prev.map((p) => (p.id === next.id ? next : p)));
   const removePost = (id: string) => setPosts((prev) => prev.filter((p) => p.id !== id));
 
@@ -967,78 +1566,143 @@ function PageView({
       </div>
 
       <div className="feed-scroll">
-        {page && (
-          <div className="page-head">
-            {page.coverUrl ? (
-              <img className="page-cover" src={page.coverUrl} alt="" />
-            ) : (
-              <div className="page-cover" />
-            )}
+        {loading && !page ? (
+          <div className="page-head" aria-hidden="true">
+            <div className="page-cover page-skel" />
             <div className="page-head-body">
-              <Avatar emoji={page.avatarEmoji} name={page.name} size={64} />
+              <span className="feed-avatar page-skel" style={{ width: 64, height: 64 }} />
               <div className="page-head-meta">
-                <div className="page-name">
-                  {page.name}
-                  {page.verified ? " ✓" : ""}
-                </div>
-                <div className="page-sub">
-                  @{page.handle}
-                  {page.category ? ` · ${page.category}` : ""} · {page.followers} follower
-                  {page.followers === 1 ? "" : "s"}
-                </div>
-                {page.about && <p className="page-about">{page.about}</p>}
+                <div className="page-skel page-skel-line" style={{ width: "38%" }} />
+                <div className="page-skel page-skel-line" style={{ width: "62%" }} />
               </div>
-              {canManage ? (
-                <div className="page-head-actions">
-                  <span className="feed-bot-badge">{page.role}</span>
-                  <select
-                    className="page-pin-select"
-                    value={page.pinnedPostId ?? ""}
-                    onChange={(event) => void pinPost(event.target.value || null)}
-                    title="Pin a post to the top"
-                  >
-                    <option value="">📌 Pin…</option>
-                    {posts.map((post) => (
-                      <option key={post.id} value={post.id}>
-                        {(post.body || "(photo)").slice(0, 40)}
-                      </option>
-                    ))}
-                  </select>
-                  <button type="button" className="feed-follow-btn" onClick={() => void openInbox()}>
-                    Community
-                  </button>
-                  <button type="button" className="feed-follow-btn" onClick={() => void openInsights()}>
-                    Insights
-                  </button>
-                  <button type="button" className="feed-follow-btn" onClick={openSettings}>
-                    Settings
-                  </button>
-                </div>
-              ) : (
-                <div className="page-head-actions">
-                  {page.cta &&
-                    (/^https?:\/\//i.test(page.cta) ? (
-                      <a className="feed-follow-btn" href={page.cta} target="_blank" rel="noreferrer">
-                        {page.cta.replace(/^https?:\/\//i, "").split("/")[0]}
-                      </a>
-                    ) : (
-                      <button type="button" className="feed-follow-btn">
-                        {page.cta}
-                      </button>
-                    ))}
-                  <button
-                    type="button"
-                    className={`feed-follow-btn${page.following ? " following" : ""}`}
-                    disabled={busy}
-                    onClick={() => void toggleFollow()}
-                  >
-                    {page.following ? "Following" : "Follow"}
-                  </button>
-                </div>
-              )}
             </div>
           </div>
-        )}
+        ) : error && !page ? (
+          <div className="page-error" role="alert">
+            <p>{error}</p>
+            <button type="button" className="feed-more" onClick={() => setNonce((n) => n + 1)}>
+              Retry
+            </button>
+          </div>
+        ) : page ? (
+          <>
+            <div className="page-head">
+              {page.coverUrl ? (
+                <img className="page-cover" src={page.coverUrl} alt="" decoding="async" />
+              ) : (
+                <div className="page-cover" />
+              )}
+              <div className="page-head-body">
+                <Avatar
+                  emoji={page.avatarEmoji}
+                  name={page.name}
+                  url={resolveAvatar(page.avatarUrl, cloudUrl)}
+                  size={64}
+                />
+                <div className="page-head-meta">
+                  <h1 className="page-name">
+                    {page.name}
+                    {page.verified ? " ✓" : ""}
+                  </h1>
+                  <div className="page-sub">
+                    @{page.handle}
+                    {page.category ? ` · ${page.category}` : ""} · {page.followers} follower
+                    {page.followers === 1 ? "" : "s"}
+                  </div>
+                  {page.about && <p className="page-about">{page.about}</p>}
+                </div>
+                {isStaff ? (
+                  <div className="page-head-actions">
+                    <span className="feed-bot-badge">{page.role}</span>
+                    {canManage && (
+                      <select
+                        className="page-pin-select"
+                        aria-label="Pin a post to the top"
+                        value={page.pinnedPostId ?? ""}
+                        onChange={(event) => void pinPost(event.target.value || null)}
+                        title="Pin a post to the top"
+                      >
+                        <option value="">📌 Pin…</option>
+                        {posts.map((post) => (
+                          <option key={post.id} value={post.id}>
+                            {(post.body || "(photo)").slice(0, 40)}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    {canModerate && (
+                      <button type="button" className="feed-follow-btn" onClick={() => void openInbox()}>
+                        Community
+                      </button>
+                    )}
+                    {canViewInsights && (
+                      <button type="button" className="feed-follow-btn" onClick={() => void openInsights()}>
+                        Insights
+                      </button>
+                    )}
+                    {canManage && (
+                      <button type="button" className="feed-follow-btn" onClick={openSettings}>
+                        Settings
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="page-head-actions">
+                    {ctaHref ? (
+                      <a className="feed-follow-btn" href={ctaHref} target="_blank" rel="noreferrer">
+                        {cta || ctaHref}
+                      </a>
+                    ) : cta ? (
+                      <span className="page-cta-badge" title="This Page's call to action">
+                        {cta}
+                      </span>
+                    ) : null}
+                    <button
+                      type="button"
+                      className={`feed-follow-btn${page.following ? " following" : ""}`}
+                      disabled={busy}
+                      aria-busy={busy}
+                      onClick={() => void toggleFollow()}
+                    >
+                      {busy
+                        ? page.following
+                          ? "Unfollowing…"
+                          : "Following…"
+                        : page.following
+                          ? "Following"
+                          : "Follow"}
+                    </button>
+                  </div>
+                )}
+              </div>
+              {followError && (
+                <p className="page-follow-error" role="alert">
+                  {followError}
+                </p>
+              )}
+            </div>
+            <div className="page-tabs" role="tablist" aria-label="Page sections">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={section === "posts"}
+                className={`page-tab${section === "posts" ? " active" : ""}`}
+                onClick={() => setSection("posts")}
+              >
+                Posts
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={section === "about"}
+                className={`page-tab${section === "about" ? " active" : ""}`}
+                onClick={() => setSection("about")}
+              >
+                About
+              </button>
+            </div>
+          </>
+        ) : null}
 
         {editing && page && (
           <form className="page-settings" onSubmit={saveSettings}>
@@ -1128,6 +1792,7 @@ function PageView({
                   <div key={person.id} className="page-role-row">
                     <span>{person.displayName || (person.handle ? `@${person.handle}` : person.id)}</span>
                     <select
+                      aria-label="Assign role"
                       defaultValue=""
                       onChange={(event) => {
                         if (event.target.value) void addRole(person, event.target.value);
@@ -1227,28 +1892,73 @@ function PageView({
           </div>
         )}
 
-        {loading ? (
-          <div className="feed-state">Loading…</div>
-        ) : posts.length === 0 ? (
-          <div className="feed-state">No posts yet.</div>
-        ) : (
-          posts.map((post) => (
-            <div key={post.id} className="feed-post-wrap">
-              {page?.pinnedPostId === post.id && <div className="feed-repost-label">📌 Pinned</div>}
-              <PostCard
-                post={post}
-                client={client}
-                cloudUrl={cloudUrl}
-                canDelete={canManage === true || (!post.pageId && post.author.id === viewerId)}
-                onChange={updatePost}
-                onDelete={removePost}
-                onBlock={(authorId) => setPosts((prev) => prev.filter((p) => p.author.id !== authorId))}
-                onOpenPage={onOpenPage}
-                onRepost={(next) => setPosts((prev) => [next, ...prev])}
-              />
+        {page &&
+          (section === "about" ? (
+            <div className="page-about-panel">
+              <div className="feed-rail-head">About</div>
+              {page.about ? (
+                <p className="page-about-text">{page.about}</p>
+              ) : (
+                <p className="feed-state">This Page hasn't added a description yet.</p>
+              )}
+              <dl className="page-fact-list">
+                <div className="page-fact">
+                  <dt>Handle</dt>
+                  <dd>@{page.handle}</dd>
+                </div>
+                {page.category && (
+                  <div className="page-fact">
+                    <dt>Category</dt>
+                    <dd>{page.category}</dd>
+                  </div>
+                )}
+                <div className="page-fact">
+                  <dt>Followers</dt>
+                  <dd>{page.followers}</dd>
+                </div>
+                <div className="page-fact">
+                  <dt>Created</dt>
+                  <dd>{createdLabel}</dd>
+                </div>
+                {ctaHref && (
+                  <div className="page-fact">
+                    <dt>Link</dt>
+                    <dd>
+                      <a href={ctaHref} target="_blank" rel="noreferrer">
+                        {cta || ctaHref}
+                      </a>
+                    </dd>
+                  </div>
+                )}
+              </dl>
             </div>
-          ))
-        )}
+          ) : loading ? (
+            <div className="feed-state">Loading…</div>
+          ) : posts.length === 0 ? (
+            <div className="feed-state">
+              {canManage
+                ? "You haven't posted yet — use the composer to publish as this Page."
+                : "This Page hasn't posted yet."}
+            </div>
+          ) : (
+            posts.map((post) => (
+              <div key={post.id} className="feed-post-wrap">
+                {page.pinnedPostId === post.id && <div className="feed-repost-label">📌 Pinned</div>}
+                <PostCard
+                  post={post}
+                  client={client}
+                  cloudUrl={cloudUrl}
+                  canDelete={canManage === true || (!post.pageId && post.author.id === viewerId)}
+                  viewerId={viewerId}
+                  onChange={updatePost}
+                  onDelete={removePost}
+                  onBlock={(authorId) => setPosts((prev) => prev.filter((p) => p.author.id !== authorId))}
+                  onOpenPage={onOpenPage}
+                  onRepost={(next) => setPosts((prev) => [next, ...prev])}
+                />
+              </div>
+            ))
+          ))}
       </div>
     </div>
   );
@@ -1313,6 +2023,7 @@ function TagView({
               client={client}
               cloudUrl={cloudUrl}
               canDelete={!post.pageId && post.author.id === viewerId}
+              viewerId={viewerId}
               onChange={updatePost}
               onDelete={removePost}
               onBlock={(authorId) => setPosts((prev) => prev.filter((p) => p.author.id !== authorId))}
@@ -1326,33 +2037,854 @@ function TagView({
   );
 }
 
+/** "m:ss" for the reel transport bar. */
+function formatClock(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return "0:00";
+  const total = Math.floor(seconds);
+  const mins = Math.floor(total / 60);
+  const secs = total % 60;
+  return `${mins}:${String(secs).padStart(2, "0")}`;
+}
+
+/** Play, but never throw: autoplay can be blocked and jsdom has no video engine. */
+function safePlay(element: HTMLVideoElement | null | undefined): void {
+  if (!element) return;
+  try {
+    const attempt = element.play();
+    if (attempt && typeof attempt.catch === "function") attempt.catch(() => {});
+  } catch {
+    // Autoplay blocked or unimplemented — the UI then shows a manual play button.
+  }
+}
+
+/** Pause, tolerating environments (jsdom) where media methods are unimplemented. */
+function safePause(element: HTMLVideoElement | null | undefined): void {
+  if (!element) return;
+  try {
+    element.pause();
+  } catch {
+    // Unimplemented media element in tests.
+  }
+}
+
+/**
+ * One reel: the video, its overlay (creator, caption, action rail) and a compact
+ * custom transport. Playback state comes from media events, so controls never
+ * claim the video is playing when it is not.
+ */
+function ReelCard({
+  post,
+  index,
+  total,
+  active,
+  preload,
+  muted,
+  cloudUrl,
+  client,
+  reducedMotion,
+  onEngageChange,
+  onOpenComments,
+  onOpenPage,
+  onHide,
+  onBlock,
+  onToast,
+  onToggleMute,
+}: {
+  post: FeedPost;
+  index: number;
+  total: number;
+  active: boolean;
+  preload: "auto" | "metadata" | "none";
+  muted: boolean;
+  cloudUrl: string;
+  client: BotifyrClient;
+  reducedMotion: boolean;
+  onEngageChange: (next: FeedPost) => void;
+  onOpenComments: (post: FeedPost) => void;
+  onOpenPage?: (handle: string) => void;
+  onHide: (id: string) => void;
+  onBlock: (authorId: string) => void;
+  onToast: (message: string) => void;
+  onToggleMute: () => void;
+}) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const [waiting, setWaiting] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [pageFollow, setPageFollow] = useState<{
+    id: string;
+    following: boolean;
+    followers: number;
+  } | null>(null);
+  const [followBusy, setFollowBusy] = useState(false);
+
+  const src = post.videos?.[0];
+  const hasVideo = Boolean(src);
+  const name = authorName(post.author);
+  const pageHandle = post.pageId && post.author.handle ? post.author.handle : null;
+
+  // Follow state isn't on the reel payload; fetch it for Page-authored reels
+  // once they become active (and never invent it if the lookup fails).
+  useEffect(() => {
+    if (!pageHandle || pageFollow || !active) return;
+    let alive = true;
+    client
+      .getPage(pageHandle)
+      .then((page) => {
+        if (alive) setPageFollow({ id: page.id, following: page.following, followers: page.followers });
+      })
+      .catch(() => {
+        // No follow control if we can't read the real state.
+      });
+    return () => {
+      alive = false;
+    };
+  }, [active, pageHandle, pageFollow, client]);
+
+  // Only the active reel plays, and never automatically under reduced motion.
+  useEffect(() => {
+    const element = videoRef.current;
+    if (!element) return;
+    if (active && !reducedMotion) safePlay(element);
+    else safePause(element);
+  }, [active, reducedMotion, reloadKey]);
+
+  useEffect(() => {
+    const element = videoRef.current;
+    if (element) element.muted = muted;
+  }, [muted, reloadKey]);
+
+  // Release playback when this reel leaves the tree.
+  useEffect(() => {
+    const element = videoRef.current;
+    return () => safePause(element);
+  }, [reloadKey]);
+
+  function togglePlay() {
+    const element = videoRef.current;
+    if (!element) return;
+    if (element.paused || element.ended) safePlay(element);
+    else safePause(element);
+  }
+
+  function retry() {
+    setFailed(false);
+    setWaiting(true);
+    setProgress(0);
+    setReloadKey((value) => value + 1);
+  }
+
+  async function toggleLike() {
+    const liked = !post.likedByMe;
+    const snapshot = post;
+    onEngageChange({ ...post, likedByMe: liked, likes: Math.max(0, post.likes + (liked ? 1 : -1)) });
+    try {
+      await client.likePost(post.id, liked);
+    } catch {
+      onEngageChange(snapshot);
+      onToast("Couldn't update your like");
+    }
+  }
+
+  async function toggleSave() {
+    const saved = !post.savedByMe;
+    const snapshot = post;
+    onEngageChange({ ...post, savedByMe: saved });
+    try {
+      await client.savePost(post.id, saved);
+    } catch {
+      onEngageChange(snapshot);
+      onToast(saved ? "Couldn't save this reel" : "Couldn't remove from saved");
+    }
+  }
+
+  async function share() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await client.repost(post.id);
+      onEngageChange({ ...post, shares: post.shares + 1, sharedByMe: true });
+      onToast("Shared to your feed");
+    } catch {
+      onToast("Couldn't share this reel");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function hide() {
+    setMoreOpen(false);
+    try {
+      await client.hidePost(post.id, true);
+      onHide(post.id);
+    } catch {
+      onToast("Couldn't hide this reel");
+    }
+  }
+
+  async function report() {
+    setMoreOpen(false);
+    try {
+      await client.reportPost(post.id);
+      onToast("Report submitted");
+    } catch {
+      onToast("Couldn't submit the report");
+    }
+  }
+
+  async function blockAuthor() {
+    setMoreOpen(false);
+    try {
+      await client.blockUser(post.author.id);
+      onBlock(post.author.id);
+    } catch {
+      onToast("Couldn't block this creator");
+    }
+  }
+
+  async function fullscreen() {
+    const element = videoRef.current?.closest(".reel-stage") as HTMLElement | null;
+    if (!element || typeof element.requestFullscreen !== "function") return;
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await element.requestFullscreen();
+    } catch {
+      // Fullscreen can be denied; the rest of the player still works.
+    }
+  }
+
+  async function toggleFollow() {
+    if (!pageFollow || followBusy) return;
+    const wasFollowing = pageFollow.following;
+    const snapshot = pageFollow;
+    setPageFollow({
+      ...pageFollow,
+      following: !wasFollowing,
+      followers: Math.max(0, pageFollow.followers + (wasFollowing ? -1 : 1)),
+    });
+    setFollowBusy(true);
+    try {
+      if (wasFollowing) await client.unfollowPage(pageFollow.id);
+      else await client.followPage(pageFollow.id);
+    } catch {
+      setPageFollow(snapshot);
+      onToast(wasFollowing ? "Couldn't unfollow" : "Couldn't follow");
+    } finally {
+      setFollowBusy(false);
+    }
+  }
+
+  const canOpenPage = Boolean(post.pageId && post.author.handle && onOpenPage);
+
+  return (
+    <div
+      className={`reel${active ? " reel--active" : ""}`}
+      data-reel-index={index}
+      onClick={togglePlay}
+      role="group"
+      aria-label={`Reel ${index + 1} of ${total} by ${name}`}
+    >
+      <div className="reel-stage">
+        {hasVideo ? (
+          <video
+            key={reloadKey}
+            ref={videoRef}
+            className="reel-video"
+            src={`${cloudUrl}${src}`}
+            poster={post.imageUrl ? `${cloudUrl}${post.imageUrl}` : undefined}
+            muted={muted}
+            loop
+            playsInline
+            preload={preload}
+            aria-label={`${name}'s reel video`}
+            onPlay={() => setPlaying(true)}
+            onPause={() => setPlaying(false)}
+            onPlaying={() => {
+              setPlaying(true);
+              setWaiting(false);
+              setFailed(false);
+            }}
+            onLoadStart={() => setWaiting(true)}
+            onWaiting={() => setWaiting(true)}
+            onLoadedMetadata={(event) => {
+              setDuration(event.currentTarget.duration || 0);
+              setWaiting(false);
+            }}
+            onCanPlay={() => setWaiting(false)}
+            onTimeUpdate={(event) => setProgress(event.currentTarget.currentTime)}
+            onEnded={() => setPlaying(false)}
+            onError={() => {
+              setWaiting(false);
+              setFailed(true);
+            }}
+          />
+        ) : (
+          <div className="reel-missing">Video unavailable</div>
+        )}
+
+        {hasVideo && (
+          <>
+            <div className="reel-scrim" aria-hidden="true" />
+
+            {waiting && !failed && (
+              <div className="reel-spinner" role="status" aria-live="polite">
+                <span className="reel-spinner-ring" />
+                <span className="visually-hidden">Loading video</span>
+              </div>
+            )}
+
+            {failed && (
+              <div className="reel-error" role="alert">
+                <span>Couldn&apos;t play this reel.</span>
+                <button
+                  type="button"
+                  className="reel-retry"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    retry();
+                  }}
+                >
+                  Retry
+                </button>
+              </div>
+            )}
+
+            {!playing && !failed && (
+              <button
+                type="button"
+                className="reel-play"
+                aria-label="Play video"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  togglePlay();
+                }}
+              >
+                <PlayIcon size={40} />
+              </button>
+            )}
+
+            <div className="reel-actions" onClick={(event) => event.stopPropagation()}>
+              <div className="reel-action">
+                <button
+                  type="button"
+                  className={`reel-action-btn${post.likedByMe ? " active" : ""}`}
+                  aria-label={post.likedByMe ? "Unlike" : "Like"}
+                  aria-pressed={post.likedByMe}
+                  onClick={() => void toggleLike()}
+                >
+                  <HeartIcon filled={post.likedByMe} size={26} />
+                </button>
+                <span className="reel-action-count">{post.likes}</span>
+              </div>
+
+              <div className="reel-action">
+                <button
+                  type="button"
+                  className="reel-action-btn"
+                  aria-label="Comments"
+                  onClick={() => onOpenComments(post)}
+                >
+                  <MessageIcon size={25} />
+                </button>
+                <span className="reel-action-count">{post.comments}</span>
+              </div>
+
+              <div className="reel-action">
+                <button
+                  type="button"
+                  className="reel-action-btn"
+                  aria-label="Share"
+                  aria-busy={busy}
+                  disabled={busy}
+                  onClick={() => void share()}
+                >
+                  <ForwardIcon size={25} />
+                </button>
+                <span className="reel-action-count">{post.shares}</span>
+              </div>
+
+              <div className="reel-action">
+                <button
+                  type="button"
+                  className={`reel-action-btn${post.savedByMe ? " active" : ""}`}
+                  aria-label={post.savedByMe ? "Unsave" : "Save"}
+                  aria-pressed={post.savedByMe}
+                  onClick={() => void toggleSave()}
+                >
+                  <BookmarkIcon filled={post.savedByMe} size={24} />
+                </button>
+                <span className="reel-action-count">{post.savedByMe ? "Saved" : "Save"}</span>
+              </div>
+
+              <div className="reel-action reel-action-more">
+                <button
+                  type="button"
+                  className="reel-action-btn"
+                  aria-label="More options"
+                  aria-expanded={moreOpen}
+                  onClick={() => setMoreOpen((value) => !value)}
+                >
+                  <MoreIcon size={22} />
+                </button>
+              </div>
+            </div>
+
+            {moreOpen && (
+              <div className="reel-menu" onClick={(event) => event.stopPropagation()}>
+                <button type="button" className="reel-menu-item" onClick={() => void hide()}>
+                  Hide this reel
+                </button>
+                <button type="button" className="reel-menu-item" onClick={() => void report()}>
+                  Report
+                </button>
+                <button type="button" className="reel-menu-item danger" onClick={() => void blockAuthor()}>
+                  Block {name}
+                </button>
+              </div>
+            )}
+
+            <div className="reel-info" onClick={(event) => event.stopPropagation()}>
+              <div className="reel-creator-row">
+                {canOpenPage ? (
+                  <button
+                    type="button"
+                    className="reel-creator"
+                    onClick={() => onOpenPage?.(post.author.handle as string)}
+                  >
+                    <Avatar
+                      emoji={authorEmoji(post.author)}
+                      name={name}
+                      url={resolveAvatar(post.author.avatarUrl, cloudUrl)}
+                      size={34}
+                    />
+                    <span className="reel-creator-name">{name}</span>
+                  </button>
+                ) : (
+                  <span className="reel-creator">
+                    <Avatar
+                      emoji={authorEmoji(post.author)}
+                      name={name}
+                      url={resolveAvatar(post.author.avatarUrl, cloudUrl)}
+                      size={34}
+                    />
+                    <span className="reel-creator-name">{name}</span>
+                  </span>
+                )}
+                {pageFollow && (
+                  <button
+                    type="button"
+                    className={`reel-follow${pageFollow.following ? " following" : ""}`}
+                    aria-pressed={pageFollow.following}
+                    disabled={followBusy}
+                    onClick={() => void toggleFollow()}
+                  >
+                    {pageFollow.following ? "Following" : "Follow"}
+                  </button>
+                )}
+              </div>
+              {post.body && <p className="reel-caption">{post.body}</p>}
+              {post.hashtags && post.hashtags.length > 0 && (
+                <div className="reel-tags">
+                  {post.hashtags.map((tag) => (
+                    <span key={tag} className="reel-tag">
+                      #{tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+              <span className="reel-audio">Original audio · {name}</span>
+            </div>
+          </>
+        )}
+      </div>
+
+      {hasVideo && (
+        <div className="reel-transport" onClick={(event) => event.stopPropagation()}>
+          <button
+            type="button"
+            className="reel-transport-btn"
+            aria-label={playing ? "Pause" : "Play"}
+            aria-pressed={playing}
+            onClick={togglePlay}
+          >
+            {playing ? <PauseIcon size={18} /> : <PlayIcon size={18} />}
+          </button>
+          <span className="reel-transport-time">{formatClock(progress)}</span>
+          <input
+            type="range"
+            className="reel-seek"
+            min={0}
+            max={duration > 0 ? duration : 0}
+            step="any"
+            value={duration > 0 ? Math.min(progress, duration) : 0}
+            disabled={duration <= 0 || failed}
+            aria-label="Seek"
+            aria-valuetext={`${formatClock(progress)} of ${formatClock(duration)}`}
+            onChange={(event) => {
+              const next = Number(event.target.value);
+              setProgress(next);
+              const element = videoRef.current;
+              try {
+                if (element) element.currentTime = next;
+              } catch {
+                // Seeking can throw before metadata loads; state still updates.
+              }
+            }}
+          />
+          <span className="reel-transport-time">{formatClock(duration)}</span>
+          <button
+            type="button"
+            className="reel-transport-btn"
+            aria-label={muted ? "Unmute video" : "Mute video"}
+            aria-pressed={muted}
+            onClick={onToggleMute}
+          >
+            <VolumeIcon size={17} muted={muted} />
+          </button>
+          <button
+            type="button"
+            className="reel-transport-btn"
+            aria-label="Full screen"
+            onClick={() => void fullscreen()}
+          >
+            <FullscreenIcon size={17} />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Comments for one reel, as a bottom sheet over the still-mounted video. */
+function ReelComments({
+  post,
+  client,
+  cloudUrl,
+  onClose,
+}: {
+  post: FeedPost;
+  client: BotifyrClient;
+  cloudUrl: string;
+  onClose: () => void;
+}) {
+  const [comments, setComments] = useState<FeedComment[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    client
+      .listComments(post.id)
+      .then((list) => {
+        if (alive) setComments(list);
+      })
+      .catch((err) => {
+        if (alive) setError(err instanceof Error ? err.message : "Couldn't load comments");
+      })
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [client, post.id]);
+
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  function updateComment(next: FeedComment) {
+    setComments((prev) => (prev ?? []).map((comment) => (comment.id === next.id ? next : comment)));
+  }
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    const body = draft.trim();
+    if (!body || busy) return;
+    setBusy(true);
+    try {
+      const created = await client.addComment(post.id, body);
+      setComments((prev) => [...(prev ?? []), created]);
+      setDraft("");
+      setError(null);
+    } catch {
+      setError("Couldn't post your comment");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div
+      className="reel-sheet"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Comments on ${authorName(post.author)}'s reel`}
+    >
+      <button type="button" className="reel-sheet-backdrop" aria-label="Close comments" onClick={onClose} />
+      <div className="reel-sheet-panel">
+        <div className="reel-sheet-head">
+          <span>
+            {post.comments} comment{post.comments === 1 ? "" : "s"}
+          </span>
+          <button type="button" className="reel-sheet-close" onClick={onClose} aria-label="Close comments">
+            ✕
+          </button>
+        </div>
+        <div className="reel-sheet-body">
+          {loading ? (
+            <div className="reel-sheet-note">Loading comments…</div>
+          ) : (comments ?? []).length === 0 && !error ? (
+            <div className="reel-sheet-note">No comments yet. Be the first.</div>
+          ) : (
+            (comments ?? []).map((comment) => (
+              <CommentRow
+                key={comment.id}
+                comment={comment}
+                client={client}
+                cloudUrl={cloudUrl}
+                onChange={updateComment}
+              />
+            ))
+          )}
+          {error && (
+            <div className="reel-sheet-note" role="alert">
+              {error}
+            </div>
+          )}
+        </div>
+        <form className="reel-sheet-form" onSubmit={submit}>
+          <input
+            className="reel-sheet-input"
+            placeholder="Add a comment…"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            aria-label="Add a comment"
+          />
+          <button
+            type="submit"
+            className="reel-sheet-send"
+            disabled={!draft.trim() || busy}
+            aria-label="Post comment"
+          >
+            <SendIcon size={16} />
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 function ReelsView({
   client,
   cloudUrl,
+  onOpenPage,
   onBack,
 }: {
   client: BotifyrClient;
   cloudUrl: string;
+  onOpenPage?: (handle: string) => void;
   onBack: () => void;
 }) {
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const rafRef = useRef<number | null>(null);
   const [reels, setReels] = useState<FeedPost[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [active, setActive] = useState(0);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [moreError, setMoreError] = useState(false);
+  const [muted, setMuted] = useState(() => {
+    try {
+      return window.localStorage.getItem("botifyr.reels.muted") !== "false";
+    } catch {
+      return true;
+    }
+  });
+  const [reducedMotion, setReducedMotion] = useState(false);
+  const [commentsFor, setCommentsFor] = useState<FeedPost | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const page = await client.listReels();
+      setReels(page.items);
+      setNextCursor(page.nextCursor ?? null);
+      setActive(0);
+      setMoreError(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't load reels");
+    } finally {
+      setLoading(false);
+    }
+  }, [client]);
 
   useEffect(() => {
-    let active = true;
-    client
-      .listReels()
-      .then((page) => {
-        if (active) setReels(page.items);
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [client]);
+    void load();
+  }, [load]);
+
+  // Persist the viewer's audio choice across reels and sessions.
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("botifyr.reels.muted", String(muted));
+    } catch {
+      // Storage can be unavailable; the in-memory preference still applies.
+    }
+  }, [muted]);
+
+  // Respect prefers-reduced-motion: no autoplay, the user presses play.
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const query = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setReducedMotion(query.matches);
+    update();
+    query.addEventListener?.("change", update);
+    return () => query.removeEventListener?.("change", update);
+  }, []);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = window.setTimeout(() => setToast(null), 2400);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
+
+  const loadMore = useCallback(async () => {
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    setMoreError(false);
+    try {
+      const page = await client.listReels(nextCursor);
+      setReels((prev) => [...prev, ...page.items]);
+      setNextCursor(page.nextCursor ?? null);
+    } catch {
+      setMoreError(true);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [client, nextCursor, loadingMore]);
+
+  // Fetch the next page as the last loaded reel comes into reach.
+  useEffect(() => {
+    if (reels.length > 0 && nextCursor && active >= reels.length - 1) void loadMore();
+  }, [active, reels.length, nextCursor, loadMore]);
+
+  const computeActive = useCallback(() => {
+    const element = scrollerRef.current;
+    if (!element) return;
+    const nodes = element.querySelectorAll<HTMLElement>(".reel");
+    if (nodes.length === 0) return;
+    const center = element.scrollTop + element.clientHeight / 2;
+    let best = 0;
+    let bestDistance = Number.POSITIVE_INFINITY;
+    nodes.forEach((node, i) => {
+      const middle = node.offsetTop + node.offsetHeight / 2;
+      const distance = Math.abs(middle - center);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = i;
+      }
+    });
+    setActive((prev) => (prev === best ? prev : best));
+  }, []);
+
+  const onScroll = useCallback(() => {
+    if (rafRef.current != null) return;
+    rafRef.current = window.requestAnimationFrame(() => {
+      rafRef.current = null;
+      computeActive();
+    });
+  }, [computeActive]);
+
+  useEffect(
+    () => () => {
+      if (rafRef.current != null) window.cancelAnimationFrame(rafRef.current);
+    },
+    [],
+  );
+
+  const goTo = useCallback(
+    (target: number) => {
+      if (reels.length === 0) return;
+      const clamped = Math.max(0, Math.min(reels.length - 1, target));
+      setActive(clamped);
+      const node = scrollerRef.current?.querySelectorAll<HTMLElement>(".reel")[clamped];
+      try {
+        node?.scrollIntoView({ behavior: "smooth", block: "start" });
+      } catch {
+        // jsdom does not implement scrollIntoView.
+      }
+    },
+    [reels.length],
+  );
+
+  const toggleActiveVideo = useCallback(() => {
+    const element = scrollerRef.current?.querySelector<HTMLVideoElement>(".reel--active video");
+    if (!element) return;
+    if (element.paused || element.ended) safePlay(element);
+    else safePause(element);
+  }, []);
+
+  function onKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    const target = event.target as HTMLElement | null;
+    // Let Space/Enter activate a focused control instead of toggling playback.
+    if (target?.closest("button, a, input, textarea, select")) {
+      if (event.key === " " || event.key === "Enter") return;
+    }
+    switch (event.key) {
+      case "ArrowDown":
+      case "j":
+      case "PageDown":
+        event.preventDefault();
+        goTo(active + 1);
+        break;
+      case "ArrowUp":
+      case "k":
+      case "PageUp":
+        event.preventDefault();
+        goTo(active - 1);
+        break;
+      case " ":
+        event.preventDefault();
+        toggleActiveVideo();
+        break;
+      case "m":
+      case "M":
+        setMuted((value) => !value);
+        break;
+      case "Escape":
+        onBack();
+        break;
+      default:
+        break;
+    }
+  }
+
+  const updateReel = useCallback((next: FeedPost) => {
+    setReels((prev) => prev.map((post) => (post.id === next.id ? next : post)));
+  }, []);
+
+  const removeReel = useCallback((id: string) => {
+    setReels((prev) => prev.filter((post) => post.id !== id));
+  }, []);
+
+  const removeAuthor = useCallback((authorId: string) => {
+    setReels((prev) => prev.filter((post) => post.author.id !== authorId));
+  }, []);
 
   return (
     <div className="feed">
@@ -1361,32 +2893,118 @@ function ReelsView({
           ← Back
         </button>
         <span className="feed-topbar-title">Reels</span>
+        <span className="feed-stats-spacer" />
+        <button
+          type="button"
+          className="feed-composer-tool"
+          onClick={() => void load()}
+          aria-label="Refresh reels"
+        >
+          <RefreshIcon size={15} />
+        </button>
+        <button
+          type="button"
+          className="feed-composer-tool"
+          onClick={() => setMuted((value) => !value)}
+          aria-pressed={muted}
+          aria-label={muted ? "Unmute reels" : "Mute reels"}
+        >
+          <VolumeIcon size={15} muted={muted} /> {muted ? "Muted" : "Sound"}
+        </button>
       </div>
-      <div className="reels-scroll">
+
+      <div
+        className="reels-scroll"
+        ref={scrollerRef}
+        onScroll={onScroll}
+        onKeyDown={onKeyDown}
+        tabIndex={0}
+        role="region"
+        aria-label="Reels"
+      >
         {loading ? (
-          <div className="feed-state">Loading…</div>
+          <div className="reels-loading" aria-hidden="true">
+            {[0, 1].map((key) => (
+              <div key={key} className="reel-skeleton">
+                <div className="reel-skeleton-stage" />
+                <div className="reel-skeleton-line" />
+              </div>
+            ))}
+          </div>
+        ) : error ? (
+          <div className="reels-state">
+            <div className="feed-error" role="alert">
+              <span>{error}</span>
+              <button type="button" className="feed-error-retry" onClick={() => void load()}>
+                Retry
+              </button>
+            </div>
+          </div>
         ) : reels.length === 0 ? (
-          <div className="feed-state">No reels yet.</div>
-        ) : (
-          reels.map((post) => (
-            <div key={post.id} className="reel">
-              {post.videos?.[0] && (
-                <video
-                  className="reel-video"
-                  src={`${cloudUrl}${post.videos[0]}`}
-                  controls
-                  loop
-                  playsInline
-                />
-              )}
-              <div className="reel-meta">
-                {authorEmoji(post.author)} {authorName(post.author)}
-                {post.body ? ` · ${post.body}` : ""}
+          <div className="reels-state">
+            <div className="feed-empty">
+              <div className="feed-empty-emoji">🎬</div>
+              <div className="feed-empty-title">No reels yet</div>
+              <div className="feed-empty-sub">
+                Reels are short videos shared to the Feed. Post one to see it here.
               </div>
             </div>
-          ))
+          </div>
+        ) : (
+          <>
+            {reels.map((post, index) => (
+              <ReelCard
+                key={post.id}
+                post={post}
+                index={index}
+                total={reels.length}
+                active={index === active}
+                preload={index === active ? "auto" : Math.abs(index - active) === 1 ? "metadata" : "none"}
+                muted={muted}
+                cloudUrl={cloudUrl}
+                client={client}
+                reducedMotion={reducedMotion}
+                onEngageChange={updateReel}
+                onOpenComments={setCommentsFor}
+                onOpenPage={onOpenPage}
+                onHide={removeReel}
+                onBlock={removeAuthor}
+                onToast={setToast}
+                onToggleMute={() => setMuted((value) => !value)}
+              />
+            ))}
+            {loadingMore && (
+              <div className="reels-more">
+                <span className="reel-spinner-ring" />
+                <span>Loading more reels…</span>
+              </div>
+            )}
+            {moreError && (
+              <div className="reels-more">
+                <span>Couldn&apos;t load more.</span>
+                <button type="button" className="feed-error-retry" onClick={() => void loadMore()}>
+                  Retry
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
+
+      {toast && (
+        <div className="reel-toast" role="status" aria-live="polite">
+          {toast}
+        </div>
+      )}
+
+      {commentsFor && (
+        <ReelComments
+          post={commentsFor}
+          client={client}
+          cloudUrl={cloudUrl}
+          onClose={() => setCommentsFor(null)}
+        />
+      )}
     </div>
   );
 }
@@ -1448,6 +3066,7 @@ function AlbumView({
               client={client}
               cloudUrl={cloudUrl}
               canDelete={!post.pageId && post.author.id === viewerId}
+              viewerId={viewerId}
               onChange={updatePost}
               onDelete={removePost}
               onBlock={(authorId) => setPosts((prev) => prev.filter((p) => p.author.id !== authorId))}
@@ -1478,6 +3097,7 @@ function GroupView({
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -1513,12 +3133,14 @@ function GroupView({
     const body = draft.trim();
     if (!body || !group || busy) return;
     setBusy(true);
+    setError(null);
     try {
       const created = await client.createPost({ body, groupId: group.id });
       setPosts((prev) => [created, ...prev]);
       setDraft("");
-    } catch {
-      // ignore
+    } catch (err) {
+      // Keep the text so a failed group post can be retried.
+      setError(err instanceof Error ? err.message : "Couldn't post to this group");
     } finally {
       setBusy(false);
     }
@@ -1564,14 +3186,33 @@ function GroupView({
               <Avatar name="You" />
               <textarea
                 className="feed-composer-input"
+                aria-label={`Post in ${group.name}`}
                 placeholder={`Post in ${group.name}…`}
                 rows={2}
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
               />
             </div>
+            {error && (
+              <div className="feed-composer-error" role="alert">
+                {error}
+              </div>
+            )}
             <div className="feed-composer-actions">
-              <button className="feed-post-btn" type="submit" disabled={!draft.trim() || busy}>
+              {draft.length > 0 && (
+                <span
+                  className={`feed-composer-count${draft.length > MAX_POST_CHARS ? " over" : ""}`}
+                  aria-live="polite"
+                >
+                  {draft.length} / {MAX_POST_CHARS}
+                </span>
+              )}
+              <button
+                className="feed-post-btn"
+                type="submit"
+                aria-busy={busy}
+                disabled={!draft.trim() || busy || draft.length > MAX_POST_CHARS}
+              >
                 {busy ? "Posting…" : "Post"}
               </button>
             </div>
@@ -1590,11 +3231,565 @@ function GroupView({
               client={client}
               cloudUrl={cloudUrl}
               canDelete={!post.pageId && post.author.id === viewerId}
+              viewerId={viewerId}
               onChange={updatePost}
               onDelete={removePost}
               onBlock={(authorId) => setPosts((prev) => prev.filter((p) => p.author.id !== authorId))}
               onRepost={(next) => setPosts((prev) => [next, ...prev])}
             />
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+const FEED_TAB_KEY = "botifyr.feedTab";
+const FEED_SORT_KEY = "botifyr.feedSort";
+/** Mirrors the server's MAX_POST_BODY (apps/cloud/src/server.ts). */
+const MAX_POST_CHARS = 4000;
+/** Mirrors the server's `/v1/uploads` guard (15 MB decoded). Images are capped
+ *  lower so optional base64 encoding stays under the 25 MB JSON body limit. */
+const MAX_IMAGE_BYTES = 12 * 1024 * 1024;
+const MAX_VIDEO_BYTES = 15 * 1024 * 1024;
+/** The server keeps at most 4 media ids per post. */
+const MAX_ATTACHMENTS = 4;
+/** Composer text is persisted so it survives a reload; media is never persisted
+ *  (base64 would blow the storage quota and is a privacy risk). */
+const FEED_DRAFT_KEY = "botifyr.feedDraft";
+/** A small, curated set for the composer's "Mood" picker. */
+const FEED_EMOJIS = [
+  "😀", "😄", "😁", "😆", "😊", "🙂", "😉", "😍",
+  "😘", "😎", "🤩", "🥳", "😇", "🤔", "😴", "😭",
+  "😅", "😂", "🤣", "😢", "😮", "😡", "🤯", "🥺",
+  "👍", "👏", "🙌", "🙏", "💪", "👋", "🤝", "✌️",
+  "❤️", "🔥", "✨", "🎉", "💡", "🚀", "🌟", "☕",
+];
+
+/** A file the user picked, held in memory until it is uploaded on publish. */
+interface ComposerAttachment {
+  /** Stable key so a retry uploads only files that have not succeeded yet. */
+  id: string;
+  name: string;
+  mime: string;
+  data: string;
+  size: number;
+  /** Per-image accessibility description (optional). */
+  alt: string;
+}
+
+/** How long a photo story shows before auto-advancing. */
+const STORY_IMAGE_DURATION_MS = 5000;
+/** How long a text-only story shows (quicker to read than a photo). */
+const STORY_TEXT_DURATION_MS = 4000;
+/** A press held longer than this pauses instead of advancing. */
+const STORY_HOLD_MS = 220;
+const STORY_SEEN_KEY = "botifyr.seenStories";
+/** Cap the locally-remembered seen list so it cannot grow without bound. */
+const STORY_SEEN_LIMIT = 500;
+/** Quick reactions offered on a story (docs/feed-next.md §FR-13). */
+const STORY_REACTIONS = ["❤️", "😂", "😮", "😢", "👏"];
+
+/** A creator's collection of active stories, in play order. */
+type StoryGroup = { author: Story["author"]; stories: Story[] };
+
+function storyDuration(story: Story): number {
+  return story.imageUrl ? STORY_IMAGE_DURATION_MS : STORY_TEXT_DURATION_MS;
+}
+
+/** Read the locally-remembered "seen" story ids (the API has no view route). */
+function readSeenStories(): Record<string, true> {
+  try {
+    const raw = localStorage.getItem(STORY_SEEN_KEY);
+    const list = raw ? (JSON.parse(raw) as unknown) : [];
+    if (!Array.isArray(list)) return {};
+    return Object.fromEntries(
+      list.filter((id): id is string => typeof id === "string").map((id) => [id, true]),
+    );
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Group a flat, newest-first story list into per-creator collections. Creators
+ * keep the order they first appear in (most recent story first); each creator's
+ * own stories play oldest→newest so the collection reads chronologically.
+ */
+function groupStories(stories: Story[]): StoryGroup[] {
+  const now = Date.now();
+  const groups = new Map<string, StoryGroup>();
+  for (const story of stories) {
+    // The server filters expired stories, but one may lapse while the app is open.
+    if (new Date(story.expiresAt).getTime() <= now) continue;
+    const existing = groups.get(story.author.id);
+    if (existing) existing.stories.push(story);
+    else groups.set(story.author.id, { author: story.author, stories: [story] });
+  }
+  for (const group of groups.values()) {
+    group.stories.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  }
+  return [...groups.values()];
+}
+
+/**
+ * Full-screen story viewer. Progress segments cover the active creator's
+ * collection; the timer advances within the collection, then to the next
+ * creator, then exits. Supports tap zones, hold-to-pause, keyboard, and a reply
+ * bar when the host provides one.
+ */
+function StoryViewer({
+  groups,
+  groupIndex,
+  storyIndex,
+  cloudUrl,
+  onClose,
+  onSeen,
+  onNavigate,
+  onReplyToStory,
+  onReact,
+}: {
+  groups: StoryGroup[];
+  groupIndex: number;
+  storyIndex: number;
+  cloudUrl: string;
+  onClose: () => void;
+  onSeen: (storyId: string) => void;
+  onNavigate: (groupIndex: number, storyIndex: number) => void;
+  onReplyToStory?: (author: Story["author"], text: string) => Promise<void> | void;
+  onReact?: (storyId: string, emoji: string) => void;
+}) {
+  const group = groups[groupIndex];
+  const story = group?.stories[storyIndex];
+  const duration = story ? storyDuration(story) : STORY_IMAGE_DURATION_MS;
+
+  const [userPaused, setUserPaused] = useState(false);
+  const [pageHidden, setPageHidden] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+  const [cycle, setCycle] = useState(0);
+  const [mediaError, setMediaError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [reply, setReply] = useState("");
+  const [replyState, setReplyState] = useState<"idle" | "sending" | "sent" | "error">("idle");
+
+  const paused = userPaused || pageHidden;
+  const pausedRef = useRef(false);
+  pausedRef.current = paused;
+  const startedAtRef = useRef(0);
+  const elapsedRef = useRef(0);
+  const closeRef = useRef<HTMLButtonElement | null>(null);
+  const restoreRef = useRef<HTMLElement | null>(null);
+  const holdTimerRef = useRef<number | null>(null);
+  const heldRef = useRef(false);
+  const suppressClickRef = useRef(false);
+  const advanceRef = useRef<() => void>(() => {});
+  const backRef = useRef<() => void>(() => {});
+
+  // Reset per-story state whenever the active story changes.
+  useEffect(() => {
+    elapsedRef.current = 0;
+    startedAtRef.current = Date.now();
+    setElapsed(0);
+    setUserPaused(false);
+    setMediaError(false);
+    setReloadKey(0);
+    setReply("");
+    setReplyState("idle");
+  }, [story?.id]);
+
+  // Record that the active story was viewed (locally; the API has no view route).
+  useEffect(() => {
+    if (story) onSeen(story.id);
+  }, [story, onSeen]);
+
+  // Move focus into the viewer, and restore it to the opener on close.
+  useEffect(() => {
+    restoreRef.current = (document.activeElement as HTMLElement | null) ?? null;
+    closeRef.current?.focus();
+    return () => restoreRef.current?.focus?.();
+  }, []);
+
+  // Backgrounding the tab pauses progression instead of counting down unseen.
+  useEffect(() => {
+    function onVisibility() {
+      const hidden = document.hidden;
+      // Freeze the elapsed offset when leaving, so returning resumes (not restarts).
+      if (hidden && !pausedRef.current) {
+        elapsedRef.current += Date.now() - startedAtRef.current;
+        setElapsed(elapsedRef.current);
+      }
+      setPageHidden(hidden);
+    }
+    document.addEventListener("visibilitychange", onVisibility);
+    onVisibility();
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, []);
+
+  function restart() {
+    elapsedRef.current = 0;
+    startedAtRef.current = Date.now();
+    setElapsed(0);
+    setUserPaused(false);
+    setCycle((value) => value + 1);
+  }
+  function advance() {
+    if (!group) return;
+    if (storyIndex + 1 < group.stories.length) onNavigate(groupIndex, storyIndex + 1);
+    else if (groupIndex + 1 < groups.length) onNavigate(groupIndex + 1, 0);
+    else onClose();
+  }
+  function back() {
+    if (!group) return;
+    if (storyIndex > 0) onNavigate(groupIndex, storyIndex - 1);
+    else if (groupIndex > 0) onNavigate(groupIndex - 1, groups[groupIndex - 1].stories.length - 1);
+    else restart();
+  }
+  advanceRef.current = advance;
+  backRef.current = back;
+
+  function pause() {
+    if (pausedRef.current) return;
+    elapsedRef.current += Date.now() - startedAtRef.current;
+    setElapsed(elapsedRef.current);
+    setUserPaused(true);
+  }
+  function resume() {
+    setUserPaused(false);
+  }
+
+  // Advance timer: restarts only when the story, paused state, duration or an
+  // explicit restart changes — not on ordinary re-renders.
+  useEffect(() => {
+    if (!story || paused) return;
+    startedAtRef.current = Date.now();
+    const remaining = Math.max(0, duration - elapsedRef.current);
+    const timer = window.setTimeout(() => advanceRef.current(), remaining);
+    return () => window.clearTimeout(timer);
+  }, [story, paused, duration, cycle]);
+
+  // Keyboard: Esc closes; ←/→ navigate; Space toggles pause. Never hijack keys
+  // while the reply field is focused.
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null;
+      const typing =
+        !!target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
+      if (event.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (typing) return;
+      if (event.key === "ArrowRight") {
+        event.preventDefault();
+        advanceRef.current();
+      } else if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        backRef.current();
+      } else if (event.key === " " || event.key === "Spacebar") {
+        event.preventDefault();
+        if (pausedRef.current) resume();
+        else pause();
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  if (!group || !story) return null;
+
+  function startHold() {
+    heldRef.current = false;
+    holdTimerRef.current = window.setTimeout(() => {
+      heldRef.current = true;
+      pause();
+    }, STORY_HOLD_MS);
+  }
+  function endHold() {
+    if (holdTimerRef.current !== null) {
+      window.clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+    if (heldRef.current) {
+      heldRef.current = false;
+      suppressClickRef.current = true;
+      resume();
+    }
+  }
+  function tap(next: () => void) {
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false;
+      return;
+    }
+    next();
+  }
+  async function submitReply() {
+    const value = reply.trim();
+    if (!value || !onReplyToStory || replyState === "sending") return;
+    setReplyState("sending");
+    try {
+      await onReplyToStory(story.author, value);
+      setReply("");
+      setReplyState("sent");
+    } catch {
+      setReplyState("error");
+    }
+  }
+
+  return (
+    <div
+      className="story-viewer"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Story by ${authorName(story.author)}`}
+    >
+      <div className="story-progress" aria-hidden="true">
+        {group.stories.map((entry, i) => (
+          <span key={entry.id} className={`story-seg${i < storyIndex ? " done" : ""}`}>
+            {i === storyIndex && (
+              <span
+                key={entry.id}
+                className="story-seg-fill"
+                style={{
+                  animationDuration: `${duration}ms`,
+                  animationDelay: `${-elapsed}ms`,
+                  animationPlayState: paused ? "paused" : "running",
+                }}
+              />
+            )}
+          </span>
+        ))}
+      </div>
+
+      <div className="story-viewer-head">
+        <Avatar
+          emoji={authorEmoji(story.author)}
+          name={authorName(story.author)}
+          url={resolveAvatar(story.author.avatarUrl, cloudUrl)}
+          size={32}
+        />
+        <span className="story-viewer-name">{authorName(story.author)}</span>
+        <span className="story-viewer-when">{relativeTime(story.createdAt)}</span>
+        {paused && (
+          <span className="story-paused" role="status">
+            Paused
+          </span>
+        )}
+        <button
+          ref={closeRef}
+          type="button"
+          className="story-close"
+          onClick={onClose}
+          aria-label="Close story"
+        >
+          ✕
+        </button>
+      </div>
+
+      <div className="story-viewer-body">
+        {story.imageUrl && !mediaError && (
+          <img
+            key={`${story.id}-${reloadKey}`}
+            src={`${cloudUrl}${story.imageUrl}`}
+            alt=""
+            onError={() => setMediaError(true)}
+          />
+        )}
+        {story.imageUrl && mediaError && (
+          <div className="story-error" role="alert">
+            <p>This story couldn’t load.</p>
+            <div className="story-error-actions">
+              <button
+                type="button"
+                onClick={() => {
+                  setMediaError(false);
+                  setReloadKey((value) => value + 1);
+                }}
+              >
+                Retry
+              </button>
+              <button type="button" onClick={advance}>
+                Next
+              </button>
+            </div>
+          </div>
+        )}
+        {!story.imageUrl && <div className="story-text">{story.caption}</div>}
+        {story.caption && story.imageUrl && !mediaError && (
+          <div className="story-caption">{story.caption}</div>
+        )}
+      </div>
+
+      {/* Tap zones: left third goes back, the rest advances. Hidden from AT —
+          the visible nav buttons and arrow keys are the accessible controls. */}
+      <div className="story-taps" aria-hidden="true">
+        <div
+          className="story-tap prev"
+          onClick={() => tap(backRef.current)}
+          onPointerDown={startHold}
+          onPointerUp={endHold}
+          onPointerLeave={endHold}
+        />
+        <div
+          className="story-tap next"
+          onClick={() => tap(advanceRef.current)}
+          onPointerDown={startHold}
+          onPointerUp={endHold}
+          onPointerLeave={endHold}
+        />
+      </div>
+
+      {(groups.length > 1 || group.stories.length > 1) && (
+        <>
+          <button
+            type="button"
+            className="story-nav prev"
+            aria-label="Previous story"
+            onClick={(event) => {
+              event.stopPropagation();
+              back();
+            }}
+          >
+            ‹
+          </button>
+          <button
+            type="button"
+            className="story-nav next"
+            aria-label="Next story"
+            onClick={(event) => {
+              event.stopPropagation();
+              advance();
+            }}
+          >
+            ›
+          </button>
+        </>
+      )}
+
+      {onReact && (
+        <div className="story-reactions" role="group" aria-label="React to this story">
+          {STORY_REACTIONS.map((emoji) => {
+            const count = story.reactions?.[emoji] ?? 0;
+            const active = story.myReaction === emoji;
+            return (
+              <button
+                key={emoji}
+                type="button"
+                className={`story-reaction${active ? " active" : ""}`}
+                aria-pressed={active}
+                aria-label={`React ${emoji}`}
+                onClick={() => onReact(story.id, emoji)}
+              >
+                <span aria-hidden="true">{emoji}</span>
+                {count > 0 && <span className="story-reaction-count">{count}</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {onReplyToStory && (
+        <form
+          className="story-reply"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void submitReply();
+          }}
+        >
+          <input
+            className="story-reply-input"
+            type="text"
+            value={reply}
+            maxLength={500}
+            placeholder={`Reply to ${authorName(story.author)}…`}
+            aria-label={`Reply to ${authorName(story.author)}`}
+            onChange={(event) => {
+              setReply(event.target.value);
+              if (replyState !== "sending") setReplyState("idle");
+            }}
+          />
+          {replyState === "sent" ? (
+            <span className="story-reply-status" role="status">
+              Sent ✓
+            </span>
+          ) : (
+            <button
+              type="submit"
+              className="story-reply-send"
+              disabled={!reply.trim() || replyState === "sending"}
+            >
+              {replyState === "sending" ? "Sending…" : "Send"}
+            </button>
+          )}
+          {replyState === "error" && (
+            <span className="story-reply-status error" role="alert">
+              Couldn’t send
+            </span>
+          )}
+        </form>
+      )}
+    </div>
+  );
+}
+
+/** Feed navigation: a simple list of the viewer's Groups. */
+function GroupsView({
+  client,
+  onBack,
+  onOpenGroup,
+}: {
+  client: BotifyrClient;
+  onBack: () => void;
+  onOpenGroup?: (handle: string) => void;
+}) {
+  const [groups, setGroups] = useState<Group[] | null>(null);
+  useEffect(() => {
+    let active = true;
+    client
+      .listGroups()
+      .then((list) => {
+        if (active) setGroups(list);
+      })
+      .catch(() => {
+        if (active) setGroups([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [client]);
+
+  return (
+    <div className="feed">
+      <div className="feed-topbar">
+        <button type="button" className="ghost small" onClick={onBack}>
+          ← Back
+        </button>
+        <span className="feed-topbar-title">Groups</span>
+      </div>
+      <div className="feed-scroll">
+        {groups === null ? (
+          <div className="feed-state">Loading…</div>
+        ) : groups.length === 0 ? (
+          <div className="feed-empty">
+            <div className="feed-empty-emoji">👥</div>
+            <div className="feed-empty-title">No groups yet</div>
+            <div className="feed-empty-sub">Groups you join will appear here.</div>
+          </div>
+        ) : (
+          groups.map((group) => (
+            <button
+              key={group.id}
+              type="button"
+              className="feed-list-row"
+              onClick={() => onOpenGroup?.(group.handle)}
+            >
+              <Avatar emoji={group.avatarEmoji} name={group.name} size={40} />
+              <span className="feed-list-meta">
+                <span className="feed-list-name">{group.name}</span>
+                <span className="feed-list-sub">
+                  {group.members} member{group.members === 1 ? "" : "s"}
+                </span>
+              </span>
+            </button>
           ))
         )}
       </div>
@@ -1613,6 +3808,8 @@ export function FeedView({
   onOpenGroup,
   albumName,
   onOpenAlbum,
+  onOpenNav,
+  onOpenMarketplace,
 }: {
   client: BotifyrClient;
   viewerId?: string;
@@ -1628,22 +3825,44 @@ export function FeedView({
   /** When set, show this album instead of the feed. */
   albumName?: string | null;
   onOpenAlbum?: (name: string | null) => void;
+  /** Open the app's navigation drawer (narrow screens only). */
+  onOpenNav?: () => void;
+  /** Open the Marketplace surface (owned by the host). */
+  onOpenMarketplace?: () => void;
 }) {
   const [posts, setPosts] = useState<FeedPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
-  const [draft, setDraft] = useState("");
+  const [pendingNew, setPendingNew] = useState(false);
+  const [exhausted, setExhausted] = useState(false);
+  const [errorMode, setErrorMode] = useState<"reset" | "more">("reset");
+  const [draft, setDraft] = useState(() => localStorage.getItem(FEED_DRAFT_KEY) ?? "");
   const [posting, setPosting] = useState(false);
-  const [attachments, setAttachments] = useState<Array<{ name: string; mime: string; data: string }>>([]);
+  /** Set while media uploads run, so the composer can show n / total progress. */
+  const [upload, setUpload] = useState<{ done: number; total: number } | null>(null);
+  /** Composer-specific errors stay separate from timeline-load errors. */
+  const [composerError, setComposerError] = useState<string | null>(null);
+  /** Transient confirmation shown after a successful publish/schedule. */
+  const [notice, setNotice] = useState<string | null>(null);
+  const [draftRestored, setDraftRestored] = useState(
+    () => (localStorage.getItem(FEED_DRAFT_KEY) ?? "").trim().length > 0,
+  );
+  const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
+  const [moodOpen, setMoodOpen] = useState(false);
   const [audience, setAudience] = useState<"public" | "friends" | "only_me">("friends");
   const [scheduledAt, setScheduledAt] = useState("");
   const [album, setAlbum] = useState("");
   const [pollOpen, setPollOpen] = useState(false);
   const [pollOptions, setPollOptions] = useState<string[]>(["", ""]);
-  const [tab, setTab] = useState<"all" | "friends" | "pages">("all");
-  const [sort, setSort] = useState<"recent" | "top">("recent");
+  const [tab, setTab] = useState<"all" | "friends" | "pages">(() => {
+    const stored = localStorage.getItem(FEED_TAB_KEY);
+    return stored === "friends" || stored === "pages" ? stored : "all";
+  });
+  const [sort, setSort] = useState<"recent" | "top">(() =>
+    localStorage.getItem(FEED_SORT_KEY) === "top" ? "top" : "recent",
+  );
   const [openTag, setOpenTag] = useState<string | null>(null);
   const [pages, setPages] = useState<Page[]>([]);
   const [postAs, setPostAs] = useState("");
@@ -1651,16 +3870,39 @@ export function FeedView({
   const [newPageName, setNewPageName] = useState("");
   const [mentionResults, setMentionResults] = useState<Person[]>([]);
   const [stories, setStories] = useState<Story[]>([]);
-  const [storyView, setStoryView] = useState<Story | null>(null);
+  const [storiesLoading, setStoriesLoading] = useState(true);
+  const [storyError, setStoryError] = useState(false);
+  const [storyOpen, setStoryOpen] = useState<{ authorId: string; storyId: string } | null>(null);
+  const [seenStories, setSeenStories] = useState<Record<string, boolean>>(() => readSeenStories());
+  const storyGroups = useMemo(() => groupStories(stories), [stories]);
   const [reelsOpen, setReelsOpen] = useState(false);
+  const [groupsOpen, setGroupsOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const storyRef = useRef<HTMLInputElement | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const postsRef = useRef<FeedPost[]>([]);
+  /** Saved scroll offset per tab:sort view, restored when returning from a sub-view. */
+  const scrollPosRef = useRef<Record<string, number>>({});
+  /** Monotonic id so a superseded pagination response can be discarded. */
+  const loadSeqRef = useRef(0);
+  /** Keys of requests currently in flight, so identical ones are not re-sent. */
+  const inFlightRef = useRef<Set<string>>(new Set());
+  const lastRefreshKeyRef = useRef(refreshKey);
+  /** Last time we checked for newer posts on regaining focus (throttle). */
+  const lastWakeCheckRef = useRef(0);
+  const viewKeyRef = useRef("all:recent");
+  /** attachment id -> uploaded media id, so a retry after a partial failure
+   *  never re-uploads what already succeeded. */
+  const uploadedMediaRef = useRef<Map<string, string>>(new Map());
 
   /** As the user types `@name`, offer people to insert. */
   async function updateMentions(event: ChangeEvent<HTMLTextAreaElement>) {
     const value = event.target.value;
     setDraft(value);
+    setNotice(null);
+    if (draftRestored) setDraftRestored(false);
     const caret = event.target.selectionStart ?? value.length;
     const match = /(?:^|\s)@([A-Za-z0-9_]*)$/.exec(value.slice(0, caret));
     if (!match) {
@@ -1688,73 +3930,278 @@ export function FeedView({
     setMentionResults([]);
   }
 
+  /** Insert an emoji at the caret (falls back to the end) from the Mood picker. */
+  function insertEmoji(emoji: string) {
+    const element = composerRef.current;
+    const caret = element?.selectionStart ?? draft.length;
+    setDraft(draft.slice(0, caret) + emoji + draft.slice(caret));
+    setNotice(null);
+    if (draftRestored) setDraftRestored(false);
+    const nextCaret = caret + emoji.length;
+    requestAnimationFrame(() => {
+      element?.focus();
+      element?.setSelectionRange(nextCaret, nextCaret);
+    });
+  }
+
   function pickImages(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []);
     event.target.value = "";
+    if (files.length === 0) return;
+    setComposerError(null);
+    setNotice(null);
+    // Validate before reading: an over-limit file never enters memory or the
+    // network, so the user sees the real limit instead of a failed upload.
+    const rejected: string[] = [];
+    let accepted = 0;
+    const remaining = MAX_ATTACHMENTS - attachments.length;
     for (const file of files) {
       const isVideo = file.type.startsWith("video/");
       if (!file.type.startsWith("image/") && !isVideo) {
-        setError("Only image or video files can be attached");
+        rejected.push(`${file.name} isn't an image or video`);
         continue;
       }
-      if (file.size > (isVideo ? 25 : 12) * 1024 * 1024) {
-        setError(`File is too large (max ${isVideo ? 25 : 12}MB)`);
+      const limit = isVideo ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES;
+      if (file.size > limit) {
+        rejected.push(`${file.name} is too large (max ${Math.round(limit / 1024 / 1024)} MB)`);
         continue;
       }
+      if (accepted >= remaining) {
+        rejected.push(`You can attach up to ${MAX_ATTACHMENTS} files`);
+        break;
+      }
+      accepted += 1;
       const reader = new FileReader();
       reader.onload = () => {
         const data = typeof reader.result === "string" ? reader.result : "";
-        if (data) {
-          setAttachments((prev) =>
-            prev.length >= 4 ? prev : [...prev, { name: file.name, mime: file.type, data }],
-          );
-        }
+        if (!data) return;
+        const attachment: ComposerAttachment = {
+          id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          name: file.name,
+          mime: file.type,
+          data,
+          size: file.size,
+          alt: "",
+        };
+        setAttachments((prev) => (prev.length >= MAX_ATTACHMENTS ? prev : [...prev, attachment]));
       };
       reader.readAsDataURL(file);
     }
+    if (rejected.length > 0) setComposerError(rejected.join(" · "));
   }
 
+  /** Remove a picked file and forget any media id already uploaded for it. */
+  function removeAttachment(target: ComposerAttachment) {
+    uploadedMediaRef.current.delete(target.id);
+    setAttachments((prev) => prev.filter((file) => file.id !== target.id));
+  }
+
+  /** Update one attachment's alt text (accessibility description). */
+  function setAttachmentAlt(id: string, alt: string) {
+    setAttachments((prev) => prev.map((file) => (file.id === id ? { ...file, alt } : file)));
+  }
+
+  viewKeyRef.current = `${tab}:${sort}`;
+
+  /** Load a page of the timeline. `reset` replaces the list; `more` appends. */
   const load = useCallback(
     async (mode: "reset" | "more") => {
-      if (mode === "reset") setLoading(true);
-      else setLoadingMore(true);
+      // De-duplicate identical concurrent requests (StrictMode remounts, a
+      // double observer fire). Checked before bumping the sequence so the
+      // original request is not invalidated by its duplicate.
+      const requestKey = `${mode}:${mode === "more" ? (cursor ?? "") : ""}:${tab}:${sort}`;
+      if (inFlightRef.current.has(requestKey)) return;
+      inFlightRef.current.add(requestKey);
+      const seq = ++loadSeqRef.current;
+      if (mode === "reset") {
+        setLoading(true);
+        setLoadingMore(false);
+      } else {
+        setLoadingMore(true);
+      }
       setError(null);
       try {
         const page = await client.listFeed(mode === "reset" ? undefined : (cursor ?? undefined), 20, {
           tab,
           sort,
         });
-        setPosts((prev) => (mode === "reset" ? page.items : [...prev, ...page.items]));
+        // A newer request superseded this one — drop the stale response so it
+        // cannot clobber or duplicate the list (e.g. a refresh racing a "more").
+        if (seq !== loadSeqRef.current) return;
+        if (mode === "reset") {
+          setPosts(page.items);
+          setExhausted(false);
+          setPendingNew(false);
+        } else {
+          // De-duplicate so paginating can never render the same post twice.
+          const seen = new Set(postsRef.current.map((post) => post.id));
+          const fresh = page.items.filter((post) => !seen.has(post.id));
+          setPosts((prev) => [...prev, ...fresh.filter((post) => !prev.some((p) => p.id === post.id))]);
+          // If a page added nothing new, stop auto-loading to avoid a loop.
+          if (fresh.length === 0) setExhausted(true);
+        }
         setCursor(page.nextCursor);
       } catch (err) {
+        if (seq !== loadSeqRef.current) return;
         setError(err instanceof Error ? err.message : "Couldn't load the feed");
+        setErrorMode(mode === "more" ? "more" : "reset");
       } finally {
-        if (mode === "reset") setLoading(false);
-        else setLoadingMore(false);
+        inFlightRef.current.delete(requestKey);
+        if (mode === "reset") {
+          if (seq === loadSeqRef.current) setLoading(false);
+        } else {
+          setLoadingMore(false);
+        }
       }
     },
     [client, cursor, tab, sort],
   );
 
+  // Keep a ref copy of the list so pagination can de-duplicate synchronously.
   useEffect(() => {
-    // Load on mount, on tab/sort change, and whenever the host signals a feed
-    // event (realtime). "load more" is user-driven.
+    postsRef.current = posts;
+  }, [posts]);
+
+  // Load on mount and whenever the view (tab/sort) changes. Refresh events are
+  // handled separately so they don't disrupt someone mid-read.
+  useEffect(() => {
+    scrollPosRef.current = {};
+    if (scrollRef.current) scrollRef.current.scrollTop = 0;
     void load("reset");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [client, refreshKey, tab, sort]);
+  }, [client, tab, sort]);
+
+  // Infinite scroll: fetch the next page when the bottom sentinel nears view.
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel || typeof IntersectionObserver === "undefined") return;
+    if (!cursor || exhausted || loading || loadingMore) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) void load("more");
+      },
+      { root: scrollRef.current, rootMargin: "600px 0px" },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [cursor, exhausted, loading, loadingMore, load]);
+
+  // Realtime feed events bump `refreshKey`. If the reader has scrolled into the
+  // timeline, hold the update behind a "new activity" pill instead of yanking
+  // content out from under them.
+  useEffect(() => {
+    if (lastRefreshKeyRef.current === refreshKey) return;
+    lastRefreshKeyRef.current = refreshKey;
+    const node = scrollRef.current;
+    if (node && node.scrollTop > 120 && postsRef.current.length > 0) {
+      setPendingNew(true);
+    } else {
+      void load("reset");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshKey]);
+
+  // Freshness fallback (frontend-only): when the app regains focus/visibility,
+  // check whether anything newer was posted. This keeps "new content" working
+  // even where the realtime stream (DB-1) doesn't deliver, and never disturbs a
+  // reader because it only raises the banner. Throttled to avoid request spam.
+  useEffect(() => {
+    async function checkForNew() {
+      if (postsRef.current.length === 0) return;
+      const now = Date.now();
+      if (now - lastWakeCheckRef.current < 15000) return;
+      lastWakeCheckRef.current = now;
+      try {
+        const page = await client.listFeed(undefined, 1, { tab, sort });
+        const top = page.items[0];
+        const currentTop = postsRef.current[0];
+        if (top && currentTop && top.id !== currentTop.id) setPendingNew(true);
+      } catch {
+        // Non-fatal: the manual Refresh control still works.
+      }
+    }
+    function onWake() {
+      if (document.visibilityState !== "visible") return;
+      void checkForNew();
+    }
+    document.addEventListener("visibilitychange", onWake);
+    window.addEventListener("focus", onWake);
+    return () => {
+      document.removeEventListener("visibilitychange", onWake);
+      window.removeEventListener("focus", onWake);
+    };
+  }, [client, tab, sort]);
+
+  // Remember the reader's tab/sort so leaving and returning to the Feed keeps
+  // their choice (docs/feed-next.md FR-9).
+  useEffect(() => {
+    localStorage.setItem(FEED_TAB_KEY, tab);
+  }, [tab]);
 
   useEffect(() => {
-    let active = true;
-    client
-      .listStories()
-      .then((list) => {
-        if (active) setStories(list);
-      })
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
+    localStorage.setItem(FEED_SORT_KEY, sort);
+  }, [sort]);
+
+  // Persist the composer text (only) so a reload or tab switch can't destroy it.
+  useEffect(() => {
+    if (draft.trim()) localStorage.setItem(FEED_DRAFT_KEY, draft);
+    else localStorage.removeItem(FEED_DRAFT_KEY);
+  }, [draft]);
+
+  const loadStories = useCallback(async () => {
+    setStoriesLoading(true);
+    setStoryError(false);
+    try {
+      const list = await client.listStories();
+      setStories(list);
+      // Adopt server-recorded views so "seen" survives across devices.
+      const viewed = list.filter((story) => story.viewedByMe).map((story) => story.id);
+      if (viewed.length > 0) {
+        setSeenStories((prev) => {
+          let changed = false;
+          const next = { ...prev };
+          for (const id of viewed) {
+            if (!next[id]) {
+              next[id] = true;
+              changed = true;
+            }
+          }
+          return changed ? next : prev;
+        });
+      }
+    } catch {
+      setStoryError(true);
+    } finally {
+      setStoriesLoading(false);
+    }
   }, [client]);
+
+  useEffect(() => {
+    void loadStories();
+  }, [loadStories]);
+
+  // Remember viewed stories locally (the API has no story-view route yet).
+  useEffect(() => {
+    try {
+      const ids = Object.keys(seenStories).slice(-STORY_SEEN_LIMIT);
+      localStorage.setItem(STORY_SEEN_KEY, JSON.stringify(ids));
+    } catch {
+      // Storage may be unavailable; seen state simply won't persist.
+    }
+  }, [seenStories]);
+
+  // If the active story is removed or expires while open, close gracefully.
+  useEffect(() => {
+    if (
+      storyOpen &&
+      !storyGroups.some(
+        (group) =>
+          group.author.id === storyOpen.authorId && group.stories.some((s) => s.id === storyOpen.storyId),
+      )
+    ) {
+      setStoryOpen(null);
+    }
+  }, [storyGroups, storyOpen]);
 
   async function addStory(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -1769,10 +4216,52 @@ export function FeedView({
     try {
       const media = await client.uploadFile({ name: file.name, mime: file.type, data });
       await client.createStory({ mediaId: media.id });
-      setStories(await client.listStories());
+      await loadStories();
     } catch {
       // Ignore a failed story.
     }
+  }
+
+  const markStorySeen = useCallback(
+    (storyId: string) => {
+      setSeenStories((prev) => (prev[storyId] ? prev : { ...prev, [storyId]: true }));
+      // Record the view server-side (best-effort; local state updates immediately).
+      void client.viewStory(storyId).catch(() => {});
+    },
+    [client],
+  );
+
+  function openStory(authorId: string, storyId: string) {
+    setStoryOpen({ authorId, storyId });
+  }
+
+  function navigateStory(groupIndex: number, storyIndex: number) {
+    const group = storyGroups[groupIndex];
+    const story = group?.stories[storyIndex];
+    if (group && story) setStoryOpen({ authorId: group.author.id, storyId: story.id });
+  }
+
+  /** React to a story: optimistic locally, reconciled by refetch on failure. */
+  function reactToStory(storyId: string, emoji: string) {
+    const current = stories.find((story) => story.id === storyId);
+    const prior = current?.myReaction ?? null;
+    const next = prior === emoji ? "" : emoji;
+    setStories((prev) =>
+      prev.map((story) => {
+        if (story.id !== storyId) return story;
+        const reactions = { ...(story.reactions ?? {}) };
+        if (prior) reactions[prior] = Math.max(0, (reactions[prior] ?? 1) - 1);
+        if (next) reactions[next] = (reactions[next] ?? 0) + 1;
+        return { ...story, reactions, myReaction: next || null };
+      }),
+    );
+    void client.reactStory(storyId, next).catch(() => void loadStories());
+  }
+
+  /** Reply to a story via the existing DM channel (docs/feed-next.md §FR-13). */
+  async function replyToStory(author: Story["author"], text: string): Promise<void> {
+    const session = await client.openDm(author.id);
+    await client.sendDm(session.id, text);
   }
 
   useEffect(() => {
@@ -1806,35 +4295,63 @@ export function FeedView({
     event.preventDefault();
     const body = draft.trim();
     if ((!body && attachments.length === 0) || posting) return;
+    // A past time would be silently dropped server-side and post immediately, so
+    // refuse it here rather than letting "Schedule" mean "post now".
+    if (scheduledAt && new Date(scheduledAt).getTime() <= Date.now()) {
+      setComposerError("Pick a future time to schedule, or clear the schedule to post now.");
+      return;
+    }
     setPosting(true);
-    setError(null);
+    setComposerError(null);
+    setNotice(null);
+    uploadedMediaRef.current.clear();
     try {
       const mediaIds: string[] = [];
+      if (attachments.length > 0) setUpload({ done: 0, total: attachments.length });
       for (const file of attachments) {
         const media = await client.uploadFile({ name: file.name, mime: file.mime, data: file.data });
+        uploadedMediaRef.current.set(file.id, media.id);
         mediaIds.push(media.id);
+        setUpload({ done: mediaIds.length, total: attachments.length });
       }
       const poll = pollOptions.map((option) => option.trim()).filter(Boolean);
       const post = await client.createPost({
         body,
         mediaIds,
+        alts: attachments.length > 0 ? attachments.map((file) => file.alt.trim()) : undefined,
         pageId: postAs || undefined,
         audience,
         scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : undefined,
         album: attachments.length > 0 && album.trim() ? album.trim() : undefined,
         poll: pollOpen && poll.length >= 2 ? poll : undefined,
       });
+      // Confirm only after the server returned the created post.
       setPosts((prev) => [post, ...prev]);
+      if (scheduledAt) {
+        setNotice(`Scheduled for ${new Date(scheduledAt).toLocaleString()}`);
+      } else if (postAs) {
+        setNotice(`Posted as ${pages.find((page) => page.id === postAs)?.name ?? "your Page"}`);
+      } else {
+        setNotice("Post published");
+      }
+      // Reset every field so the next post starts clean and can't accidentally
+      // repeat a Page destination or a narrow audience.
       setDraft("");
       setAttachments([]);
       setScheduledAt("");
       setAlbum("");
       setPollOpen(false);
       setPollOptions(["", ""]);
+      setPostAs("");
+      setAudience("friends");
+      setDraftRestored(false);
+      uploadedMediaRef.current.clear();
+      localStorage.removeItem(FEED_DRAFT_KEY);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't post that");
+      setComposerError(err instanceof Error ? err.message : "Couldn't publish that post");
     } finally {
       setPosting(false);
+      setUpload(null);
     }
   }
 
@@ -1845,6 +4362,24 @@ export function FeedView({
   /** After blocking, drop that author's posts from the local feed. */
   const removeAuthorPosts = (authorId: string) =>
     setPosts((prev) => prev.filter((p) => p.author.id !== authorId));
+
+  /** Restore the scroll offset when returning from a Page/Group/Tag/Reels view. */
+  const attachScroll = useCallback((node: HTMLDivElement | null) => {
+    scrollRef.current = node;
+    if (node) node.scrollTop = scrollPosRef.current[viewKeyRef.current] ?? 0;
+  }, []);
+
+  function onFeedScroll(event: UIEvent<HTMLDivElement>) {
+    scrollPosRef.current[viewKeyRef.current] = event.currentTarget.scrollTop;
+  }
+
+  /** Manual refresh: reload the top of the feed and return to the start. */
+  function refreshNow() {
+    scrollPosRef.current[viewKeyRef.current] = 0;
+    if (scrollRef.current) scrollRef.current.scrollTop = 0;
+    setPendingNew(false);
+    void load("reset");
+  }
 
   if (openTag) {
     return (
@@ -1875,6 +4410,19 @@ export function FeedView({
     return <ReelsView client={client} cloudUrl={cloudUrl} onBack={() => setReelsOpen(false)} />;
   }
 
+  if (groupsOpen) {
+    return (
+      <GroupsView
+        client={client}
+        onBack={() => setGroupsOpen(false)}
+        onOpenGroup={(handle) => {
+          setGroupsOpen(false);
+          onOpenGroup?.(handle);
+        }}
+      />
+    );
+  }
+
   if (groupHandle) {
     return (
       <GroupView
@@ -1903,6 +4451,11 @@ export function FeedView({
   return (
     <div className="feed">
       <div className="feed-topbar">
+        {onOpenNav && (
+          <button type="button" className="mobile-nav-btn" onClick={onOpenNav} aria-label="Show navigation">
+            <MenuIcon size={18} />
+          </button>
+        )}
         <span className="feed-topbar-title">Feed</span>
         <div className="feed-tabs">
           <button
@@ -1928,36 +4481,128 @@ export function FeedView({
           </button>
         </div>
         <span className="feed-stats-spacer" />
+        <select
+          className="feed-sort"
+          aria-label="Sort feed"
+          title="Sort feed"
+          value={sort}
+          onChange={(event) => setSort(event.target.value as "recent" | "top")}
+        >
+          <option value="recent">Most recent</option>
+          <option value="top">Top</option>
+        </select>
         <button
           type="button"
           className="feed-composer-tool"
-          onClick={() => setSort((value) => (value === "top" ? "recent" : "top"))}
+          onClick={refreshNow}
+          aria-label="Refresh feed"
+          title="Refresh feed"
         >
-          {sort === "top" ? "Top" : "Most recent"}
+          <RefreshIcon size={16} />
         </button>
         <button type="button" className="feed-composer-tool" onClick={() => setReelsOpen(true)}>
           Reels
         </button>
       </div>
 
-      <div className="feed-scroll">
-        <div className="stories-strip">
-          <button type="button" className="story-tile" onClick={() => storyRef.current?.click()}>
-            <span className="story-avatar add">＋</span>
-            <span className="story-name">Your story</span>
+      <div className="feed-scroll" ref={attachScroll} onScroll={onFeedScroll}>
+        {pendingNew && (
+          <button type="button" className="feed-new-banner" onClick={refreshNow}>
+            <RefreshIcon size={14} /> New activity — tap to refresh
           </button>
-          {stories.map((story) => (
-            <button key={story.id} type="button" className="story-tile" onClick={() => setStoryView(story)}>
-              <span className="story-avatar">
-                {story.imageUrl ? (
-                  <img src={`${cloudUrl}${story.imageUrl}`} alt="" />
-                ) : (
-                  authorEmoji(story.author)
+        )}
+        <div className="stories-strip">
+          {(() => {
+            const ownGroup = viewerId ? storyGroups.find((group) => group.author.id === viewerId) : undefined;
+            const ownSeen = ownGroup ? ownGroup.stories.every((s) => seenStories[s.id]) : false;
+            const others = storyGroups.filter((group) => !viewerId || group.author.id !== viewerId);
+            const firstUnseen = (group: StoryGroup): Story =>
+              group.stories.find((s) => !seenStories[s.id]) ?? group.stories[0];
+            return (
+              <>
+                <div className="story-tile story-own">
+                  <button
+                    type="button"
+                    className="story-own-main"
+                    onClick={() =>
+                      ownGroup
+                        ? openStory(ownGroup.author.id, firstUnseen(ownGroup).id)
+                        : storyRef.current?.click()
+                    }
+                    aria-label={ownGroup ? "View your story" : "Add to your story"}
+                  >
+                    <span
+                      className={`story-avatar${ownGroup && ownSeen ? " seen" : ""}${ownGroup ? "" : " add"}`}
+                    >
+                      {ownGroup?.stories[0]?.imageUrl ? (
+                        <img src={`${cloudUrl}${ownGroup.stories[0].imageUrl}`} alt="" />
+                      ) : (
+                        "＋"
+                      )}
+                    </span>
+                  </button>
+                  {ownGroup && (
+                    <button
+                      type="button"
+                      className="story-own-add"
+                      onClick={() => storyRef.current?.click()}
+                      aria-label="Add to your story"
+                    >
+                      ＋
+                    </button>
+                  )}
+                  <span className="story-name">Your story</span>
+                </div>
+
+                {storiesLoading && storyGroups.length === 0 && (
+                  <>
+                    <div className="story-tile story-skeleton" aria-hidden="true">
+                      <span className="story-avatar" />
+                    </div>
+                    <div className="story-tile story-skeleton" aria-hidden="true">
+                      <span className="story-avatar" />
+                    </div>
+                  </>
                 )}
-              </span>
-              <span className="story-name">{authorName(story.author)}</span>
-            </button>
-          ))}
+
+                {storyError && (
+                  <button type="button" className="story-tile story-retry" onClick={() => void loadStories()}>
+                    <span className="story-avatar add">↻</span>
+                    <span className="story-name">Retry</span>
+                  </button>
+                )}
+
+                {!storiesLoading && !storyError && others.length === 0 && !ownGroup && (
+                  <span className="story-empty" role="status">
+                    No stories yet
+                  </span>
+                )}
+
+                {others.map((group) => {
+                  const unseen = group.stories.some((s) => !seenStories[s.id]);
+                  const latest = group.stories[group.stories.length - 1];
+                  return (
+                    <button
+                      key={group.author.id}
+                      type="button"
+                      className="story-tile"
+                      onClick={() => openStory(group.author.id, firstUnseen(group).id)}
+                      aria-label={`${authorName(group.author)}${unseen ? " — new story" : " — viewed"}`}
+                    >
+                      <span className={`story-avatar${unseen ? "" : " seen"}`}>
+                        {latest.imageUrl ? (
+                          <img src={`${cloudUrl}${latest.imageUrl}`} alt="" />
+                        ) : (
+                          authorEmoji(group.author)
+                        )}
+                      </span>
+                      <span className="story-name">{authorName(group.author)}</span>
+                    </button>
+                  );
+                })}
+              </>
+            );
+          })()}
           <input
             ref={storyRef}
             type="file"
@@ -1970,20 +4615,46 @@ export function FeedView({
           <div className="feed-composer-row">
             <Avatar name="You" />
             <textarea
+              id="feed-composer-input"
               ref={composerRef}
               className="feed-composer-input"
+              aria-label="Post text"
+              aria-describedby={draft ? "feed-composer-count" : undefined}
               placeholder="Share an update…"
               rows={2}
               value={draft}
               onChange={(event) => void updateMentions(event)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape" && mentionResults.length > 0) {
+                  event.preventDefault();
+                  setMentionResults([]);
+                }
+              }}
             />
           </div>
+          {draftRestored && (
+            <div className="feed-draft-hint" role="status">
+              <span>Draft restored</span>
+              <button
+                type="button"
+                className="feed-composer-tool"
+                onClick={() => {
+                  setDraft("");
+                  setDraftRestored(false);
+                  localStorage.removeItem(FEED_DRAFT_KEY);
+                }}
+              >
+                Discard
+              </button>
+            </div>
+          )}
           {mentionResults.length > 0 && (
-            <div className="mention-menu">
+            <div className="mention-menu" role="listbox" aria-label="People to mention">
               {mentionResults.slice(0, 6).map((person) => (
                 <button
                   key={person.id}
                   type="button"
+                  role="option"
                   className="mention-item"
                   onClick={() => insertMention(person)}
                 >
@@ -1997,23 +4668,41 @@ export function FeedView({
             </div>
           )}
           {attachments.length > 0 && (
-            <div className="feed-composer-grid">
-              {attachments.map((file, index) => (
-                <div key={index} className="feed-composer-thumb">
+            <div className="feed-composer-grid" role="list" aria-label="Attachments">
+              {attachments.map((file) => (
+                <div key={file.id} className="feed-composer-thumb" role="listitem">
                   {file.mime.startsWith("video/") ? (
-                    <video src={file.data} muted preload="metadata" />
+                    <>
+                      <video src={file.data} muted preload="metadata" />
+                      <span className="feed-composer-thumb-kind">Video</span>
+                    </>
                   ) : (
-                    <img src={file.data} alt="Attachment preview" />
+                    <img src={file.data} alt={`Preview of ${file.name}`} />
                   )}
                   <button
                     type="button"
                     className="feed-attachment-remove"
-                    onClick={() => setAttachments((prev) => prev.filter((_, i) => i !== index))}
-                    aria-label="Remove image"
+                    onClick={() => removeAttachment(file)}
+                    aria-label={`Remove ${file.name}`}
                   >
                     ✕
                   </button>
                 </div>
+              ))}
+            </div>
+          )}
+          {attachments.length > 0 && (
+            <div className="feed-composer-alts" role="group" aria-label="Image descriptions">
+              {attachments.map((file) => (
+                <input
+                  key={file.id}
+                  className="feed-composer-as-input"
+                  value={file.alt}
+                  maxLength={200}
+                  placeholder={`Alt text for ${file.name} (optional)`}
+                  aria-label={`Alt text for ${file.name}`}
+                  onChange={(event) => setAttachmentAlt(file.id, event.target.value)}
+                />
               ))}
             </div>
           )}
@@ -2027,7 +4716,7 @@ export function FeedView({
           )}
           <div className="feed-composer-as">
             <span>Post as</span>
-            <select value={postAs} onChange={(event) => setPostAs(event.target.value)}>
+            <select aria-label="Post as" value={postAs} onChange={(event) => setPostAs(event.target.value)}>
               <option value="">You</option>
               {pages.map((page) => (
                 <option key={page.id} value={page.id}>
@@ -2063,6 +4752,7 @@ export function FeedView({
           <div className="feed-composer-as">
             <span>Audience</span>
             <select
+              aria-label="Audience"
               value={audience}
               onChange={(event) => setAudience(event.target.value as "public" | "friends" | "only_me")}
             >
@@ -2076,6 +4766,7 @@ export function FeedView({
               value={scheduledAt}
               onChange={(event) => setScheduledAt(event.target.value)}
               title="Schedule for later"
+              aria-label="Schedule for later"
             />
           </div>
           {pollOpen && (
@@ -2102,19 +4793,85 @@ export function FeedView({
                   + Add option
                 </button>
               )}
+              {pollOpen && pollOptions.filter((option) => option.trim()).length < 2 && (
+                <span className="feed-composer-hint">Add at least 2 options to include a poll.</span>
+              )}
+            </div>
+          )}
+          {upload && (
+            <div
+              className="feed-upload"
+              role="progressbar"
+              aria-label="Uploading media"
+              aria-valuemin={0}
+              aria-valuemax={upload.total}
+              aria-valuenow={upload.done}
+            >
+              <div className="feed-upload-track">
+                <div
+                  className="feed-upload-fill"
+                  style={{ width: `${Math.round((upload.done / upload.total) * 100)}%` }}
+                />
+              </div>
+              <span className="feed-upload-label">
+                Uploading {upload.done} / {upload.total}…
+              </span>
+            </div>
+          )}
+          {composerError && (
+            <div className="feed-composer-error" role="alert">
+              {composerError}
+            </div>
+          )}
+          {notice && (
+            <div className="feed-composer-notice" role="status">
+              {notice}
             </div>
           )}
           <div className="feed-composer-actions">
+            <span className="feed-composer-destination">
+              {postAs
+                ? `Posting as ${pages.find((page) => page.id === postAs)?.name ?? "Page"}`
+                : "Posting to your profile"}
+              {" · "}
+              {audience === "public" ? "Public" : audience === "only_me" ? "Only me" : "Friends"}
+            </span>
             <button type="button" className="feed-composer-tool" onClick={() => fileRef.current?.click()}>
               <CameraIcon size={16} /> Photo
             </button>
-            <button
-              type="button"
-              className="feed-composer-tool"
-              onClick={() => setDraft((value) => `${value}${value ? " " : ""}😀`)}
-            >
-              <SmileyIcon size={16} /> Mood
-            </button>
+            <span className="feed-mood">
+              <button
+                type="button"
+                className={`feed-composer-tool${moodOpen ? " active" : ""}`}
+                aria-haspopup="listbox"
+                aria-expanded={moodOpen}
+                onClick={() => setMoodOpen((value) => !value)}
+              >
+                <SmileyIcon size={16} /> Mood
+              </button>
+              {moodOpen && (
+                <>
+                  <div className="emoji-backdrop" onClick={() => setMoodOpen(false)} />
+                  <div className="emoji-pop feed-mood-pop" role="listbox" aria-label="Add a mood emoji">
+                    {FEED_EMOJIS.map((emoji) => (
+                      <button
+                        key={emoji}
+                        type="button"
+                        className="emoji-choice"
+                        role="option"
+                        aria-selected={false}
+                        onClick={() => {
+                          insertEmoji(emoji);
+                          setMoodOpen(false);
+                        }}
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </span>
             <button
               type="button"
               className={`feed-composer-tool${pollOpen ? " active" : ""}`}
@@ -2122,12 +4879,30 @@ export function FeedView({
             >
               <ChartIcon size={16} /> Poll
             </button>
+            {draft.length > 0 && (
+              <span
+                id="feed-composer-count"
+                className={`feed-composer-count${draft.length > MAX_POST_CHARS ? " over" : ""}`}
+                aria-live="polite"
+              >
+                {draft.length} / {MAX_POST_CHARS}
+              </span>
+            )}
             <button
               className="feed-post-btn"
               type="submit"
-              disabled={(!draft.trim() && attachments.length === 0) || posting}
+              aria-busy={posting}
+              disabled={
+                (!draft.trim() && attachments.length === 0) || posting || draft.length > MAX_POST_CHARS
+              }
             >
-              {posting ? "Saving…" : scheduledAt ? "Schedule" : "Post"}
+              {posting
+                ? upload
+                  ? `Uploading ${upload.done}/${upload.total}…`
+                  : "Publishing…"
+                : scheduledAt
+                  ? "Schedule"
+                  : "Post"}
             </button>
           </div>
           <input
@@ -2143,7 +4918,7 @@ export function FeedView({
         {error && (
           <div className="feed-error" role="alert">
             <span>{error}</span>
-            <button type="button" className="feed-error-retry" onClick={() => void load("reset")}>
+            <button type="button" className="feed-error-retry" onClick={() => void load(errorMode)}>
               Retry
             </button>
           </div>
@@ -2181,6 +4956,7 @@ export function FeedView({
               client={client}
               cloudUrl={cloudUrl}
               canDelete={!post.pageId && post.author.id === viewerId}
+              viewerId={viewerId}
               onChange={updatePost}
               onDelete={removePost}
               onBlock={removeAuthorPosts}
@@ -2191,33 +4967,51 @@ export function FeedView({
           ))
         )}
 
-        {cursor && !loading && (
-          <button
-            type="button"
-            className="feed-more"
-            onClick={() => void load("more")}
-            disabled={loadingMore}
-          >
-            {loadingMore ? "Loading…" : "Load more"}
-          </button>
+        {!loading &&
+          posts.length > 0 &&
+          (cursor && !exhausted ? (
+            <button
+              type="button"
+              className="feed-more"
+              onClick={() => void load("more")}
+              disabled={loadingMore}
+            >
+              {loadingMore ? "Loading…" : "Load more"}
+            </button>
+          ) : (
+            <div className="feed-end" role="status">
+              You're all caught up
+            </div>
+          ))}
+
+        {!loading && posts.length > 0 && cursor && !exhausted && (
+          <div ref={sentinelRef} className="feed-sentinel" aria-hidden="true" />
         )}
       </div>
 
-      {storyView && (
-        <div className="story-viewer" onClick={() => setStoryView(null)}>
-          {storyView.imageUrl ? (
-            <img src={`${cloudUrl}${storyView.imageUrl}`} alt="" />
-          ) : (
-            <div className="story-text">{storyView.caption}</div>
-          )}
-          {storyView.caption && storyView.imageUrl && (
-            <div className="story-caption">{storyView.caption}</div>
-          )}
-          <button type="button" className="story-close" onClick={() => setStoryView(null)} aria-label="Close">
-            ✕
-          </button>
-        </div>
-      )}
+      {storyOpen &&
+        (() => {
+          const groupIndex = storyGroups.findIndex((group) => group.author.id === storyOpen.authorId);
+          if (groupIndex < 0) return null;
+          const activeGroup = storyGroups[groupIndex];
+          const storyIndex = Math.max(
+            0,
+            activeGroup.stories.findIndex((s) => s.id === storyOpen.storyId),
+          );
+          return (
+            <StoryViewer
+              groups={storyGroups}
+              groupIndex={groupIndex}
+              storyIndex={storyIndex}
+              cloudUrl={cloudUrl}
+              onClose={() => setStoryOpen(null)}
+              onSeen={markStorySeen}
+              onNavigate={navigateStory}
+              onReplyToStory={viewerId && activeGroup.author.id === viewerId ? undefined : replyToStory}
+              onReact={viewerId && activeGroup.author.id === viewerId ? undefined : reactToStory}
+            />
+          );
+        })()}
     </div>
   );
 }

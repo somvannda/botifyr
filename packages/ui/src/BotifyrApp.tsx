@@ -58,6 +58,7 @@ import {
   ForwardIcon,
   GearIcon,
   HelpIcon,
+  HomeIcon,
   LockIcon,
   LogoutIcon,
   MenuIcon,
@@ -310,6 +311,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   /** readAt as it was when each open conversation was entered — the boundary
       above which a "New messages" divider is drawn. */
   const [newMsgSince, setNewMsgSince] = useState<Record<string, string>>({});
+  /** Ephemeral peer-typing state per conversation (userId + when last seen). */
+  const [typing, setTyping] = useState<Record<string, { userId: string; at: number }>>({});
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [shareItem, setShareItem] = useState<MediaItem | null>(null);
@@ -427,9 +430,9 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [, setHqQuests] = useState<Array<Quest>>([]);
   /** When the CEO last opened this company's HQ — drives the "since your last visit" delta. */
   const [lastVisitAt, setLastVisitAt] = useState<string | null>(null);
-  const [, setHqWiki] = useState<
-    Array<{ id: string; name: string; content: string; department?: string }>
-  >([]);
+  const [, setHqWiki] = useState<Array<{ id: string; name: string; content: string; department?: string }>>(
+    [],
+  );
   const [filePreview, setFilePreview] = useState<{ name: string; content: string } | null>(null);
   const [, setHqChanges] = useState<
     Array<{ repo: string; path: string; content: string; diff: string; exists: boolean }>
@@ -440,6 +443,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [, setHoursWeekdays] = useState(true);
   const [, setHoursTimezone] = useState("");
   const [emojiOpen, setEmojiOpen] = useState(false);
+  /** Composer emoji picker (separate from the bot-editor picker). */
+  const [composerEmojiOpen, setComposerEmojiOpen] = useState(false);
   const [editingBotId, setEditingBotId] = useState<string | null>(null);
   const [botName, setBotName] = useState("");
   const [botEmoji, setBotEmoji] = useState("🤖");
@@ -725,6 +730,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   /** Whether the transcript is pinned to the newest message (avoids yanking
       readers to the bottom when a new message arrives while they scroll up). */
   const atBottomRef = useRef(true);
+  /** Throttle for outbound typing signals, keyed by conversation. */
+  const typingSentAtRef = useRef<Record<string, number>>({});
   const [atBottom, setAtBottom] = useState(true);
   const [newWhileAway, setNewWhileAway] = useState(0);
 
@@ -1074,6 +1081,15 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
           if (last?.role === "assistant") {
             setStream((prev) => (prev && prev.taskId === last.taskId ? null : prev));
           }
+          // A delivered message ends the peer's "typing" indicator immediately.
+          if (last?.senderId && last.senderId !== user?.id) {
+            setTyping((prev) => {
+              if (!(event.session.id in prev)) return prev;
+              const next = { ...prev };
+              delete next[event.session.id];
+              return next;
+            });
+          }
         }
         break;
       case "bot.deleted": {
@@ -1142,6 +1158,23 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
           return task ? { ...prev, [event.taskId]: { ...task, approval: event.approval } } : prev;
         });
         break;
+      case "typing": {
+        const key = event.sessionId;
+        setTyping((prev) => ({ ...prev, [key]: { userId: event.userId, at: Date.now() } }));
+        // Expire the indicator if no fresh signal arrives within a few seconds.
+        window.setTimeout(
+          () =>
+            setTyping((prev) => {
+              const current = prev[key];
+              if (!current || Date.now() - current.at < 3500) return prev;
+              const next = { ...prev };
+              delete next[key];
+              return next;
+            }),
+          4000,
+        );
+        break;
+      }
       case "feed.post":
         setFeedRefresh((prev) => prev + 1);
         break;
@@ -2132,8 +2165,19 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     setEditingLabel(false);
   }
 
+  /** Tell the other participants (throttled) that this user is typing. */
+  function pingTyping() {
+    const session = sessions.find((entry) => entry.id === activeSessionId);
+    if (!session || (session.kind !== "dm" && session.kind !== "group")) return;
+    const now = Date.now();
+    if (now - (typingSentAtRef.current[session.id] ?? 0) < 2500) return;
+    typingSentAtRef.current[session.id] = now;
+    void client.sendTyping(session.id).catch(() => {});
+  }
+
   function onComposerChange(value: string) {
     setText(value);
+    if (value.trim()) pingTyping();
     if (!activeBot?.memberIds?.length) {
       setMentionQuery(null);
       return;
@@ -4092,11 +4136,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
         </div>
       )}
       {mobileNavOpen && (
-        <div
-          className="mobile-nav-overlay"
-          role="presentation"
-          onClick={() => setMobileNavOpen(false)}
-        />
+        <div className="mobile-nav-overlay" role="presentation" onClick={() => setMobileNavOpen(false)} />
       )}
       <aside className="sidebar" aria-label="Chats and contacts">
         <div className="sidebar-top">
@@ -4132,7 +4172,10 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
             type="button"
             role="tab"
             aria-selected={activeWorkspaceFilter === "personal"}
-            onClick={() => setWorkspaceFilter("personal")}
+            onClick={() => {
+              setWorkspaceFilter("personal");
+              setMobileNavOpen(false);
+            }}
           >
             Chat
           </button>
@@ -4141,7 +4184,10 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
             type="button"
             role="tab"
             aria-selected={feedActive}
-            onClick={() => setWorkspaceFilter("feed")}
+            onClick={() => {
+              setWorkspaceFilter("feed");
+              setMobileNavOpen(false);
+            }}
           >
             Feed
           </button>
@@ -4150,7 +4196,10 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
             type="button"
             role="tab"
             aria-selected={activeWorkspaceFilter === "startups"}
-            onClick={() => setWorkspaceFilter("startups")}
+            onClick={() => {
+              setWorkspaceFilter("startups");
+              setMobileNavOpen(false);
+            }}
           >
             Startup Workspace
           </button>
@@ -4459,6 +4508,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
             onOpenGroup={setFeedGroup}
             albumName={feedAlbum}
             onOpenAlbum={setFeedAlbum}
+            onOpenNav={() => setMobileNavOpen(true)}
+            onOpenMarketplace={() => setShowConnectApps(true)}
           />
         )}
         {startupsActive && (
@@ -4788,151 +4839,211 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                   {findTerm && visibleMessages.length === 0 && (
                     <div className="bot-panel-empty">No matches in this chat.</div>
                   )}
-                  {visibleMessages.map((message, msgIndex) => (
-                    <Fragment key={message.id}>
-                      {(msgIndex === 0 ||
-                        dayKeyOf(visibleMessages[msgIndex - 1]?.createdAt) !==
-                          dayKeyOf(message.createdAt)) && (
-                        <div className="date-sep-thread" role="separator">
-                          {dayLabelOf(message.createdAt)}
-                        </div>
-                      )}
-                      {msgIndex === firstNewIndex && (
-                        <div className="new-msg-divider" role="separator">
-                          New messages
-                        </div>
-                      )}
-                      {(() => {
-                    if (activeSession.kind === "dm" || activeSession.kind === "group") {
-                      const mine = message.senderId === user.id;
-                      const person = friends.find((entry) => entry.id === message.senderId);
-                      const label = person?.displayName || (person?.handle ? `@${person.handle}` : "Friend");
-                      if (mine) {
-                        return (
-                          <div key={message.id} className="msg-user">
-                            {actionsFor(message, user.displayName || "You")}
-                            <div className="msg-user-bubble">
-                              <div className="msg-author">
-                                {user.displayName || (user.handle ? `@${user.handle}` : "You")}
-                              </div>
-                              {dmFileCard(displayText(decrypted, message.content, message.id)) ??
-                                displayText(decrypted, message.content, message.id)}
-                              {reactionChips(message).map((chip) => (
-                                <span key={chip.emoji} className={`reaction${chip.mine ? " mine" : ""}`}>
-                                  {chip.emoji}
-                                  {chip.count > 1 ? ` ${chip.count}` : ""}
-                                </span>
-                              ))}
-                              {message.id === lastOwnMessageId &&
-                                peerReadAt &&
-                                message.createdAt <= peerReadAt && <div className="read-receipt">Seen</div>}
-                              <time className="msg-time out">{clockOf(message.createdAt)}</time>
-                            </div>
-                            <SelfAvatar user={user} email={user.email} className="msg-user-avatar" />
-                          </div>
-                        );
-                      }
-                      return (
-                        <div key={message.id} className="msg-assistant">
-                          {person?.avatarUrl ? (
-                            <img
-                              className="msg-bot-logo person-avatar"
-                              src={person.avatarUrl}
-                              alt=""
-                              style={{ width: 26, height: 26 }}
-                            />
-                          ) : (
-                            <BotLogo
-                              size={26}
-                              scheme={BOT_SCHEMES[(person?.avatarScheme ?? 0) % BOT_SCHEMES.length]}
-                              className="msg-bot-logo"
-                            />
-                          )}
-                          <div className="msg-body">
-                            <div className="msg-author">{label}</div>
-                            {dmFileCard(displayText(decrypted, message.content, message.id)) ?? (
-                              <Markdown
-                                text={displayText(decrypted, message.content, message.id)}
-                                onFileRef={openFileRef}
-                              />
-                            )}
-                            {translations[message.id] && (
-                              <div className="msg-translation">{translations[message.id]}</div>
-                            )}
-                            {reactionChips(message).map((chip) => (
-                              <span key={chip.emoji} className={`reaction${chip.mine ? " mine" : ""}`}>
-                                {chip.emoji}
-                                {chip.count > 1 ? ` ${chip.count}` : ""}
-                              </span>
-                            ))}
-                            {actionsFor(message, label)}
-                            <time className="msg-time">{clockOf(message.createdAt)}</time>
-                          </div>
-                        </div>
-                      );
-                    }
-                    if (message.role === "user") {
-                      return (
-                        <div key={message.id} className="msg-user">
-                          {actionsFor(message, "You")}
-                          <div className="msg-user-bubble">
-                            {displayText(decrypted, message.content, message.id)}
-                            {reactionChips(message).map((chip) => (
-                              <span key={chip.emoji} className={`reaction${chip.mine ? " mine" : ""}`}>
-                                {chip.emoji}
-                                {chip.count > 1 ? ` ${chip.count}` : ""}
-                              </span>
-                            ))}
-                            <time className="msg-time out">{clockOf(message.createdAt)}</time>
-                          </div>
-                          <SelfAvatar user={user} email={user.email} className="msg-user-avatar" />
-                        </div>
-                      );
-                    }
-                    const msgBot =
-                      (message.botId && bots.find((entry) => entry.id === message.botId)) || activeBot;
-                    const msgScheme = BOT_SCHEMES[(msgBot?.scheme ?? 0) % BOT_SCHEMES.length];
-                    const parsed = parseOptions(message.content);
+                  {visibleMessages.map((message, msgIndex) => {
+                    const prevMsg = visibleMessages[msgIndex - 1];
+                    // Consecutive messages from the same sender (within 5 min)
+                    // read as one block: repeated names/avatars are dropped and
+                    // the shared corner is flattened.
+                    const sameRun = (a: typeof message | undefined, b: typeof message | undefined) =>
+                      a !== undefined &&
+                      b !== undefined &&
+                      a.role === b.role &&
+                      a.senderId === b.senderId &&
+                      a.botId === b.botId &&
+                      Math.abs(new Date(a.createdAt ?? 0).getTime() - new Date(b.createdAt ?? 0).getTime()) <
+                        5 * 60 * 1000;
+                    const groupedWithPrev = sameRun(prevMsg, message);
                     return (
-                      <div key={message.id} className="msg-assistant">
-                        <BotLogo size={26} scheme={msgScheme} className="msg-bot-logo" />
-                        <div className="msg-body">
-                          {msgBot && (
-                            <div className="msg-author">
-                              <span className="msg-author-emoji">{cleanEmoji(msgBot.emoji, false)}</span>
-                              {msgBot.name}
-                            </div>
-                          )}
-                          <Markdown text={parsed.body} onFileRef={openFileRef} />
-                          {parsed.options.length > 0 && (
-                            <div className="quick-replies">
-                              {parsed.options.map((option, index) => (
-                                <button
-                                  key={index}
-                                  className="quick-reply"
-                                  type="button"
-                                  disabled={busy}
-                                  onClick={() => void sendMessage(option)}
+                      <Fragment key={message.id}>
+                        {(msgIndex === 0 ||
+                          dayKeyOf(visibleMessages[msgIndex - 1]?.createdAt) !==
+                            dayKeyOf(message.createdAt)) && (
+                          <div className="date-sep-thread" role="separator">
+                            {dayLabelOf(message.createdAt)}
+                          </div>
+                        )}
+                        {msgIndex === firstNewIndex && (
+                          <div className="new-msg-divider" role="separator">
+                            New messages
+                          </div>
+                        )}
+                        {(() => {
+                          if (activeSession.kind === "dm" || activeSession.kind === "group") {
+                            const mine = message.senderId === user.id;
+                            const person = friends.find((entry) => entry.id === message.senderId);
+                            const label =
+                              person?.displayName || (person?.handle ? `@${person.handle}` : "Friend");
+                            if (mine) {
+                              return (
+                                <div
+                                  key={message.id}
+                                  className={`msg-user${groupedWithPrev ? " grouped" : ""}`}
                                 >
-                                  {option}
-                                </button>
-                              ))}
+                                  {actionsFor(message, user.displayName || "You")}
+                                  <div className="msg-user-bubble">
+                                    <div className="msg-author">
+                                      {user.displayName || (user.handle ? `@${user.handle}` : "You")}
+                                    </div>
+                                    {dmFileCard(displayText(decrypted, message.content, message.id)) ??
+                                      displayText(decrypted, message.content, message.id)}
+                                    {reactionChips(message).map((chip) => (
+                                      <span
+                                        key={chip.emoji}
+                                        className={`reaction${chip.mine ? " mine" : ""}`}
+                                      >
+                                        {chip.emoji}
+                                        {chip.count > 1 ? ` ${chip.count}` : ""}
+                                      </span>
+                                    ))}
+                                    {message.id === lastOwnMessageId &&
+                                      peerReadAt &&
+                                      message.createdAt <= peerReadAt && (
+                                        <div className="read-receipt">Seen</div>
+                                      )}
+                                    <time className="msg-time out">{clockOf(message.createdAt)}</time>
+                                  </div>
+                                  <SelfAvatar user={user} email={user.email} className="msg-user-avatar" />
+                                </div>
+                              );
+                            }
+                            return (
+                              <div
+                                key={message.id}
+                                className={`msg-assistant${groupedWithPrev ? " grouped" : ""}`}
+                              >
+                                {person?.avatarUrl ? (
+                                  <img
+                                    className="msg-bot-logo person-avatar"
+                                    src={person.avatarUrl}
+                                    alt=""
+                                    style={{ width: 26, height: 26 }}
+                                  />
+                                ) : (
+                                  <BotLogo
+                                    size={26}
+                                    scheme={BOT_SCHEMES[(person?.avatarScheme ?? 0) % BOT_SCHEMES.length]}
+                                    className="msg-bot-logo"
+                                  />
+                                )}
+                                <div className="msg-body">
+                                  <div className="msg-author">{label}</div>
+                                  {dmFileCard(displayText(decrypted, message.content, message.id)) ?? (
+                                    <Markdown
+                                      text={displayText(decrypted, message.content, message.id)}
+                                      onFileRef={openFileRef}
+                                    />
+                                  )}
+                                  {translations[message.id] && (
+                                    <div className="msg-translation">{translations[message.id]}</div>
+                                  )}
+                                  {reactionChips(message).map((chip) => (
+                                    <span key={chip.emoji} className={`reaction${chip.mine ? " mine" : ""}`}>
+                                      {chip.emoji}
+                                      {chip.count > 1 ? ` ${chip.count}` : ""}
+                                    </span>
+                                  ))}
+                                  {actionsFor(message, label)}
+                                  <time className="msg-time">{clockOf(message.createdAt)}</time>
+                                </div>
+                              </div>
+                            );
+                          }
+                          if (message.role === "user") {
+                            return (
+                              <div
+                                key={message.id}
+                                className={`msg-user${groupedWithPrev ? " grouped" : ""}`}
+                              >
+                                {actionsFor(message, "You")}
+                                <div className="msg-user-bubble">
+                                  {displayText(decrypted, message.content, message.id)}
+                                  {reactionChips(message).map((chip) => (
+                                    <span key={chip.emoji} className={`reaction${chip.mine ? " mine" : ""}`}>
+                                      {chip.emoji}
+                                      {chip.count > 1 ? ` ${chip.count}` : ""}
+                                    </span>
+                                  ))}
+                                  <time className="msg-time out">{clockOf(message.createdAt)}</time>
+                                </div>
+                                <SelfAvatar user={user} email={user.email} className="msg-user-avatar" />
+                              </div>
+                            );
+                          }
+                          const msgBot =
+                            (message.botId && bots.find((entry) => entry.id === message.botId)) || activeBot;
+                          const msgScheme = BOT_SCHEMES[(msgBot?.scheme ?? 0) % BOT_SCHEMES.length];
+                          const parsed = parseOptions(message.content);
+                          return (
+                            <div
+                              key={message.id}
+                              className={`msg-assistant${groupedWithPrev ? " grouped" : ""}`}
+                            >
+                              <BotLogo size={26} scheme={msgScheme} className="msg-bot-logo" />
+                              <div className="msg-body">
+                                {msgBot && (
+                                  <div className="msg-author">
+                                    <span className="msg-author-emoji">
+                                      {cleanEmoji(msgBot.emoji, false)}
+                                    </span>
+                                    {msgBot.name}
+                                  </div>
+                                )}
+                                <Markdown text={parsed.body} onFileRef={openFileRef} />
+                                {parsed.options.length > 0 && (
+                                  <div className="quick-replies">
+                                    {parsed.options.map((option, index) => (
+                                      <button
+                                        key={index}
+                                        className="quick-reply"
+                                        type="button"
+                                        disabled={busy}
+                                        onClick={() => void sendMessage(option)}
+                                      >
+                                        {option}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                                {reactionChips(message).map((chip) => (
+                                  <span key={chip.emoji} className={`reaction${chip.mine ? " mine" : ""}`}>
+                                    {chip.emoji}
+                                    {chip.count > 1 ? ` ${chip.count}` : ""}
+                                  </span>
+                                ))}
+                                {actionsFor(
+                                  message,
+                                  msgBot?.name ?? activeBotName,
+                                  message.id === lastAssistantId,
+                                )}
+                                <time className="msg-time">{clockOf(message.createdAt)}</time>
+                              </div>
                             </div>
-                          )}
-                          {reactionChips(message).map((chip) => (
-                            <span key={chip.emoji} className={`reaction${chip.mine ? " mine" : ""}`}>
-                              {chip.emoji}
-                              {chip.count > 1 ? ` ${chip.count}` : ""}
-                            </span>
-                          ))}
-                          {actionsFor(message, msgBot?.name ?? activeBotName, message.id === lastAssistantId)}
-                          <time className="msg-time">{clockOf(message.createdAt)}</time>
-                        </div>
-                      </div>
+                          );
+                        })()}
+                      </Fragment>
                     );
-                      })()}
-                    </Fragment>
-                  ))}
+                  })}
+
+                  {activeSession &&
+                    (activeSession.kind === "dm" || activeSession.kind === "group") &&
+                    (() => {
+                      const entry = typing[activeSession.id];
+                      if (!entry || entry.userId === user?.id || Date.now() - entry.at > 3500) {
+                        return null;
+                      }
+                      const typer = friends.find((person) => person.id === entry.userId);
+                      const name = typer?.displayName || (typer?.handle ? `@${typer.handle}` : "Someone");
+                      return (
+                        <div className="typing-row" aria-live="polite">
+                          <span className="typing-dots">
+                            <i />
+                            <i />
+                            <i />
+                          </span>
+                          {name} is typing
+                        </div>
+                      );
+                    })()}
 
                   {streamActive && (
                     <div className="msg-assistant">
@@ -5186,9 +5297,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                 onClick={jumpToLatest}
                 aria-label="Jump to the latest messages"
               >
-                {newWhileAway > 0
-                  ? `${newWhileAway} new message${newWhileAway > 1 ? "s" : ""}`
-                  : "Latest"}
+                {newWhileAway > 0 ? `${newWhileAway} new message${newWhileAway > 1 ? "s" : ""}` : "Latest"}
                 <ChevronIcon size={15} className="chev-down" />
               </button>
             )}
@@ -5355,6 +5464,28 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                   />
                 </div>
               )}
+              {composerEmojiOpen && (
+                <>
+                  <div className="emoji-backdrop" onClick={() => setComposerEmojiOpen(false)} />
+                  <div className="emoji-pop composer-emoji-pop" role="listbox" aria-label="Insert emoji">
+                    {EMOJI_CHOICES.map((emoji) => (
+                      <button
+                        key={emoji}
+                        type="button"
+                        className="emoji-choice"
+                        role="option"
+                        aria-selected={false}
+                        onClick={() => {
+                          setText((prev) => prev + emoji);
+                          setComposerEmojiOpen(false);
+                        }}
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
               <div className="composer-bar">
                 <button
                   className={`round${recording ? " recording" : ""}`}
@@ -5425,6 +5556,16 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                     }
                   }}
                 />
+                <button
+                  className="round emoji-btn"
+                  type="button"
+                  title="Emoji"
+                  aria-label="Insert emoji"
+                  aria-expanded={composerEmojiOpen}
+                  onClick={() => setComposerEmojiOpen((value) => !value)}
+                >
+                  <SmileyIcon size={17} />
+                </button>
                 <button
                   className={`round mic${listening ? " on" : ""}`}
                   type="button"

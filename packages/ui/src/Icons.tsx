@@ -376,6 +376,55 @@ export function ForwardIcon({ size = 18, className }: IconProps) {
   );
 }
 
+export function BookmarkIcon({ size = 18, className, filled = false }: IconProps & { filled?: boolean }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill={filled ? "currentColor" : "none"}
+      stroke="currentColor"
+      strokeWidth="1.9"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      className={className}
+    >
+      <path d="M6 3.5h12a1 1 0 0 1 1 1V21l-7-4-7 4V4.5a1 1 0 0 1 1-1z" />
+    </svg>
+  );
+}
+
+export function VolumeIcon({ size = 18, className, muted = false }: IconProps & { muted?: boolean }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden className={className} {...stroke}>
+      <path d="M11 5 6.5 8.6H3v6.8h3.5L11 19z" />
+      {muted ? (
+        <>
+          <line x1="15.5" y1="9.5" x2="20.5" y2="14.5" />
+          <line x1="20.5" y1="9.5" x2="15.5" y2="14.5" />
+        </>
+      ) : (
+        <>
+          <path d="M15.4 9.2a4 4 0 0 1 0 5.6" />
+          <path d="M18 6.6a7.5 7.5 0 0 1 0 10.8" />
+        </>
+      )}
+    </svg>
+  );
+}
+
+export function FullscreenIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden className={className} {...stroke}>
+      <path d="M4 9V5.5A1.5 1.5 0 0 1 5.5 4H9" />
+      <path d="M15 4h3.5A1.5 1.5 0 0 1 20 5.5V9" />
+      <path d="M20 15v3.5a1.5 1.5 0 0 1-1.5 1.5H15" />
+      <path d="M9 20H5.5A1.5 1.5 0 0 1 4 18.5V15" />
+    </svg>
+  );
+}
+
 export function CopyIcon({ size = 18, className }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden className={className} {...stroke}>
@@ -392,6 +441,15 @@ export function RefreshIcon({ size = 18, className }: IconProps) {
       <path d="M20 4v5h-5" />
       <path d="M19.5 12a7.5 7.5 0 01-12.8 5.3L4 15" />
       <path d="M4 20v-5h5" />
+    </svg>
+  );
+}
+
+export function HomeIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden className={className} {...stroke}>
+      <path d="M4 10.5 12 4l8 6.5V19a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19z" />
+      <path d="M9.5 20.5v-6h5v6" />
     </svg>
   );
 }
