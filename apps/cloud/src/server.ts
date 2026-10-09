@@ -1060,7 +1060,7 @@ export async function buildServer(options: ServerOptions) {
       task,
     )
       .then(() =>
-        bot && task.status === "completed" ? advanceAssignedItems(bot, "in_progress", "done") : undefined,
+        bot && task.status === "completed" ? advanceAssignedItems(bot, "in_progress", "review") : undefined,
       )
       .catch((error) => app.log.error({ err: error, taskId: task.id }, "rerun task failed"));
 
@@ -1171,7 +1171,9 @@ export async function buildServer(options: ServerOptions) {
       task,
     )
       .then(async () => {
-        await advanceAssignedItems(bot, "in_progress", "done");
+        // A finished run leaves the item in review; only company.report (which
+        // requires a result) sets done, and the CEO verifies it.
+        await advanceAssignedItems(bot, "in_progress", "review");
         if (workspace) await maybeContinueWorking(bot, workspace.id, boardBefore).catch(() => {});
       })
       .catch((error) => app.log.error({ err: error, taskId: task.id }, "scheduled run failed"));
