@@ -221,6 +221,7 @@ describe("Composer publish lifecycle", () => {
 
     fireEvent.change(screen.getByLabelText("Post text"), { target: { value: "later" } });
     fireEvent.click(screen.getByRole("button", { name: "Options" }));
+    fireEvent.click(screen.getByRole("button", { name: "Schedule for later" }));
     const when = container.querySelector<HTMLInputElement>('input[type="datetime-local"]');
     expect(when).toBeTruthy();
     fireEvent.change(when!, { target: { value: "2020-01-01T10:00" } });
@@ -269,7 +270,9 @@ describe("Composer advanced options", () => {
     fireEvent.click(screen.getByRole("button", { name: "Options" }));
     expect(screen.getByRole("combobox", { name: "Post as" })).toBeTruthy();
     expect(screen.getByRole("combobox", { name: "Audience" })).toBeTruthy();
-    expect(document.querySelector('input[type="datetime-local"]')).toBeTruthy();
+    // Scheduling stays collapsed until the user asks for it.
+    expect(screen.getByRole("button", { name: "Schedule for later" })).toBeTruthy();
+    expect(document.querySelector('input[type="datetime-local"]')).toBeNull();
   });
 });
 
