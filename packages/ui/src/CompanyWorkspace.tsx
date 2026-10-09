@@ -324,6 +324,8 @@ export function CompanyWorkspace({
   const inboxCount = needs.length + proposedQuests.length + promotions.length;
   const failedRuns = activity.filter((run) => run.status === "failed");
   const runningRuns = activity.filter((run) => run.status === "running" || run.status === "queued");
+  // Runs paused on a founder decision (a consequential action needs approval).
+  const awaitingRuns = activity.filter((run) => run.status === "awaiting_approval");
   const members = view?.roles ?? [];
 
   function botName(botId?: string): string {
@@ -1022,7 +1024,16 @@ export function CompanyWorkspace({
           >
             <RefreshIcon size={14} /> Refresh
           </button>
-          {runningRuns.length > 0 ? (
+          {awaitingRuns.length > 0 ? (
+            <button
+              className="ghost small cws-needs-you"
+              type="button"
+              title="Paused on you — open the Inbox to approve or decline"
+              onClick={() => setTab("inbox")}
+            >
+              <SparkIcon size={14} /> Needs you ({awaitingRuns.length})
+            </button>
+          ) : runningRuns.length > 0 ? (
             <button
               className="ghost small cws-stop"
               type="button"
