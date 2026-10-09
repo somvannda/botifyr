@@ -316,11 +316,27 @@ if (await firstOther.count()) {
   }
 }
 
-// Own post: does Delete confirm?
+// Mention routing: clicking an @mention opens a mini-profile.
+if (await firstOther.count()) {
+  const mention = firstOther.locator(".feed-mention-btn").first();
+  if (await mention.count()) {
+    await mention.click();
+    await page.waitForTimeout(600);
+    report.mentionProfileOpened =
+      (await page.locator('[role="dialog"][aria-label^="Profile for"]').count()) > 0;
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(200);
+    report.mentionProfileClosedByEscape =
+      (await page.locator('[role="dialog"][aria-label^="Profile for"]').count()) === 0;
+  }
+}
+
+// Own post: does Delete confirm? Does it offer Edit?
 const ownCard = page.locator(".feed-post").filter({ hasText: "Shared a post" }).first();
 if (await ownCard.count()) {
   await ownCard.getByRole("button", { name: "More options" }).click();
   await page.waitForTimeout(150);
+  report.ownHasEdit = (await ownCard.getByRole("menuitem", { name: "Edit post" }).count()) > 0;
   const del = ownCard.getByRole("menuitem", { name: "Delete post" });
   report.ownHasDelete = (await del.count()) > 0;
   if (report.ownHasDelete) {

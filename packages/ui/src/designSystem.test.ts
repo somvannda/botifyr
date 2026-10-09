@@ -81,6 +81,11 @@ describe("design tokens", () => {
       "--danger-soft",
       "--danger-border",
       "--danger-solid",
+      "--ok-soft",
+      "--ok-border",
+      "--warn-soft",
+      "--warn-border",
+      "--input-bg",
       "--focus-ring",
       "--radius-xs",
       "--radius-sm",
@@ -102,13 +107,19 @@ describe("design tokens", () => {
       "--text-3xl",
       "--text-4xl",
       "--text-5xl",
+      "--space-1",
+      "--space-2",
+      "--space-3",
+      "--space-4",
+      "--space-5",
+      "--space-6",
     ]) {
       expect(dark[token], `:root is missing ${token}`).toBeTruthy();
     }
   });
 
   it("overrides every semantic color in the light theme", () => {
-    for (const token of SEMANTIC) {
+    for (const token of [...SEMANTIC, "--input-bg"]) {
       expect(light[token], `[data-theme=light] is missing ${token}`).toBeTruthy();
       expect(light[token]).not.toBe(dark[token]);
     }
@@ -257,5 +268,38 @@ describe("Feed adopts the tokens", () => {
     expect(feed).toContain("var(--accent-border)");
     expect(feed).toContain("var(--danger-soft)");
     expect(feed).toContain("var(--danger-border)");
+  });
+
+  it("adopts the 4-pt spacing scale app-wide", () => {
+    expect(css).toContain("var(--space-");
+    const properties = [
+      "gap",
+      "row-gap",
+      "column-gap",
+      "padding",
+      "padding-top",
+      "padding-bottom",
+      "margin",
+      "margin-top",
+      "margin-bottom",
+    ];
+    for (const value of [
+      "2px",
+      "3px",
+      "4px",
+      "5px",
+      "6px",
+      "7px",
+      "8px",
+      "9px",
+      "10px",
+      "12px",
+      "14px",
+      "16px",
+    ]) {
+      for (const prop of properties) {
+        expect(css, `${prop}: ${value} should use a --space token`).not.toContain(`${prop}: ${value};`);
+      }
+    }
   });
 });

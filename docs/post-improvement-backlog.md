@@ -23,8 +23,9 @@ owned files are modified.
 | POST-11 | P3 | Delete own comment (with confirmation) and keep counts consistent | Post Manager | — | Author sees Delete on their comment; confirming removes it and decrements the post's comment count | done |
 | POST-15 | P3 | Comment preview: show the first two threads behind a "View all N comments" action | Post Manager | — | Opening comments shows ≤2 threads + a "View all N comments" button; revealing shows the rest; a new comment always appears | done |
 | POST-12 | P2 | Comment pagination: server `limit`/`cursor`, client `listCommentsPage`, UI "Load more comments" | Post Manager | — | `GET /v1/posts/:id/comments?limit=&cursor=` returns `{items,nextCursor}` (legacy array without `limit`); opening comments loads one page; "Load more comments" appends the next page | done |
-| POST-13 | P3 | Copy post link / permalink | — | **host routing** (`BotifyrApp` has no `location.hash`/`search` handling, so a copied link can't open the post on reload) | A copied link opens the Feed focused on the post | deferred (host dependency) |
-| POST-14 | P3 | `@mention` navigation to a profile | — | **host/Feed & Discovery** (no person-profile surface) | Clicking a mention opens the person's profile | deferred (host dependency) |
+| POST-13 | P3 | Copy post link / permalink | Post Manager | — | A "Copy link" menu item copies `…/#post=<id>`; `BotifyrApp` reads the hash, opens the Feed, and `PostCard` scrolls to + highlights the post; `GET /v1/posts/:id` fetches it if absent from the page | done |
+| POST-14 | P3 | `@mention` navigation to a profile | Post Manager | — | Clicking an inline `@handle` opens a mini-profile dialog (`GET /v1/people/by-handle/:handle` → person + recent posts); Escape/backdrop closes | done |
+| POST-16 | P3 | Edit an owned post | Post Manager | — | Own posts show "Edit post"; inline editor saves via `PATCH /v1/posts/:id` (author-only, length-validated); updated body renders | done |
 
 ## Notes
 
@@ -33,4 +34,7 @@ owned files are modified.
   `MediaLightbox` in `FeedView.tsx`). Global tokens/primitives (`styles.css`
   base tokens, `Icons.tsx`) are Design System–owned — this batch only adds new
   `.feed-*` classes and reuses existing icons.
-- **No API contract changes.** Every interaction uses an existing client method.
+- **API additions (backward-compatible):** `GET /v1/posts/:id`,
+  `PATCH /v1/posts/:id` (edit), paginated `GET /v1/posts/:id/comments`
+  (`limit`/`cursor`), and `GET /v1/people/by-handle/:handle`. Existing
+  responses/callers are unchanged.

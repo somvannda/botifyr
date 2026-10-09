@@ -45,40 +45,48 @@ styles were changed.
 ## Files changed (this assignment)
 
 - `packages/ui/src/FeedView.tsx` — `renderRichText` + `fullDate`, rewritten
-  `PostBody`, new `FeedImage` / `PostMedia` / `ConfirmDialog`, upgraded
-  `AuthorLine` (`<time>`) and `CommentRow` (rich text, own-comment delete),
-  `PostCard` optimistic guards + feedback + confirmations + menu/picker keyboard
-  handling, `viewerId` threaded to all 5 call sites, a **Like-click fix**
-  (hover opened the picker, then the click toggled it closed — now the click
-  opens/stays open), and a **comment preview** (`View all N comments`).
+  `PostBody`, new `FeedImage` / `PostMedia` / `ConfirmDialog` / `MentionProfile`,
+  upgraded `AuthorLine` (`<time>`) and `CommentRow` (rich text, own-comment
+  delete), `PostCard` optimistic guards + feedback + confirmations + menu/picker
+  keyboard handling + permalink focus + inline edit + copy-link + mention
+  buttons, `FeedView` `focusPostId` + mention-profile state, `viewerId` threaded
+  to all call sites, a **Like-click fix** (hover opened the picker, then the
+  click toggled it closed — now the click opens/stays open), and a **comment
+  preview** (`View all N comments`).
+- `packages/ui/src/BotifyrApp.tsx` — reads `#post=<id>` (load + `hashchange`),
+  opens the Feed, and passes `focusPostId`.
 - `packages/ui/src/styles.css` — new `.feed-*` classes (links, inline tags,
   mentions, broken-media, feedback, reaction-summary button, confirm dialog,
-  "view all"/"load more" comments).
-- `packages/client/src/index.ts` — `listCommentsPage(id, cursor, limit)` for
-  comment pagination (POST-12).
-- `apps/cloud/src/server.ts` — `GET /v1/posts/:id/comments` accepts
-  `limit`/`cursor` and returns `{items, nextCursor}` (backward-compatible:
-  legacy array without `limit`).
-- `apps/cloud/src/server.feed.test.ts` — pagination test (POST-12).
-- `packages/ui/src/FeedView.dom.test.tsx` — new `describe("Post interactions")`
-  (14 tests: POST-1…POST-11; includes save rollback, dialog Escape safety,
-  reply routing, video name, focusable summary, semantic timestamp) plus
-  `describe("Post reuse across contexts")` (Group + album).
+  "view all"/"load more" comments, post focus highlight, edit editor, mention
+  mini-profile).
+- `packages/client/src/index.ts` — `listCommentsPage` (POST-12), `getPost` +
+  `editPost` (POST-13/16), `getPersonByHandle` (POST-14).
+- `apps/cloud/src/server.ts` — paginated comments (POST-12), `GET`/`PATCH
+  /v1/posts/:id` (POST-13/16), `GET /v1/people/by-handle/:handle` (POST-14).
+- `apps/cloud/src/store/{types,memory,postgres}.ts` — `updatePostBody`.
+- `apps/cloud/src/server.feed.test.ts` — pagination, edit, and mention tests.
+- `packages/ui/src/FeedView.dom.test.tsx` — `describe("Post interactions")`
+  (POST-1…POST-16; save rollback, dialog Escape, reply routing, video name,
+  focusable summary, timestamp, comment preview, pagination, copy-link, edit,
+  permalink highlight, mention profile) plus `describe("Post reuse across
+  contexts")` (Group + album).
 - `scripts/post-audit.mjs` — new live audit + screenshot harness.
 - `docs/post-improvement-plan.md`, `docs/post-improvement-backlog.md`,
   `docs/post-improvement-progress.md`, `docs/assets/post/*.png`.
 
 ## Tests & results (actual, after changes)
 
-- `npx vitest run packages/ui/src/FeedView.dom.test.tsx` → **73 passed / 73**
-  (16 `Post interactions` + 2 `Post reuse` + others).
-- `npx vitest run apps/cloud/src/server.feed.test.ts` → **33 passed / 33**
-  (includes the comment-pagination test, POST-12).
-- `npm test` (repo-wide) → **454 passed / 454** (64 files).
+- `npx vitest run packages/ui/src/FeedView.dom.test.tsx` → **79 passed / 79**
+  (`Post interactions` incl. POST-12/13/14/16 + `Post reuse` + others).
+- `npx vitest run apps/cloud/src/server.feed.test.ts` → **35 passed / 35**
+  (pagination, edit, and mention endpoints).
+- `npm test` (repo-wide) → **462 passed / 462** (64 files).
 - `npm run typecheck` (repo-wide) → **clean**.
 - `npm run lint` → **clean**.
 - `npx prettier --check` (all changed files) → **clean**.
-- `node scripts/post-audit.mjs` → after-report above; screenshots refreshed.
+- `node scripts/post-audit.mjs` → after-report above (copy-link in the menu,
+  `mentionProfileOpened`/`ClosedByEscape`, `ownHasEdit`, video, rollback); no
+  unexpected console errors.
 
 ## Visual evidence & accessibility
 
@@ -102,12 +110,13 @@ scope**:
 ## Definition-of-done mapping
 
 - Audit ✅ · research ✅ · gaps identified ✅ · prioritized plan ✅ ·
-  high-priority feasible improvements implemented ✅ (POST-1…POST-12, POST-15) ·
+  improvements implemented ✅ (POST-1…POST-16 — incl. comment pagination,
+  copy-link/permalink, edit-post, `@mention` profiles) ·
   interactions verified ✅ (unit + live) · reliability/error recovery verified ✅
   (rollback + inline error test) · responsive ✅ (no 390px overflow) ·
   reuse verified ✅ (same card in Feed, Page, Group, album) ·
-  accessibility ✅ (menu Escape/focus, labelled input, Lighthouse 0.96; new
-  dialog/menu semantics) · automated tests ✅ · regressions fixed/documented ✅.
+  accessibility ✅ (menu Escape/focus, labelled input, Lighthouse 0.96; dialog/
+  menu semantics) · automated tests ✅ · regressions fixed/documented ✅.
 
 ## Blockers / caveats
 
@@ -115,11 +124,9 @@ scope**:
   and other files are being modified by other workstreams (Stories, Composer,
   Reels). During this session those edits repeatedly shifted line numbers; all
   steps were re-read before editing. Watch for churn.
-- **Repo-wide `npm run typecheck` is red** from **another workstream's** unused
-  composer declarations (`upload`, `setUpload`, `composerError`, `notice`,
-  `removeAttachment` around lines 3625–3756) — **not** Post code. `@botifyr/ui`
-  typechecks clean. Do not "fix" the composer without coordinating with its
-  owner; it is expected to be cleaned up by that workstream.
+- **Repo-wide gate is green** (`typecheck`, `lint`, `test` all clean as of the
+  last run, 462/462). It oscillated earlier from other workstreams' in-flight
+  edits; re-run after they settle before merging.
 - **Live video rendering:** the running `botifyr-cloud` returned an empty
   `videos[]` for an uploaded `.mp4` (likely a stale container — it was rebuilt
   concurrently), so the audit now **injects** a `videos[]` entry into the feed
@@ -130,12 +137,11 @@ scope**:
 
 ## Exact next actions
 
-1. Re-run the full gate after the concurrent workstreams settle
-   (`npm run typecheck && npm run lint && npm test`) — currently green.
-2. Deferred (host dependency, not Post-owned): POST-13 copy-link/permalink and
-   POST-14 `@mention` routing need `BotifyrApp` URL routing / a profile surface.
-3. Deferred (other owners): edit-post (Composer/API), post detail view (host +
-   `GET /v1/posts/:id`).
-4. Cross-boundary: report the shell `ws-tab` contrast to the Design System
+1. **Integrate** the uncommitted Post work (POST-12…POST-16) via a branch/PR
+   (AGENTS §8/§9). Note: fix `scripts/worktree.mjs` first — it fails on Windows
+   at `spawnSync npm.cmd EINVAL`.
+2. Re-run the full gate after the concurrent workstreams settle
+   (`npm run typecheck && npm run lint && npm test`).
+3. Cross-boundary: report the shell `ws-tab` contrast to the Design System
    owner; re-verify live video classification after a clean `botifyr-cloud`
    rebuild.

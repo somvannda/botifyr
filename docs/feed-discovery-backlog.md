@@ -19,6 +19,7 @@
 | FEED-D6 | Timeline | Hold realtime updates behind a "New activity" banner when scrolled | P2 | `FeedView.dom.test.tsx` banner test; **live-verified** via the FEED-D10 fallback |
 | FEED-D7 | Timeline | Explicit, labelled sort control (`<select aria-label="Sort feed">`) instead of an unlabelled toggle | P2 | `FeedView.dom.test.tsx`; verify script: `labelled Sort control visible=true` |
 | FEED-D10 | Timeline | Freshness fallback: on focus/visibility, check the newest post and raise the banner if it changed (throttled; list untouched) | P2 | `FeedView.dom.test.tsx`; verify script: `fresh-content banner on wake: true`, `banner cleared after tap: true`; `discovery-new-activity.png` |
+| FEED-D11 | Timeline | Polite live region announces "N more posts loaded" after infinite-scroll pagination | P2 | `FeedView.dom.test.tsx` (FEED-D11); verify script: `pagination live-region: "5 more posts loaded"` |
 
 ## Open
 
