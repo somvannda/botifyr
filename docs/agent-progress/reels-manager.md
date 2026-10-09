@@ -5,10 +5,17 @@
 
 ## Current status
 
-**Complete.** Implementation, documentation, and tests are done and the full
-gate is green: `npm run typecheck` (all workspaces), `npm run lint`, and
-`npm test` (61 files, 409 tests) all pass. The earlier external Composer
-typecheck break was fixed by that workstream.
+**VERIFIED — integrated and green.** The Reels deliverable is committed to
+`main` / `origin/main` (replayed onto the canonical history as
+`ac00857 feat(ui): Feed, Reels, Stories, Composer, and Design System
+workstreams` and `f7aac26 feat(feed): backend, store, and API for Feed
+Experience workstreams`). Repo gate on the integrated tree:
+`npm run typecheck` **pass** · `npm run lint` **pass** · `npm test`
+**454 tests passed**. Stage: PLANNED → IMPLEMENTED → TESTED → INTEGRATED →
+**VERIFIED**.
+
+The only open item is **R-10 captions/WebVTT**, which is blocked on a
+media-metadata field (documented, not faked). No other pending Reels work.
 
 ## Environment
 
