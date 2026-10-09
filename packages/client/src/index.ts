@@ -987,6 +987,7 @@ export class BotifyrClient {
       result?: string | null;
       phase?: WorkItem["phase"];
       status?: WorkItem["status"];
+      verified?: boolean;
       assigneeBotId?: string | null;
       department?: Department;
     },

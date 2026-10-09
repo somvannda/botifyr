@@ -406,6 +406,14 @@ export function CompanyWorkspace({
     });
   }
 
+  /** Confirm a done deliverable meets the mission's acceptance bar. */
+  async function setWorkVerified(id: string, verified: boolean) {
+    await withBusy(async () => {
+      await client.updateWorkItem(id, { verified }).catch(() => {});
+      setItems(await client.listWorkItems(selectedId).catch(() => items));
+    });
+  }
+
   async function runNow() {
     await withBusy(async () => {
       await client.runCompany(selectedId).catch(() => null);
@@ -1483,6 +1491,21 @@ export function CompanyWorkspace({
                   />
                   <span className="cws-work-title">{item.title}</span>
                   <span className="cws-muted">{item.phase}</span>
+                  {item.status === "done" && (
+                    <button
+                      className={`cws-verify${item.verified ? " verified" : ""}`}
+                      type="button"
+                      disabled={busy}
+                      title={
+                        item.verified
+                          ? "Verified — click to clear"
+                          : "Mark the deliverable verified"
+                      }
+                      onClick={() => void setWorkVerified(item.id, !item.verified)}
+                    >
+                      <CheckIcon size={13} /> {item.verified ? "Verified" : "Verify"}
+                    </button>
+                  )}
                   {item.result && <span className="cws-muted cws-work-result">{item.result}</span>}
                 </li>
               ))}
