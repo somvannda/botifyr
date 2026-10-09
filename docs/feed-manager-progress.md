@@ -1,5 +1,7 @@
 # Feed Manager — Progress Checkpoint
 
+> **Historical record** — ports reflect the run at the time. Canonical local dev is defined in [`AGENTS.md`](../AGENTS.md) §10.
+
 > Resume point for the Feed UX/UI assignment. Update after meaningful work.
 
 ## Assignment scope

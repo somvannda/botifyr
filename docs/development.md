@@ -34,6 +34,18 @@ npx playwright install chromium   # first time only
 
 ## Run it
 
+Local dev is **one topology with fixed ports** — reuse the running stack, never
+spin up a second copy or a different port (see [AGENTS.md](AGENTS.md) §10).
+
+| Piece | Runs as | Address |
+| --- | --- | --- |
+| Postgres | Docker Compose (`postgres`) | `localhost:54329` |
+| Cloud API | Docker Compose (`cloud`) | `http://localhost:8787` |
+| Web / portal (baked) | Docker Compose (`web`) | `http://localhost:4322` |
+| Admin (baked) | Docker Compose (`admin`) | `http://localhost:4324` |
+| Desktop UI (HMR) | `npm run dev:desktop` | `http://localhost:1420` |
+| Portal UI (HMR) | `npm run dev -w @botifyr/portal` | `http://localhost:1421` |
+
 ### Terminal 1 — cloud service
 
 ```bash
@@ -56,11 +68,12 @@ see live screenshots of the sandbox.
 
 ## Run with Docker (recommended, always on)
 
-Runs Postgres **and** the cloud in containers, independent of any terminal:
+Runs Postgres, the cloud, and the baked **web/portal** and **admin** sites in
+containers, independent of any terminal:
 
 ```bash
 npm run db:up                 # or: docker compose up -d --build
-docker compose up -d --build  # builds + starts postgres + cloud
+docker compose up -d --build  # builds + starts postgres, cloud, web, admin
 docker compose logs -f cloud
 docker compose down           # stop (data is kept)
 ```

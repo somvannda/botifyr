@@ -1,5 +1,7 @@
 # Chat Manager — progress checkpoint
 
+> **Historical record** — ports reflect the run at the time. Canonical local dev is defined in [`AGENTS.md`](../AGENTS.md) §10.
+
 Durable state for resuming the Chat improvement assignment. See the full plan
 and backlog in [`docs/chat-improvement-plan.md`](chat-improvement-plan.md).
 

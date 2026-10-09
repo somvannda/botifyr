@@ -1,5 +1,7 @@
 # Reels — UX & Reliability Audit
 
+> **Historical record** — ports reflect the run at the time. Canonical local dev is defined in [`AGENTS.md`](../AGENTS.md) §10.
+
 > Owner: **Reels Manager**. Date: **Oct 2026**.
 > Method: source inspection of `packages/ui/src/FeedView.tsx` (ReelsView/ReelVideo),
 > `packages/ui/src/styles.css`, `packages/client/src/index.ts`,

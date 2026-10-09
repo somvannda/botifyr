@@ -1,5 +1,7 @@
 # Feed QA — Handoff to Agent 9 (Final Integrated QA)
 
+> **Historical record** — ports reflect the run at the time. Canonical local dev is defined in [`AGENTS.md`](../../AGENTS.md) §10.
+
 > From: **Agent 1 — Feed Experience Lead**. To: **Agent 9 — Feed QA & E2E
 > Manager**. Status: **ready**. Date: Oct 2026.
 

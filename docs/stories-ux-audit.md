@@ -1,5 +1,7 @@
 # Stories — UX & Reliability Audit
 
+> **Historical record** — ports reflect the run at the time. Canonical local dev is defined in [`AGENTS.md`](../AGENTS.md) §10.
+
 > Owner: **Stories Manager** (Feed Experience Team). Date: **Oct 2026**.
 > Method: source inspection of `packages/ui/src/FeedView.tsx` (pre-change
 > `StoryViewer` ~1848–1951), `packages/ui/src/styles.css` (`.story-*`), the

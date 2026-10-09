@@ -38,13 +38,14 @@ OpenRouter, DeepSeek, Groq, or a local model via environment variables.
 ```bash
 npm install
 
-# Everything (Postgres + cloud) in Docker — always on:
+# Everything (Postgres + cloud + web/portal + admin) in Docker — always on:
 docker compose up -d --build
-# …or run the cloud locally in a terminal:
+# …or run the cloud locally in a terminal (not both — one cloud on :8787):
 npm run dev:cloud        # http://localhost:8787
 
-# The desktop app (window):
-npm run dev:desktop      # http://localhost:1420 (browser preview)
+# Front-end dev servers (HMR):
+npm run dev:desktop      # desktop UI, http://localhost:1420 (browser preview)
+npm run dev -w @botifyr/portal   # web portal, http://localhost:1421
 # or: npm run dev:desktop:tauri   # native window
 ```
 

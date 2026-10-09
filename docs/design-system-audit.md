@@ -1,5 +1,7 @@
 # Design System — Audit
 
+> **Historical record** — ports reflect the run at the time. Canonical local dev is defined in [`AGENTS.md`](../AGENTS.md) §10.
+
 > Owner: **Design System Manager** · Scope: shared tokens, primitives and
 > conventions used by the Feed experience (Feed, Posts, Reels, Stories, Pages,
 > Composer). Last updated: Oct 2026.

@@ -1,5 +1,7 @@
 # Agent 3 — Feed & Discovery Manager — Progress
 
+> **Historical record** — ports reflect the run at the time. Canonical local dev is defined in [`AGENTS.md`](../../AGENTS.md) §10.
+
 > Checkpoint for the main-feed / content-discovery workstream. Update after each
 > meaningful batch. Plan: [`../feed-discovery-implementation-plan.md`](../feed-discovery-implementation-plan.md) ·
 > Audit: [`../feed-discovery-ux-audit.md`](../feed-discovery-ux-audit.md).

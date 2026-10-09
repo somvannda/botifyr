@@ -1,5 +1,7 @@
 # Design System Manager (Agent 2) — Progress
 
+> **Historical record** — ports reflect the run at the time. Canonical local dev is defined in [`AGENTS.md`](../../AGENTS.md) §10.
+
 > Durable resume point for the Facebook-inspired **dark social UI design system**.
 > Spec: [`docs/design-system-spec.md`](../design-system-spec.md) ·
 > Audit: [`docs/design-system-audit.md`](../design-system-audit.md) ·

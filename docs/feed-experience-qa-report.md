@@ -1,5 +1,7 @@
 # Feed Experience — Independent QA Report
 
+> **Historical record** — ports reflect the run at the time. Canonical local dev is defined in [`AGENTS.md`](../AGENTS.md) §10.
+
 > Owner: **Feed Experience Lead / QA** (independent of the implementing
 > workstreams). Method: headless Playwright against the running app.
 > Harness: `scripts/feed-qa.mjs`. Date: Oct 2026.
