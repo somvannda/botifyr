@@ -1622,8 +1622,24 @@ export class BotifyrClient {
     return this.request(`/v1/pages/${id}`, { method: "DELETE" });
   }
 
-  listPagePosts(handle: string): Promise<FeedPost[]> {
-    return this.request(`/v1/pages/${encodeURIComponent(handle)}/posts`);
+  /** A Page's timeline, keyset-paged (`docs/pages-implementation-plan.md`). */
+  listPagePosts(handle: string, cursor?: string, limit = 20): Promise<FeedPage> {
+    const params = new URLSearchParams();
+    if (cursor) params.set("cursor", cursor);
+    params.set("limit", String(limit));
+    return this.request(`/v1/pages/${encodeURIComponent(handle)}/posts?${params.toString()}`);
+  }
+
+  /** Image attachments across a Page's posts, newest first. */
+  listPageMedia(
+    handle: string,
+    cursor?: string,
+    limit = 30,
+  ): Promise<{ items: Array<{ id: string; imageUrl: string }>; nextCursor: string | null }> {
+    const params = new URLSearchParams();
+    if (cursor) params.set("cursor", cursor);
+    params.set("limit", String(limit));
+    return this.request(`/v1/pages/${encodeURIComponent(handle)}/media?${params.toString()}`);
   }
 
   followPage(id: string): Promise<{ ok: boolean }> {

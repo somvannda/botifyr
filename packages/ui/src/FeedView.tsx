@@ -1320,20 +1320,29 @@ function PageView({
   const [insightsOpen, setInsightsOpen] = useState(false);
   const [inbox, setInbox] = useState<Awaited<ReturnType<BotifyrClient["pageInbox"]>> | null>(null);
   const [inboxOpen, setInboxOpen] = useState(false);
-  const [section, setSection] = useState<"posts" | "about">("posts");
+  const [section, setSection] = useState<"posts" | "about" | "photos">("posts");
   const [error, setError] = useState<string | null>(null);
   const [followError, setFollowError] = useState<string | null>(null);
   const [nonce, setNonce] = useState(0);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [media, setMedia] = useState<Array<{ id: string; imageUrl: string }>>([]);
+  const [mediaCursor, setMediaCursor] = useState<string | null>(null);
+  const [mediaLoading, setMediaLoading] = useState(false);
+  const [mediaLoadingMore, setMediaLoadingMore] = useState(false);
+  const [mediaLoaded, setMediaLoaded] = useState(false);
+  const [lightbox, setLightbox] = useState<number | null>(null);
 
   useEffect(() => {
     let active = true;
     setLoading(true);
     setError(null);
     Promise.all([client.getPage(handle), client.listPagePosts(handle)])
-      .then(([record, list]) => {
+      .then(([record, feed]) => {
         if (!active) return;
         setPage(record);
-        setPosts(list);
+        setPosts(feed.items);
+        setCursor(feed.nextCursor);
       })
       .catch(() => {
         if (active)
@@ -1346,6 +1355,64 @@ function PageView({
       active = false;
     };
   }, [client, handle, nonce]);
+
+  // The Photos section loads lazily, only when first opened.
+  useEffect(() => {
+    if (section !== "photos" || mediaLoaded || !page) return;
+    let active = true;
+    setMediaLoading(true);
+    client
+      .listPageMedia(page.handle)
+      .then((feed) => {
+        if (!active) return;
+        setMedia(feed.items);
+        setMediaCursor(feed.nextCursor);
+        setMediaLoaded(true);
+      })
+      .catch(() => {
+        if (active) setMediaLoaded(true);
+      })
+      .finally(() => {
+        if (active) setMediaLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [section, mediaLoaded, page, client]);
+
+  async function loadMore() {
+    if (!cursor || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const feed = await client.listPagePosts(handle, cursor);
+      setPosts((prev) => {
+        const seen = new Set(prev.map((post) => post.id));
+        return [...prev, ...feed.items.filter((post) => !seen.has(post.id))];
+      });
+      setCursor(feed.nextCursor);
+    } catch {
+      // Keep the cursor so the reader can retry.
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
+  async function loadMoreMedia() {
+    if (!mediaCursor || mediaLoadingMore) return;
+    setMediaLoadingMore(true);
+    try {
+      const feed = await client.listPageMedia(handle, mediaCursor);
+      setMedia((prev) => {
+        const seen = new Set(prev.map((item) => item.id));
+        return [...prev, ...feed.items.filter((item) => !seen.has(item.id))];
+      });
+      setMediaCursor(feed.nextCursor);
+    } catch {
+      // Keep the cursor so the reader can retry.
+    } finally {
+      setMediaLoadingMore(false);
+    }
+  }
 
   const isAdmin = page?.role === "admin";
 
@@ -1382,7 +1449,9 @@ function PageView({
     try {
       await client.pinPagePost(page.id, postId);
       setPage({ ...page, pinnedPostId: postId ?? undefined });
-      setPosts(await client.listPagePosts(handle));
+      const feed = await client.listPagePosts(handle);
+      setPosts(feed.items);
+      setCursor(feed.nextCursor);
     } catch {
       // Leave the pin unchanged on failure.
     }
@@ -1696,6 +1765,15 @@ function PageView({
               >
                 About
               </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={section === "photos"}
+                className={`page-tab${section === "photos" ? " active" : ""}`}
+                onClick={() => setSection("photos")}
+              >
+                Photos
+              </button>
             </div>
           </>
         ) : null}
@@ -1938,6 +2016,42 @@ function PageView({
                 )}
               </dl>
             </div>
+          ) : section === "photos" ? (
+            <div className="page-photos">
+              {mediaLoading ? (
+                <div className="feed-state">Loading…</div>
+              ) : media.length === 0 ? (
+                <div className="feed-state">No photos yet.</div>
+              ) : (
+                <>
+                  <div className="page-photo-grid">
+                    {media.map((item, index) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className="page-photo"
+                        onClick={() => setLightbox(index)}
+                        aria-label={`Open photo ${index + 1}`}
+                      >
+                        <img src={`${cloudUrl}${item.imageUrl}`} alt="" loading="lazy" />
+                      </button>
+                    ))}
+                  </div>
+                  {mediaCursor ? (
+                    <button
+                      type="button"
+                      className="feed-more"
+                      onClick={() => void loadMoreMedia()}
+                      disabled={mediaLoadingMore}
+                    >
+                      {mediaLoadingMore ? "Loading…" : "Load more photos"}
+                    </button>
+                  ) : (
+                    <div className="feed-end">You're all caught up</div>
+                  )}
+                </>
+              )}
+            </div>
           ) : loading ? (
             <div className="feed-state">Loading…</div>
           ) : posts.length === 0 ? (
@@ -1947,24 +2061,48 @@ function PageView({
                 : "This Page hasn't posted yet."}
             </div>
           ) : (
-            posts.map((post) => (
-              <div key={post.id} className="feed-post-wrap">
-                {page.pinnedPostId === post.id && <div className="feed-repost-label">📌 Pinned</div>}
-                <PostCard
-                  post={post}
-                  client={client}
-                  cloudUrl={cloudUrl}
-                  canDelete={canManage === true || (!post.pageId && post.author.id === viewerId)}
-                  viewerId={viewerId}
-                  onChange={updatePost}
-                  onDelete={removePost}
-                  onBlock={(authorId) => setPosts((prev) => prev.filter((p) => p.author.id !== authorId))}
-                  onOpenPage={onOpenPage}
-                  onRepost={(next) => setPosts((prev) => [next, ...prev])}
-                />
-              </div>
-            ))
+            <>
+              {posts.map((post) => (
+                <div key={post.id} className="feed-post-wrap">
+                  {page.pinnedPostId === post.id && <div className="feed-repost-label">📌 Pinned</div>}
+                  <PostCard
+                    post={post}
+                    client={client}
+                    cloudUrl={cloudUrl}
+                    canDelete={canManage === true || (!post.pageId && post.author.id === viewerId)}
+                    viewerId={viewerId}
+                    onChange={updatePost}
+                    onDelete={removePost}
+                    onBlock={(authorId) => setPosts((prev) => prev.filter((p) => p.author.id !== authorId))}
+                    onOpenPage={onOpenPage}
+                    onRepost={(next) => setPosts((prev) => [next, ...prev])}
+                  />
+                </div>
+              ))}
+              {cursor ? (
+                <button
+                  type="button"
+                  className="feed-more"
+                  onClick={() => void loadMore()}
+                  disabled={loadingMore}
+                >
+                  {loadingMore ? "Loading…" : "Load more"}
+                </button>
+              ) : (
+                <div className="feed-end">You're all caught up</div>
+              )}
+            </>
           ))}
+
+        {lightbox !== null && (
+          <MediaLightbox
+            images={media.map((item) => item.imageUrl)}
+            index={lightbox}
+            cloudUrl={cloudUrl}
+            onClose={() => setLightbox(null)}
+            onNavigate={setLightbox}
+          />
+        )}
       </div>
     </div>
   );

@@ -6,14 +6,22 @@
 
 ## Current status
 
-**Complete, integrated, and verified.** Stage: PLANNED → IMPLEMENTED → TESTED
-→ INTEGRATED → **VERIFIED** (all Pages work is on `origin/main`; CI green:
-Typecheck/Lint/Test + Cloud image). Pages tests 9/9; cloud Pages tests 10/10;
-E2E 4/4; visual E2E captured; whole-repo gate green (`typecheck` 0, `lint` 0,
-`npm test` 451/451). Delivered: three live-only bugs (PG-18 Postgres
-post-as-Page, PG-19 mobile clipping, PG-20 role-inaccurate controls), the
-`listPostMedia` consumer coordination fix, **`pages.cta_url` end-to-end**
-(label + destination), and the E2E seed-uniqueness fix (PR #5).
+**Destination v2 — implemented + tested (in branch `agent/pages-destination-v2`, PR pending).**
+Adds the three requested capabilities on top of the verified base:
+
+- **A — timeline pagination:** `GET /v1/pages/:handle/posts?cursor=&limit=` returns
+  `{ items, nextCursor }` (keyset over `(createdAt,id)`, pin-first on page 1);
+  client + `PageView` "Load more" (dedup on append).
+- **B — Photos section:** `GET /v1/pages/:handle/media` (image attachments,
+  signed URLs) + a lazy **Photos** tab and the shared lightbox.
+- **C — hash routing:** `#/pages/:handle` in `BotifyrApp` (refresh, share,
+  back/forward; activates the Feed view).
+
+Verified in the worktree: `typecheck` 0, `lint` 0, `npm test` **462/462**;
+cloud Pages tests **12/12**; UI Pages tests **11/11**.
+
+**Prior verified base** (on `origin/main`): PG-18/19/20 fixes, `listPostMedia`
+coordination fix, `pages.cta_url`, E2E seed fix (PR #5), CI green.
 
 ## Problem statement
 

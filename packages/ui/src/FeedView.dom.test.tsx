@@ -742,7 +742,8 @@ function makePageClient(
   return {
     ...makeClient(posts),
     getPage: vi.fn().mockResolvedValue(page),
-    listPagePosts: vi.fn().mockResolvedValue(posts),
+    listPagePosts: vi.fn().mockResolvedValue({ items: posts, nextCursor: null }),
+    listPageMedia: vi.fn().mockResolvedValue({ items: [], nextCursor: null }),
     listPageRoles: vi.fn().mockResolvedValue([]),
     followPage: vi.fn().mockResolvedValue({ ok: true }),
     unfollowPage: vi.fn().mockResolvedValue(undefined),
@@ -894,6 +895,41 @@ describe("Pages experience", () => {
     expect(
       await screen.findByText("You haven't posted yet — use the composer to publish as this Page."),
     ).toBeTruthy();
+  });
+
+  it("pages the timeline with Load more and no duplicates (PG-10)", async () => {
+    const p1 = makePost({ id: "pp1", body: "page post one" });
+    const p2 = makePost({ id: "pp2", body: "page post two" });
+    const listPagePosts = vi
+      .fn()
+      .mockResolvedValueOnce({ items: [p1], nextCursor: "c1" })
+      .mockResolvedValueOnce({ items: [p1, p2], nextCursor: null });
+    renderPage(makePageClient(makePage(), [], { listPagePosts }));
+
+    await screen.findByText("page post one");
+    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+    await screen.findByText("page post two");
+    // The overlapping first post is not rendered twice.
+    expect(screen.getAllByText("page post one")).toHaveLength(1);
+    expect(screen.getByText("You're all caught up")).toBeTruthy();
+  });
+
+  it("shows a Page's photos and opens the lightbox", async () => {
+    const listPageMedia = vi.fn().mockResolvedValue({
+      items: [
+        { id: "m1", imageUrl: "/v1/feed/image?t=a" },
+        { id: "m2", imageUrl: "/v1/feed/image?t=b" },
+      ],
+      nextCursor: null,
+    });
+    const { container } = renderPage(makePageClient(makePage(), [], { listPageMedia }));
+    await screen.findByRole("heading", { name: /Acme Coffee/ });
+
+    fireEvent.click(screen.getByRole("tab", { name: "Photos" }));
+    await waitFor(() => expect(container.querySelectorAll(".page-photo")).toHaveLength(2));
+
+    fireEvent.click(screen.getByRole("button", { name: "Open photo 1" }));
+    expect(await screen.findByRole("dialog", { name: "Image viewer" })).toBeTruthy();
   });
 });
 
