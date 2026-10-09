@@ -18,8 +18,11 @@ keep development fast and cheap: **fewer tokens, fewer commands, fewer rebuilds*
 ## 2. Commands
 - Typecheck only what changed: `npm run typecheck -w @botifyr/<pkg>`.
 - Run the full gate **once, at the end**: `npm run typecheck && npm run lint && npm test`.
-- Docker: the cloud image **bakes the sources**, so a source change needs
-  `docker compose up -d --build cloud`. Do **not** rebuild for frontend-only edits.
+- Docker: the cloud image **bakes the sources**, so a source change needs a
+  rebuild. Use `npm run deploy:cloud` — it builds from **`origin/main`** in a
+  throwaway worktree and recreates the container, so it can't accidentally bake
+  whatever branch the primary checkout happens to be on. Do **not** rebuild for
+  frontend-only edits.
 - Keep the dev server running and rely on HMR. Do **not** restart `tauri dev`
   for frontend-only changes.
 - Avoid long foreground waits; use background commands and keep working.
