@@ -98,7 +98,10 @@ Backend-dependent (documented, **not** implemented):
   **Retry** action.
 - **A11y:** a single, consistent `:focus-visible` ring across the Feed; the
   overflow button labelled "More options"; menu items use `role="menu"`.
-- **Responsive:** reduced padding/tighter action spacing under 720px.
+- **Responsive:** reduced padding/tighter action spacing under 820px; feed
+  actions, composer actions and the topbar wrap so nothing clips at narrow
+  widths. The shared shell turns the sidebar into an off-canvas drawer ≤820px,
+  and the Feed topbar exposes a navigation toggle.
 
 ## F. Prioritized roadmap
 
@@ -119,9 +122,12 @@ Backend-dependent (documented, **not** implemented):
 | FEED-3 | Reserve media space / square grid | Image container has non-zero height before load; grid cells are square | **Done** |
 | FEED-4 | Skeleton loading, richer empty, error retry | Loading shows 3 skeleton cards; empty explains next step; error has a working Retry | **Done** |
 | FEED-5 | Responsive tuning <720px | No horizontal overflow; actions remain readable and on one row | **Done** |
-| FEED-6 | Render `avatarUrl` photo with emoji/initial fallback | If author has a photo, it renders; otherwise emoji/initial | Backlog (P2) |
+| FEED-6 | Render `avatarUrl` photo with emoji/initial fallback | If author has a photo, it renders; otherwise emoji/initial | **Done** (posts + comments) |
 | FEED-7 | Reaction breakdown tooltip | Hover/focus the reaction summary shows per-type counts | **Done** |
 | FEED-8 | Long-post "Show more" clamp | Posts over ~12 lines clamp with a toggle | **Done** |
+| FEED-9 | Accessible names for Feed form controls | Every `.feed` `<select>` has an accessible name (aria-label) | **Done** |
+| FEED-10 | Full-screen media lightbox | Clicking a post image opens a viewer with prev/next, counter, Escape/arrow keys | **Done** |
+| FEED-11 | Persist feed tab + sort | Leaving/returning to the Feed keeps the chosen tab and sort (FR-9) | **Done** |
 
 ## H. Validation strategy
 

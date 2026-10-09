@@ -2,7 +2,8 @@
 
 These limit how many model tokens **Botifyr itself** spends when it runs agent
 tasks. They are part of the **shipped product**, not the development process
-(see [`../AGENTS.md`](../AGENTS.md) for the development-cost guidance).
+(see [`dev-cost-controls.md`](dev-cost-controls.md) and [`../AGENTS.md`](../AGENTS.md)
+for the development-cost guidance).
 
 ## Where it is enforced
 | File | Responsibility |

@@ -39,10 +39,15 @@ keep development fast and cheap: **fewer tokens, fewer commands, fewer rebuilds*
 | Concern | What it limits | Where |
 | --- | --- | --- |
 | **Product runtime** | End-user model spend when the app runs tasks | `apps/cloud`, `packages/agent-core` → [`docs/cost-controls.md`](docs/cost-controls.md) |
-| **Development** (this file) | The coding agent's tokens/commands while editing | how you work, above |
+| **Development** | The coding agent's spend while editing this repo | `opencode.jsonc`, `~/.config/opencode/opencode.jsonc` → [`docs/dev-cost-controls.md`](docs/dev-cost-controls.md) |
 
 Changing `BOTIFYR_*` limits changes the **product**, not the coding agent. Don't
 add runtime-limit code to solve a development-cost problem, and vice-versa.
+
+The development ledger has two halves, and they point at the same goal:
+- **Config knobs** — model, reasoning variant, `compaction`, `agents.build.steps`,
+  provider settings, off-peak pricing → [`docs/dev-cost-controls.md`](docs/dev-cost-controls.md).
+- **Behaviour** — context, command, and verification discipline → §1–§4 and §6.
 
 ## 6. Development keys & model
 - Use a **separate API key for development** than for the product, so each side's

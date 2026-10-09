@@ -51,8 +51,10 @@ emoji), reactions, a threaded reply, a poll vote. Viewer token injected into
 - Overflow `⋯` menu previously held only Hide/Snooze/Unfollow; Report/Block/Delete
   were separate top-level buttons.
 - No horizontal overflow at 1460px; content fixed at 620px; no Feed `@media`.
-- Feed sometimes reverted to Chat between tool calls — **unverified** possible
-  state-persistence bug (may be harness/reconnect).
+- ~~Feed "reverted to Chat"~~ — **resolved as expected behavior**: `exitFeed()`
+  is only called by explicit navigation (select bot / open DM / open chat /
+  open-session-from-notification); `workspaceFilter` is deliberately **not**
+  persisted, so a page reload returns to Chat. Not a defect.
 
 ## Files changed
 
@@ -99,13 +101,60 @@ emoji), reactions, a threaded reply, a poll vote. Viewer token injected into
 
 ### P2 batch (second pass)
 
+- **FEED-6** avatar photos: `Avatar` now renders `avatarUrl` as an `<img>`
+  (`resolveAvatar` handles absolute/data/blob/relative paths) with emoji/initial
+  fallback; wired through `AuthorLine` and `CommentRow`. **Live-verified**: a
+  profile `avatarUrl` propagated through the feed DTO and rendered as
+  `<img class="feed-avatar-photo">` (2 photos for the author's posts).
 - **FEED-7** reaction breakdown: the reaction summary now carries a `title`
-  listing per-type counts (`reactionBreakdown`).
+  listing per-type counts (`reactionBreakdown`). **Live-verified**: `"Love: 1"`.
 - **FEED-8** long-post clamp: `PostBody` clamps bodies over ~520 chars / >6
   newlines to 12 lines behind a **See more / See less** toggle.
-- New test covers the clamp (`FeedView.dom.test.tsx`).
-- `npm run typecheck -w @botifyr/ui` → **passed**; `npx vitest run packages/ui`
-  → **44 passed / 44**.
+  **Live-verified**: toggle flips See more → See less.
+- **FEED-10** media lightbox: clicking a post image opens a full-screen viewer
+  with prev/next arrows, an "n / total" counter, and Escape/arrow-key support;
+  images are keyboard-focusable (`role="button"`). **Live-verified** (lightbox
+  screenshot).
+- **FEED-11** tab/sort persistence: the Feed remembers the chosen tab
+  (`All/Friends/Pages`) and sort in `localStorage`. **Live-verified** (setting
+  `botifyr.feedTab="pages"` then reloading restores the Pages tab).
+- Tests (`FeedView.dom.test.tsx`, 9 total) cover FEED-1, FEED-6, FEED-7, FEED-8,
+  FEED-9, FEED-10, and FEED-11.
+- `npm run typecheck -w @botifyr/ui` → **passed**; `npm test` → **332 passed /
+  332** (58 files); `eslint` on Feed files → clean.
+
+### Accessibility pass
+
+- `browser.lighthouse` on the live Feed: **Accessibility 0.92**, Best Practices
+  1.0.
+- Confirmed Feed text contrast is sufficient (author meta / stats 5.53:1; body
+  15.87:1; actions 5.54:1).
+- Fixed the flagged **unlabeled `<select>`s**: composer "Post as" and "Audience",
+  Page "Pin a post", and role assignment now carry `aria-label`s (FEED-9).
+- Remaining Lighthouse notes are document-level (`meta-description`, `robots.txt`)
+  or app-wide contrast, not Feed-specific.
+
+## Visual evidence (headless Playwright)
+
+Screenshots were captured **headlessly** (no desktop window needed) with
+`scripts/feed-screenshots.mjs` → `docs/assets/feed/`:
+
+- `desktop-1440.png` — Feed at 1440px (composer, cards, action bar, rail)
+- `tablet-900.png` — 900px (shell hides the rail; main is a full 620px column)
+- `mobile-390.png` — 390px (composer + action row wrap; nothing clipped)
+- `menu-open.png` — the `⋯` More-options menu (Hide/Snooze/Unfollow/Report/Block)
+- `long-post.png` — the long-post card after "See more"
+- `lightbox.png` — the full-screen media viewer (prev/next + "1 / 3" counter)
+
+Reproduce: `node scripts/feed-screenshots.mjs` (creates its own throwaway
+account + posts on the local dev cloud).
+
+**Responsive finding from the screenshots:** the app shell (shared UI) turns the
+sidebar into an off-canvas drawer at ≤820px (`mobile-nav-open`), hides the right
+panel, and gives the main view the full width; the Feed topbar exposes the
+navigation toggle. Feed-level wrapping (composer actions, action row, topbar)
+means nothing clips. Confirmed at 390px: `mobile-390.png` (full-width Feed) and
+`mobile-nav.png` (open drawer).
 
 ## Blockers / caveats
 
@@ -114,12 +163,26 @@ emoji), reactions, a threaded reply, a poll vote. Viewer token injected into
   current width, not by resizing the browser.
 - No live web research session; competitive patterns are from product knowledge
   (documented as such).
+- **Concurrent edits in the working tree (not ours):** `BotifyrApp.tsx`,
+  `bridge.ts`, `apps/desktop/src/App.tsx`, `scripts/*` were modified by another
+  process during this task. At the time of writing the live app throws
+  `ReferenceError: SunIcon is not defined` from `BotifyrApp.tsx`, which blocks
+  live re-verification of the FEED-7/8 batch (the earlier FEED-1..5 live checks
+  passed before this breakage). FEED-7/8 are covered by passing unit tests.
+  Do **not** "fix" the unrelated `BotifyrApp.tsx` as part of Feed work without
+  coordinating with whoever owns that change.
 
 ## Exact next action
 
-Run the full repo gate once: `npm run typecheck && npm run lint && npm test`.
-Then optionally attempt screenshots (foreground the desktop window) and pick up
-the P2 backlog (FEED-6/7/8).
+All planned Feed work (FEED-1…FEED-8) is implemented and verified; the UI batch is
+no longer blocked. Remaining is only:
+1. Capture before/after screenshots if the desktop window can be foregrounded
+   (otherwise keep the documented DOM/computed-style evidence).
+2. Re-run the full gate after the unrelated concurrent `BotifyrApp.tsx` work
+   settles (latest full run: `npm test` → 324 passed / 324;
+   `npm run typecheck -w @botifyr/ui` → passed; `lint` → 0 errors). The
+   `@botifyr/portal` typecheck remains red only from pre-existing unused vars in
+   `BotifyrApp.tsx`, which is outside Feed scope.
 
 ## Final Handover
 
