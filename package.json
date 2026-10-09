@@ -26,7 +26,8 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "verify:media": "node apps/cloud/scripts/verify-media.mjs"
+    "verify:media": "node apps/cloud/scripts/verify-media.mjs",
+    "wt": "node scripts/worktree.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9",
