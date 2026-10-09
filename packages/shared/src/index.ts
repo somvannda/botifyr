@@ -69,6 +69,16 @@ export interface ChatMessage {
   createdAt: string;
   /** The task that produced this message (assistant) or that it started (user). */
   taskId?: string;
+  /**
+   * The task's goal, carried on a finished assistant message so the thread can
+   * say *what* ran instead of just "Task finished.".
+   */
+  goal?: string;
+  /**
+   * The steps a task ran, snapshotted onto the finished assistant message so the
+   * checklist survives reloads (not only while the task is live).
+   */
+  steps?: TaskStep[];
   /** The bot that authored an assistant message (set in group chats). */
   botId?: string;
   /** The user who sent a message in a human (friend) conversation. */

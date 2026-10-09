@@ -176,6 +176,25 @@ describe("runAgent", () => {
     expect(result.summary).toBe("ok");
   });
 
+  it("synthesizes a summary when the model stops without a final message", async () => {
+    const provider = scriptedProvider([
+      { toolCalls: [{ id: "1", name: "demo_echo", arguments: { value: "hi" } }] },
+      { text: "   ", toolCalls: [] },
+    ]);
+    const result = await runAgent({
+      goal: "echo hi",
+      provider,
+      tools: [echoTool(() => {})],
+      workspaceDir: ".",
+      requestApproval: async () => true,
+      onStep: () => {},
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.summary).toContain("Finished 1 step");
+    expect(result.summary).toContain("demo_echo");
+  });
+
   it("auto-approve runs a consequential tool without asking", async () => {
     let asked = false;
     const risky: ToolDefinition = {
