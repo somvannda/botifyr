@@ -14,8 +14,13 @@
 
 The sidebar is **Chat · Feed · Startup Workspace**. Selecting **Startup
 Workspace** (`activeWorkspaceFilter === "startups"`) renders `CompanyWorkspace`
-in the main pane — a full-pane view, a sibling of `FeedView`, **not a modal**.
-The chat side panels are hidden while it is open, so it uses the full width.
+on the left of `<main>`, with the **real chat column** docked on the right
+(`.main-split`: workspace `1fr` + chat `0 1 <width>`, default **543px**). The
+divider is **draggable** (clamped 300–960px, persisted in `localStorage`), and
+the split applies **only** in the Startup Workspace — the Chat/Feed tabs keep
+their normal layout. Clicking an employee in the sidebar loads their conversation
+in the chat column, which stays put as you move between the workspace's tabs
+(Home / Inbox / Team / Board / …).
 
 ## 2. The loop
 
@@ -43,7 +48,7 @@ The chat side panels are hidden while it is open, so it uses the full width.
   trusted).
 - **Board** — work items with status, plus a **Start a mission** form (the next
   quest; one active at a time).
-- **Office** — opens the 3D office docked beside the pane (same data).
+- **Office** — the 3D office **embedded** in the section (same board data).
 - **Budget / Standup / Changes / Wiki** — token cap, reports, staged diffs,
   company docs.
 
@@ -80,5 +85,6 @@ autonomy levels, AI rewrite, honest failures. The full gate
 
 ## 8. Remaining / optional
 
-- Embed the 3D office **inside** the pane (currently docked beside it).
 - Richer verification signals per work item ("result verified").
+- Scope the chat column to the company shown when several exist.
+- Chat column polish: a nicer employee picker; remember the last employee.
