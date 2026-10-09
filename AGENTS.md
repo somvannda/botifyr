@@ -75,3 +75,47 @@ Rules:
 - `pnpm`/`npm` guard: `packages/ui/src/parity.test.ts` asserts both hosts still
   render `BotifyrApp` and stay thin. A new bespoke UI file in a host should be
   treated as a bug.
+
+## 8. Multi-agent ownership & integration protocol
+When more than one agent (or human) edits this repo, follow this protocol. It
+complements §1–§3, it does not replace them.
+
+**Before implementation**
+- Inspect the relevant code, `git status`, and existing diffs first. Never assume a
+  file is clean, and never assume a symbol exists — locate the actual types, exports
+  and dependencies you rely on.
+- State a short plan before editing: goal, files you intend to change, shared
+  dependencies, and how you will verify it.
+- Do not build on, overwrite or revert uncommitted changes you did not make.
+
+**One owner per file**
+- Each shared file has **one active editing owner at a time**. Before touching a
+  file, check whether another workstream already owns or is editing it.
+- If agents share one working directory, they must **not edit overlapping files
+  concurrently** — sequence the work or split ownership.
+- Prefer isolated **git worktrees** and branches for parallel work, and integrate
+  through review rather than shared live edits.
+
+**Shared contracts**
+- Verify a shared interface or export before importing it, and coordinate before
+  changing a shared contract. Do not invent types or exports just to make code compile.
+
+**Reporting & status**
+- Every agent reports: files changed, commands run, results, dependencies, and
+  unresolved blockers.
+- Track each workstream through **PLANNED → IMPLEMENTED → TESTED → INTEGRATED →
+  VERIFIED**; do not claim a stage you have not reached.
+- Only the **integration owner** reviews the diff, merges changes, and re-runs the
+  relevant checks after integration. Never claim a change is merged or verified
+  unless it actually is.
+
+**When something breaks**
+- On conflict or a failed import: preserve existing work, stop, find the root cause,
+  and coordinate a compatible fix before continuing. Never revert, overwrite or
+  stage another agent's changes. Never run destructive git commands (`reset --hard`,
+  `clean -fd`, force-push) without approval.
+
+**Verification commands** — use the scripts that actually exist; do not assume.
+- Affected package: `npm run typecheck -w @botifyr/<pkg>`.
+- Repo gate (once, at the end): `npm run typecheck && npm run lint && npm test`.
+- Browser flows: `npm run test:e2e`.
