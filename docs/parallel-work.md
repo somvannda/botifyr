@@ -63,23 +63,22 @@ Via the GitHub UI: **Settings → Rules → Rulesets → New branch ruleset**, t
 - Require branches to be **up to date** before merging.
 - Block force pushes and deletions.
 
-Or with the `gh` CLI (needs admin on the repo):
+Or run the checked-in helper (needs admin on the repo). It is idempotent and
+applies the whole policy, including the status checks:
 
 ```sh
-gh api --method POST repos/{owner}/{repo}/rulesets \
-  -f name=main-protection -f target=branch -f enforcement=active \
-  -f 'conditions[branches][0][name]=~DEFAULT_BRANCH' \
-  -F 'rules[][type]=deletion' \
-  -F 'rules[][type]=non_fast_forward' \
-  -F 'rules[][type]=required_linear_history' \
-  -f 'rules[][type]=pull_request' \
-  -f 'rules[][parameters][required_approving_review_count]=1' \
-  -f 'rules[][parameters][require_code_owner_review]=true' \
-  -f 'rules[][parameters][dismiss_stale_reviews_on_push]=true'
+npm run protect:main                 # create / update the "main-protection" ruleset
+npm run protect:main -- --dry-run    # print the exact payload first
 ```
 
-(Add the `required_status_checks` rule with the CI job names in the UI; the exact
-JSON shape varies by GitHub version.)
+It requires a PR, green CI (`Typecheck / Lint / Test`, `Cloud image`), an
+up-to-date branch, blocks force-pushes/deletions, and enforces linear history.
+The default needs **no approval**, so a solo owner is never locked out; add human
+review once a second person is available:
+
+```sh
+npm run protect:main -- --approvals 1 --code-owner-review
+```
 
 ### 1b. Free fallback — the local `pre-push` guard
 

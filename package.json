@@ -28,7 +28,8 @@
     "test:e2e": "playwright test",
     "verify:media": "node apps/cloud/scripts/verify-media.mjs",
     "wt": "node scripts/worktree.mjs",
-    "hooks:install": "node scripts/install-hooks.mjs"
+    "hooks:install": "node scripts/install-hooks.mjs",
+    "protect:main": "node scripts/apply-main-protection.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9",
