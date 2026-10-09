@@ -170,6 +170,7 @@ Priorities justified by user impact × frequency × severity × confidence ÷ ef
 | FEED-D6 | New-activity banner | When scrolled past ~120 px, realtime news shows a tappable banner instead of replacing the list | P2 | **Implemented + verified** (DB-1 fixed enables the realtime path) |
 | FEED-D7 | Make the sort control explicit | Sorting is a labelled `<select>` (`aria-label="Sort feed"`) with `Most recent` / `Top` options | P2 | **Implemented + verified** |
 | FEED-D10 | Freshness without realtime | On regaining focus/visibility, check the newest post and raise the "New activity" banner if it changed (throttled; list untouched) | P2 | **Implemented + verified** |
+| FEED-D11 | Pagination status for screen readers | A polite live region announces "N more posts loaded" after an infinite-scroll fetch | P2 | **Implemented + verified** |
 | FEED-D8 | Paginate the `Top` sort | `Top` can scroll beyond one page | P3 | Documented (backend) |
 | DB-1 | Deliver `feed.*` realtime events | Connected clients receive the feed events they are eligible for | P1 | **Fixed + verified** (`canReceive` + `feedEventRecipient`; `feed-realtime.test.ts`, `events.test.ts`) |
 | DB-2 | Stable keyset pagination | No posts skipped when several share a `createdAt` | P2 | **Fixed + verified** (`encodeFeedCursor`/`decodeFeedCursor`; store keyset; `feed-pagination.test.ts`) |

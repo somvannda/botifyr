@@ -11,11 +11,11 @@ raw colors.
 
 | Group | Tokens |
 | --- | --- |
-| Surfaces | `--bg`, `--panel`, `--panel-2`, `--hover`, `--bubble` |
+| Surfaces | `--bg`, `--panel`, `--panel-2`, `--hover`, `--bubble`, `--input-bg` |
 | Text | `--text` (primary), `--muted` (secondary) |
 | Lines | `--border` |
 | Accent | `--accent`, `--accent-2`, `--accent-soft`, `--accent-soft-strong`, `--accent-border`, `--accent-glow`, `--accent-solid` |
-| Status | `--ok`, `--warn`, `--danger`, `--danger-soft`, `--danger-border`, `--danger-solid` |
+| Status | `--ok`, `--ok-soft`, `--ok-border`, `--warn`, `--warn-soft`, `--warn-border`, `--danger`, `--danger-soft`, `--danger-border`, `--danger-solid` |
 | Focus | `--focus-ring` (= `--accent`) |
 | Shape | `--radius-xs` 6 · `--radius-sm` 9 · `--radius-control` 8 · `--radius-md` 10 · `--radius-bubble` 12 · `--radius-card` 14 · `--radius-pill` 999 · `--radius-round` 50% |
 | Type | `--text-4xs` 10 · `--text-3xs` 10.5 · `--text-2xs` 11 · `--text-xs` 11.5 · `--text-sm` 12 · `--text-md` 12.5 · `--text-lg` 13 · `--text-xl` 13.5 · `--text-2xl` 14 · `--text-3xl` 15 · `--text-4xl` 16 · `--text-5xl` 18 |
@@ -37,8 +37,11 @@ Display sizes (20/22/24/26/28/30/36/40px) remain literal. Truncation:
 `overflow:hidden; text-overflow:ellipsis; white-space:nowrap` (single line) or
 `-webkit-line-clamp` (multi-line).
 
-**Spacing (observed convention).** 4-pt base with an 8-pt rhythm for layout:
-content padding `12–16px`, gaps `8/10/12px`, section spacing `16–22px`.
+**Spacing.** `--space-1..6` = `4/8/12/16/20/24` (a 4-pt grid). The Feed was
+normalised first, then the whole app (1,001 values; e.g. 10→12, 6→8, 14→16, 2→4).
+Verified in-app: computed gaps/paddings resolve to the grid, no horizontal
+overflow, axe clean. A small off-grid tail (18/22/26/40px hairlines & display
+spacing) stays literal.
 
 ## 2. Primitives
 
