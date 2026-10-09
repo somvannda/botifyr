@@ -1112,6 +1112,28 @@ export function CompanyWorkspace({
 
             <div className="cws-card">
               <div className="cws-card-head">
+                <h3>What the company is doing</h3>
+                <span className="cws-muted">
+                  {runningRuns.length ? `${runningRuns.length} running` : "idle"}
+                </span>
+              </div>
+              {activity.length === 0 ? (
+                <p className="cws-muted">No runs yet. Hit Run to give everyone their first task.</p>
+              ) : (
+                <ul className="cws-list">
+                  {activity.slice(0, 5).map((run) => (
+                    <li key={run.id} className="cws-work">
+                      <span className={`cws-run-dot cws-run-${run.status}`} aria-hidden="true" />
+                      <span className="cws-work-title">{run.goal}</span>
+                      <span className="cws-muted">{run.status.replace("_", " ")}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div className="cws-card">
+              <div className="cws-card-head">
                 <h3>Since you were last here</h3>
               </div>
               {lastVisitAt ? (

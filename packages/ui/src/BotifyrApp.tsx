@@ -67,6 +67,7 @@ import {
   HelpIcon,
   LockIcon,
   LogoutIcon,
+  MenuIcon,
   MessageIcon,
   MicIcon,
   MobileIcon,

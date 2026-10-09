@@ -8749,6 +8749,38 @@ a.feed-follow-btn {
   white-space: nowrap;
 }
 
+.cws-run-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex: none;
+  background: var(--muted);
+}
+
+.cws-run-running {
+  background: var(--accent);
+}
+
+.cws-run-queued {
+  background: var(--muted);
+}
+
+.cws-run-awaiting_approval {
+  background: var(--warn);
+}
+
+.cws-run-completed {
+  background: var(--ok);
+}
+
+.cws-run-failed {
+  background: var(--danger);
+}
+
+.cws-run-cancelled {
+  background: var(--muted);
+}
+
 .cws-onboard-head {
   display: flex;
   align-items: center;
