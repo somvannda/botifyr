@@ -3673,7 +3673,11 @@ function GroupCard({
         {group.coverUrl ? (
           <img src={resolveAvatar(group.coverUrl, cloudUrl)} alt="" loading="lazy" />
         ) : (
-          <span className="group-card-cover-fallback" />
+          <span className="group-card-cover-fallback" aria-hidden="true">
+            <span className="group-card-cover-emoji">
+              {group.avatarEmoji?.trim() || group.name.charAt(0).toUpperCase()}
+            </span>
+          </span>
         )}
       </button>
       <div className="group-card-body">
@@ -3685,16 +3689,21 @@ function GroupCard({
             size={44}
           />
           <span className="group-card-meta">
-            <span className="group-card-name">
-              {group.name}
-              {group.privacy === "private" && <LockIcon size={12} />}
-            </span>
+            <span className="group-card-name">{group.name}</span>
             <span className="feed-list-sub">
               {group.members} member{group.members === 1 ? "" : "s"}
               {group.category ? ` · ${group.category}` : ""}
             </span>
           </span>
         </button>
+        <div className="group-card-chips">
+          <span className={`group-chip${group.privacy === "private" ? " private" : ""}`}>
+            {group.privacy === "private" ? <LockIcon size={11} /> : <UsersIcon size={11} />}
+            {group.privacy === "private" ? "Private" : "Public"}
+          </span>
+          {group.joined && group.role && <span className="group-chip role">{group.role}</span>}
+          {group.requestPending && <span className="group-chip pending">Requested</span>}
+        </div>
         {group.about && <p className="group-card-about">{group.about}</p>}
         <div className="group-card-actions">
           <button
@@ -4530,6 +4539,8 @@ function GroupsView({
   const [groups, setGroups] = useState<Group[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /** Bumped to retry a failed load without changing the tab. */
+  const [reloadKey, setReloadKey] = useState(0);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -4582,10 +4593,8 @@ function GroupsView({
         if (active) setGroups(list);
       })
       .catch(() => {
-        if (active) {
-          setGroups([]);
-          setError("We couldn't load groups. Please try again.");
-        }
+        // Keep any data already on screen; surface a retry instead of blanking it.
+        if (active) setError("We couldn't reach the groups service. Check your connection and try again.");
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -4593,7 +4602,7 @@ function GroupsView({
     return () => {
       active = false;
     };
-  }, [client, tab, query, category]);
+  }, [client, tab, query, category, reloadKey]);
 
   function patchGroup(id: string, patch: Partial<Group>) {
     setGroups((prev) => (prev ?? []).map((entry) => (entry.id === id ? { ...entry, ...patch } : entry)));
@@ -4853,33 +4862,59 @@ function GroupsView({
             {notice}
           </p>
         )}
-        {error && (
-          <p className="page-follow-error" role="alert">
+
+        {error && groups && (
+          <p className="group-inline-error" role="alert">
             {error}
           </p>
         )}
 
-        {loading ? (
-          <div className="feed-state">Loading…</div>
-        ) : !groups || groups.length === 0 ? (
+        {error && !groups ? (
+          <div className="group-error" role="alert">
+            <span className="group-error-ico" aria-hidden="true">
+              <UsersIcon size={22} />
+            </span>
+            <div className="group-error-title">Couldn't load groups</div>
+            <p className="group-error-sub">{error}</p>
+            <button type="button" className="feed-follow-btn" onClick={() => setReloadKey((n) => n + 1)}>
+              <RefreshIcon size={14} /> Try again
+            </button>
+          </div>
+        ) : groups === null ? (
+          <div className="group-grid" aria-hidden="true">
+            {[0, 1, 2, 3].map((key) => (
+              <div key={key} className="group-card group-skel">
+                <span className="group-skel-cover" />
+                <span className="group-skel-line" style={{ width: "60%" }} />
+                <span className="group-skel-line" style={{ width: "85%" }} />
+              </div>
+            ))}
+          </div>
+        ) : groups.length === 0 ? (
           <div className="feed-empty">
             <div className="feed-empty-emoji">{emptyCopy.emoji}</div>
             <div className="feed-empty-title">{emptyCopy.title}</div>
             <div className="feed-empty-sub">{emptyCopy.sub}</div>
           </div>
         ) : (
-          <div className="group-grid">
-            {groups.map((group) => (
-              <GroupCard
-                key={group.id}
-                group={group}
-                cloudUrl={cloudUrl}
-                busy={busyId === group.id}
-                onOpen={() => onOpenGroup?.(group.handle)}
-                onAction={() => void act(group)}
-              />
-            ))}
-          </div>
+          <>
+            <div className="group-count" aria-live="polite">
+              {groups.length} group{groups.length === 1 ? "" : "s"}
+              {loading ? " · updating…" : ""}
+            </div>
+            <div className="group-grid">
+              {groups.map((group) => (
+                <GroupCard
+                  key={group.id}
+                  group={group}
+                  cloudUrl={cloudUrl}
+                  busy={busyId === group.id}
+                  onOpen={() => onOpenGroup?.(group.handle)}
+                  onAction={() => void act(group)}
+                />
+              ))}
+            </div>
+          </>
         )}
       </div>
     </div>
