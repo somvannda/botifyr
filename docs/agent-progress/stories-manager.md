@@ -9,18 +9,18 @@
 ## Current status
 
 **Implementation complete and verified, including the previously backend-blocked
-story views and reactions.** Repo-wide `npm test` → **429 passed / 0 failed**.
-Stories Playwright E2E → **1 passed** (open, react, pause, close). Live Feed QA
-(`scripts/feed-qa.mjs`) → "Story viewer opens" **true**, **0 console errors**.
-Cloud container rebuilt; new routes live (unauthenticated `POST
-/v1/stories/:id/view` → 401). `typecheck` for `@botifyr/cloud`/`@botifyr/client`
-clean; `@botifyr/ui` currently has 6 unused-import errors from a concurrent
-workstream (not Stories). ESLint 0 errors.
+story views and reactions.** Repo-wide `npm test` → **437 passed / 0 failed**
+(63 files). Stories Playwright E2E → **2 passed** (desktop + mobile: open, react,
+pause, close). Live Feed QA (`scripts/feed-qa.mjs`) → "Story viewer opens"
+**true**, **0 console errors**. Cloud container rebuilt; new routes live
+(unauthenticated `POST /v1/stories/:id/view` → 401). `npm run typecheck` clean
+across all workspaces; ESLint 0 errors; Prettier clean.
 
 > Concurrent-writer note: sibling agents edit shared files; one introduced (then
 > fixed) a backtick typo in `apps/cloud/src/store/schema.ts`. The earlier 4
-> post-media test failures were resolved by their owner. The Vite dev server on
-> `:1420` was restarted to pick up the new `@botifyr/client` (HMR missed it).
+> post-media test failures and the 6 unused-import errors were resolved by their
+> owners. The Vite dev server on `:1420` was restarted to pick up the new
+> `@botifyr/client` (HMR missed it).
 
 ## Environment
 
@@ -78,8 +78,9 @@ workstream (not Stories). ESLint 0 errors.
   `myReaction`; added `viewStory` + `reactStory`.
 - `packages/ui/src/styles.css` — `.story-reactions`/`.story-reaction`, spacing,
   more opaque viewer backdrop.
-- `e2e/stories.spec.ts` — live Stories journey (open, react, pause, close) +
-  `docs/assets/feed/story-viewer.png` screenshot.
+- `e2e/stories.spec.ts` — live Stories journey at desktop + mobile 390px (open,
+  react, pause, close) + `docs/assets/feed/story-viewer.png` and
+  `story-viewer-mobile.png` screenshots.
 - New docs: `stories-competitive-research.md`, `stories-ux-audit.md`,
   `stories-implementation-plan.md`, this file.
 
@@ -113,20 +114,20 @@ workstream (not Stories). ESLint 0 errors.
 
 ## Test results (actual)
 
-- `npm test` (repo-wide) → **429 passed / 0 failed** (61 files).
+- `npm test` (repo-wide) → **437 passed / 0 failed** (63 files).
 - `npx vitest run packages/ui/src/FeedView.dom.test.tsx` → **66 passed** (13
   Stories tests: grouping, per-creator progress, expiry hidden, end-of-collection
   close, keyboard nav, tab-hidden pause, seen + persistence, pause/resume, reply,
   media error, view-recorded, reaction toggle).
 - `npx vitest run apps/cloud/src/server.feed.test.ts` → **2 story tests passed**
   (expiry + "records story views and reactions").
-- `npx playwright test e2e/stories.spec.ts` → **1 passed** (live: open, react,
-  pause badge, close; screenshot at `docs/assets/feed/story-viewer.png`).
+- `npx playwright test e2e/stories.spec.ts` → **2 passed** (desktop + mobile 390px:
+  open, react, pause badge, close; screenshots `docs/assets/feed/story-viewer.png`
+  and `story-viewer-mobile.png`).
 - `node scripts/feed-qa.mjs` → Story viewer opens **true**, **0 console errors**.
 - Live API: `POST /v1/stories/:id/view` → 200 then `viewedByMe: true`; reaction →
   `{ "❤️": 1 }` + `myReaction`; clear → `{}`; unknown → 404.
-- `npm run typecheck` → `@botifyr/cloud`/`@botifyr/client` clean; `@botifyr/ui`
-  has 6 unused-import errors from a concurrent workstream (not Stories).
+- `npm run typecheck` → **clean** (all workspaces).
 - `npx eslint .` → **0 errors**; `npx prettier --check` clean on touched files.
 
 ## Outstanding tasks
@@ -144,9 +145,8 @@ workstream (not Stories). ESLint 0 errors.
 
 ## Next concrete actions
 
-1. Resolve the 6 `@botifyr/ui` unused-import errors with their owner.
-2. Keep the local seen store as an optimistic cache alongside the server route.
-3. Optional: extract Stories into its own module to end shared-file contention.
+1. Keep the local seen store as an optimistic cache alongside the server route.
+2. Optional: extract Stories into its own module to end shared-file contention.
 
 ## Handoff notes
 

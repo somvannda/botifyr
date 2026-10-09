@@ -32,9 +32,10 @@ Shared, heavily-contended files: `packages/ui/src/FeedView.tsx`,
 
 ## Integration status (Lead-verified)
 
-- `npm test` (repo-wide) → **414 passed / 414** (61 files).
-- `npm run typecheck -w @botifyr/ui` → **passed**.
-- `npx vitest run packages/ui/src/FeedView.dom.test.tsx` → **57 passed**.
+- `npm test` (repo-wide) → **437 passed / 437** (63 files).
+- `npm run typecheck` (all workspaces) → **passed**.
+- `npx vitest run packages/ui/src/FeedView.dom.test.tsx` → **66 passed**.
+- `npx playwright test e2e/stories.spec.ts` → **2 passed** (desktop + mobile).
 - **Independent live QA** (`scripts/feed-qa.mjs`) → **12/12 journeys passed, 0
   console errors** (see `docs/feed-experience-qa-report.md`).
 - ESLint/Prettier clean on Feed files.

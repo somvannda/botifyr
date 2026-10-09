@@ -35,8 +35,12 @@ and empty/error states — with verification.
 - `packages/ui/src/FeedView.tsx` — timeline mechanics (see "Done").
 - `packages/ui/src/styles.css` — `.feed-end`, `.feed-sentinel`,
   `.feed-new-banner`, `.feed-sort`.
-- `packages/ui/src/FeedView.dom.test.tsx` — 6 new timeline/discovery tests
-  (FEED-D1/D2/D3/D5/D6/D7).
+- `packages/ui/src/FeedView.dom.test.tsx` — 7 new timeline/discovery tests
+  (FEED-D1/D2/D3/D5/D6/D7/D10).
+- `apps/cloud/src/server.ts` + `apps/cloud/src/events.ts` — DB-1 realtime
+  delivery filter (`feedEventRecipient` / `canReceive`).
+- `apps/cloud/src/events.test.ts`, `apps/cloud/src/feed-realtime.test.ts` — DB-1
+  routing + websocket integration tests.
 - `scripts/feed-discovery-verify.mjs` — new headless E2E/visual verification.
 - `scripts/feed-discovery-perf.mjs` — headless performance/reliability checks
   (request de-duplication, no infinite-scroll loop, tablet/wide layout).
@@ -70,6 +74,10 @@ and empty/error states — with verification.
   newest post (throttled 15s) and raise the "New activity" banner if the top
   changed — so new content surfaces even though the realtime stream is dead
   (DB-1), and the list is never replaced under the reader.
+- **DB-1 (backend)** realtime delivery: `canReceive` now routes
+  `feed.like/comment/share/mention` to the event's `toUserId` and `feed.post` to
+  its `authorId`, via a pure `feedEventRecipient` helper — so the app's existing
+  realtime toasts/refresh work. (Friends' *new posts* still rely on FEED-D10.)
 - Bonus: error **Retry** now retries the failed page (`errorMode`) instead of a
   full reset.
 
@@ -114,7 +122,7 @@ and empty/error states — with verification.
 The Stories/Reels/Composer workstream rewrote large parts of `FeedView.tsx` and
 its test file, but my timeline code and tests survived and still pass:
 
-- `npm test` (repo-wide) → **428 passed / 428** (61 files, at the time of writing).
+- `npm test` (repo-wide) → **437 passed / 437** (63 files, at the time of writing).
 - `npx vitest run packages/ui/src/FeedView.dom.test.tsx` → **67 passed / 67**
   (includes FEED-D1/D2/D3/D5/D6/D7/D10, which are still present).
 - **Live E2E** re-run `node scripts/feed-discovery-verify.mjs` (added a11y +
@@ -138,16 +146,16 @@ its test file, but my timeline code and tests survived and still pass:
 
 ## Known failures / not verified
 
-- **No failures remain.** The repo-wide suite is **428 passed / 428** (61 files)
+- **No failures remain.** The repo-wide suite is **437 passed / 437** (63 files)
   and the Feed test file is **67 passed / 67**, including all of
   FEED-D1/D2/D3/D5/D6/D7/D10. The transient EXP-1/EXP-2 (Stories) and EXP-3
   (Reels) failures from the concurrent workstream were fixed by their owner, and
   the composer typecheck error was resolved too.
-- **Realtime `feed.*` delivery (DB-1)** still cannot be exercised end-to-end
-  because the server drops the events. The **New activity** UX is nevertheless
-  live-verified through the FEED-D10 focus/visibility fallback; only the
-  websocket-specific path remains unverified until DB-1 is fixed.
-- **Backend defects DB-1/DB-2** documented, not fixed.
+- **DB-1 is fixed.** Feed realtime delivery is covered by `events.test.ts`
+  (routing) and `feed-realtime.test.ts` (websocket). Remaining follow-up:
+  friends' *new posts* over realtime need recipient resolution at the emit site
+  (`feed.post` carries only `authorId`); the FEED-D10 fallback covers that UX.
+- **Backend defect DB-2** (equal-timestamp cursor skips) documented, not fixed.
 
 ## Blockers
 

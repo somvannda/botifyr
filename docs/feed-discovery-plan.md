@@ -45,9 +45,9 @@ owns:
    filter drops them), and cursor pagination by `created_at` can **skip** posts
    that share a boundary timestamp.
 
-This workstream **implemented and verified** the timeline fixes (FEED-D1…D6) and
-**documented** the backend dependencies (DB-1, DB-2) rather than patching another
-team's backend surface.
+This workstream **implemented and verified** the timeline fixes (FEED-D1…D7, D10)
+plus the **DB-1 realtime-delivery fix**, and documented the remaining backend
+dependency (DB-2).
 
 ## B. Current-state architecture
 
@@ -148,10 +148,13 @@ Priorities justified by user impact × frequency × severity × confidence ÷ ef
 - **P3 — polish.**
   - Animate the new-activity banner; "n of m" progress cue; virtualize only if
     profiling shows a genuine long-list cost.
-- **Backend dependencies (documented, not implemented here):**
-  - **DB-1** deliver `feed.*` events to clients (enables realtime freshness).
+- **Backend dependencies:**
+  - **DB-1** deliver `feed.*` events to clients — **fixed & verified**
+    (`canReceive` + `feedEventRecipient`; websocket integration test).
+    Remaining follow-up: deliver *friends'* new posts (needs recipient
+    resolution at the emit site, since `feed.post` carries only `authorId`).
   - **DB-2** keyset pagination that is stable across equal timestamps
-    (e.g. `(created_at, id) < (cursor_at, cursor_id)`).
+    (e.g. `(created_at, id) < (cursor_at, cursor_id)`) — **documented**.
 
 ## G. Engineering backlog
 
@@ -162,11 +165,11 @@ Priorities justified by user impact × frequency × severity × confidence ÷ ef
 | FEED-D4 | Scroll restoration across sub-views | Returning from a Page/Group/Tag/Reels keeps the previous scroll offset | P1 | **Implemented + verified** |
 | FEED-D2 | End-of-timeline state | "You're all caught up" shows once the cursor is exhausted; Load More hides | P2 | **Implemented + verified** |
 | FEED-D5 | Manual refresh control | A labelled topbar control reloads the first page and returns to the top | P2 | **Implemented + verified** |
-| FEED-D6 | New-activity banner | When scrolled past ~120 px, realtime news shows a tappable banner instead of replacing the list | P2 | **Implemented + unit-tested** (live realtime path blocked by DB-1) |
+| FEED-D6 | New-activity banner | When scrolled past ~120 px, realtime news shows a tappable banner instead of replacing the list | P2 | **Implemented + verified** (DB-1 fixed enables the realtime path) |
 | FEED-D7 | Make the sort control explicit | Sorting is a labelled `<select>` (`aria-label="Sort feed"`) with `Most recent` / `Top` options | P2 | **Implemented + verified** |
 | FEED-D10 | Freshness without realtime | On regaining focus/visibility, check the newest post and raise the "New activity" banner if it changed (throttled; list untouched) | P2 | **Implemented + verified** |
 | FEED-D8 | Paginate the `Top` sort | `Top` can scroll beyond one page | P3 | Documented (backend) |
-| DB-1 | Deliver `feed.*` realtime events | Connected clients receive `feed.post/like/comment/share` they are eligible for | P1 | **Documented** (backend, `server.ts`) |
+| DB-1 | Deliver `feed.*` realtime events | Connected clients receive the feed events they are eligible for | P1 | **Fixed + verified** (`canReceive` + `feedEventRecipient`; `feed-realtime.test.ts`, `events.test.ts`) |
 | DB-2 | Stable keyset pagination | No posts skipped when several share a `createdAt` | P2 | **Documented** (backend) |
 
 ## H. Testing strategy

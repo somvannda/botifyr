@@ -1785,6 +1785,7 @@ function PageView({
                 <div className="page-role-add">
                   <input
                     placeholder="Add by @handle"
+                    aria-label="Search people to add a role"
                     value={roleQuery}
                     onChange={(event) => setRoleQuery(event.target.value)}
                     onKeyDown={(event) => {
@@ -4019,21 +4020,22 @@ export function FeedView({
         break;
       }
       accepted += 1;
-      const reader = new FileReader();
-      reader.onload = () => {
-        const data = typeof reader.result === "string" ? reader.result : "";
-        if (!data) return;
-        const attachment: ComposerAttachment = {
-          id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-          name: file.name,
-          mime: file.type,
-          data,
-          size: file.size,
-          alt: "",
-        };
-        setAttachments((prev) => (prev.length >= MAX_ATTACHMENTS ? prev : [...prev, attachment]));
+      const attachment: ComposerAttachment = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        name: file.name,
+        mime: file.type,
+        size: file.size,
+        alt: "",
+        file,
+        previewUrl: URL.createObjectURL(file),
       };
-      reader.readAsDataURL(file);
+      setAttachments((prev) => {
+        if (prev.length >= MAX_ATTACHMENTS) {
+          URL.revokeObjectURL(attachment.previewUrl);
+          return prev;
+        }
+        return [...prev, attachment];
+      });
     }
     if (rejected.length > 0) setComposerError(rejected.join(" · "));
   }
@@ -4196,6 +4198,17 @@ export function FeedView({
     else localStorage.removeItem(FEED_DRAFT_KEY);
   }, [draft]);
 
+  // Revoke preview object URLs for attachments that have left the composer
+  // (removed, or cleared after publishing) so the blobs can be freed.
+  const previewUrlsRef = useRef<Map<string, string>>(new Map());
+  useEffect(() => {
+    const current = new Map(attachments.map((file) => [file.id, file.previewUrl]));
+    for (const [id, url] of previewUrlsRef.current) {
+      if (!current.has(id)) URL.revokeObjectURL(url);
+    }
+    previewUrlsRef.current = current;
+  }, [attachments]);
+
   const loadStories = useCallback(async () => {
     setStoriesLoading(true);
     setStoryError(false);
@@ -4357,7 +4370,12 @@ export function FeedView({
       const mediaIds: string[] = [];
       if (attachments.length > 0) setUpload({ done: 0, total: attachments.length });
       for (const file of attachments) {
-        const media = await client.uploadFile({ name: file.name, mime: file.mime, data: file.data });
+        // Raw bytes, so large media isn't inflated by base64 on the wire.
+        const media = await client.uploadFileRaw({
+          name: file.name,
+          mime: file.mime,
+          blob: file.file,
+        });
         uploadedMediaRef.current.set(file.id, media.id);
         mediaIds.push(media.id);
         setUpload({ done: mediaIds.length, total: attachments.length });
@@ -4721,11 +4739,11 @@ export function FeedView({
                 <div key={file.id} className="feed-composer-thumb" role="listitem">
                   {file.mime.startsWith("video/") ? (
                     <>
-                      <video src={file.data} muted preload="metadata" />
+                      <video src={file.previewUrl} muted preload="metadata" />
                       <span className="feed-composer-thumb-kind">Video</span>
                     </>
                   ) : (
-                    <img src={file.data} alt={`Preview of ${file.name}`} />
+                    <img src={file.previewUrl} alt={`Preview of ${file.name}`} />
                   )}
                   <button
                     type="button"

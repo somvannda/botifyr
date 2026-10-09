@@ -27,15 +27,15 @@
 | FEED-D8 | Timeline | Paginate the `Top` (engagement) sort | P3 | backend | `Top` can load beyond one page | Deferred (backend) |
 | FEED-D9 | Performance | Virtualize / memoize only if profiling shows a real long-list cost | P3 | profiling | Evidence-backed improvement | Not started |
 
-## Backend dependencies (documented, not implemented here)
+## Backend dependencies
 
-| ID | Description | Evidence | Proposed fix |
+| ID | Description | Status | Evidence / remaining work |
 | --- | --- | --- | --- |
-| DB-1 | Realtime `feed.*` events are emitted but **never delivered** — `canReceive` in `apps/cloud/src/server.ts` has no `feed.post/like/comment/share/mention` cases, so the websocket fan-out drops them (`default: return false`) | source: `server.ts` `canReceive` (≈L656) vs. `emit({type:"feed.post"…})` (L4561) and fan-out `if (!canReceive(userId, event)) return` (L6449) | Add `feed.*` cases routing to the author's friends/followers (needs audience resolution) or include explicit recipients at the emit sites |
-| DB-2 | Cursor pagination uses `created_at < cursor` (strict), so posts sharing the boundary timestamp can be **skipped** | source: `apps/cloud/src/store/postgres.ts` `listFeedPosts` | Keyset pagination on `(created_at, id)` |
+| DB-1 | Realtime `feed.*` events were emitted but never delivered — `canReceive` in `apps/cloud/src/server.ts` had no `feed.*` cases, so the websocket fan-out dropped them | **Fixed + verified** | `feedEventRecipient` in `apps/cloud/src/events.ts` + `canReceive` routing; `apps/cloud/src/feed-realtime.test.ts` (websocket) and `events.test.ts`. Follow-up: friends' *new posts* still need recipient resolution at the emit site (`feed.post` carries only `authorId`) |
+| DB-2 | Cursor pagination uses `created_at < cursor` (strict), so posts sharing the boundary timestamp can be **skipped** | Documented (backend) | source: `apps/cloud/src/store/postgres.ts` `listFeedPosts`; fix = keyset on `(created_at, id)` |
 
 ## Cross-workstream notes
 
 | ID | Note | Owner |
 | --- | --- | --- |
-| X-1 | The concurrent Stories/Reels workstream rewrote `StoryViewer`/`ReelsView` in `FeedView.tsx`; the resulting EXP-1/EXP-2/EXP-3 test breakages have since been fixed by that workstream (repo suite now **390 passed**). **Still open:** one composer typecheck error (`ComposerAttachment` vs. the un-updated `pickImages`/`publish` retry path, ≈L3715) from the in-progress Composer refactor. Not caused by the Feed & Discovery changes. | Stories/Reels/Composer Manager |
+| X-1 | The concurrent Stories/Reels/Composer workstream repeatedly rewrote `FeedView.tsx` and `server.ts` during this work. All of its transient breakages (EXP-1/2/3 tests, composer typecheck error) have since been resolved by its owner; the Feed & Discovery changes were preserved throughout. | Stories/Reels/Composer Manager |

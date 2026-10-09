@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { BotifyrClient, FeedPost, Page } from "@botifyr/client";
 import { FeedView } from "./FeedView";
@@ -50,6 +50,7 @@ function makeClient(overrides: Partial<BotifyrClient> = {}): BotifyrClient {
     listMyPages: vi.fn().mockResolvedValue([]),
     searchPeople: vi.fn().mockResolvedValue([]),
     uploadFile: vi.fn().mockResolvedValue({ id: "media-1" }),
+    uploadFileRaw: vi.fn().mockResolvedValue({ id: "media-1" }),
     createPost: vi.fn().mockResolvedValue(makePost({ id: "new-post", body: "hello" })),
     reportPost: vi.fn().mockResolvedValue(undefined),
     blockUser: vi.fn().mockResolvedValue(undefined),
