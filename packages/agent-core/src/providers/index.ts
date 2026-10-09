@@ -12,6 +12,8 @@ interface Preset {
   baseUrl: string;
   model: string;
   keyEnv?: string;
+  /** Echo assistant reasoning_content back (DeepSeek thinking mode requires it). */
+  echoReasoning?: boolean;
 }
 
 const PRESETS: Record<Exclude<ProviderName, "mock">, Preset> = {
@@ -21,7 +23,12 @@ const PRESETS: Record<Exclude<ProviderName, "mock">, Preset> = {
     model: "openai/gpt-4o-mini",
     keyEnv: "OPENROUTER_API_KEY",
   },
-  deepseek: { baseUrl: "https://api.deepseek.com/v1", model: "deepseek-chat", keyEnv: "DEEPSEEK_API_KEY" },
+  deepseek: {
+    baseUrl: "https://api.deepseek.com/v1",
+    model: "deepseek-chat",
+    keyEnv: "DEEPSEEK_API_KEY",
+    echoReasoning: true,
+  },
   groq: {
     baseUrl: "https://api.groq.com/openai/v1",
     model: "llama-3.3-70b-versatile",
@@ -72,5 +79,6 @@ export function createProvider(selection: ProviderSelection): ModelProvider {
     baseUrl: selection.baseUrl ?? preset.baseUrl,
     model,
     apiKey,
+    echoReasoning: preset.echoReasoning,
   });
 }

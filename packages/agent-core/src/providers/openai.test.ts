@@ -1,0 +1,89 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { createOpenAIProvider } from "./openai.js";
+
+/** Capture request bodies while returning a canned completion. */
+function captureFetch(response: unknown): { bodies: Array<Record<string, any>> } {
+  const bodies: Array<Record<string, any>> = [];
+  vi.stubGlobal("fetch", async (_url: string, init: { body: string }) => {
+    bodies.push(JSON.parse(init.body));
+    return {
+      ok: true,
+      status: 200,
+      json: async () => response,
+      text: async () => "",
+      body: null,
+    } as unknown as Response;
+  });
+  return { bodies };
+}
+
+afterEach(() => vi.unstubAllGlobals());
+
+describe("createOpenAIProvider reasoning echo", () => {
+  it("echoes reasoning_content on every assistant turn for DeepSeek thinking mode", async () => {
+    const { bodies } = captureFetch({
+      choices: [{ message: { content: "hi", reasoning_content: "because" } }],
+    });
+    const provider = createOpenAIProvider({
+      baseUrl: "https://api.deepseek.com/v1",
+      model: "deepseek-flash",
+      apiKey: "k",
+      echoReasoning: true,
+    });
+
+    const result = await provider.complete({
+      messages: [
+        { role: "user", content: "hi" },
+        // The prefill / replayed history: no reasoning captured, yet the field
+        // must still be present or the API rejects the whole request.
+        { role: "assistant", content: "On it." },
+        { role: "user", content: "again" },
+      ],
+      tools: [],
+    });
+
+    expect(bodies[0].messages[1]).toMatchObject({
+      role: "assistant",
+      content: "On it.",
+      reasoning_content: "",
+    });
+    // The provider must surface the reasoning so the loop can echo it back.
+    expect(result.reasoningContent).toBe("because");
+  });
+
+  it("echoes captured reasoning back on tool-call turns", async () => {
+    const { bodies } = captureFetch({ choices: [{ message: { content: "ok" } }] });
+    const provider = createOpenAIProvider({
+      baseUrl: "https://api.deepseek.com/v1",
+      model: "deepseek-flash",
+      apiKey: "k",
+      echoReasoning: true,
+    });
+    await provider.complete({
+      messages: [
+        {
+          role: "assistant",
+          content: "",
+          reasoningContent: "I should act",
+          toolCalls: [{ id: "c1", name: "browser_goto", arguments: { url: "https://example.com" } }],
+        },
+      ],
+      tools: [],
+    });
+    expect(bodies[0].messages[0]).toMatchObject({
+      role: "assistant",
+      reasoning_content: "I should act",
+    });
+  });
+
+  it("omits reasoning_content for providers that reject unknown fields", async () => {
+    const { bodies } = captureFetch({ choices: [{ message: { content: "hi" } }] });
+    const provider = createOpenAIProvider({
+      baseUrl: "https://api.openai.com/v1",
+      model: "gpt-4o-mini",
+      apiKey: "k",
+    });
+    await provider.complete({ messages: [{ role: "assistant", content: "On it." }], tools: [] });
+    expect("reasoning_content" in bodies[0].messages[0]).toBe(false);
+  });
+});

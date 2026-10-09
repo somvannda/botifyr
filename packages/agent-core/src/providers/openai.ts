@@ -11,10 +11,18 @@ export interface OpenAIProviderOptions {
   baseUrl: string;
   model: string;
   apiKey?: string;
+  /**
+   * Echo assistant `reasoning_content` back on every assistant turn. Required
+   * by DeepSeek "thinking mode": it rejects a request whose replayed assistant
+   * messages omit the field (an empty string is accepted). Other providers
+   * reject the unknown field, so this stays opt-in.
+   */
+  echoReasoning?: boolean;
 }
 
 interface OpenAIChoiceMessage {
   content?: string | null;
+  reasoning_content?: string | null;
   tool_calls?: Array<{
     id: string;
     function?: { name?: string; arguments?: string };
@@ -31,12 +39,12 @@ function safeJson(value: string | undefined): Record<string, unknown> {
   }
 }
 
-function toOpenAIMessage(message: AgentMessage): Record<string, unknown> {
+function toOpenAIMessage(message: AgentMessage, echoReasoning: boolean): Record<string, unknown> {
   if (message.role === "tool") {
     return { role: "tool", tool_call_id: message.toolCallId, content: message.content };
   }
   if (message.role === "assistant" && message.toolCalls?.length) {
-    return {
+    const out: Record<string, unknown> = {
       role: "assistant",
       content: message.content || null,
       tool_calls: message.toolCalls.map((call) => ({
@@ -45,12 +53,22 @@ function toOpenAIMessage(message: AgentMessage): Record<string, unknown> {
         function: { name: call.name, arguments: JSON.stringify(call.arguments) },
       })),
     };
+    if (echoReasoning) out.reasoning_content = message.reasoningContent ?? "";
+    return out;
+  }
+  if (message.role === "assistant" && echoReasoning) {
+    return {
+      role: "assistant",
+      content: message.content || null,
+      reasoning_content: message.reasoningContent ?? "",
+    };
   }
   return { role: message.role, content: message.content };
 }
 
 export function createOpenAIProvider(options: OpenAIProviderOptions): ModelProvider {
   const endpoint = `${options.baseUrl.replace(/\/$/, "")}/chat/completions`;
+  const echoReasoning = options.echoReasoning === true;
 
   return {
     name: `openai-compatible:${options.model}`,
@@ -67,7 +85,7 @@ export function createOpenAIProvider(options: OpenAIProviderOptions): ModelProvi
     }): Promise<ModelResponse> {
       const body: Record<string, unknown> = {
         model: options.model,
-        messages: messages.map(toOpenAIMessage),
+        messages: messages.map((message) => toOpenAIMessage(message, echoReasoning)),
         temperature: 0.2,
       };
       if (maxTokens && maxTokens > 0) body.max_tokens = maxTokens;
@@ -127,6 +145,7 @@ export function createOpenAIProvider(options: OpenAIProviderOptions): ModelProvi
 
       return {
         text: message.content ?? undefined,
+        reasoningContent: message.reasoning_content ?? undefined,
         toolCalls,
         usage: json.usage
           ? {
@@ -139,7 +158,7 @@ export function createOpenAIProvider(options: OpenAIProviderOptions): ModelProvi
     async completeStream({ messages, tools, maxTokens, toolChoice }, onDelta) {
       const body: Record<string, unknown> = {
         model: options.model,
-        messages: messages.map(toOpenAIMessage),
+        messages: messages.map((message) => toOpenAIMessage(message, echoReasoning)),
         temperature: 0.2,
         stream: true,
         stream_options: { include_usage: true },
@@ -181,6 +200,7 @@ export function createOpenAIProvider(options: OpenAIProviderOptions): ModelProvi
       const decoder = new TextDecoder();
       let buffer = "";
       let text = "";
+      let reasoning = "";
       let streamUsage: TokenUsage | undefined;
       const calls = new Map<number, { id: string; name: string; args: string }>();
 
@@ -200,6 +220,7 @@ export function createOpenAIProvider(options: OpenAIProviderOptions): ModelProvi
             choices?: Array<{
               delta?: {
                 content?: string | null;
+                reasoning_content?: string | null;
                 tool_calls?: Array<{
                   index?: number;
                   id?: string;
@@ -222,6 +243,9 @@ export function createOpenAIProvider(options: OpenAIProviderOptions): ModelProvi
           }
           const delta = chunk.choices?.[0]?.delta;
           if (!delta) continue;
+          if (typeof delta.reasoning_content === "string" && delta.reasoning_content) {
+            reasoning += delta.reasoning_content;
+          }
           if (typeof delta.content === "string" && delta.content) {
             text += delta.content;
             onDelta(delta.content);
@@ -241,6 +265,7 @@ export function createOpenAIProvider(options: OpenAIProviderOptions): ModelProvi
 
       return {
         text: text || undefined,
+        reasoningContent: reasoning || undefined,
         toolCalls: [...calls.values()]
           .filter((call) => call.name)
           .map((call) => ({
