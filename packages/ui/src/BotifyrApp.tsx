@@ -411,6 +411,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [boardWorkspace, setBoardWorkspace] = useState<{ id: string; name: string } | null>(null);
   /** Company the Startup Workspace should focus (set by the sidebar board button). */
   const [startupFocusId, setStartupFocusId] = useState<string | null>(null);
+  /** In the Startup Workspace: show the company pane, or an employee's chat. */
+  const [startupShowWorkspace, setStartupShowWorkspace] = useState(true);
   // The Company HQ opens as a full main area by default; "Float" turns it into a
   // smaller, movable panel over the chat.
   const [, setHqFloating] = useState(false);
@@ -1792,6 +1794,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
 
   function selectBot(bot: Bot) {
     exitFeed();
+    setStartupShowWorkspace(false);
     setActiveBotId(bot.id);
     setActiveSessionId(bot.sessionId);
     setShowAudit(false);
@@ -1802,6 +1805,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   function startCompanyFlow() {
     setCompanyCreateNonce((nonce) => nonce + 1);
     setWorkspaceFilter("startups");
+    setStartupShowWorkspace(true);
     setShowNewChat(false);
   }
 
@@ -4140,7 +4144,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
 
   return (
     <div
-      className={`app${feedActive || (!startupsActive && showBotPanel && (activeBot || (activeSession && (activeSession.kind === "dm" || activeSession.kind === "group")))) ? " with-panel" : ""}${officeDocked ? " with-office" : ""}${density === "compact" ? " density-compact" : ""}${mobileNavOpen ? " mobile-nav-open" : ""}`}
+      className={`app${feedActive || (!(startupsActive && startupShowWorkspace) && showBotPanel && (activeBot || (activeSession && (activeSession.kind === "dm" || activeSession.kind === "group")))) ? " with-panel" : ""}${officeDocked ? " with-office" : ""}${density === "compact" ? " density-compact" : ""}${mobileNavOpen ? " mobile-nav-open" : ""}`}
     >
       {titlebarSlot &&
         createPortal(
@@ -4314,6 +4318,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
             aria-selected={activeWorkspaceFilter === "startups"}
             onClick={() => {
               setWorkspaceFilter("startups");
+              setStartupShowWorkspace(true);
               setMobileNavOpen(false);
             }}
           >
@@ -4406,6 +4411,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                       onClick={() => {
                         setStartupFocusId(group.workspace!.id);
                         setWorkspaceFilter("startups");
+                        setStartupShowWorkspace(true);
                       }}
                     >
                       <ChartIcon size={16} />
@@ -4704,7 +4710,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
             onChanged={() => setFeedRefresh((prev) => prev + 1)}
           />
         )}
-        {startupsActive && (
+        {startupsActive && startupShowWorkspace && (
           <CompanyWorkspace
             client={client}
             companies={workspaces}
@@ -4716,7 +4722,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
             onCreated={handleCompanyCreated}
           />
         )}
-        {((!feedActive && !startupsActive) || showNewChat) && (
+        {((!feedActive && !(startupsActive && startupShowWorkspace)) || showNewChat) && (
           <>
             {showNewChat && (
               <div className="newchat-overlay" onClick={() => setShowNewChat(false)}>
@@ -5805,7 +5811,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       )}
 
       {!feedActive &&
-        !startupsActive &&
+        !(startupsActive && startupShowWorkspace) &&
         showBotPanel &&
         !activeBot &&
         activeSession &&
@@ -6068,7 +6074,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
         </aside>
       )}
 
-      {!feedActive && !startupsActive && showBotPanel && activeBot && (
+      {!feedActive && !(startupsActive && startupShowWorkspace) && showBotPanel && activeBot && (
         <aside className="bot-panel">
           <div className="bot-panel-head">
             <BotLogo size={96} scheme={activeScheme} />
