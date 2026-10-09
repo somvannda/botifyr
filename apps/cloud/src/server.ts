@@ -5155,49 +5155,53 @@ export async function buildServer(options: ServerOptions) {
 
   /* Repost (share) with an optional caption. Creates a new post that links back
      to the original and bumps the original's share count. */
-  app.post<{ Params: { id: string }; Body: { caption?: string } }>(
-    "/v1/posts/:id/repost",
-    { preHandler: requireAuth },
-    async (request, reply) => {
-      const userId = request.userId as string;
-      const original = await store.getPost(request.params.id);
-      if (!original) return reply.code(404).send({ error: "post not found" });
-      if (!canSeePost(original, userId) || (await store.isBlockedEither(userId, original.authorId))) {
-        return reply.code(403).send({ error: "not allowed" });
-      }
-      const caption = typeof request.body?.caption === "string" ? request.body.caption.trim() : "";
-      if (caption.length > MAX_POST_BODY) return reply.code(413).send({ error: "caption is too long" });
-      const now = new Date().toISOString();
-      const record: PostRecord = {
-        id: randomUUID(),
-        authorId: userId,
-        body: caption,
-        repostOf: original.id,
-        createdAt: now,
-        updatedAt: now,
-      };
-      await store.createPost(record);
-      await store.setPostShare(original.id, userId, true);
-      const friendIds = await store.listFriends(userId);
+  app.post<{
+    Params: { id: string };
+    Body: { caption?: string; audience?: "public" | "friends" | "only_me" };
+  }>("/v1/posts/:id/repost", { preHandler: requireAuth }, async (request, reply) => {
+    const userId = request.userId as string;
+    const original = await store.getPost(request.params.id);
+    if (!original) return reply.code(404).send({ error: "post not found" });
+    if (!canSeePost(original, userId) || (await store.isBlockedEither(userId, original.authorId))) {
+      return reply.code(403).send({ error: "not allowed" });
+    }
+    const caption = typeof request.body?.caption === "string" ? request.body.caption.trim() : "";
+    if (caption.length > MAX_POST_BODY) return reply.code(413).send({ error: "caption is too long" });
+    const audience = request.body?.audience ?? "friends";
+    if (!["public", "friends", "only_me"].includes(audience)) {
+      return reply.code(400).send({ error: "invalid audience" });
+    }
+    const now = new Date().toISOString();
+    const record: PostRecord = {
+      id: randomUUID(),
+      authorId: userId,
+      body: caption,
+      repostOf: original.id,
+      audience,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await store.createPost(record);
+    await store.setPostShare(original.id, userId, true);
+    const friendIds = await store.listFriends(userId);
+    emit({
+      type: "feed.post",
+      postId: record.id,
+      authorId: userId,
+      toUserIds: [userId, ...friendIds],
+    });
+    if (original.authorId !== userId) {
+      const actor = await store.getUserById(userId);
       emit({
-        type: "feed.post",
-        postId: record.id,
-        authorId: userId,
-        toUserIds: [userId, ...friendIds],
+        type: "feed.share",
+        postId: original.id,
+        fromUserId: userId,
+        fromName: actor?.displayName ?? actor?.handle,
+        toUserId: original.authorId,
       });
-      if (original.authorId !== userId) {
-        const actor = await store.getUserById(userId);
-        emit({
-          type: "feed.share",
-          postId: original.id,
-          fromUserId: userId,
-          fromName: actor?.displayName ?? actor?.handle,
-          toUserId: original.authorId,
-        });
-      }
-      return reply.code(201).send(await feedPostOf(record, userId, new Map()));
-    },
-  );
+    }
+    return reply.code(201).send(await feedPostOf(record, userId, new Map()));
+  });
 
   app.get<{ Params: { handle: string } }>(
     "/v1/users/:handle/posts",
@@ -5695,8 +5699,10 @@ export async function buildServer(options: ServerOptions) {
       handle,
       about: request.body?.about?.trim().slice(0, 500) || undefined,
       avatarEmoji: request.body?.avatarEmoji?.trim().slice(0, 8) || undefined,
-      avatarUrl: typeof request.body?.avatarUrl === "string" ? request.body.avatarUrl.trim() || undefined : undefined,
-      coverUrl: typeof request.body?.coverUrl === "string" ? request.body.coverUrl.trim() || undefined : undefined,
+      avatarUrl:
+        typeof request.body?.avatarUrl === "string" ? request.body.avatarUrl.trim() || undefined : undefined,
+      coverUrl:
+        typeof request.body?.coverUrl === "string" ? request.body.coverUrl.trim() || undefined : undefined,
       category: request.body?.category?.trim().slice(0, 40) || undefined,
       privacy: request.body?.privacy === "private" ? "private" : "public",
       createdAt: now,

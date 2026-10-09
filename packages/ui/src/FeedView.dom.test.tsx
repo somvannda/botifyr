@@ -1834,7 +1834,7 @@ describe("Post share / reaction hover / repost layout (Agent 1)", () => {
 
     fireEvent.change(screen.getByLabelText("Share caption"), { target: { value: "nice one" } });
     fireEvent.click(screen.getByRole("button", { name: "Share now" }));
-    await waitFor(() => expect(repost).toHaveBeenCalledWith("post-1", "nice one"));
+    await waitFor(() => expect(repost).toHaveBeenCalledWith("post-1", "nice one", "friends"));
   });
 
   it("hides the reaction picker on mouse leave", async () => {
@@ -1870,6 +1870,18 @@ describe("Post share / reaction hover / repost layout (Agent 1)", () => {
 
     fireEvent.change(input, { target: { value: "on enter" } });
     fireEvent.keyDown(input, { key: "Enter" });
-    await waitFor(() => expect(repost).toHaveBeenCalledWith("post-1", "on enter"));
+    await waitFor(() => expect(repost).toHaveBeenCalledWith("post-1", "on enter", "friends"));
+  });
+
+  it("shares with the chosen audience", async () => {
+    const repost = vi.fn().mockResolvedValue(makePost({ id: "rp-aud" }));
+    const client = { ...makeClient([makePost()]), repost } as unknown as BotifyrClient;
+    render(<FeedView client={client} cloudUrl="http://cloud" viewerId="viewer-1" />);
+    await screen.findByText("A quiet feed is a happy feed.");
+
+    fireEvent.click(screen.getByRole("button", { name: "Share" }));
+    fireEvent.change(await screen.findByLabelText("Share audience"), { target: { value: "public" } });
+    fireEvent.click(screen.getByRole("button", { name: "Share now" }));
+    await waitFor(() => expect(repost).toHaveBeenCalledWith("post-1", undefined, "public"));
   });
 });

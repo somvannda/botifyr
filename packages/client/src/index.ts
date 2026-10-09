@@ -1471,11 +1471,11 @@ export class BotifyrClient {
   }
 
   /** Repost (share) a post, optionally with a caption. Returns the new post. */
-  repost(id: string, caption?: string): Promise<FeedPost> {
+  repost(id: string, caption?: string, audience?: "public" | "friends" | "only_me"): Promise<FeedPost> {
     return this.request(`/v1/posts/${id}/repost`, {
       method: "POST",
       json: true,
-      body: JSON.stringify({ caption }),
+      body: JSON.stringify({ caption, audience }),
     });
   }
 
@@ -1549,7 +1549,12 @@ export class BotifyrClient {
   }
 
   /** Public-group discovery with optional search + category filter. */
-  discoverGroups(opts?: { query?: string; category?: string; limit?: number; offset?: number }): Promise<Group[]> {
+  discoverGroups(opts?: {
+    query?: string;
+    category?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<Group[]> {
     const params = new URLSearchParams();
     if (opts?.query) params.set("q", opts.query);
     if (opts?.category) params.set("category", opts.category);
@@ -1623,7 +1628,11 @@ export class BotifyrClient {
   }
 
   /** Assign a member's role (owner/admin only). */
-  setGroupMemberRole(id: string, userId: string, role: "admin" | "moderator" | "member"): Promise<{ ok: boolean }> {
+  setGroupMemberRole(
+    id: string,
+    userId: string,
+    role: "admin" | "moderator" | "member",
+  ): Promise<{ ok: boolean }> {
     return this.request(`/v1/groups/${id}/members/${encodeURIComponent(userId)}`, {
       method: "PUT",
       json: true,
@@ -1832,7 +1841,13 @@ export class BotifyrClient {
   /** Bot roles on a Page (a bot has no user row; docs/feed-next.md FR-15). */
   listPageBotRoles(
     id: string,
-  ): Promise<Array<{ botId: string; role: string; bot: { id: string; name: string; emoji: string; scheme: number } | null }>> {
+  ): Promise<
+    Array<{
+      botId: string;
+      role: string;
+      bot: { id: string; name: string; emoji: string; scheme: number } | null;
+    }>
+  > {
     return this.request(`/v1/pages/${id}/roles?kind=bot`);
   }
 
