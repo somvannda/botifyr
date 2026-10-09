@@ -8161,6 +8161,217 @@ a.feed-follow-btn {
   object-fit: cover;
 }
 
+/* Feed improvements (docs/feed-improvement-plan.md) ----------------------- */
+
+/* FEED-1: primary action bar + a single overflow menu for rare/destructive
+   actions, so the card stays scannable and mistakes are harder to make. */
+.feed-action-more {
+  flex: 0 0 auto;
+  padding: 8px 10px;
+}
+
+.feed-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 8px;
+  padding: 6px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.feed-menu-item {
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.feed-menu-item:hover {
+  background: var(--hover);
+}
+
+.feed-menu-danger {
+  color: #f0556b;
+}
+
+.feed-menu-danger:hover {
+  background: rgba(240, 85, 107, 0.12);
+}
+
+.feed-menu-sep {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 2px;
+}
+
+/* FEED-2: one consistent keyboard focus ring across the Feed. */
+.feed button:focus-visible,
+.feed [role="menuitem"]:focus-visible,
+.feed input:focus-visible,
+.feed textarea:focus-visible,
+.feed select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* FEED-3: reserve media space so late-loading images don't shift the feed. */
+.feed-image-img {
+  min-height: 160px;
+  background: var(--panel-2);
+}
+
+.feed-image-grid .feed-image-img {
+  min-height: 0;
+  aspect-ratio: 1;
+  height: auto;
+  max-height: none;
+}
+
+/* FEED-4: shimmer skeletons + a friendlier empty state + a retryable error. */
+.feed-skeleton {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.feed-skeleton-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.feed-skeleton-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.feed-skeleton-line {
+  height: 11px;
+  border-radius: 6px;
+}
+
+.feed-skeleton-line.short {
+  width: 38%;
+}
+
+.feed-skeleton-media {
+  height: 200px;
+  border-radius: 12px;
+}
+
+.feed-skeleton-avatar,
+.feed-skeleton-line,
+.feed-skeleton-media {
+  background: linear-gradient(90deg, var(--panel-2) 25%, var(--hover) 50%, var(--panel-2) 75%);
+  background-size: 200% 100%;
+  animation: feed-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes feed-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .feed-skeleton-avatar,
+  .feed-skeleton-line,
+  .feed-skeleton-media {
+    animation: none;
+  }
+}
+
+.feed-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 40px 24px;
+  text-align: center;
+}
+
+.feed-empty-emoji {
+  font-size: 30px;
+}
+
+.feed-empty-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.feed-empty-sub {
+  font-size: 12.5px;
+  color: var(--muted);
+  max-width: 360px;
+  line-height: 1.5;
+}
+
+.feed-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.feed-error-retry {
+  flex: none;
+  border: 1px solid rgba(240, 85, 107, 0.5);
+  background: transparent;
+  color: #f0556b;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.feed-error-retry:hover {
+  background: rgba(240, 85, 107, 0.12);
+}
+
+/* FEED-5: keep the Feed comfortable on narrow viewports. */
+@media (max-width: 720px) {
+  .feed-scroll {
+    padding: 12px 10px 32px;
+    gap: 12px;
+  }
+
+  .feed-composer,
+  .feed-post {
+    border-radius: 12px;
+    padding: 12px;
+  }
+
+  .feed-actions {
+    gap: 2px;
+  }
+
+  .feed-action {
+    font-size: 12px;
+    padding: 8px 4px;
+    gap: 5px;
+  }
+}
+
 /* Startup Workspace (founder home) — docs/company-workspace.md, product-plan §4–5.
    A full-pane workspace view, a sibling of `.feed`. */
 .cws {

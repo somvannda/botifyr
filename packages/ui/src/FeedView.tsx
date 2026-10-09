@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import type { BotifyrClient, FeedComment, FeedPost, Group, Page, Person, Story } from "@botifyr/client";
-import { CameraIcon, ChartIcon, ForwardIcon, MessageIcon, SendIcon, SmileyIcon, SparkIcon } from "./Icons";
+import { CameraIcon, ChartIcon, ForwardIcon, MessageIcon, MoreIcon, SendIcon, SmileyIcon, SparkIcon } from "./Icons";
 
 /**
  * Feed — the social wall / timeline (see docs/feed.md).
@@ -451,19 +451,6 @@ function PostCard({
         {post.shares > 0 && <span>{post.shares} share{post.shares === 1 ? "" : "s"}</span>}
       </div>
 
-      {moreOpen && (
-        <div className="reaction-picker">
-          <button type="button" className="feed-composer-tool" onClick={() => void hide()}>
-            Hide this post
-          </button>
-          <button type="button" className="feed-composer-tool" onClick={() => void snooze()}>
-            Snooze 30 days
-          </button>
-          <button type="button" className="feed-composer-tool" onClick={() => void unfollow()}>
-            Unfollow
-          </button>
-        </div>
-      )}
       {pickOpen && (
         <div className="reaction-picker">
           {REACTIONS.map((reaction) => (
@@ -487,6 +474,7 @@ function PostCard({
           onClick={() => setPickOpen((value) => !value)}
           onMouseEnter={() => setPickOpen(true)}
           aria-pressed={post.myReaction !== null}
+          aria-expanded={pickOpen}
         >
           {post.myReaction ? (
             <span className="feed-action-emoji">{reactionEmoji(post.myReaction)}</span>
@@ -509,32 +497,111 @@ function PostCard({
         >
           Save
         </button>
-        {!canDelete && (
-          <button type="button" className="feed-action" onClick={() => setMoreOpen((value) => !value)}>
-            ⋯
-          </button>
-        )}
-        {post.author.page && post.author.handle && onOpenPage && (
-          <button type="button" className="feed-action" onClick={() => onOpenPage(post.author.handle as string)}>
-            View page
-          </button>
-        )}
-        {canDelete && (
-          <button type="button" className="feed-action feed-action-danger" onClick={() => void remove()}>
-            Delete
-          </button>
-        )}
-        {!canDelete && (
-          <>
-            <button type="button" className="feed-action" onClick={() => void report()}>
-              Report
-            </button>
-            <button type="button" className="feed-action feed-action-danger" onClick={() => void blockAuthor()}>
-              Block
-            </button>
-          </>
-        )}
+        <button
+          type="button"
+          className={`feed-action feed-action-more${moreOpen ? " active" : ""}`}
+          onClick={() => setMoreOpen((value) => !value)}
+          aria-label="More options"
+          aria-haspopup="menu"
+          aria-expanded={moreOpen}
+        >
+          <MoreIcon size={18} />
+        </button>
       </div>
+
+      {moreOpen && (
+        <div className="feed-menu" role="menu">
+          {post.author.page && post.author.handle && onOpenPage && (
+            <button
+              type="button"
+              role="menuitem"
+              className="feed-menu-item"
+              onClick={() => {
+                setMoreOpen(false);
+                onOpenPage(post.author.handle as string);
+              }}
+            >
+              View page
+            </button>
+          )}
+          {!canDelete && (
+            <>
+              <button
+                type="button"
+                role="menuitem"
+                className="feed-menu-item"
+                onClick={() => {
+                  setMoreOpen(false);
+                  void hide();
+                }}
+              >
+                Hide this post
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="feed-menu-item"
+                onClick={() => {
+                  setMoreOpen(false);
+                  void snooze();
+                }}
+              >
+                Snooze {authorName(post.author)} for 30 days
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="feed-menu-item"
+                onClick={() => {
+                  setMoreOpen(false);
+                  void unfollow();
+                }}
+              >
+                Unfollow {authorName(post.author)}
+              </button>
+              <div className="feed-menu-sep" />
+              <button
+                type="button"
+                role="menuitem"
+                className="feed-menu-item"
+                onClick={() => {
+                  setMoreOpen(false);
+                  void report();
+                }}
+              >
+                Report post
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="feed-menu-item feed-menu-danger"
+                onClick={() => {
+                  setMoreOpen(false);
+                  void blockAuthor();
+                }}
+              >
+                Block {authorName(post.author)}
+              </button>
+            </>
+          )}
+          {canDelete && (
+            <>
+              <div className="feed-menu-sep" />
+              <button
+                type="button"
+                role="menuitem"
+                className="feed-menu-item feed-menu-danger"
+                onClick={() => {
+                  setMoreOpen(false);
+                  void remove();
+                }}
+              >
+                Delete post
+              </button>
+            </>
+          )}
+        </div>
+      )}
 
       {commentsOpen && (
         <div className="feed-comments">
@@ -1946,12 +2013,39 @@ export function FeedView({
           />
         </form>
 
-        {error && <div className="feed-error">{error}</div>}
+        {error && (
+          <div className="feed-error" role="alert">
+            <span>{error}</span>
+            <button type="button" className="feed-error-retry" onClick={() => void load("reset")}>
+              Retry
+            </button>
+          </div>
+        )}
 
         {loading ? (
-          <div className="feed-state">Loading the feed…</div>
+          <>
+            {[0, 1, 2].map((index) => (
+              <div key={index} className="feed-skeleton" aria-hidden="true">
+                <div className="feed-skeleton-head">
+                  <div className="feed-skeleton-avatar" />
+                  <div className="feed-skeleton-line short" />
+                </div>
+                <div className="feed-skeleton-line" />
+                <div className="feed-skeleton-line" />
+                <div className="feed-skeleton-media" />
+              </div>
+            ))}
+          </>
         ) : posts.length === 0 ? (
-          <div className="feed-state">No posts yet. Be the first to share something.</div>
+          <div className="feed-empty">
+            <div className="feed-empty-emoji">✨</div>
+            <div className="feed-empty-title">Your feed is quiet</div>
+            <div className="feed-empty-sub">
+              {tab === "friends"
+                ? "Add friends or switch to All to see posts from Pages you follow."
+                : "Follow people and Pages to fill your feed — or share the first post above."}
+            </div>
+          </div>
         ) : (
           posts.map((post) => (
             <PostCard

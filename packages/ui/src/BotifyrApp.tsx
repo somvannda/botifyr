@@ -21,7 +21,6 @@ import type {
   CompanyReport,
   ConnectionInfo,
   CreateWorkspaceRequest,
-  Department,
   LearnedSkill,
   Quest,
   RuntimeConfig,
@@ -35,7 +34,7 @@ import type {
   WorkspaceBudget,
   WorkspaceWithRoles,
 } from "@botifyr/shared";
-import { DEPARTMENTS, ROLE_CATALOG } from "@botifyr/shared";
+import { ROLE_CATALOG } from "@botifyr/shared";
 import {
   AuthError,
   BotifyrClient,
@@ -77,14 +76,12 @@ import {
   PauseIcon,
   PhoneIcon,
   PlayIcon,
-  PowerIcon,
   PlusIcon,
   RefreshIcon,
   ReplyIcon,
   SparkIcon,
   SearchIcon,
   SendIcon,
-  ShieldIcon,
   SmileyIcon,
   StopIcon,
   UserIcon,
@@ -185,6 +182,32 @@ function membersFromDirection(direction: CompanyDirection): NonNullable<CreateWo
 }
 const TOKEN_KEY = "botifyr.token";
 const REFRESH_KEY = "botifyr.refresh";
+
+/** Local calendar day key (YYYY-MM-DD) used to group messages by date. */
+function dayKeyOf(iso: string | undefined): string {
+  const date = iso ? new Date(iso) : new Date();
+  if (Number.isNaN(date.getTime())) return "";
+  return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+}
+
+/** "Today" / "Yesterday" / a readable date, for thread date separators. */
+function dayLabelOf(iso: string | undefined): string {
+  const date = iso ? new Date(iso) : new Date();
+  if (Number.isNaN(date.getTime())) return "";
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(today.getDate() - 1);
+  if (dayKeyOf(iso) === dayKeyOf(today.toISOString())) return "Today";
+  if (dayKeyOf(iso) === dayKeyOf(yesterday.toISOString())) return "Yesterday";
+  return date.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
+}
+
+/** Wall-clock time for a message (e.g. "09:03"). */
+function clockOf(iso: string | undefined): string {
+  const date = iso ? new Date(iso) : new Date();
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
 
 type ConnectionState = "connecting" | "online" | "offline";
 
@@ -354,6 +377,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [showNewChat, setShowNewChat] = useState(false);
+  /** On narrow screens the conversation list becomes an off-canvas drawer. */
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [newChatTab, setNewChatTab] = useState<"contacts" | "chats" | "calls">("chats");
   const [newChatQuery, setNewChatQuery] = useState("");
   const [showConnectApps, setShowConnectApps] = useState(false);
@@ -996,6 +1021,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
 
   useEffect(() => {
     setHistoryIndex(null);
+    // Picking a conversation closes the narrow-screen drawer.
+    setMobileNavOpen(false);
   }, [activeSessionId]);
 
   useEffect(() => {
@@ -4404,7 +4431,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
 
   return (
     <div
-      className={`app${feedActive || (!startupsActive && showBotPanel && (activeBot || (activeSession && (activeSession.kind === "dm" || activeSession.kind === "group")))) ? " with-panel" : ""}${officeDocked ? " with-office" : ""}${density === "compact" ? " density-compact" : ""}`}
+      className={`app${feedActive || (!startupsActive && showBotPanel && (activeBot || (activeSession && (activeSession.kind === "dm" || activeSession.kind === "group")))) ? " with-panel" : ""}${officeDocked ? " with-office" : ""}${density === "compact" ? " density-compact" : ""}${mobileNavOpen ? " mobile-nav-open" : ""}`}
     >
       {titlebarSlot && createPortal(notificationCentre, titlebarSlot)}
       {modelNotice && (
@@ -4507,6 +4534,13 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
             </div>
           ))}
         </div>
+      )}
+      {mobileNavOpen && (
+        <div
+          className="mobile-nav-overlay"
+          role="presentation"
+          onClick={() => setMobileNavOpen(false)}
+        />
       )}
       <aside className="sidebar">
         <div className="sidebar-top">
@@ -5031,6 +5065,16 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
 
             {!showNewChat && (
               <header className="topbar">
+                <button
+                  className="mobile-nav-btn"
+                  type="button"
+                  title="Show chats"
+                  aria-label="Show chats"
+                  aria-expanded={mobileNavOpen}
+                  onClick={() => setMobileNavOpen((value) => !value)}
+                >
+                  <MenuIcon size={18} />
+                </button>
                 {findOpen ? (
                   <div className="thread-search">
                     <SearchIcon size={15} />
@@ -5180,7 +5224,16 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                   {findTerm && visibleMessages.length === 0 && (
                     <div className="bot-panel-empty">No matches in this chat.</div>
                   )}
-                  {visibleMessages.map((message) => {
+                  {visibleMessages.map((message, msgIndex) => (
+                    <Fragment key={message.id}>
+                      {(msgIndex === 0 ||
+                        dayKeyOf(visibleMessages[msgIndex - 1]?.createdAt) !==
+                          dayKeyOf(message.createdAt)) && (
+                        <div className="date-sep-thread" role="separator">
+                          {dayLabelOf(message.createdAt)}
+                        </div>
+                      )}
+                      {(() => {
                     if (activeSession.kind === "dm" || activeSession.kind === "group") {
                       const mine = message.senderId === user.id;
                       const person = friends.find((entry) => entry.id === message.senderId);
@@ -5301,10 +5354,13 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                             </span>
                           ))}
                           {actionsFor(message, msgBot?.name ?? activeBotName, message.id === lastAssistantId)}
+                          <time className="msg-time">{clockOf(message.createdAt)}</time>
                         </div>
                       </div>
                     );
-                  })}
+                      })()}
+                    </Fragment>
+                  ))}
 
                   {streamActive && (
                     <div className="msg-assistant">
