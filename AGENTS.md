@@ -95,6 +95,11 @@ complements §1–§3, it does not replace them.
   concurrently** — sequence the work or split ownership.
 - Prefer isolated **git worktrees** and branches for parallel work, and integrate
   through review rather than shared live edits.
+- **Enforced, not advisory.** `origin/main` is the only integration point and is
+  protected: no direct pushes, and every change needs a PR + green CI + the
+  integration owner's review. `.github/CODEOWNERS` names the owner of the hot
+  shared files, so a change there cannot merge without that review. See
+  [`docs/parallel-work.md`](docs/parallel-work.md).
 
 **Shared contracts**
 - Verify a shared interface or export before importing it, and coordinate before
@@ -131,9 +136,10 @@ per task** when you need real directory isolation. The helper in
 on every PR.
 
 **Start**
-- One task = one `<type>/<slug>` branch off `main`.
+- One task = one `<type>/<slug>` branch off **`origin/main`** (fetched first) — the
+  single integration point. `wt new` and `wt sync` do the fetch for you.
 - For directory isolation: `npm run wt -- new <slug>` (branch `agent/<slug>` in a
-  sibling worktree). Otherwise a plain `git switch -c <type>/<slug> main`.
+  sibling worktree). Otherwise a plain `git switch -c <type>/<slug> origin/main`.
 - Never work directly on `main`, and never edit the primary checkout while another
   task is in flight. From a worktree, never edit files in the primary repo directory.
 - Do not run `npm install` inside a worktree — `wt new` provisions dependencies.
@@ -141,19 +147,28 @@ on every PR.
 **Work**
 - Commit small, focused changes with Conventional Commits. `wt finish` can commit
   leftovers with `--message`.
+- Keep current by **rebasing**, not merging: `npm run wt -- sync <slug>` fetches and
+  rebases the branch onto `origin/main` (and only force-with-leases that branch).
+  Never merge `origin/main` into your branch, and never hand-resolve a shared-file
+  conflict — coordinate with the file's owner in §8.
 
-**Finish — pick one; never merge concurrently**
-- **Default (has remote):** push → PR → wait for CI → merge. CI is the gate; never
-  merge red.
-  `git push -u origin <branch>` → `gh pr create --fill` → `gh pr checks --watch` →
-  `gh pr merge --squash --delete-branch` → `git switch main && git pull --ff-only`.
-- **Offline (no PR):** `npm run wt -- finish <slug> --message "feat: …"` runs the
-  local gate, merges into `main`, and deletes the worktree + branch.
+**Finish — one at a time; never merge concurrently**
+- **Default (has remote):** `npm run wt -- finish <slug> --message "feat: …"`. The
+  helper runs the gate, pushes, opens/uses the PR, waits for CI, squash-merges, and
+  deletes the branch. CI is the gate; never merge red. (By hand: `git push -u origin
+  <branch>` → `gh pr create --fill` → `gh pr checks --watch` → `gh pr merge --squash
+  --delete-branch` → fast-forward `main` with `--ff-only`.)
+- **Offline (no remote):** `npm run wt -- finish <slug> --offline --message "…"` runs
+  the local gate and merges into `main`. Use only when there is genuinely no remote.
 - On conflict: preserve work, rebase onto `main`, retry or abandon — never
   hand-resolve in the merge, never revert another agent's work.
 - Never force-push, never commit directly to `main`, and never run destructive git
   (`reset --hard`, `clean -fd`) outside your own worktree. `npm run wt -- list`
   shows active worktrees.
+- **`main` never diverges.** Local `main` is only ever fast-forwarded from
+  `origin/main`; a local-only commit on `main` is a bug. Reconcile it through a
+  branch + PR (see [`docs/parallel-work.md`](docs/parallel-work.md)) — never a local
+  merge. The helper refuses to move a diverged `main`.
 
 **Done means merged — never left dangling**
 - A job is finished when it is **merged into `main`** (PR with green CI, or
