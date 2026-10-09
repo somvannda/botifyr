@@ -15,7 +15,16 @@ import type {
 } from "@botifyr/shared";
 import { ROLE_CATALOG } from "@botifyr/shared";
 import type { BotifyrClient } from "@botifyr/client";
-import { CheckIcon, CloseIcon, CubeIcon, PlayIcon, RefreshIcon, SendIcon, SparkIcon } from "./Icons";
+import {
+  CheckIcon,
+  CloseIcon,
+  CubeIcon,
+  PlayIcon,
+  RefreshIcon,
+  SendIcon,
+  SparkIcon,
+  StopIcon,
+} from "./Icons";
 import { Select } from "./Select";
 
 const ROLE_BY_ID = new Map(ROLE_CATALOG.map((role) => [role.id, role]));
@@ -401,6 +410,20 @@ export function CompanyWorkspace({
     await withBusy(async () => {
       await client.runCompany(selectedId).catch(() => null);
       setNotice("Asked every employee to pick up their work.");
+      // Reflect the new runs immediately so the button flips to Stop.
+      setActivity(await client.listWorkspaceActivity(selectedId).catch(() => activity));
+      setItems(await client.listWorkItems(selectedId).catch(() => items));
+    });
+  }
+
+  /** Stop: cancel every run that is still queued or executing. */
+  async function stopRuns() {
+    const active = runningRuns;
+    if (!active.length) return;
+    await withBusy(async () => {
+      await Promise.all(active.map((run) => client.cancelTask(run.id).catch(() => {})));
+      setNotice("Stopped the work that was running.");
+      setActivity(await client.listWorkspaceActivity(selectedId).catch(() => activity));
       setItems(await client.listWorkItems(selectedId).catch(() => items));
     });
   }
@@ -931,15 +954,27 @@ export function CompanyWorkspace({
           >
             <RefreshIcon size={14} /> Refresh
           </button>
-          <button
-            className="ghost small"
-            type="button"
-            disabled={busy}
-            title="Run now — every employee picks up their work"
-            onClick={() => void runNow()}
-          >
-            <PlayIcon size={14} /> Run
-          </button>
+          {runningRuns.length > 0 ? (
+            <button
+              className="ghost small cws-stop"
+              type="button"
+              disabled={busy}
+              title="Stop — cancel the work that is running now"
+              onClick={() => void stopRuns()}
+            >
+              <StopIcon size={14} /> Stop
+            </button>
+          ) : (
+            <button
+              className="ghost small"
+              type="button"
+              disabled={busy}
+              title="Run now — every employee picks up their work"
+              onClick={() => void runNow()}
+            >
+              <PlayIcon size={14} /> Run
+            </button>
+          )}
           <label className="cws-autonomy" title="How much the company may do on its own">
             <Select
               className="cws-select"
