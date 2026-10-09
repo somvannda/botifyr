@@ -65,6 +65,14 @@ function groupStories(stories: Story[]): StoryGroup[] {
   return [...groups.values()];
 }
 
+/** The full-bleed background of a tray card: a story photo, or its caption. */
+function StoryCover({ story, cloudUrl }: { story: Story; cloudUrl: string }) {
+  if (story.imageUrl) {
+    return <img className="story-cover" src={`${cloudUrl}${story.imageUrl}`} alt="" loading="lazy" />;
+  }
+  return <span className="story-cover story-cover-text">{story.caption}</span>;
+}
+
 /**
  * Full-screen story viewer. Progress segments cover the active creator's
  * collection; the timer advances within the collection, then to the next
@@ -564,22 +572,25 @@ export function StoriesStrip({
   }, [storyGroups, storyOpen]);
 
   async function addStory(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
+    const files = Array.from(event.target.files ?? []).filter((file) => file.type.startsWith("image/"));
     event.target.value = "";
-    if (!file || !file.type.startsWith("image/")) return;
-    const data = await new Promise<string>((resolve) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
-      reader.readAsDataURL(file);
-    });
-    if (!data) return;
-    try {
-      const media = await client.uploadFile({ name: file.name, mime: file.type, data });
-      await client.createStory({ mediaId: media.id });
-      await loadStories();
-    } catch {
-      // Ignore a failed story.
+    if (files.length === 0) return;
+    // Upload each selected image as its own story, oldest-first (selection order).
+    for (const file of files) {
+      const data = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
+        reader.readAsDataURL(file);
+      });
+      if (!data) continue;
+      try {
+        const media = await client.uploadFile({ name: file.name, mime: file.type, data });
+        await client.createStory({ mediaId: media.id });
+      } catch {
+        // Ignore a failed story; keep uploading the rest.
+      }
     }
+    await loadStories();
   }
 
   const markStorySeen = useCallback(
@@ -637,28 +648,24 @@ export function StoriesStrip({
             group.stories.find((s) => !seenStories[s.id]) ?? group.stories[0];
           return (
             <>
-              <div className="story-tile story-own">
-                <button
-                  type="button"
-                  className="story-own-main"
-                  onClick={() =>
-                    ownGroup
-                      ? openStory(ownGroup.author.id, firstUnseen(ownGroup).id)
-                      : storyRef.current?.click()
-                  }
-                  aria-label={ownGroup ? "View your story" : "Add to your story"}
-                >
-                  <span
-                    className={`story-avatar${ownGroup && ownSeen ? " seen" : ""}${ownGroup ? "" : " add"}`}
+              {ownGroup ? (
+                <div className="story-tile story-own">
+                  <button
+                    type="button"
+                    className="story-own-main"
+                    onClick={() => openStory(ownGroup.author.id, firstUnseen(ownGroup).id)}
+                    aria-label="View your story"
                   >
-                    {ownGroup?.stories[0]?.imageUrl ? (
-                      <img src={`${cloudUrl}${ownGroup.stories[0].imageUrl}`} alt="" />
-                    ) : (
-                      "＋"
-                    )}
-                  </span>
-                </button>
-                {ownGroup && (
+                    <StoryCover story={ownGroup.stories[ownGroup.stories.length - 1]} cloudUrl={cloudUrl} />
+                    <span className={`story-avatar${ownSeen ? " seen" : ""}`}>
+                      {ownGroup.author.avatarUrl ? (
+                        <img src={resolveAvatar(ownGroup.author.avatarUrl, cloudUrl)} alt="" />
+                      ) : (
+                        authorEmoji(ownGroup.author)
+                      )}
+                    </span>
+                    <span className="story-name">Your story</span>
+                  </button>
                   <button
                     type="button"
                     className="story-own-add"
@@ -667,9 +674,21 @@ export function StoriesStrip({
                   >
                     ＋
                   </button>
-                )}
-                <span className="story-name">Your story</span>
-              </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="story-tile story-create"
+                  onClick={() => storyRef.current?.click()}
+                  aria-label="Create story"
+                >
+                  <span className="story-create-photo" aria-hidden="true">
+                    <Avatar name="You" size={80} />
+                    <span className="story-create-add">＋</span>
+                  </span>
+                  <span className="story-create-label">Create story</span>
+                </button>
+              )}
 
               {storiesLoading && storyGroups.length === 0 && (
                 <>
@@ -697,7 +716,6 @@ export function StoriesStrip({
 
               {others.map((group) => {
                 const unseen = group.stories.some((s) => !seenStories[s.id]);
-                const latest = group.stories[group.stories.length - 1];
                 return (
                   <button
                     key={group.author.id}
@@ -706,9 +724,10 @@ export function StoriesStrip({
                     onClick={() => openStory(group.author.id, firstUnseen(group).id)}
                     aria-label={`${authorName(group.author)}${unseen ? " — new story" : " — viewed"}`}
                   >
+                    <StoryCover story={group.stories[group.stories.length - 1]} cloudUrl={cloudUrl} />
                     <span className={`story-avatar${unseen ? "" : " seen"}`}>
-                      {latest.imageUrl ? (
-                        <img src={`${cloudUrl}${latest.imageUrl}`} alt="" />
+                      {group.author.avatarUrl ? (
+                        <img src={resolveAvatar(group.author.avatarUrl, cloudUrl)} alt="" />
                       ) : (
                         authorEmoji(group.author)
                       )}
@@ -720,7 +739,14 @@ export function StoriesStrip({
             </>
           );
         })()}
-        <input ref={storyRef} type="file" accept="image/*" style={{ display: "none" }} onChange={addStory} />
+        <input
+          ref={storyRef}
+          type="file"
+          accept="image/*"
+          multiple
+          style={{ display: "none" }}
+          onChange={addStory}
+        />
       </div>
 
       {storyOpen &&
