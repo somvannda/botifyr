@@ -527,10 +527,8 @@ export async function buildServer(options: ServerOptions) {
 
   // Raw binary bodies for large media uploads (`POST /v1/uploads/raw`), which
   // avoid the ~33% base64 inflation of the JSON endpoint.
-  app.addContentTypeParser(
-    "application/octet-stream",
-    { parseAs: "buffer" },
-    (_request, body, done) => done(null, body),
+  app.addContentTypeParser("application/octet-stream", { parseAs: "buffer" }, (_request, body, done) =>
+    done(null, body),
   );
 
   // The desktop app (and website) call this API cross-origin, so allow the

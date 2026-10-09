@@ -3258,10 +3258,10 @@ const FEED_TAB_KEY = "botifyr.feedTab";
 const FEED_SORT_KEY = "botifyr.feedSort";
 /** Mirrors the server's MAX_POST_BODY (apps/cloud/src/server.ts). */
 const MAX_POST_CHARS = 4000;
-/** Mirrors the server's `/v1/uploads` guard (15 MB decoded). Images are capped
- *  lower so optional base64 encoding stays under the 25 MB JSON body limit. */
-const MAX_IMAGE_BYTES = 12 * 1024 * 1024;
-const MAX_VIDEO_BYTES = 15 * 1024 * 1024;
+/** Mirrors the server's `/v1/uploads/raw` guard (50 MB). The composer streams
+ *  raw bytes, so there is no base64 inflation to account for. */
+const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
+const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
 /** The server keeps at most 4 media ids per post. */
 const MAX_ATTACHMENTS = 4;
 /** Composer text is persisted so it survives a reload; media is never persisted
@@ -3317,10 +3317,13 @@ interface ComposerAttachment {
   id: string;
   name: string;
   mime: string;
-  data: string;
   size: number;
   /** Per-image accessibility description (optional). */
   alt: string;
+  /** The original bytes, streamed to `/v1/uploads/raw` on publish. */
+  file: File;
+  /** Object URL used only for the local preview; revoked when the file leaves. */
+  previewUrl: string;
 }
 
 /** How long a photo story shows before auto-advancing. */

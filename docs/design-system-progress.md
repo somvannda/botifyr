@@ -55,7 +55,8 @@ system. Audit → plan (`docs/design-system-plan.md`), components
    accent-on-tint contrast (→ `#3d52c2`), a `label-title-only` finding
    (`aria-label="Schedule for later"` in `FeedView.tsx`), and white-on-accent
    solid buttons (`--accent-solid`).
-9. **Guard test** `packages/ui/src/designSystem.test.ts` (27 assertions).
+9. **Guard test** `packages/ui/src/designSystem.test.ts` (29 assertions),
+   including pinned dark/light token values as a visual-regression guard.
 10. **Screenshots** for dark/light Feed (desktop + mobile) and the confirm dialog.
 
 ## Files modified / created
@@ -88,7 +89,7 @@ system. Audit → plan (`docs/design-system-plan.md`), components
 
 | Command | Result |
 | --- | --- |
-| `npx vitest run packages/ui/src/designSystem.test.ts` | **27 passed** |
+| `npx vitest run packages/ui/src/designSystem.test.ts` | **29 passed** |
 | `npx vitest run packages/ui/src/designSystem.test.ts parity.test.ts smoke.dom.test.tsx` | **31 passed** |
 | `npm test` | **420 passed, 16 failed** — the 16 are `FeedView.dom.test.tsx` Reels tests from the concurrent workstream (mid-edit); last full-green run was 429 |
 | `npm run typecheck -w @botifyr/ui` | **clean** |

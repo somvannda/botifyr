@@ -103,8 +103,8 @@ because no live screenshots of those apps were captured here.
 | D6 | New content replaces the list silently mid-read | Improvement | Medium | Realtime events | Medium | High *(source)* | Low | **Fixed** |
 | D7 | Sort control is an unlabelled toggle; state unclear | Improvement | Medium | Every session | Low | High *(verified)* | Low | **Fixed** |
 | D8 | `Top` sort has no pagination (server returns `nextCursor: null`) | Backend limitation | Low | Power users | Low | High *(source)* | Medium | Documented |
-| D9 | Realtime `feed.*` events never reach clients | **Backend defect** | High | Any live update | High | High *(source)* | Low–Medium | Documented (DB-1) |
-| D10 | Cursor pagination can skip posts sharing a boundary `createdAt` | **Backend defect** | Medium | Rapid posting | Medium | High *(source)* | Medium | Documented (DB-2) |
+| DB-1 | Realtime `feed.*` events never reach clients | **Backend defect** | High | Any live update | High | High *(verified)* | Low | **Fixed** |
+| DB-2 | Cursor pagination can skip posts sharing a boundary `createdAt` | **Backend defect** | Medium | Rapid posting | Medium | High *(source)* | Medium | Documented |
 
 ## E. Proposed experience
 

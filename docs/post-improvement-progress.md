@@ -87,8 +87,8 @@ workstreams' in-flight edits** (see caveats).
 inline hashtags), `card-image.png`, `card-grid.png`, `card-poll.png`,
 `card-long-clamped.png`, `card-long-expanded.png`, `card-menu.png`,
 `confirm-delete.png` (the new `role="alertdialog"`), `card-react-error.png`
-(rolled-back reaction + inline error), `card-video.png` (captured once, when the
-dev cloud briefly classified an `.mp4`), `card-mobile.png`.
+(rolled-back reaction + inline error), `card-video.png` (native video controls),
+`card-mobile.png`.
 Before/after values are in the table above.
 
 **Lighthouse (live Feed with seeded posts):** Accessibility **0.96**

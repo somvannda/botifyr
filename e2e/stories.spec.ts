@@ -70,10 +70,7 @@ async function seedStory(): Promise<{ token: string }> {
 }
 
 for (const vp of VIEWPORTS) {
-  test(`a viewer can open, react to, pause, and close a story (${vp.name})`, async ({
-    page,
-    request,
-  }) => {
+  test(`a viewer can open, react to, pause, and close a story (${vp.name})`, async ({ page, request }) => {
     const appUp = await request
       .get(APP + "/")
       .then((r) => r.ok())
