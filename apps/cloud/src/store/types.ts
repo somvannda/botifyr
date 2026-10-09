@@ -93,6 +93,13 @@ export interface PostRecord {
   updatedAt: string;
 }
 
+/** A media attachment on a post, with optional alt text (accessibility). */
+export interface PostMediaRecord {
+  mediaId: string;
+  /** Screen-reader description; omitted when the author left it blank. */
+  alt?: string;
+}
+
 /** A comment on a post. */
 export interface PostCommentRecord {
   id: string;
@@ -160,6 +167,13 @@ export interface StoryRecord {
   caption: string;
   createdAt: string;
   expiresAt: string;
+}
+
+/** One viewer's reaction to a story (docs/feed-next.md §FR-13). */
+export interface StoryReactionRecord {
+  storyId: string;
+  userId: string;
+  emoji: string;
 }
 
 /** A moderation report against a post. */
@@ -446,9 +460,9 @@ export interface Store {
   /** Only the author may delete; cascades likes/comments/shares. */
   deletePost(authorId: string, id: string): Promise<boolean>;
   /** Attach an image to a post (multi-image; position orders the grid). */
-  addPostMedia(postId: string, mediaId: string, position: number): Promise<void>;
-  /** Media ids attached to a post, ordered by position. */
-  listPostMedia(postId: string): Promise<string[]>;
+  addPostMedia(postId: string, mediaId: string, position: number, alt?: string): Promise<void>;
+  /** Media attached to a post, ordered by position, with optional alt text. */
+  listPostMedia(postId: string): Promise<PostMediaRecord[]>;
   /* Hashtags */
   addPostTag(postId: string, tag: string): Promise<void>;
   listPostTags(postId: string): Promise<string[]>;
@@ -496,6 +510,16 @@ export interface Store {
   createStory(record: StoryRecord): Promise<void>;
   /** Unexpired stories by any of `authorIds`, newest first. */
   listActiveStories(authorIds: string[], nowIso: string, limit: number): Promise<StoryRecord[]>;
+  /** A single story by id (view/reaction target validation). */
+  getStory(id: string): Promise<StoryRecord | null>;
+  /** Record that `userId` viewed `storyId` (idempotent). */
+  markStoryViewed(storyId: string, userId: string, viewedAt: string): Promise<void>;
+  /** Of `storyIds`, the ones `userId` has viewed. */
+  listViewedStoryIds(userId: string, storyIds: string[]): Promise<string[]>;
+  /** Set (or, with an empty emoji, clear) `userId`'s reaction to `storyId`. */
+  setStoryReaction(storyId: string, userId: string, emoji: string): Promise<void>;
+  /** All reactions for the given stories, for aggregation. */
+  listStoryReactionRecords(storyIds: string[]): Promise<StoryReactionRecord[]>;
 
   /* Polls (docs/feed-next.md §FR-12) */
   createPoll(postId: string, options: string[], closesAt?: string): Promise<void>;

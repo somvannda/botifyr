@@ -363,7 +363,7 @@ CREATE INDEX IF NOT EXISTS notifications_user_idx ON notifications (user_id, cre
 /* Feed (social posts) — see docs/feed.md */
 CREATE TABLE IF NOT EXISTS posts (
   id         TEXT PRIMARY KEY,
-  author_id  TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  author_id  TEXT NOT NULL,
   body       TEXT NOT NULL DEFAULT '',
   media_id   TEXT REFERENCES media(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -371,6 +371,10 @@ CREATE TABLE IF NOT EXISTS posts (
 );
 CREATE INDEX IF NOT EXISTS posts_author_idx ON posts (author_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS posts_created_idx ON posts (created_at DESC);
+/* A post's author is a user OR a Page (docs/feed-next.md §FR-17), so author_id
+   is a generic author id, not user-only. Drop the legacy users FK for databases
+   created before post-as-Page shipped; author_mutes.author_id is generic too. */
+ALTER TABLE posts DROP CONSTRAINT IF EXISTS posts_author_id_fkey;
 
 CREATE TABLE IF NOT EXISTS post_likes (
   post_id    TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
@@ -455,6 +459,22 @@ CREATE TABLE IF NOT EXISTS stories (
 );
 CREATE INDEX IF NOT EXISTS stories_author_idx ON stories (author_id, created_at DESC);
 
+/* Story views + reactions (docs/feed-next.md §FR-13). */
+CREATE TABLE IF NOT EXISTS story_views (
+  story_id  TEXT NOT NULL REFERENCES stories(id) ON DELETE CASCADE,
+  user_id   TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  viewed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (story_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS story_views_user_idx ON story_views (user_id);
+
+CREATE TABLE IF NOT EXISTS story_reactions (
+  story_id TEXT NOT NULL REFERENCES stories(id) ON DELETE CASCADE,
+  user_id  TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  emoji    TEXT NOT NULL,
+  PRIMARY KEY (story_id, user_id)
+);
+
 /* Polls (docs/feed-next.md §FR-12). */
 CREATE TABLE IF NOT EXISTS post_polls (
   post_id    TEXT PRIMARY KEY REFERENCES posts(id) ON DELETE CASCADE,
@@ -489,14 +509,17 @@ CREATE TABLE IF NOT EXISTS comment_reactions (
   PRIMARY KEY (comment_id, user_id)
 );
 
-/* Multi-image posts (docs/feed-next.md §FR-5). */
+/* Multi-image posts (docs/feed-next.md §FR-5). "alt" is the per-image
+   accessibility description captured by the composer. */
 CREATE TABLE IF NOT EXISTS post_media (
   post_id  TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
   media_id TEXT NOT NULL,
   position INTEGER NOT NULL DEFAULT 0,
+  alt      TEXT,
   PRIMARY KEY (post_id, media_id)
 );
 CREATE INDEX IF NOT EXISTS post_media_post_idx ON post_media (post_id, position);
+ALTER TABLE post_media ADD COLUMN IF NOT EXISTS alt TEXT;
 
 /* Reactions (superset of likes). One per user per post. */
 CREATE TABLE IF NOT EXISTS post_reactions (

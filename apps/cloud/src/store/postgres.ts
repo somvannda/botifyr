@@ -26,6 +26,7 @@ import type {
   PlatformSettings,
   PollRecord,
   PostCommentRecord,
+  PostMediaRecord,
   PostRecord,
   PostReportRecord,
   PostStatsRecord,
@@ -36,6 +37,7 @@ import type {
   SecretRecord,
   SessionRecord,
   Store,
+  StoryReactionRecord,
   StoryRecord,
   UsageRecord,
   UserRecord,
@@ -1282,19 +1284,22 @@ export class PostgresStore implements Store {
     return rows[0] ? toPost(rows[0]) : null;
   }
 
-  async addPostMedia(postId: string, mediaId: string, position: number): Promise<void> {
+  async addPostMedia(postId: string, mediaId: string, position: number, alt?: string): Promise<void> {
     await this.pool.query(
-      "INSERT INTO post_media (post_id, media_id, position) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING",
-      [postId, mediaId, position],
+      "INSERT INTO post_media (post_id, media_id, position, alt) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING",
+      [postId, mediaId, position, alt ?? null],
     );
   }
 
-  async listPostMedia(postId: string): Promise<string[]> {
+  async listPostMedia(postId: string): Promise<PostMediaRecord[]> {
     const { rows } = await this.pool.query(
-      "SELECT media_id FROM post_media WHERE post_id = $1 ORDER BY position ASC",
+      "SELECT media_id, alt FROM post_media WHERE post_id = $1 ORDER BY position ASC",
       [postId],
     );
-    return rows.map((row) => row.media_id as string);
+    return rows.map((row) => ({
+      mediaId: row.media_id as string,
+      alt: (row.alt as string | null) ?? undefined,
+    }));
   }
 
   async addPostTag(postId: string, tag: string): Promise<void> {
@@ -1625,6 +1630,56 @@ export class PostgresStore implements Store {
       [authorIds, nowIso, Math.max(1, Math.min(100, limit))],
     );
     return rows.map(toStory);
+  }
+
+  async getStory(id: string): Promise<StoryRecord | null> {
+    const { rows } = await this.pool.query("SELECT * FROM stories WHERE id = $1", [id]);
+    return rows[0] ? toStory(rows[0]) : null;
+  }
+
+  async markStoryViewed(storyId: string, userId: string, viewedAt: string): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO story_views (story_id, user_id, viewed_at) VALUES ($1,$2,$3)
+       ON CONFLICT (story_id, user_id) DO UPDATE SET viewed_at = EXCLUDED.viewed_at`,
+      [storyId, userId, viewedAt],
+    );
+  }
+
+  async listViewedStoryIds(userId: string, storyIds: string[]): Promise<string[]> {
+    if (storyIds.length === 0) return [];
+    const { rows } = await this.pool.query(
+      "SELECT story_id FROM story_views WHERE user_id = $1 AND story_id = ANY($2)",
+      [userId, storyIds],
+    );
+    return rows.map((row) => row.story_id as string);
+  }
+
+  async setStoryReaction(storyId: string, userId: string, emoji: string): Promise<void> {
+    if (emoji) {
+      await this.pool.query(
+        `INSERT INTO story_reactions (story_id, user_id, emoji) VALUES ($1,$2,$3)
+         ON CONFLICT (story_id, user_id) DO UPDATE SET emoji = EXCLUDED.emoji`,
+        [storyId, userId, emoji],
+      );
+    } else {
+      await this.pool.query("DELETE FROM story_reactions WHERE story_id = $1 AND user_id = $2", [
+        storyId,
+        userId,
+      ]);
+    }
+  }
+
+  async listStoryReactionRecords(storyIds: string[]): Promise<StoryReactionRecord[]> {
+    if (storyIds.length === 0) return [];
+    const { rows } = await this.pool.query(
+      "SELECT story_id, user_id, emoji FROM story_reactions WHERE story_id = ANY($1)",
+      [storyIds],
+    );
+    return rows.map((row) => ({
+      storyId: row.story_id as string,
+      userId: row.user_id as string,
+      emoji: row.emoji as string,
+    }));
   }
 
   async createPoll(postId: string, options: string[], closesAt?: string): Promise<void> {

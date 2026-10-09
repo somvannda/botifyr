@@ -121,6 +121,8 @@ export interface FeedPost {
   mediaIds?: string[];
   /** Short-lived signed paths to all attached images. */
   images?: string[];
+  /** Per-image accessibility descriptions, parallel to `images`. */
+  imageAlts?: string[];
   /** Short-lived signed paths to attached videos. */
   videos?: string[];
   /** Set when the post was authored by a Page. */
@@ -184,6 +186,12 @@ export interface Story {
   imageUrl?: string;
   createdAt: string;
   expiresAt: string;
+  /** True when the viewer has viewed this story (server-recorded). */
+  viewedByMe?: boolean;
+  /** Reaction counts per emoji. */
+  reactions?: Record<string, number>;
+  /** The viewer's own reaction emoji, if any. */
+  myReaction?: string | null;
 }
 
 /** One page of the feed (newest first). */
@@ -1144,6 +1152,15 @@ export class BotifyrClient {
     });
   }
 
+  /** Signal to the conversation's other participants that this user is typing. */
+  sendTyping(id: string): Promise<{ ok: boolean }> {
+    return this.request(`/v1/conversations/${encodeURIComponent(id)}/typing`, {
+      method: "POST",
+      json: true,
+      body: "{}",
+    });
+  }
+
   /** Remove a member from a group (removing yourself leaves the group). */
   removeConversationMember(id: string, userId: string): Promise<Session> {
     return this.request(`/v1/conversations/${encodeURIComponent(id)}/members/${encodeURIComponent(userId)}`, {
@@ -1230,6 +1247,8 @@ export class BotifyrClient {
     body: string;
     mediaId?: string;
     mediaIds?: string[];
+    /** Per-media alt text, index-aligned with `[mediaId, ...mediaIds]`. */
+    alts?: string[];
     pageId?: string;
     groupId?: string;
     audience?: "public" | "friends" | "only_me";
@@ -1345,6 +1364,24 @@ export class BotifyrClient {
 
   listStories(): Promise<Story[]> {
     return this.request("/v1/stories");
+  }
+
+  /** Mark a story as viewed (server-side, idempotent). */
+  viewStory(id: string): Promise<{ ok: boolean }> {
+    return this.request(`/v1/stories/${encodeURIComponent(id)}/view`, {
+      method: "POST",
+      json: true,
+      body: "{}",
+    });
+  }
+
+  /** Set (or, with an empty emoji, clear) the viewer's reaction to a story. */
+  reactStory(id: string, emoji: string): Promise<{ ok: boolean }> {
+    return this.request(`/v1/stories/${encodeURIComponent(id)}/reaction`, {
+      method: "POST",
+      json: true,
+      body: JSON.stringify({ emoji }),
+    });
   }
 
   /* Groups (communities). */

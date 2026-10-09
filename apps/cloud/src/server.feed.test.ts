@@ -708,6 +708,76 @@ describe("feed", () => {
     await app.close();
   });
 
+  it("records story views and reactions", async () => {
+    const { app, store, signUp, auth } = await setup();
+    const alice = await signUp("alice-story2@example.com");
+    const bob = await signUp("bob-story2@example.com");
+    await store.createFriendship(alice.user.id, bob.user.id);
+
+    await app.inject({
+      method: "POST",
+      url: "/v1/stories",
+      headers: auth(alice.token),
+      payload: { caption: "view me" },
+    });
+
+    type StoryDto = {
+      id: string;
+      caption: string;
+      viewedByMe: boolean;
+      reactions: Record<string, number>;
+      myReaction: string | null;
+    };
+    const list = async (): Promise<StoryDto[]> =>
+      (await app.inject({ method: "GET", url: "/v1/stories", headers: auth(bob.token) })).json() as StoryDto[];
+
+    const story = (await list()).find((entry) => entry.caption === "view me");
+    expect(story).toBeTruthy();
+    expect(story?.viewedByMe).toBe(false);
+    expect(story?.reactions).toEqual({});
+    expect(story?.myReaction).toBeNull();
+
+    const view = await app.inject({
+      method: "POST",
+      url: `/v1/stories/${story!.id}/view`,
+      headers: auth(bob.token),
+    });
+    expect(view.statusCode).toBe(200);
+    expect((await list()).find((entry) => entry.id === story!.id)?.viewedByMe).toBe(true);
+
+    const react = await app.inject({
+      method: "POST",
+      url: `/v1/stories/${story!.id}/reaction`,
+      headers: auth(bob.token),
+      payload: { emoji: "❤️" },
+    });
+    expect(react.statusCode).toBe(200);
+    const reacted = (await list()).find((entry) => entry.id === story!.id);
+    expect(reacted?.reactions).toEqual({ "❤️": 1 });
+    expect(reacted?.myReaction).toBe("❤️");
+
+    // An empty emoji clears the viewer's reaction.
+    await app.inject({
+      method: "POST",
+      url: `/v1/stories/${story!.id}/reaction`,
+      headers: auth(bob.token),
+      payload: { emoji: "" },
+    });
+    const cleared = (await list()).find((entry) => entry.id === story!.id);
+    expect(cleared?.reactions).toEqual({});
+    expect(cleared?.myReaction).toBeNull();
+
+    // Unknown stories are rejected.
+    const missing = await app.inject({
+      method: "POST",
+      url: "/v1/stories/does-not-exist/view",
+      headers: auth(bob.token),
+    });
+    expect(missing.statusCode).toBe(404);
+
+    await app.close();
+  });
+
   it("serves video posts through the reels feed", async () => {
     const previous = process.env.BOTIFYR_DOWNLOADS_DIR;
     const dir = join(tmpdir(), `botifyr-feed-${randomUUID()}`);

@@ -287,6 +287,18 @@ function allowedOrigins(): Set<string> {
   return new Set(list.map((entry) => entry.trim()).filter(Boolean));
 }
 
+/**
+ * Which host started a Google sign-in, read from the state prefix the client
+ * sets: the web portal uses `web:`, the admin console `admin:`, and the desktop
+ * app `desktop:`. Anything else is treated as the desktop app, preserving the
+ * original behaviour for older/third-party clients.
+ */
+export function signinHost(state: string): "desktop" | "web" | "admin" {
+  if (state.startsWith("web:")) return "web";
+  if (state.startsWith("admin:")) return "admin";
+  return "desktop";
+}
+
 export async function buildServer(options: ServerOptions) {
   const { store, vaultKey, localChannel } = options;
 
@@ -664,6 +676,7 @@ export async function buildServer(options: ServerOptions) {
         return ownerOfEventTask(event.taskId) === userId;
       case "presence":
       case "friend.request":
+      case "typing":
         return event.toUserId === userId;
       case "p2p.signal":
         return event.toUserId === userId;
@@ -1725,11 +1738,7 @@ export async function buildServer(options: ServerOptions) {
       // The client prefixes the state with its host (`web:` / `desktop:` /
       // `admin:`), so the finish page knows whether to close back to the
       // browser or deep-link into the desktop app.
-      const host: "desktop" | "web" | "admin" = state.startsWith("web:")
-        ? "web"
-        : state.startsWith("admin:")
-          ? "admin"
-          : "desktop";
+      const host = signinHost(state);
       try {
         const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
           method: "POST",
@@ -3641,6 +3650,25 @@ export async function buildServer(options: ServerOptions) {
     },
   );
 
+  // Ephemeral "typing" signal — fanned out to the other participants only.
+  // Never persisted; the client expires it if no refresh arrives.
+  app.post<{ Params: { id: string } }>(
+    "/v1/conversations/:id/typing",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const session = await store.getSession(request.params.id);
+      if (!session || !(session.participants ?? []).includes(userId)) {
+        return reply.code(404).send({ error: "conversation not found" });
+      }
+      for (const participant of session.participants ?? []) {
+        if (participant === userId) continue;
+        emit({ type: "typing", sessionId: session.id, userId, toUserId: participant });
+      }
+      return { ok: true };
+    },
+  );
+
   // Rename a group (any participant).
   app.patch<{ Params: { id: string }; Body: { title?: string } }>(
     "/v1/conversations/:id",
@@ -4184,6 +4212,8 @@ export async function buildServer(options: ServerOptions) {
     mediaIds?: string[];
     /** Short-lived signed paths to all attached images. */
     images?: string[];
+    /** Per-image accessibility descriptions, parallel to `images`. */
+    imageAlts?: string[];
     /** Short-lived signed paths to attached videos. */
     videos?: string[];
     pageId?: string;
@@ -4297,11 +4327,15 @@ export async function buildServer(options: ServerOptions) {
       : await feedAuthorOf(record.authorId, cache);
     const stats = await store.getPostStats(record.id, viewerId);
     const attached = await store.listPostMedia(record.id);
-    const mediaIds = attached.length > 0 ? attached : record.mediaId ? [record.mediaId] : [];
+    const mediaIds =
+      attached.length > 0 ? attached.map((entry) => entry.mediaId) : record.mediaId ? [record.mediaId] : [];
     const isImage = (id: string) => /\.(png|jpe?g|webp|gif|avif)$/i.test(id);
     const isVideo = (id: string) => /\.(mp4|m4v|webm|mov)$/i.test(id);
+    const altById = new Map(attached.map((entry) => [entry.mediaId, entry.alt]));
     const images = mediaIds.filter(isImage).map((id) => `/v1/feed/image?t=${signImage(id)}`);
     const videos = mediaIds.filter(isVideo).map((id) => `/v1/feed/image?t=${signImage(id)}`);
+    // Per-image alt text, parallel to `images` so the client can index it.
+    const imageAlts = mediaIds.filter(isImage).map((id) => altById.get(id) ?? "");
     // Embed the reposted original (one level deep).
     let original: FeedPostDto | undefined;
     if (record.repostOf && depth < 1) {
@@ -4315,6 +4349,7 @@ export async function buildServer(options: ServerOptions) {
       mediaId: record.mediaId,
       mediaIds,
       images,
+      imageAlts,
       videos,
       pageId: record.pageId,
       groupId: record.groupId,
@@ -4431,6 +4466,8 @@ export async function buildServer(options: ServerOptions) {
       body?: string;
       mediaId?: string;
       mediaIds?: string[];
+      /** Per-media alt text, index-aligned with `[mediaId, ...mediaIds]`. */
+      alts?: string[];
       pageId?: string;
       groupId?: string;
       audience?: string;
@@ -4443,10 +4480,20 @@ export async function buildServer(options: ServerOptions) {
     const body = typeof request.body?.body === "string" ? request.body.body.trim() : "";
     const mediaId = typeof request.body?.mediaId === "string" ? request.body.mediaId.trim() : "";
     const extra = Array.isArray(request.body?.mediaIds) ? request.body.mediaIds : [];
-    const provided = [mediaId, ...extra]
-      .map((id) => (typeof id === "string" ? id.trim() : ""))
-      .filter((id, index, all) => Boolean(id) && all.indexOf(id) === index)
-      .slice(0, 4);
+    const rawAlts = Array.isArray(request.body?.alts) ? request.body.alts : [];
+    // Dedupe/filter while keeping each media id paired with its alt text, so a
+    // dropped duplicate doesn't shift the alt of the next attachment.
+    const provided: string[] = [];
+    const mediaAlts: Array<string | undefined> = [];
+    const seenMedia = new Set<string>();
+    [mediaId, ...extra].forEach((raw, index) => {
+      const id = typeof raw === "string" ? raw.trim() : "";
+      if (!id || seenMedia.has(id) || provided.length >= 4) return;
+      seenMedia.add(id);
+      provided.push(id);
+      const alt = typeof rawAlts[index] === "string" ? rawAlts[index].trim().slice(0, 200) : "";
+      mediaAlts.push(alt || undefined);
+    });
     if (!body && provided.length === 0) return reply.code(400).send({ error: "post needs text or an image" });
     if (body.length > MAX_POST_BODY) return reply.code(413).send({ error: "post is too long" });
 
@@ -4498,7 +4545,9 @@ export async function buildServer(options: ServerOptions) {
       updatedAt: now,
     };
     await store.createPost(record);
-    for (const [index, id] of provided.entries()) await store.addPostMedia(record.id, id, index);
+    for (const [index, id] of provided.entries()) {
+      await store.addPostMedia(record.id, id, index, mediaAlts[index]);
+    }
     for (const tag of new Set(
       [...body.matchAll(/(?:^|\s)#([A-Za-z0-9_]{1,50})/g)].map((m) => m[1].toLowerCase()),
     )) {
@@ -5416,8 +5465,22 @@ export async function buildServer(options: ServerOptions) {
     const friendIds = (await store.listFriends(userId)).filter((id) => !blocked.has(id));
     const nowIso = new Date().toISOString();
     const stories = await store.listActiveStories([userId, ...friendIds], nowIso, 50);
-    const people = await store.listUsersByIds([...new Set(stories.map((story) => story.authorId))]);
+    const storyIds = stories.map((story) => story.id);
+    const [people, viewedIds, reactionRecords] = await Promise.all([
+      store.listUsersByIds([...new Set(stories.map((story) => story.authorId))]),
+      store.listViewedStoryIds(userId, storyIds),
+      store.listStoryReactionRecords(storyIds),
+    ]);
     const byId = new Map(people.map((person) => [person.id, personOf(person)]));
+    const viewed = new Set(viewedIds);
+    const countsByStory = new Map<string, Record<string, number>>();
+    const mineByStory = new Map<string, string>();
+    for (const record of reactionRecords) {
+      const counts = countsByStory.get(record.storyId) ?? {};
+      counts[record.emoji] = (counts[record.emoji] ?? 0) + 1;
+      countsByStory.set(record.storyId, counts);
+      if (record.userId === userId) mineByStory.set(record.storyId, record.emoji);
+    }
     return stories.map((story) => ({
       id: story.id,
       author: byId.get(story.authorId) ?? {
@@ -5433,8 +5496,38 @@ export async function buildServer(options: ServerOptions) {
       imageUrl: story.mediaId ? `/v1/feed/image?t=${signImage(story.mediaId)}` : undefined,
       createdAt: story.createdAt,
       expiresAt: story.expiresAt,
+      viewedByMe: viewed.has(story.id),
+      reactions: countsByStory.get(story.id) ?? {},
+      myReaction: mineByStory.get(story.id) ?? null,
     }));
   });
+
+  /* Mark a story viewed (idempotent). */
+  app.post<{ Params: { id: string } }>(
+    "/v1/stories/:id/view",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const story = await store.getStory(request.params.id);
+      if (!story) return reply.code(404).send({ error: "story not found" });
+      await store.markStoryViewed(story.id, userId, new Date().toISOString());
+      return { ok: true };
+    },
+  );
+
+  /* React to a story (empty emoji clears the viewer's reaction). */
+  app.post<{ Params: { id: string }; Body: { emoji?: string } }>(
+    "/v1/stories/:id/reaction",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const story = await store.getStory(request.params.id);
+      if (!story) return reply.code(404).send({ error: "story not found" });
+      const emoji = typeof request.body?.emoji === "string" ? request.body.emoji.trim().slice(0, 8) : "";
+      await store.setStoryReaction(story.id, userId, emoji);
+      return { ok: true };
+    },
+  );
 
   /* Reels: a vertical feed of video posts (docs/feed-next.md §6). */
   app.get<{ Querystring: { cursor?: string; limit?: string } }>(
@@ -5462,7 +5555,8 @@ export async function buildServer(options: ServerOptions) {
         if (!canSeePost(record, userId)) continue;
         if (isFutureScheduled(record, nowIso) && record.authorId !== userId) continue;
         const media = await store.listPostMedia(record.id);
-        const ids = media.length > 0 ? media : record.mediaId ? [record.mediaId] : [];
+        const ids =
+          media.length > 0 ? media.map((entry) => entry.mediaId) : record.mediaId ? [record.mediaId] : [];
         if (!ids.some(isVideo)) continue;
         items.push(await feedPostOf(record, userId, cache));
         last = record.createdAt;

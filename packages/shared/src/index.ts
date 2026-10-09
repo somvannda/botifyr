@@ -668,6 +668,7 @@ export type ServerEvent =
   | { type: "approval.requested"; taskId: string; approval: Approval }
   | { type: "approval.resolved"; taskId: string; approval: Approval }
   | { type: "presence"; userId: string; online: boolean; toUserId: string }
+  | { type: "typing"; sessionId: string; userId: string; toUserId: string }
   | { type: "friend.request"; requestId: string; fromUserId: string; toUserId: string }
   | { type: "feed.post"; postId: string; authorId: string }
   | { type: "feed.like"; postId: string; fromUserId: string; fromName?: string; toUserId: string }

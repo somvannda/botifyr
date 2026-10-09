@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createLocalChannel } from "@botifyr/channels";
 import { MemoryStore } from "./store/memory.js";
 import { buildServer } from "./server.js";
+import { SCHEMA_SQL } from "./store/schema.js";
 
 interface PageDto {
   id: string;
@@ -101,9 +102,15 @@ describe("pages", () => {
     expect(denied.statusCode).toBe(403);
 
     // The Page timeline shows the post.
-    const timeline = await app.inject({ method: "GET", url: "/v1/pages/widgets/posts", headers: auth(alice.token) });
+    const timeline = await app.inject({
+      method: "GET",
+      url: "/v1/pages/widgets/posts",
+      headers: auth(alice.token),
+    });
     expect(timeline.statusCode).toBe(200);
-    expect((timeline.json() as Array<{ body: string }>).map((entry) => entry.body)).toContain("hello from the page");
+    expect((timeline.json() as Array<{ body: string }>).map((entry) => entry.body)).toContain(
+      "hello from the page",
+    );
 
     await app.close();
   });
@@ -121,11 +128,16 @@ describe("pages", () => {
     });
 
     const before = await app.inject({ method: "GET", url: "/v1/feed", headers: auth(bob.token) });
-    expect((before.json() as { items: Array<{ body: string }> }).items.map((entry) => entry.body)).not.toContain(
-      "page update",
-    );
+    expect(
+      (before.json() as { items: Array<{ body: string }> }).items.map((entry) => entry.body),
+    ).not.toContain("page update");
 
-    await app.inject({ method: "POST", url: `/v1/pages/${page.id}/follow`, headers: auth(bob.token), payload: {} });
+    await app.inject({
+      method: "POST",
+      url: `/v1/pages/${page.id}/follow`,
+      headers: auth(bob.token),
+      payload: {},
+    });
     const after = await app.inject({ method: "GET", url: "/v1/feed", headers: auth(bob.token) });
     expect((after.json() as { items: Array<{ body: string }> }).items.map((entry) => entry.body)).toContain(
       "page update",
@@ -168,7 +180,11 @@ describe("pages", () => {
     expect(post.statusCode).toBe(201);
 
     // The roles list (admin only) shows Bob as editor.
-    const roles = await app.inject({ method: "GET", url: `/v1/pages/${page.id}/roles`, headers: auth(alice.token) });
+    const roles = await app.inject({
+      method: "GET",
+      url: `/v1/pages/${page.id}/roles`,
+      headers: auth(alice.token),
+    });
     expect(roles.statusCode).toBe(200);
     const list = roles.json() as Array<{ userId: string; role: string }>;
     expect(list.find((entry) => entry.userId === bob.user.id)?.role).toBe("editor");
@@ -188,10 +204,18 @@ describe("pages", () => {
       payload: { body: "hello from the page", pageId: page.id },
     });
 
-    const denied = await app.inject({ method: "GET", url: `/v1/pages/${page.id}/insights`, headers: auth(bob.token) });
+    const denied = await app.inject({
+      method: "GET",
+      url: `/v1/pages/${page.id}/insights`,
+      headers: auth(bob.token),
+    });
     expect(denied.statusCode).toBe(403);
 
-    const ok = await app.inject({ method: "GET", url: `/v1/pages/${page.id}/insights`, headers: auth(alice.token) });
+    const ok = await app.inject({
+      method: "GET",
+      url: `/v1/pages/${page.id}/insights`,
+      headers: auth(alice.token),
+    });
     expect(ok.statusCode).toBe(200);
     const data = ok.json() as { followers: number; posts: number; topPosts: unknown[] };
     expect(data.posts).toBeGreaterThanOrEqual(1);
@@ -225,7 +249,11 @@ describe("pages", () => {
     });
     expect(pin.statusCode).toBe(200);
 
-    const timeline = await app.inject({ method: "GET", url: "/v1/pages/pins/posts", headers: auth(alice.token) });
+    const timeline = await app.inject({
+      method: "GET",
+      url: "/v1/pages/pins/posts",
+      headers: auth(alice.token),
+    });
     expect((timeline.json() as Array<{ id: string }>)[0]?.id).toBe(first.id);
 
     // A post from a different Page can't be pinned here.
@@ -264,7 +292,11 @@ describe("pages", () => {
       })
     ).json() as { id: string };
 
-    const inbox = await app.inject({ method: "GET", url: `/v1/pages/${page.id}/inbox`, headers: auth(alice.token) });
+    const inbox = await app.inject({
+      method: "GET",
+      url: `/v1/pages/${page.id}/inbox`,
+      headers: auth(alice.token),
+    });
     expect(inbox.statusCode).toBe(200);
     expect((inbox.json() as Array<{ id: string }>).map((entry) => entry.id)).toContain(comment.id);
 
@@ -302,7 +334,11 @@ describe("pages", () => {
     const mine = await createPage(alice.token, "My Own Page", "myownpage");
     const theirs = await createPage(bob.token, "Their Page", "theirpage");
 
-    const list = await app.inject({ method: "GET", url: "/v1/pages/suggestions", headers: auth(alice.token) });
+    const list = await app.inject({
+      method: "GET",
+      url: "/v1/pages/suggestions",
+      headers: auth(alice.token),
+    });
     expect(list.statusCode).toBe(200);
     const ids = (list.json() as Array<{ id: string }>).map((entry) => entry.id);
     expect(ids).toContain(theirs.id);
@@ -315,9 +351,28 @@ describe("pages", () => {
       headers: auth(alice.token),
       payload: {},
     });
-    const after = await app.inject({ method: "GET", url: "/v1/pages/suggestions", headers: auth(alice.token) });
+    const after = await app.inject({
+      method: "GET",
+      url: "/v1/pages/suggestions",
+      headers: auth(alice.token),
+    });
     expect((after.json() as Array<{ id: string }>).map((entry) => entry.id)).not.toContain(theirs.id);
 
     await app.close();
+  });
+});
+
+/**
+ * Post-as-Page (docs/feed-next.md §FR-17) stores the Page id in
+ * `posts.author_id`; the MemoryStore accepts that, but Postgres rejected it via
+ * a legacy `REFERENCES users(id)` FK (the 500 seen in the screenshot harness).
+ * Guard the schema so the FK can't come back.
+ */
+describe("post-as-Page schema", () => {
+  it("keeps posts.author_id generic and drops the legacy users FK", () => {
+    const postsTable = SCHEMA_SQL.match(/CREATE TABLE IF NOT EXISTS posts \(([\s\S]*?)\);/)?.[1] ?? "";
+    expect(postsTable).toMatch(/author_id\s+TEXT NOT NULL,/);
+    expect(postsTable).not.toContain("REFERENCES users");
+    expect(SCHEMA_SQL).toContain("ALTER TABLE posts DROP CONSTRAINT IF EXISTS posts_author_id_fkey;");
   });
 });

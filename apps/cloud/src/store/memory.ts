@@ -25,6 +25,7 @@ import type {
   PlatformSettings,
   PollRecord,
   PostCommentRecord,
+  PostMediaRecord,
   PostRecord,
   PostReportRecord,
   PostStatsRecord,
@@ -35,6 +36,7 @@ import type {
   SecretRecord,
   SessionRecord,
   Store,
+  StoryReactionRecord,
   StoryRecord,
   UsageRecord,
   UserRecord,
@@ -81,11 +83,15 @@ export class MemoryStore implements Store {
   private postComments = new Map<string, PostCommentRecord>();
   private postShares = new Set<string>();
   /** postId → ordered media ids (multi-image). */
-  private postMedia = new Map<string, string[]>();
+  private postMedia = new Map<string, PostMediaRecord[]>();
   /** postId → hashtags (lower-case, no `#`). */
   private postTags = new Map<string, Set<string>>();
   private polls = new Map<string, { options: Array<{ id: string; label: string }>; closesAt?: string }>();
   private stories = new Map<string, StoryRecord>();
+  /** Keyed by `${storyId}:${userId}` → viewedAt ISO. */
+  private storyViews = new Map<string, string>();
+  /** Keyed by `${storyId}:${userId}` → emoji. */
+  private storyReactions = new Map<string, string>();
   private groups = new Map<string, GroupRecord>();
   /** Keyed by `${groupId}:${userId}`. */
   private groupMembers = new Map<string, GroupMemberRecord>();
@@ -1034,6 +1040,37 @@ export class MemoryStore implements Store {
       .map((story) => ({ ...story }));
   }
 
+  async getStory(id: string): Promise<StoryRecord | null> {
+    const story = this.stories.get(id);
+    return story ? { ...story } : null;
+  }
+
+  async markStoryViewed(storyId: string, userId: string, viewedAt: string): Promise<void> {
+    this.storyViews.set(`${storyId}:${userId}`, viewedAt);
+  }
+
+  async listViewedStoryIds(userId: string, storyIds: string[]): Promise<string[]> {
+    return storyIds.filter((id) => this.storyViews.has(`${id}:${userId}`));
+  }
+
+  async setStoryReaction(storyId: string, userId: string, emoji: string): Promise<void> {
+    const key = `${storyId}:${userId}`;
+    if (emoji) this.storyReactions.set(key, emoji);
+    else this.storyReactions.delete(key);
+  }
+
+  async listStoryReactionRecords(storyIds: string[]): Promise<StoryReactionRecord[]> {
+    const wanted = new Set(storyIds);
+    const out: StoryReactionRecord[] = [];
+    for (const [key, emoji] of this.storyReactions) {
+      const separator = key.indexOf(":");
+      const storyId = key.slice(0, separator);
+      if (!wanted.has(storyId)) continue;
+      out.push({ storyId, userId: key.slice(separator + 1), emoji });
+    }
+    return out;
+  }
+
   async createPoll(postId: string, options: string[], closesAt?: string): Promise<void> {
     this.polls.set(postId, {
       options: options.map((label, index) => ({ id: `${postId}:opt${index}`, label })),
@@ -1072,14 +1109,14 @@ export class MemoryStore implements Store {
     return true;
   }
 
-  async addPostMedia(postId: string, mediaId: string, _position: number): Promise<void> {
+  async addPostMedia(postId: string, mediaId: string, _position: number, alt?: string): Promise<void> {
     const list = this.postMedia.get(postId) ?? [];
-    if (!list.includes(mediaId)) list.push(mediaId);
+    if (!list.some((entry) => entry.mediaId === mediaId)) list.push({ mediaId, alt });
     this.postMedia.set(postId, list);
   }
 
-  async listPostMedia(postId: string): Promise<string[]> {
-    return [...(this.postMedia.get(postId) ?? [])];
+  async listPostMedia(postId: string): Promise<PostMediaRecord[]> {
+    return (this.postMedia.get(postId) ?? []).map((entry) => ({ ...entry }));
   }
 
   async addPostTag(postId: string, tag: string): Promise<void> {
