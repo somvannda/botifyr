@@ -19,9 +19,36 @@ sitting between **Personal** and the **Company** workspace tabs.
 after Personal and before any company tab.
 
 Feed is a **view**, not a workspace filter: selecting it swaps the **middle**
-(`.main`) and **right rail** (`.bot-panel`) while the left sidebar keeps the
-chat/bot list. Implementation: `feedActive` in `BotifyrApp.tsx` drives a
-conditional `<FeedView/>` and `with-panel` grid class.
+(`.main`), the **left sidebar**, and the **right rail** (`.bot-panel`).
+Implementation: `feedActive` in `BotifyrApp.tsx` drives a conditional
+`<FeedView/>` and `with-panel` grid class. While the Feed is active the left
+sidebar shows the Feed navigation (below) instead of the chat/bot list; the chat
+list returns in the Personal and Company tabs.
+
+## Feed sidebar (left navigation)
+
+`FeedSidebar` (`packages/ui/src/FeedSidebar.tsx`) replaces the chat list in the
+app sidebar while `feedActive`. It is a `FeedSection` switch (`feedTypes.ts`)
+rendered by `FeedView`:
+
+| Destination | Renders | Backed by |
+| --- | --- | --- |
+| **Feed** | the timeline | `GET /v1/feed` |
+| **Profile** | profile header + own posts, with inline editing | `GET /v1/users/:handle/posts`, `PATCH /v1/profile` |
+| **Friends** | friends, incoming requests, suggested people | `GET /v1/friends`, `/v1/friend-requests`, `/v1/people/suggestions` |
+| **Dashboard** | post/reaction/comment/share/save/reach counters + recent posts | `GET /v1/dashboard` |
+| **Pages** | Pages you manage + create + identity switch | `GET/POST /v1/pages` |
+| **Memories** | "on this day" posts from previous years | `GET /v1/memories` |
+| **Saved** | saved posts | `GET /v1/saved` |
+| **Birthdays** | friends' birthdays in the next 7 days | `GET /v1/birthdays` |
+
+The top identity card and the **Pages** dropdown switch the account's acting
+identity between the personal profile and a Page (`actingAs` in `BotifyrApp`).
+Post impressions are recorded by `POST /v1/posts/:id/view` and surface as
+**Reach** on the Dashboard; `users.birthday` (YYYY-MM-DD) drives Birthdays and is
+edited on the Profile page.
+
+Tests: `server.feed-sidebar.test.ts` (cloud) and `FeedSidebar.dom.test.tsx` (ui).
 
 ## What already exists (reuse, don't rebuild)
 

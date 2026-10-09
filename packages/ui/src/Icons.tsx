@@ -453,3 +453,24 @@ export function HomeIcon({ size = 18, className }: IconProps) {
     </svg>
   );
 }
+
+export function ClockIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden className={className} {...stroke}>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 7.5v4.5l3 2" />
+    </svg>
+  );
+}
+
+export function GiftIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden className={className} {...stroke}>
+      <rect x="3.5" y="8" width="17" height="4" rx="1" />
+      <path d="M5 12v6.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V12" />
+      <path d="M12 8v12" />
+      <path d="M12 8c-1-2.8-2.6-4-4.2-3.4C6 5.2 6.8 7.2 9 8z" />
+      <path d="M12 8c1-2.8 2.6-4 4.2-3.4C18 5.2 17.2 7.2 15 8z" />
+    </svg>
+  );
+}

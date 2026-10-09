@@ -3,6 +3,7 @@ import type { Task } from "@botifyr/shared";
 import type {
   ApiKeyRecord,
   AuditRecord,
+  AuthorStatsRecord,
   BotRecord,
   BotRoleRecord,
   CapabilityGrantRecord,
@@ -138,12 +139,14 @@ export class PostgresStore implements Store {
       avatarEmoji?: string;
       avatarScheme?: number;
       avatarUrl?: string | null;
+      birthday?: string | null;
     },
   ): Promise<void> {
     await this.pool.query(
       "UPDATE users SET handle = COALESCE($1, handle), display_name = COALESCE($2, display_name), " +
         "avatar_emoji = COALESCE($3, avatar_emoji), avatar_scheme = COALESCE($4, avatar_scheme), " +
-        "avatar_url = CASE WHEN $6 THEN $5 ELSE avatar_url END WHERE id = $7",
+        "avatar_url = CASE WHEN $6 THEN $5 ELSE avatar_url END, " +
+        "birthday = CASE WHEN $9 THEN $8::date ELSE birthday END WHERE id = $7",
       [
         profile.handle ?? null,
         profile.displayName ?? null,
@@ -152,6 +155,8 @@ export class PostgresStore implements Store {
         profile.avatarUrl ?? null,
         profile.avatarUrl !== undefined,
         id,
+        profile.birthday ?? null,
+        profile.birthday !== undefined,
       ],
     );
   }
@@ -1400,6 +1405,61 @@ export class PostgresStore implements Store {
     return rows.map(toPost);
   }
 
+  async listPostsOnMonthDay(
+    authorIds: string[],
+    month: number,
+    day: number,
+    limit: number,
+  ): Promise<PostRecord[]> {
+    if (authorIds.length === 0) return [];
+    const capped = Math.max(1, Math.min(100, limit));
+    const { rows } = await this.pool.query(
+      "SELECT * FROM posts WHERE author_id = ANY($1) " +
+        "AND EXTRACT(MONTH FROM (created_at AT TIME ZONE 'UTC')) = $2 " +
+        "AND EXTRACT(DAY FROM (created_at AT TIME ZONE 'UTC')) = $3 " +
+        "ORDER BY created_at DESC LIMIT $4",
+      [authorIds, month, day, capped],
+    );
+    return rows.map(toPost);
+  }
+
+  async recordPostView(postId: string, userId: string): Promise<void> {
+    await this.pool.query(
+      "INSERT INTO post_views (post_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING",
+      [postId, userId],
+    );
+  }
+
+  async getPostViewCount(postId: string): Promise<number> {
+    const { rows } = await this.pool.query(
+      "SELECT COUNT(*)::int AS n FROM post_views WHERE post_id = $1",
+      [postId],
+    );
+    return Number(rows[0]?.n ?? 0);
+  }
+
+  async getAuthorStats(authorId: string): Promise<AuthorStatsRecord> {
+    const { rows } = await this.pool.query(
+      "SELECT " +
+        "(SELECT COUNT(*)::int FROM posts WHERE author_id = $1) AS posts, " +
+        "(SELECT COUNT(*)::int FROM post_reactions r JOIN posts p ON p.id = r.post_id WHERE p.author_id = $1) AS reactions, " +
+        "(SELECT COUNT(*)::int FROM post_comments c JOIN posts p ON p.id = c.post_id WHERE p.author_id = $1) AS comments, " +
+        "(SELECT COUNT(*)::int FROM post_shares s JOIN posts p ON p.id = s.post_id WHERE p.author_id = $1) AS shares, " +
+        "(SELECT COUNT(*)::int FROM post_saves v JOIN posts p ON p.id = v.post_id WHERE p.author_id = $1) AS saves, " +
+        "(SELECT COUNT(*)::int FROM post_views w JOIN posts p ON p.id = w.post_id WHERE p.author_id = $1) AS reach",
+      [authorId],
+    );
+    const row = rows[0] ?? {};
+    return {
+      posts: Number(row.posts ?? 0),
+      reactions: Number(row.reactions ?? 0),
+      comments: Number(row.comments ?? 0),
+      shares: Number(row.shares ?? 0),
+      saves: Number(row.saves ?? 0),
+      reach: Number(row.reach ?? 0),
+    };
+  }
+
   async listTrendingPosts(
     authorIds: string[],
     sinceIso: string,
@@ -2284,6 +2344,11 @@ function toUser(row: any): UserRecord {
     avatarEmoji: row.avatar_emoji ?? undefined,
     avatarScheme: row.avatar_scheme ?? undefined,
     avatarUrl: row.avatar_url ?? undefined,
+    birthday: row.birthday
+      ? row.birthday instanceof Date
+        ? row.birthday.toISOString().slice(0, 10)
+        : String(row.birthday).slice(0, 10)
+      : undefined,
     billingMode: row.billing_mode ?? undefined,
     periodStart: row.period_start ? new Date(row.period_start).toISOString() : undefined,
     periodEnd: row.period_end ? new Date(row.period_end).toISOString() : undefined,

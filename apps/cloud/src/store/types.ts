@@ -46,6 +46,8 @@ export interface UserRecord {
   avatarScheme?: number;
   /** Uploaded profile photo, stored as a small data URL (client-downscaled). */
   avatarUrl?: string;
+  /** Optional date of birth, stored as YYYY-MM-DD (Feed birthdays). */
+  birthday?: string;
   /** Billing: free | plan | payg. */
   billingMode?: "free" | "plan" | "payg";
   /** Current paid period (prepaid plans). */
@@ -105,6 +107,20 @@ export interface PostDraftRecord {
   userId: string;
   body: string;
   updatedAt: string;
+}
+
+/** Aggregate engagement on all of one author's posts (Feed Dashboard). */
+export interface AuthorStatsRecord {
+  /** Published posts authored by them. */
+  posts: number;
+  /** Total reactions across those posts. */
+  reactions: number;
+  comments: number;
+  shares: number;
+  /** Times others saved those posts. */
+  saves: number;
+  /** Unique viewers across those posts (impressions/reach). */
+  reach: number;
 }
 
 /** A comment on a post. */
@@ -484,6 +500,8 @@ export interface Store {
       avatarScheme?: number;
       /** null clears the uploaded photo; undefined leaves it unchanged. */
       avatarUrl?: string | null;
+      /** null clears the birthday; undefined leaves it unchanged. */
+      birthday?: string | null;
     },
   ): Promise<void>;
   listUsers(): Promise<UserRecord[]>;
@@ -530,6 +548,13 @@ export interface Store {
     before?: { createdAt: string; id: string },
   ): Promise<PostRecord[]>;
   listPostsByAuthor(authorId: string, limit: number): Promise<PostRecord[]>;
+  /** Posts authored by any of `authorIds` created on a given UTC month/day (Memories). */
+  listPostsOnMonthDay(
+    authorIds: string[],
+    month: number,
+    day: number,
+    limit: number,
+  ): Promise<PostRecord[]>;
   /** Posts by `authorIds` since `sinceIso`, ranked by engagement, paged by `offset`. */
   listTrendingPosts(
     authorIds: string[],
@@ -626,6 +651,12 @@ export interface Store {
   deletePostComment(authorId: string, id: string): Promise<boolean>;
   setPostShare(postId: string, userId: string, shared: boolean): Promise<void>;
   getPostStats(postId: string, viewerId: string): Promise<PostStatsRecord>;
+  /** Record that `userId` saw `postId` (one row per unique viewer). */
+  recordPostView(postId: string, userId: string): Promise<void>;
+  /** Unique viewers for a post (impressions/reach). */
+  getPostViewCount(postId: string): Promise<number>;
+  /** Aggregate engagement across all of an author's posts (Dashboard). */
+  getAuthorStats(authorId: string): Promise<AuthorStatsRecord>;
   /** Batch author lookup for feed serialization. */
   listUsersByIds(ids: string[]): Promise<UserRecord[]>;
 

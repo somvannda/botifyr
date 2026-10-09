@@ -1,16 +1,27 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ChangeEvent, FormEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode, UIEvent } from "react";
 import type {
+  ChangeEvent,
+  Dispatch,
+  FormEvent,
+  KeyboardEvent as ReactKeyboardEvent,
+  ReactNode,
+  SetStateAction,
+  UIEvent,
+} from "react";
+import type {
+  BirthdayEntry,
   BotifyrClient,
+  DashboardStats,
   FeedComment,
   FeedPost,
   Group,
   GroupJoinRequest,
   GroupMember,
+  MemoryGroup,
   Page,
   Person,
 } from "@botifyr/client";
-import type { Bot, Session } from "@botifyr/shared";
+import type { Bot, Session, User } from "@botifyr/shared";
 import {
   BookmarkIcon,
   CameraIcon,
@@ -21,6 +32,7 @@ import {
   ForwardIcon,
   FullscreenIcon,
   GearIcon,
+  GiftIcon,
   HomeIcon,
   LockIcon,
   MenuIcon,
@@ -29,6 +41,7 @@ import {
   PanelIcon,
   PauseIcon,
   PlayIcon,
+  PlusIcon,
   RefreshIcon,
   SearchIcon,
   SendIcon,
@@ -39,6 +52,7 @@ import {
   UsersIcon,
   VolumeIcon,
 } from "./Icons";
+import type { FeedSection } from "./feedTypes";
 import { authorEmoji, authorName, Avatar, relativeTime, resolveAvatar } from "./feedKit";
 import { StoriesStrip } from "./Stories";
 import { Select } from "./Select";
@@ -5058,12 +5072,32 @@ export function FeedView({
   onStoryReplySent,
   focusPostId,
   onChanged,
+  section = "feed",
+  onSectionChange,
+  viewer,
+  onOpenDm,
+  onEditProfile,
+  onProfileSaved,
+  onActPage,
 }: {
   client: BotifyrClient;
   viewerId?: string;
   cloudUrl: string;
   /** Bumped by the host on feed events; reloads the top of the feed. */
   refreshKey?: number;
+  /** Which Feed-sidebar destination to render (defaults to the timeline). */
+  section?: FeedSection;
+  onSectionChange?: (section: FeedSection) => void;
+  /** The signed-in user (drives the Profile/Dashboard destinations). */
+  viewer?: User;
+  /** Open a DM with a person (Friends/Birthdays "Message"). */
+  onOpenDm?: (person: Person) => void;
+  /** Open the app's full profile editor (Settings ▸ Profile). */
+  onEditProfile?: () => void;
+  /** Called after the in-page profile editor saves, so the host can sync. */
+  onProfileSaved?: (user: User) => void;
+  /** Switch the account's acting identity to a Page (or null for profile). */
+  onActPage?: (page: Page | null) => void;
   /** When the host is acting as a Page, default the composer to post as it. */
   defaultPostAs?: string | null;
   /** When set, show this Page's timeline instead of the feed. */
@@ -5627,6 +5661,7 @@ export function FeedView({
   }
 
   function goHome() {
+    onSectionChange?.("feed");
     setOpenTag(null);
     setReelsOpen(false);
     setGroupsOpen(false);
@@ -5636,6 +5671,7 @@ export function FeedView({
     setTab("all");
   }
   function goReels() {
+    onSectionChange?.("feed");
     setOpenTag(null);
     setGroupsOpen(false);
     onOpenPage?.(null);
@@ -5648,6 +5684,7 @@ export function FeedView({
     setTab("pages");
   }
   function goGroups() {
+    onSectionChange?.("feed");
     setOpenTag(null);
     setReelsOpen(false);
     onOpenPage?.(null);
@@ -5740,6 +5777,66 @@ export function FeedView({
         onOpenPage={(next) => onOpenPage?.(next)}
       />,
     );
+  }
+
+  // Feed-sidebar destinations (Profile / Friends / Dashboard / Pages / Memories /
+  // Saved / Birthdays) replace the timeline while selected.
+  if (section !== "feed") {
+    if (section === "profile") {
+      return withNav(
+        <ProfileSection
+          client={client}
+          cloudUrl={cloudUrl}
+          viewer={viewer}
+          onEditProfile={onEditProfile}
+          onProfileSaved={onProfileSaved}
+          onOpenPage={onOpenPage}
+          onOpenTag={setOpenTag}
+        />,
+      );
+    }
+    if (section === "friends") {
+      return withNav(<FriendsSection client={client} cloudUrl={cloudUrl} onOpenDm={onOpenDm} />);
+    }
+    if (section === "dashboard") {
+      return withNav(<DashboardSection client={client} />);
+    }
+    if (section === "pages") {
+      return withNav(
+        <PagesSection
+          client={client}
+          cloudUrl={cloudUrl}
+          actingPageId={postAs || null}
+          onActPage={onActPage}
+          onOpenPage={onOpenPage}
+        />,
+      );
+    }
+    if (section === "memories") {
+      return withNav(
+        <MemoriesSection
+          client={client}
+          cloudUrl={cloudUrl}
+          viewerId={viewerId}
+          onOpenPage={onOpenPage}
+          onOpenTag={setOpenTag}
+        />,
+      );
+    }
+    if (section === "saved") {
+      return withNav(
+        <SavedSection
+          client={client}
+          cloudUrl={cloudUrl}
+          viewerId={viewerId}
+          onOpenPage={onOpenPage}
+          onOpenTag={setOpenTag}
+        />,
+      );
+    }
+    if (section === "birthdays") {
+      return withNav(<BirthdaysSection client={client} cloudUrl={cloudUrl} onOpenDm={onOpenDm} />);
+    }
   }
 
   // Byte-level progress when sizes are known, else fall back to file count.
@@ -6639,5 +6736,845 @@ export function FeedRail({
         </div>
       )}
     </>
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * Feed-sidebar destinations (Profile / Friends / Dashboard / Pages /
+ * Memories / Saved / Birthdays).
+ * ------------------------------------------------------------------ */
+
+/** Shared shell for a Feed-sidebar destination: a header + a scroll column. */
+function SectionFrame({
+  title,
+  sub,
+  wide = false,
+  children,
+}: {
+  title: string;
+  sub?: string;
+  wide?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div className="feed">
+      <div className="feed-section-head">
+        <h2 className="feed-section-title">{title}</h2>
+        {sub && <span className="feed-section-sub">{sub}</span>}
+      </div>
+      <div className={`feed-scroll feed-section${wide ? " wide" : ""}`}>{children}</div>
+    </div>
+  );
+}
+
+/** A reusable list of interactive post cards for the destination pages. */
+function FeedPostList({
+  client,
+  cloudUrl,
+  viewerId,
+  posts,
+  setPosts,
+  onOpenPage,
+  onOpenTag,
+  emptyTitle,
+  emptySub,
+}: {
+  client: BotifyrClient;
+  cloudUrl: string;
+  viewerId?: string;
+  posts: FeedPost[];
+  setPosts: Dispatch<SetStateAction<FeedPost[]>>;
+  onOpenPage?: (handle: string) => void;
+  onOpenTag?: (tag: string) => void;
+  emptyTitle: string;
+  emptySub?: string;
+}) {
+  if (posts.length === 0) {
+    return (
+      <div className="feed-empty">
+        <div className="feed-empty-emoji">✨</div>
+        <div className="feed-empty-title">{emptyTitle}</div>
+        {emptySub && <div className="feed-empty-sub">{emptySub}</div>}
+      </div>
+    );
+  }
+  return (
+    <>
+      {posts.map((post) => (
+        <PostCard
+          key={post.id}
+          post={post}
+          client={client}
+          cloudUrl={cloudUrl}
+          canDelete={!post.pageId && post.author.id === viewerId}
+          viewerId={viewerId}
+          onChange={(next) => setPosts((prev) => prev.map((p) => (p.id === next.id ? next : p)))}
+          onDelete={(id) => setPosts((prev) => prev.filter((p) => p.id !== id))}
+          onBlock={(authorId) => setPosts((prev) => prev.filter((p) => p.author.id !== authorId))}
+          onRepost={(next) =>
+            setPosts((prev) => (prev.some((p) => p.id === next.id) ? prev : [next, ...prev]))
+          }
+          onOpenPage={(handle) => onOpenPage?.(handle)}
+          onOpenTag={onOpenTag}
+        />
+      ))}
+    </>
+  );
+}
+
+function ProfileSection({
+  client,
+  cloudUrl,
+  viewer,
+  onEditProfile,
+  onProfileSaved,
+  onOpenPage,
+  onOpenTag,
+}: {
+  client: BotifyrClient;
+  cloudUrl: string;
+  viewer?: User;
+  onEditProfile?: () => void;
+  onProfileSaved?: (user: User) => void;
+  onOpenPage?: (handle: string | null) => void;
+  onOpenTag?: (tag: string) => void;
+}) {
+  const [posts, setPosts] = useState<FeedPost[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [friendCount, setFriendCount] = useState<number | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(viewer?.displayName ?? "");
+  const [handle, setHandle] = useState(viewer?.handle ?? "");
+  const [emoji, setEmoji] = useState(viewer?.avatarEmoji ?? "");
+  const [birthday, setBirthday] = useState(viewer?.birthday ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setName(viewer?.displayName ?? "");
+    setHandle(viewer?.handle ?? "");
+    setEmoji(viewer?.avatarEmoji ?? "");
+    setBirthday(viewer?.birthday ?? "");
+  }, [viewer?.displayName, viewer?.handle, viewer?.avatarEmoji, viewer?.birthday]);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    const handleValue = viewer?.handle;
+    if (handleValue) {
+      client
+        .listUserPosts(handleValue)
+        .then((list) => {
+          if (active) setPosts(list);
+        })
+        .catch(() => {})
+        .finally(() => {
+          if (active) setLoading(false);
+        });
+    } else {
+      setLoading(false);
+    }
+    client
+      .listFriends()
+      .then((list) => {
+        if (active) setFriendCount(list.length);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [client, viewer?.handle]);
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    try {
+      const updated = await client.updateProfile({
+        displayName: name.trim(),
+        handle: handle.trim() || undefined,
+        avatarEmoji: emoji.trim() || undefined,
+        birthday: birthday.trim() ? birthday.trim() : null,
+      });
+      onProfileSaved?.(updated);
+      setEditing(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't save your profile");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const displayName = viewer?.displayName || viewer?.handle || "Your profile";
+  const avatarUrl = resolveAvatar(viewer?.avatarUrl, cloudUrl);
+
+  return (
+    <SectionFrame title="Profile" sub={viewer?.handle ? `@${viewer.handle}` : undefined}>
+      <section className="feed-profile-card">
+        <div className="feed-profile-top">
+          <Avatar url={avatarUrl} emoji={viewer?.avatarEmoji ?? "🙂"} name={displayName} size={84} />
+          <div className="feed-profile-meta">
+            <h3 className="feed-profile-name">{displayName}</h3>
+            {viewer?.handle && <span className="feed-profile-handle">@{viewer.handle}</span>}
+            {viewer?.birthday && (
+              <span className="feed-profile-birthday">
+                <GiftIcon size={14} />{" "}
+                {new Date(`${viewer.birthday}T00:00:00Z`).toLocaleDateString(undefined, {
+                  month: "long",
+                  day: "numeric",
+                })}
+              </span>
+            )}
+            <div className="feed-profile-actions">
+              <button type="button" className="feed-post-btn" onClick={() => setEditing((value) => !value)}>
+                {editing ? "Cancel" : "Edit profile"}
+              </button>
+              {onEditProfile && (
+                <button type="button" className="ghost small" onClick={onEditProfile}>
+                  Change photo
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {editing && (
+          <div className="feed-profile-editor">
+            <label className="feed-field">
+              <span>Display name</span>
+              <input value={name} maxLength={40} placeholder="Your name" onChange={(e) => setName(e.target.value)} />
+            </label>
+            <label className="feed-field">
+              <span>Handle</span>
+              <input
+                value={handle}
+                maxLength={24}
+                placeholder="handle"
+                onChange={(e) => setHandle(e.target.value)}
+              />
+            </label>
+            <label className="feed-field">
+              <span>Avatar emoji</span>
+              <input value={emoji} maxLength={8} placeholder="🙂" onChange={(e) => setEmoji(e.target.value)} />
+            </label>
+            <label className="feed-field">
+              <span>Birthday</span>
+              <input type="date" value={birthday} onChange={(e) => setBirthday(e.target.value)} />
+            </label>
+            {error && (
+              <div className="feed-error" role="alert">
+                {error}
+              </div>
+            )}
+            <button type="button" className="feed-post-btn" disabled={busy} onClick={() => void save()}>
+              {busy ? "Saving…" : "Save changes"}
+            </button>
+          </div>
+        )}
+
+        <div className="feed-profile-stats">
+          <div className="feed-stat">
+            <strong>{posts.length}</strong>
+            <span>Posts</span>
+          </div>
+          <div className="feed-stat">
+            <strong>{friendCount ?? "—"}</strong>
+            <span>Friends</span>
+          </div>
+        </div>
+      </section>
+
+      {loading ? (
+        <div className="feed-empty">Loading…</div>
+      ) : (
+        <FeedPostList
+          client={client}
+          cloudUrl={cloudUrl}
+          viewerId={viewer?.id}
+          posts={posts}
+          setPosts={setPosts}
+          onOpenPage={onOpenPage}
+          onOpenTag={onOpenTag}
+          emptyTitle="No posts yet"
+          emptySub="Your posts will show up here."
+        />
+      )}
+    </SectionFrame>
+  );
+}
+
+function FriendsSection({
+  client,
+  cloudUrl,
+  onOpenDm,
+}: {
+  client: BotifyrClient;
+  cloudUrl: string;
+  onOpenDm?: (person: Person) => void;
+}) {
+  const [tab, setTab] = useState<"friends" | "requests" | "suggested">("friends");
+  const [friends, setFriends] = useState<Person[]>([]);
+  const [requests, setRequests] = useState<
+    Array<{ id: string; direction: "incoming" | "outgoing"; person: Person }>
+  >([]);
+  const [suggested, setSuggested] = useState<Person[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    Promise.all([
+      client.listFriends().catch(() => [] as Person[]),
+      client.listFriendRequests().catch(() => []),
+      client.suggestPeople(12).catch(() => [] as Person[]),
+    ])
+      .then(([f, r, s]) => {
+        if (!active) return;
+        setFriends(f);
+        setRequests(r);
+        setSuggested(s);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [client]);
+
+  async function respond(id: string, action: "accept" | "decline") {
+    setBusyId(id);
+    setError(null);
+    try {
+      await client.respondFriendRequest(id, action);
+      const req = requests.find((entry) => entry.id === id);
+      setRequests((prev) => prev.filter((entry) => entry.id !== id));
+      if (action === "accept" && req) setFriends((prev) => [req.person, ...prev]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function add(id: string) {
+    setBusyId(id);
+    setError(null);
+    try {
+      await client.addFriend(id);
+      setSuggested((prev) => prev.filter((person) => person.id !== id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const incoming = requests.filter((entry) => entry.direction === "incoming");
+
+  const personRow = (person: Person) => (
+    <>
+      <Avatar
+        url={resolveAvatar(person.avatarUrl, cloudUrl)}
+        emoji={person.avatarEmoji}
+        name={person.displayName}
+        size={40}
+      />
+      <div className="feed-people-meta">
+        <span className="feed-people-name">
+          {person.displayName || (person.handle ? `@${person.handle}` : "Someone")}
+        </span>
+        {person.handle && <span className="feed-people-sub">@{person.handle}</span>}
+      </div>
+    </>
+  );
+
+  return (
+    <SectionFrame title="Friends" sub={`${friends.length} friend${friends.length === 1 ? "" : "s"}`}>
+      <div className="feed-seg" role="tablist" aria-label="Friends views">
+        {(["friends", "requests", "suggested"] as const).map((key) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={tab === key}
+            className={`feed-seg-btn${tab === key ? " active" : ""}`}
+            onClick={() => setTab(key)}
+          >
+            {key === "friends"
+              ? "Friends"
+              : key === "requests"
+                ? `Requests${incoming.length ? ` (${incoming.length})` : ""}`
+                : "Suggested"}
+          </button>
+        ))}
+      </div>
+      {error && (
+        <div className="feed-error" role="alert">
+          {error}
+        </div>
+      )}
+      {loading ? (
+        <div className="feed-empty">Loading…</div>
+      ) : tab === "friends" ? (
+        <ul className="feed-people">
+          {friends.length === 0 && <li className="feed-empty-sub">No friends yet — add some from Suggested.</li>}
+          {friends.map((person) => (
+            <li key={person.id} className="feed-people-row">
+              {personRow(person)}
+              {onOpenDm && (
+                <button type="button" className="feed-post-btn" onClick={() => onOpenDm(person)}>
+                  Message
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : tab === "requests" ? (
+        <ul className="feed-people">
+          {incoming.length === 0 && <li className="feed-empty-sub">No pending requests.</li>}
+          {incoming.map((req) => (
+            <li key={req.id} className="feed-people-row">
+              {personRow(req.person)}
+              <div className="feed-people-actions">
+                <button
+                  type="button"
+                  className="feed-post-btn"
+                  disabled={busyId === req.id}
+                  onClick={() => void respond(req.id, "accept")}
+                >
+                  Accept
+                </button>
+                <button
+                  type="button"
+                  className="ghost small"
+                  disabled={busyId === req.id}
+                  onClick={() => void respond(req.id, "decline")}
+                >
+                  Decline
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <ul className="feed-people">
+          {suggested.length === 0 && <li className="feed-empty-sub">No suggestions right now.</li>}
+          {suggested.map((person) => (
+            <li key={person.id} className="feed-people-row">
+              {personRow(person)}
+              <button
+                type="button"
+                className="feed-follow-btn"
+                disabled={busyId === person.id}
+                onClick={() => void add(person.id)}
+              >
+                Add friend
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </SectionFrame>
+  );
+}
+
+function DashboardSection({ client }: { client: BotifyrClient }) {
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    client
+      .getDashboard()
+      .then((value) => {
+        if (active) setStats(value);
+      })
+      .catch((err) => {
+        if (active) setError(err instanceof Error ? err.message : "Couldn't load your stats");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [client]);
+
+  const cards = stats
+    ? [
+        { label: "Posts", value: stats.posts },
+        { label: "Reactions", value: stats.reactions },
+        { label: "Comments", value: stats.comments },
+        { label: "Shares", value: stats.shares },
+        { label: "Saves", value: stats.saves },
+        { label: "Reach", value: stats.reach },
+        { label: "Friends", value: stats.friends },
+        { label: "Pages", value: stats.pages },
+        { label: "Followers", value: stats.followers },
+      ]
+    : [];
+
+  return (
+    <SectionFrame title="Dashboard" sub="How your posts are doing" wide>
+      {loading ? (
+        <div className="feed-empty">Loading…</div>
+      ) : error ? (
+        <div className="feed-error" role="alert">
+          {error}
+        </div>
+      ) : (
+        <>
+          <div className="feed-stat-grid">
+            {cards.map((card) => (
+              <div key={card.label} className="feed-stat-card">
+                <strong>{card.value.toLocaleString()}</strong>
+                <span>{card.label}</span>
+              </div>
+            ))}
+          </div>
+          <h3 className="feed-section-subtitle">Recent posts</h3>
+          {stats && stats.recent.length === 0 ? (
+            <div className="feed-empty-sub">No posts yet.</div>
+          ) : (
+            <ul className="feed-insights">
+              {stats?.recent.map((post) => (
+                <li key={post.id} className="feed-insights-row">
+                  <span className="feed-insights-body">{post.body || "(media post)"}</span>
+                  <span className="feed-insights-metrics">
+                    <span>{post.likes} reactions</span>
+                    <span>{post.comments} comments</span>
+                    <span>{post.shares} shares</span>
+                    <span>{post.reach} reach</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+    </SectionFrame>
+  );
+}
+
+function PagesSection({
+  client,
+  cloudUrl,
+  actingPageId,
+  onActPage,
+  onOpenPage,
+}: {
+  client: BotifyrClient;
+  cloudUrl: string;
+  actingPageId: string | null;
+  onActPage?: (page: Page | null) => void;
+  onOpenPage?: (handle: string | null) => void;
+}) {
+  const [pages, setPages] = useState<Page[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    client
+      .listMyPages()
+      .then((list) => {
+        if (active) setPages(list);
+      })
+      .catch((err) => {
+        if (active) setError(err instanceof Error ? err.message : "Couldn't load your Pages");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [client]);
+
+  async function create() {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const page = await client.createPage({ name: trimmed });
+      setPages((prev) => [...prev, page]);
+      setName("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't create the Page");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <SectionFrame title="Pages" sub={`${pages.length} Page${pages.length === 1 ? "" : "s"} you manage`}>
+      <form
+        className="feed-page-create"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void create();
+        }}
+      >
+        <input
+          value={name}
+          maxLength={60}
+          placeholder="New Page name"
+          onChange={(event) => setName(event.target.value)}
+        />
+        <button type="submit" className="feed-post-btn" disabled={busy || !name.trim()}>
+          <PlusIcon size={15} /> Create
+        </button>
+      </form>
+      {error && (
+        <div className="feed-error" role="alert">
+          {error}
+        </div>
+      )}
+      {loading ? (
+        <div className="feed-empty">Loading…</div>
+      ) : pages.length === 0 ? (
+        <div className="feed-empty">
+          <div className="feed-empty-title">No Pages yet</div>
+          <div className="feed-empty-sub">Create a Page to build a public presence.</div>
+        </div>
+      ) : (
+        <ul className="feed-pages-list">
+          {pages.map((page) => (
+            <li key={page.id} className="feed-pages-row">
+              <Avatar
+                url={resolveAvatar(page.avatarUrl, cloudUrl)}
+                emoji={page.avatarEmoji ?? "📄"}
+                name={page.name}
+                size={44}
+              />
+              <div className="feed-people-meta">
+                <span className="feed-people-name">{page.name}</span>
+                <span className="feed-people-sub">
+                  @{page.handle} · {page.followers} follower{page.followers === 1 ? "" : "s"}
+                  {page.role ? ` · ${page.role}` : ""}
+                </span>
+              </div>
+              <div className="feed-people-actions">
+                <button type="button" className="ghost small" onClick={() => onOpenPage?.(page.handle)}>
+                  View
+                </button>
+                {onActPage && (
+                  <button
+                    type="button"
+                    className="feed-post-btn"
+                    onClick={() => onActPage(actingPageId === page.id ? null : page)}
+                  >
+                    {actingPageId === page.id ? "Switch back" : "Switch to"}
+                  </button>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </SectionFrame>
+  );
+}
+
+function MemoriesSection({
+  client,
+  cloudUrl,
+  viewerId,
+  onOpenPage,
+  onOpenTag,
+}: {
+  client: BotifyrClient;
+  cloudUrl: string;
+  viewerId?: string;
+  onOpenPage?: (handle: string | null) => void;
+  onOpenTag?: (tag: string) => void;
+}) {
+  const [groups, setGroups] = useState<MemoryGroup[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    client
+      .listMemories()
+      .then((list) => {
+        if (active) setGroups(list);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [client]);
+
+  return (
+    <SectionFrame title="Memories" sub="Posts from this day in past years">
+      {loading ? (
+        <div className="feed-empty">Loading…</div>
+      ) : groups.length === 0 ? (
+        <div className="feed-empty">
+          <div className="feed-empty-emoji">🕰️</div>
+          <div className="feed-empty-title">No memories today</div>
+          <div className="feed-empty-sub">Come back on a day you posted in a previous year.</div>
+        </div>
+      ) : (
+        groups.map((group) => (
+          <section key={group.key} className="feed-memory-group">
+            <h3 className="feed-section-subtitle">{group.label}</h3>
+            <FeedPostList
+              client={client}
+              cloudUrl={cloudUrl}
+              viewerId={viewerId}
+              posts={group.posts}
+              setPosts={() => {}}
+              onOpenPage={onOpenPage}
+              onOpenTag={onOpenTag}
+              emptyTitle="Nothing here"
+            />
+          </section>
+        ))
+      )}
+    </SectionFrame>
+  );
+}
+
+function SavedSection({
+  client,
+  cloudUrl,
+  viewerId,
+  onOpenPage,
+  onOpenTag,
+}: {
+  client: BotifyrClient;
+  cloudUrl: string;
+  viewerId?: string;
+  onOpenPage?: (handle: string | null) => void;
+  onOpenTag?: (tag: string) => void;
+}) {
+  const [posts, setPosts] = useState<FeedPost[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    client
+      .listSaved()
+      .then((list) => {
+        if (active) setPosts(list);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [client]);
+
+  return (
+    <SectionFrame title="Saved" sub="Posts you saved for later">
+      {loading ? (
+        <div className="feed-empty">Loading…</div>
+      ) : (
+        <FeedPostList
+          client={client}
+          cloudUrl={cloudUrl}
+          viewerId={viewerId}
+          posts={posts}
+          setPosts={setPosts}
+          onOpenPage={onOpenPage}
+          onOpenTag={onOpenTag}
+          emptyTitle="Nothing saved yet"
+          emptySub="Tap Save on a post to keep it here."
+        />
+      )}
+    </SectionFrame>
+  );
+}
+
+function BirthdaysSection({
+  client,
+  cloudUrl,
+  onOpenDm,
+}: {
+  client: BotifyrClient;
+  cloudUrl: string;
+  onOpenDm?: (person: Person) => void;
+}) {
+  const [entries, setEntries] = useState<BirthdayEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    client
+      .listBirthdays()
+      .then((list) => {
+        if (active) setEntries(list);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [client]);
+
+  const whenLabel = (days: number) =>
+    days === 0 ? "Today" : days === 1 ? "Tomorrow" : `In ${days} days`;
+
+  return (
+    <SectionFrame title="Birthdays" sub="Friends' birthdays this week">
+      {loading ? (
+        <div className="feed-empty">Loading…</div>
+      ) : entries.length === 0 ? (
+        <div className="feed-empty">
+          <div className="feed-empty-emoji">🎂</div>
+          <div className="feed-empty-title">No birthdays this week</div>
+          <div className="feed-empty-sub">Friends' birthdays show here 7 days ahead.</div>
+        </div>
+      ) : (
+        <ul className="feed-birthdays">
+          {entries.map((entry) => (
+            <li key={entry.person.id} className="feed-people-row">
+              <Avatar
+                url={resolveAvatar(entry.person.avatarUrl, cloudUrl)}
+                emoji={entry.person.avatarEmoji}
+                name={entry.person.displayName}
+                size={44}
+              />
+              <div className="feed-people-meta">
+                <span className="feed-people-name">
+                  {entry.person.displayName || (entry.person.handle ? `@${entry.person.handle}` : "Someone")}
+                </span>
+                <span className="feed-people-sub">
+                  <GiftIcon size={13} /> {whenLabel(entry.daysUntil)} ·{" "}
+                  {new Date(`${entry.date}T00:00:00Z`).toLocaleDateString(undefined, {
+                    month: "short",
+                    day: "numeric",
+                  })}
+                </span>
+              </div>
+              {onOpenDm && (
+                <button type="button" className="feed-post-btn" onClick={() => onOpenDm(entry.person)}>
+                  Send wishes
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </SectionFrame>
   );
 }
