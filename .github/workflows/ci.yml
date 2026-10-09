@@ -58,3 +58,37 @@ jobs:
 
       - name: Build cloud image
         run: docker build -f apps/cloud/Dockerfile -t botifyr-cloud:ci .
+
+  # Continuous deploy: after a merge to main (and only once checks + the cloud
+  # image build pass), rebuild the running Docker stack on the host.
+  #
+  # GitHub-hosted runners can't reach the host's Docker daemon, so this job runs
+  # on a self-hosted runner (label: botifyr) installed on the deploy host.
+  # One-time setup:
+  #   1. Register a self-hosted runner on the host with the label `botifyr`
+  #      (Settings -> Actions -> Runners -> New self-hosted runner).
+  #   2. Set the repository variable BOTIFYR_DEPLOY_DIR to the checkout that runs
+  #      the stack (e.g. /srv/botifyr or G:\Developments\botifyr.xyz) and make
+  #      sure its apps/cloud/.env exists (it is gitignored).
+  # Until BOTIFYR_DEPLOY_DIR is set the job is skipped, so main stays green.
+  deploy:
+    name: Deploy (self-hosted)
+    needs: [checks, cloud]
+    if: >-
+      github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+      vars.BOTIFYR_DEPLOY_DIR != ''
+    runs-on: [self-hosted, botifyr]
+    steps:
+      - name: Update the deploy checkout
+        shell: bash
+        working-directory: ${{ vars.BOTIFYR_DEPLOY_DIR }}
+        run: |
+          set -euo pipefail
+          git fetch --prune origin main
+          git checkout main
+          git pull --ff-only
+
+      - name: Rebuild the running stack
+        shell: bash
+        working-directory: ${{ vars.BOTIFYR_DEPLOY_DIR }}
+        run: docker compose up -d --build

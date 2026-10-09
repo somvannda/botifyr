@@ -95,6 +95,36 @@ VITE_CLOUD_URL=https://api.botifyr.xyz npm run tauri -w @botifyr/desktop -- buil
 Installers land in `apps/desktop/src-tauri/target/release/bundle/`. The installer
 registers the `botifyr://` deep link so the web "Open Botifyr" button works.
 
+## 4. Continuous deployment (auto-deploy on merge)
+
+Merging to `main` can rebuild the running stack automatically. CI
+(`.github/workflows/ci.yml`) has a `deploy` job that runs **only** on a push to
+`main`, **only** after `Typecheck / Lint / Test` and `Cloud image` pass, and
+**only** on a self-hosted runner — GitHub-hosted runners can't reach your Docker
+daemon.
+
+One-time setup:
+
+1. Register a self-hosted runner on the deploy host and give it the label
+   `botifyr` (Settings → Actions → Runners → New self-hosted runner). Install
+   Docker on that host so the runner can run `docker compose`.
+2. Set the repository variable **`BOTIFYR_DEPLOY_DIR`** to the checkout that runs
+   the stack (e.g. `/srv/botifyr` or `G:\Developments\botifyr.xyz`). Make sure
+   `apps/cloud/.env` exists there (it is gitignored).
+
+Then every merge to `main` runs, on the host:
+
+```bash
+git fetch --prune origin main && git checkout main && git pull --ff-only
+docker compose up -d --build
+```
+
+Until `BOTIFYR_DEPLOY_DIR` is set the job is skipped, so `main` stays green.
+
+> Point `BOTIFYR_DEPLOY_DIR` at a **dedicated** checkout, not a shared dev tree:
+> the job runs `git checkout main` and `git pull --ff-only` there. A dirty tree
+> that blocks the checkout fails the deploy job loudly rather than clobbering.
+
 ## Local (development)
 
 ```bash
