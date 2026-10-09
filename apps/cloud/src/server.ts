@@ -1011,6 +1011,50 @@ export async function buildServer(options: ServerOptions) {
     return task;
   }
 
+  /**
+   * Re-run a failed task in place: reset it to queued and run its own goal again
+   * in the same session. Unlike `retryTask`, this works for scheduled company
+   * runs, whose prompt lives only on the task (never appended to the session).
+   */
+  async function rerunTask(task: Task, session: Session, userId: string, local = false): Promise<Task> {
+    const bot = session.botId ? await store.getBot(session.botId).catch(() => null) : null;
+    const windowSize = maxHistoryTurns * 2;
+    const history = session.messages
+      .slice(-windowSize)
+      .map((message) => ({ role: message.role, content: message.content.slice(0, maxMessageChars) }));
+
+    task.status = "queued";
+    task.steps = [];
+    task.error = undefined;
+    task.result = undefined;
+    task.approval = undefined;
+    task.updatedAt = new Date().toISOString();
+    await store.updateTask(task);
+    rememberTask(task.id, session.id, userId);
+    emit({ type: "task.updated", task });
+
+    const { mediaTask, initialToolCall, initialToolOnly } = confidentPlan(task.goal);
+    void runTask(
+      {
+        store,
+        userId,
+        history,
+        local: mediaTask ? false : local,
+        instructions:
+          [bot?.instructions, skillInstructions(bot?.skills)].filter(Boolean).join("\n\n") || undefined,
+        summary: session.summary,
+        vaultKey,
+        author: bot ? { id: bot.id } : undefined,
+        autoApprove: bot?.autoApprove === true,
+        initialToolCall,
+        initialToolOnly,
+      },
+      task,
+    ).catch((error) => app.log.error({ err: error, taskId: task.id }, "rerun task failed"));
+
+    return task;
+  }
+
   /** Move a bot's board items between statuses so the board reflects progress. */
   async function advanceAssignedItems(
     bot: Bot,
@@ -3916,6 +3960,36 @@ export async function buildServer(options: ServerOptions) {
       } catch (error) {
         return reply.code(400).send({ error: error instanceof Error ? error.message : "retry failed" });
       }
+    },
+  );
+
+  // Re-run a failed task in place (a company run, or a chat task).
+  app.post<{ Params: { id: string }; Body: { local?: boolean } }>(
+    "/v1/tasks/:id/retry",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const task = await store.getTask(request.params.id);
+      if (!task) return reply.code(404).send({ error: "task not found" });
+      const session = await store.getSession(task.sessionId);
+      if (!session || session.userId !== userId) {
+        return reply.code(404).send({ error: "task not found" });
+      }
+      if (!rateLimitOk(userId)) {
+        return reply
+          .code(429)
+          .send({ error: "You've reached the message limit for now — please try again later." });
+      }
+      if (await budgetBlocked(userId)) {
+        return reply
+          .code(429)
+          .send({ error: "Daily token budget reached — try again tomorrow or raise the budget." });
+      }
+      const billingReason = await billingBlockReason(userId);
+      if (billingReason) return reply.code(402).send({ error: billingReason });
+      const warning = await budgetWarning(userId);
+      const next = await rerunTask(task, session, userId, request.body?.local === true);
+      return { task: next, warning: warning ?? undefined };
     },
   );
 
