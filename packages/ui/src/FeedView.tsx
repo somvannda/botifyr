@@ -5179,6 +5179,8 @@ export function FeedView({
   const [composerExpanded, setComposerExpanded] = useState(false);
   const [audience, setAudience] = useState<"public" | "friends" | "only_me">("friends");
   const [scheduledAt, setScheduledAt] = useState("");
+  /** The schedule field stays hidden until the user opts into scheduling. */
+  const [scheduleOpen, setScheduleOpen] = useState(false);
   const [album, setAlbum] = useState("");
   const [pollOpen, setPollOpen] = useState(false);
   const [pollOptions, setPollOptions] = useState<string[]>(["", ""]);
@@ -5640,6 +5642,7 @@ export function FeedView({
       setDraft("");
       setAttachments([]);
       setScheduledAt("");
+      setScheduleOpen(false);
       setAlbum("");
       setPollOpen(false);
       setPollOptions(["", ""]);
@@ -6069,14 +6072,33 @@ export function FeedView({
               </div>
               <div className="feed-composer-as">
                 <span>Schedule</span>
-                <input
-                  type="datetime-local"
-                  className="feed-composer-as-input"
-                  value={scheduledAt}
-                  onChange={(event) => setScheduledAt(event.target.value)}
-                  title="Schedule for later"
-                  aria-label="Schedule for later"
-                />
+                {scheduledAt || scheduleOpen ? (
+                  <>
+                    <input
+                      type="datetime-local"
+                      className="feed-composer-as-input"
+                      value={scheduledAt}
+                      onChange={(event) => setScheduledAt(event.target.value)}
+                      title="Schedule for later"
+                      aria-label="Schedule for later"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      className="feed-composer-tool"
+                      onClick={() => {
+                        setScheduledAt("");
+                        setScheduleOpen(false);
+                      }}
+                    >
+                      Clear
+                    </button>
+                  </>
+                ) : (
+                  <button type="button" className="feed-composer-tool" onClick={() => setScheduleOpen(true)}>
+                    Schedule for later
+                  </button>
+                )}
               </div>
             </div>
           )}
