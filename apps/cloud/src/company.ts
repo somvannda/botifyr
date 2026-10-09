@@ -96,6 +96,25 @@ export function hasOpenWork(items: Array<{ status: string }>): boolean {
   return items.some((item) => item.status !== "done");
 }
 
+/**
+ * Decide whether an employee should run again right away instead of waiting out
+ * its cadence. The chair (CEO) keeps going while there is **unassigned** work it
+ * can delegate; every other employee continues only when its run moved the board
+ * and work is still open. `progressed` is derived from `boardFingerprint`.
+ */
+export function shouldContinueWorking(
+  items: Array<{ status: string; assigneeBotId?: string }>,
+  isChair: boolean,
+  progressed: boolean,
+): boolean {
+  if (!hasOpenWork(items)) return false;
+  // The chair is the delegator: keep it running while work has no owner.
+  if (isChair && items.some((item) => item.status === "todo" && !item.assigneeBotId)) {
+    return true;
+  }
+  return progressed;
+}
+
 const WEEKDAYS: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
 
 /** Local day-of-week and hour (0–24) for `now` in an IANA timezone (default UTC). */
