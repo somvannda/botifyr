@@ -6,12 +6,14 @@
 
 ## Current status
 
-**Complete and fully green.** Pages tests 9/9; cloud Pages tests 10/10; E2E 4/4;
-visual E2E captured; whole-repo gate green (`typecheck` 0, `lint` 0,
+**Complete, integrated, and verified.** Stage: PLANNED → IMPLEMENTED → TESTED
+→ INTEGRATED → **VERIFIED** (all Pages work is on `origin/main`; CI green:
+Typecheck/Lint/Test + Cloud image). Pages tests 9/9; cloud Pages tests 10/10;
+E2E 4/4; visual E2E captured; whole-repo gate green (`typecheck` 0, `lint` 0,
 `npm test` 451/451). Delivered: three live-only bugs (PG-18 Postgres
 post-as-Page, PG-19 mobile clipping, PG-20 role-inaccurate controls), the
-`listPostMedia` consumer coordination fix, and **`pages.cta_url` end-to-end**
-(label + destination, schema → API → UI → tests).
+`listPostMedia` consumer coordination fix, **`pages.cta_url` end-to-end**
+(label + destination), and the E2E seed-uniqueness fix (PR #5).
 
 ## Problem statement
 
@@ -89,7 +91,7 @@ supported sections — not core functionality. See the audit for the ranked list
 - `npm run typecheck` (all workspaces) → **exit 0**. ✅
 - `npm run lint` → **exit 0**, 0 errors. ✅
 - `npx vitest run apps/cloud/src/server.pages.test.ts` → **9 passed / 9**. ✅
-- Pages component tests → **8 passed / 8** (incl. role coverage).
+- Pages component tests → **9 passed / 9** (incl. role + `cta_url` coverage).
 - `prettier --check` on Pages-authored files → **clean**. (`FeedView.tsx` is
   shared and concurrently edited; its remaining churn is in other managers'
   regions, not the `PageView` code.)
@@ -98,6 +100,9 @@ supported sections — not core functionality. See the audit for the ranked list
 - E2E (`E2E_PAGES_TOKEN=… E2E_BASE_URL=http://localhost:1420 npx playwright test e2e/pages.spec.ts`)
   → **4 passed**: discover/open, identity + posts, Posts/About nav, owner
   controls, mobile visibility. ✅
+- E2E seed made **unique per parallel worker** (a millisecond stamp could make
+  two workers race for one Page handle). Verified with 3 consecutive 4/4 runs;
+  shipped as **PR #5** (`94fdabe`), CI green (Typecheck/Lint/Test + Cloud image).
 
 > The repo churned heavily under concurrent edits during this session: gate runs
 > went transiently red from other managers' in-flight changes (Story viewer,
