@@ -9230,6 +9230,21 @@ body {
   color: var(--muted);
 }
 
+/* Separator between the destination and audience groups in the compact row. */
+.feed-composer-divider {
+  align-self: stretch;
+  width: 1px;
+  min-height: 18px;
+  margin: 0 var(--space-1);
+  background: var(--border);
+}
+
+/* Keep the schedule picker to its natural width so the meta row stays one line. */
+.feed-composer-schedule {
+  flex: 0 0 auto;
+  max-width: 210px;
+}
+
 .feed-composer-as select {
   border: 1px solid var(--border);
   background: var(--panel-2);

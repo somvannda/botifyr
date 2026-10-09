@@ -113,9 +113,22 @@
   (`role="progressbar"` `aria-valuenow` 0–100) with the file count alongside.
 - No CSS change: reuses the existing `.feed-upload*` classes.
 
+### W17 — Published posts render through the card (fourth pass) · Done
+- `prependUnique(list, post)` replaces every bare `[post, ...prev]` insertion
+  (feed publish, group publish, repost, permalink fetch), so a realtime refresh
+  racing a local insert can't render two cards for the same post.
+- Tests assert a newly published post renders as a full `PostCard` (feed + group)
+  and is not duplicated; the E2E publish test checks the action bar.
+
+### W18 — Composer horizontal compaction (fourth pass) · Done
+- The **Post as** and **Audience + schedule** rows are merged into a single
+  horizontal row (`.feed-composer-as` with a `.feed-composer-divider`), reducing
+  the composer from four stacked rows to three. Delegated by the Feed Experience
+  Lead (`docs/feed-page-redesign-report.md`).
+
 ### Backlog
-- Collapsed composer state; `listScheduled` management UI (Post Manager).
-- Byte-accurate upload progress (would need XHR/streams).
+- Collapsed composer state (further than compaction); `listScheduled` management
+  UI (Post Manager).
 
 ## Coordinate-don't-duplicate
 

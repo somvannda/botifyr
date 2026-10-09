@@ -251,6 +251,21 @@ describe("Composer publish lifecycle", () => {
   });
 });
 
+describe("Composer layout compaction", () => {
+  it("keeps destination and audience controls on a single horizontal row", async () => {
+    const { container } = renderFeed(makeClient());
+    await screen.findByText("existing post");
+
+    const postAs = screen.getByRole("combobox", { name: "Post as" });
+    const audience = screen.getByRole("combobox", { name: "Audience" });
+    const row = postAs.closest(".feed-composer-as");
+    expect(row).toBeTruthy();
+    // Both selects live in the same row (was two stacked rows).
+    expect(row).toBe(audience.closest(".feed-composer-as"));
+    expect(container.querySelectorAll(".feed-composer-as")).toHaveLength(1);
+  });
+});
+
 /**
  * Newly published posts must render through the shared `PostCard`, never as a
  * bare row, and must never appear twice when a realtime refresh races the local

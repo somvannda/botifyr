@@ -102,6 +102,11 @@ several accessibility gaps. See the audit for the ranked list.
 - [x] W13 **Raw-binary uploads** prefix `/v1/uploads/raw` + composer uses it.
 - [x] W14 **Server-synced drafts** `/v1/posts/draft` + composer sync.
 - [x] W15 Mood emoji **picker** (was a single-emoji button).
+- [x] W16 Byte-accurate upload progress (XHR).
+- [x] W17 Newly published posts render through the card (dedupe + tests).
+- [x] W18 **Composer horizontal compaction** — destination, audience and schedule
+  share one row (delegated by the Feed Experience Lead in
+  `docs/feed-page-redesign-report.md`).
 
 Previously "blocked" items are now implemented; see the second-pass notes below.
 

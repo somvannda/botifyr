@@ -4773,8 +4773,9 @@ export function FeedView({
               onChange={(event) => setAlbum(event.target.value)}
             />
           )}
+          {/* Compaction: destination, audience and schedule share one horizontal
+              row instead of stacking, so the composer stays short. */}
           <div className="feed-composer-as">
-            <span>Post as</span>
             <select aria-label="Post as" value={postAs} onChange={(event) => setPostAs(event.target.value)}>
               <option value="">You</option>
               {pages.map((page) => (
@@ -4807,9 +4808,7 @@ export function FeedView({
                 + New Page
               </button>
             )}
-          </div>
-          <div className="feed-composer-as">
-            <span>Audience</span>
+            <span className="feed-composer-divider" aria-hidden="true" />
             <select
               aria-label="Audience"
               value={audience}
@@ -4821,7 +4820,7 @@ export function FeedView({
             </select>
             <input
               type="datetime-local"
-              className="feed-composer-as-input"
+              className="feed-composer-as-input feed-composer-schedule"
               value={scheduledAt}
               onChange={(event) => setScheduledAt(event.target.value)}
               title="Schedule for later"
