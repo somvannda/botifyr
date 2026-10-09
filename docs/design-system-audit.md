@@ -67,6 +67,7 @@ typography or elevation. Those values were inlined per rule.
 | DS-14 | The same white-on-`--accent` AA failure (DS-12) exists in **13 non-Feed** solid-accent elements (HQ tabs/icons, workspace tab, grant chip, badges, `.btn.primary`, CWS composer). | High | `styles.css` | **Fixed** via `--accent-solid` app-wide |
 | DS-15 | Reels empty state (`No reels yet`) used light-theme text on the black Reels backdrop — **1.23:1**. | Medium | `.reels-scroll .feed-empty-*` | **Fixed** via `--on-media` / `--on-media-muted` |
 | DS-16 | `--ok`/`--warn` tints inlined as `rgba(…)` across components. | Low | `styles.css` | **Fixed** via `--ok-soft/-border`, `--warn-soft/-border` (11 values) |
+| DS-17 | `.btn.allow` put white text on a `--accent`→`--accent-2` gradient — fails AA at both dark stops (3.1–3.6:1). | Medium | `.btn.allow` | **Fixed** via `--accent-solid`/`--accent-2-solid` (4.7/5.8:1) |
 
 ## 4. Accessibility
 

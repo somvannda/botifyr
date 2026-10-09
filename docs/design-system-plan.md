@@ -58,6 +58,7 @@ Established product knowledge, not live captures:
 | DS-T16 | `--on-media` / `--on-media-muted` for text on dark media backdrops; fix Reels empty state | P1 | `:root`, `.reels-scroll` | axe clean (light Reels) | **Done** |
 | DS-T17 | Status tint tokens `--ok-soft/-border`, `--warn-soft/-border` | P2 | `:root`, components | value-preserving; light-adaptive | **Done** |
 | DS-T18 | Close the shape/overlay tails (`--radius-2xs/-lg`, `--overlay`) | P3 | `styles.css` | all `border-radius` tokenised | **Done** |
+| DS-T19 | `--accent-2-solid` + fix `.btn.allow` gradient contrast; tokenise `.result`/`.error` tints | P2 | `styles.css` | white ≥4.5:1 both stops | **Done** |
 
 ## 5. Acceptance criteria
 

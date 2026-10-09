@@ -78,7 +78,10 @@ system. Audit → plan (`docs/design-system-plan.md`), components
 15. **Shape/overlay tails closed** (DS-T18): `--radius-2xs` 4 · `--radius-lg` 16
     added and the radius tail normalised onto the scale; `--overlay` adopted for
     the common backdrop. All `border-radius` now tokenised.
-16. **Screenshots** for dark/light Feed (desktop + mobile) and the confirm dialog.
+16. **Shared `.btn` audit (DS-T19):** `.btn.allow` gradient switched to
+    `--accent-solid`/`--accent-2-solid` (white text now AA); `.result`/`.error`
+    feedback tints tokenised (`--ok-soft/-border`, `--danger-soft/-border`).
+17. **Screenshots** for dark/light Feed (desktop + mobile) and the confirm dialog.
 
 ## Files modified / created
 
@@ -114,7 +117,7 @@ system. Audit → plan (`docs/design-system-plan.md`), components
 | `npx vitest run packages/ui/src/designSystem.test.ts parity.test.ts smoke.dom.test.tsx` | **36 passed** |
 | `npm run typecheck` (repo) | **exit 0** |
 | `npm run lint` (repo) | **exit 0** |
-| `npm test` | **467 passed** (65 files) |
+| `npm test` | **473 passed** (67 files) |
 | `npx prettier --check` (new files) | clean |
 | In-app contrast audit (dark & light) | all Feed text ≥4.5:1 (audit §4.1) |
 | axe-core 4.10.2 (real theme toggle, composer enabled) | **0 violations** — Feed (All/Pages/Reels) dark & light, Chat, Startup Workspace |

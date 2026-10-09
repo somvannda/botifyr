@@ -67,6 +67,7 @@ spacing) stays literal.
 | `.feed-comment-send` | primary icon-only | `aria-label` required |
 | `.feed-action` | tertiary (borderless, flex-1) | `.active` uses `--danger`; `.feed-action-danger` uses `--danger` |
 | `.feed-composer-tool` | tertiary | Photo/Mood/Poll |
+| `.btn` / `.btn.primary` / `.btn.allow` / `.btn.deny` | generic shared buttons (settings/consent); primary = `--accent-solid`, allow = `--accent-solid`→`--accent-2-solid` gradient (AA) |
 | `.feed-menu-item` | menu row (`role="menuitem"`) | `.feed-menu-danger` uses `--danger` |
 | `.feed-confirm-cancel` / `.feed-confirm-danger` | dialog actions | danger uses `--danger-solid` (white text ≥4.5:1) |
 

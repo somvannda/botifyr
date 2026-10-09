@@ -78,6 +78,7 @@ describe("design tokens", () => {
       "--accent-border",
       "--accent-glow",
       "--accent-solid",
+      "--accent-2-solid",
       "--danger-soft",
       "--danger-border",
       "--danger-solid",
@@ -229,14 +230,16 @@ describe("WCAG AA text contrast (both themes)", () => {
     expect(ratio, `white on --danger-solid was ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5);
   });
 
-  it("white text on the solid accent surface >= 4.5:1 (both themes)", () => {
-    for (const [name, tokens] of [
-      ["dark", dark],
-      ["light", light],
-    ] as const) {
-      const color = tokens["--accent-solid"] || dark["--accent-solid"];
-      const ratio = contrast("#ffffff", color);
-      expect(ratio, `white on ${name} --accent-solid was ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5);
+  it("white text on the solid accent surfaces >= 4.5:1 (both themes)", () => {
+    for (const token of ["--accent-solid", "--accent-2-solid"]) {
+      for (const [name, tokens] of [
+        ["dark", dark],
+        ["light", light],
+      ] as const) {
+        const color = tokens[token] || dark[token];
+        const ratio = contrast("#ffffff", color);
+        expect(ratio, `white on ${name} ${token} was ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5);
+      }
     }
   });
 
