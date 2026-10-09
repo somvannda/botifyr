@@ -121,3 +121,69 @@ drive Feed sub-views; the host passes only `onOpenMarketplace`. No new API.
 - Note: the shared tree is multi-author; transient typecheck breaks from the
   Stories extraction occurred and were fixed by the owning workstream.
 
+## J. Visual direction (§3) — Agent 1
+
+This section supplies the brief's truncated §3. It grounds the Feed in Agent 2's
+tokens (`:root` in `packages/ui/src/styles.css`); Feed code references **tokens
+only**, never raw literals.
+
+### Colors (dark)
+
+| Role | Token | Value |
+| --- | --- | --- |
+| Page background | `--bg` | `#0a0a0b` |
+| Surfaces (cards, composer, rail) | `--panel` | `#121214` |
+| Inset / hover rows | `--panel-2` | `#17171a` |
+| Borders / dividers | `--border` | `#26262b` |
+| Primary text | `--text` | `#ececef` |
+| Secondary / metadata | `--muted` | `#8b8b92` |
+| Accent (active nav, links, likes) | `--accent` | `#6d8bff` |
+| Accent solid (filled buttons) | `--accent-solid` | `#5568e0` |
+| Destructive | `--danger` / `--danger-solid` | `#ff6b6b` / `#c8324a` |
+| Text over media | `--on-media` | `#ffffff` |
+
+Semantic tints (`--accent-soft`, `--accent-soft-strong`, `--accent-border`,
+`--accent-glow`, `--danger-soft`, `--danger-border`, `--ok-soft`, `--warn-soft`)
+are used for chips/badges/menus instead of ad-hoc rgba. Light theme re-derives
+them from overridden base hues.
+
+### Radius (shape scale)
+
+`--radius-card` 14px (post/composer/rail cards) · `--radius-bubble` 12px (nested
+media, comments, repost) · `--radius-control`/`--radius-sm` 8/9px (inputs,
+buttons) · `--radius-pill` for chips/tags/action pills · `--radius-round` for
+avatars, presence dots, nav badges.
+
+### Spacing (4-pt grid)
+
+`--space-1..6` = 4/8/12/16/20/24. Feed column gap `--space-4`; card padding
+`--space-3 --space-4`; action row `padding-top: --space-2`; rail section gap
+`--space-3`. Bottom menu height 58px with `env(safe-area-inset-bottom)`.
+
+### Type scale
+
+`--text-xs` 11.5 (metadata, timestamps) · `--text-md` 12.5 (actions, secondary) ·
+`--text-xl` 13.5 (author name, post body) · `--text-4xl` 16 (topbar titles) ·
+`--text-5xl` 18 (Page/Group name). Body line-height 1.5–1.55.
+
+### Media treatment
+
+- Images `object-fit: cover`, radius `--radius-bubble`, 1px `--border`.
+- **Reserved space** to prevent layout shift: single image `min-height: 160px`;
+  multi-image grid uses `aspect-ratio: 1` square tiles (2/3/4 columns).
+- Lightbox / Stories / Reels use `--on-media` text over a dark scrim.
+- Media is keyboard-focusable (`role="button"`) and opens the lightbox.
+
+### Reference behavior
+
+Dark charcoal canvas; lighter card surfaces; subtle 1px dividers; blue accent for
+active nav and primary actions; rounded corners; a single readable feed column
+(~620px); an aligned right rail; and a **bottom menu pinned inside the feed
+column** (Feed-only, between the left and right sidebars).
+
+### Ownership
+
+- **Agent 1** owns Feed page layout, tabs/sort, and card integration.
+- **Agent 2** owns the shared tokens (this section only *uses* them).
+- Composer (Agent 8) and Stories (Agent 6) apply the same tokens in their parts.
+
