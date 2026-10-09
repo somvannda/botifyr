@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { FormEvent } from "react";
+import type { FormEvent, ReactNode } from "react";
 import type {
   Bot,
   CapabilityGrant,
@@ -110,6 +110,7 @@ export function CompanyWorkspace({
   focusCompanyId,
   createNonce,
   onOpenOffice,
+  renderOfficeEmbedded,
   onCreated,
 }: {
   client: BotifyrClient;
@@ -122,6 +123,8 @@ export function CompanyWorkspace({
   createNonce?: number;
   /** Open the 3D office for a company (docked, not a modal). */
   onOpenOffice: (company: { id: string; name: string }) => void;
+  /** Render the 3D office inline in the Office section (preferred). */
+  renderOfficeEmbedded?: (company: { id: string; name: string }) => ReactNode;
   /** A company was created inline → refresh the account + focus it. */
   onCreated?: (company: WorkspaceWithRoles) => void | Promise<void>;
 }) {
@@ -1391,16 +1394,25 @@ export function CompanyWorkspace({
             <div className="cws-card-head">
               <h3>Office</h3>
               <button
-                className="btn primary small"
+                className="ghost small"
                 type="button"
                 onClick={() => onOpenOffice({ id: view.id, name: view.name })}
               >
-                <CubeIcon size={14} /> Open 3D workspace
+                <CubeIcon size={14} /> Open beside
               </button>
             </div>
-            <p className="cws-muted">
-              The office mirrors the same board — every employee at their desk, live.
-            </p>
+            {renderOfficeEmbedded ? (
+              <div
+                className="cws-office-embed"
+                style={{ height: 460, borderRadius: 12, overflow: "hidden", border: "1px solid var(--border)" }}
+              >
+                {renderOfficeEmbedded({ id: view.id, name: view.name })}
+              </div>
+            ) : (
+              <p className="cws-muted">
+                The office mirrors the same board — every employee at their desk, live.
+              </p>
+            )}
             <ul className="cws-list">
               {members.map((role) => {
                 const current = items.find(

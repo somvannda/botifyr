@@ -168,6 +168,23 @@ export function clockOf(iso: string | undefined): string {
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
+/**
+ * Index of the first incoming message newer than the read boundary, or -1 when
+ * there is no boundary or nothing new. Used to place the "New messages" divider.
+ */
+export function firstUnreadIndex(
+  messages: Array<{ senderId?: string; createdAt?: string }>,
+  boundary: string | undefined,
+  selfId: string | undefined,
+): number {
+  if (!boundary) return -1;
+  return messages.findIndex(
+    (message) =>
+      Boolean(message.senderId && message.senderId !== selfId) &&
+      Boolean(message.createdAt && message.createdAt > boundary),
+  );
+}
+
 type ConnectionState = "connecting" | "online" | "offline";
 
 /** A transient in-app notification (incoming message or finished task). */
@@ -266,6 +283,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [showNewChat, setShowNewChat] = useState(false);
   /** On narrow screens the conversation list becomes an off-canvas drawer. */
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const mobileNavBtnRef = useRef<HTMLButtonElement | null>(null);
+  const wasMobileNavOpen = useRef(false);
   const [newChatTab, setNewChatTab] = useState<"contacts" | "chats" | "calls">("chats");
   const [newChatQuery, setNewChatQuery] = useState("");
   const [showConnectApps, setShowConnectApps] = useState(false);
@@ -288,6 +307,9 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       return {};
     }
   });
+  /** readAt as it was when each open conversation was entered — the boundary
+      above which a "New messages" divider is drawn. */
+  const [newMsgSince, setNewMsgSince] = useState<Record<string, string>>({});
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [shareItem, setShareItem] = useState<MediaItem | null>(null);
@@ -634,6 +656,61 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     </ErrorBoundary>
   );
 
+  /** The same employee list the office uses, for any company (not just the open one). */
+  function agentsForCompany(companyName: string): OfficeAgent[] {
+    const workspace = workspaces.find((entry) => entry.name === companyName);
+    if (!workspace) return [];
+    const latestBySession = new Map<string, Task>();
+    for (const task of Object.values(tasks)) {
+      const current = latestBySession.get(task.sessionId);
+      if (!current || current.updatedAt < task.updatedAt) latestBySession.set(task.sessionId, task);
+    }
+    return workspace.roles.flatMap((role) => {
+      const bot = bots.find((entry) => entry.id === role.botId);
+      if (!bot) return [];
+      const task = latestBySession.get(bot.sessionId);
+      const activity: AgentActivity = task && task.status !== "cancelled" ? task.status : "idle";
+      return [
+        {
+          botId: bot.id,
+          name: bot.name,
+          emoji: bot.emoji,
+          title: role.title,
+          department: role.department,
+          activity,
+        },
+      ];
+    });
+  }
+
+  /** The 3D office embedded inside the Startup Workspace pane (no dock/close chrome). */
+  const renderOfficeEmbedded = (company: { id: string; name: string }) => (
+    <ErrorBoundary
+      fallback={
+        <div className="office3d-dock-root" role="presentation">
+          <div className="office3d-panel">
+            <div className="office3d-head">
+              <span className="office3d-title">3D office unavailable</span>
+            </div>
+            <p className="company-hint">The Office tab still lists every employee.</p>
+          </div>
+        </div>
+      }
+    >
+      <LazyOfficeView
+        company={company.name}
+        agents={agentsForCompany(company.name)}
+        paused={(workspaces.find((entry) => entry.name === company.name)?.status ?? "active") === "paused"}
+        docked
+        onClose={() => undefined}
+        onSelect={(botId) => {
+          const bot = bots.find((entry) => entry.id === botId);
+          if (bot) openEmployee(bot);
+        }}
+      />
+    </ErrorBoundary>
+  );
+
   /**
    * The office is "open" only when it also has a company to show. Deriving this
    * once keeps the grid class and the rendered aside in lock-step — a mismatch
@@ -645,6 +722,11 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const nodeStartedRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const cancelSigninRef = useRef(false);
+  /** Whether the transcript is pinned to the newest message (avoids yanking
+      readers to the bottom when a new message arrives while they scroll up). */
+  const atBottomRef = useRef(true);
+  const [atBottom, setAtBottom] = useState(true);
+  const [newWhileAway, setNewWhileAway] = useState(0);
 
   // Persist token rotations (login + silent refresh) so a restart stays signed in.
   useEffect(() => {
@@ -860,11 +942,52 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, client]);
 
-  // Keep the transcript scrolled to the newest message.
+  // Pin the transcript to the newest message — but only when the reader is
+  // already at the bottom, so scrolling back through history isn't interrupted.
   const activeMessageCount = sessions.find((session) => session.id === activeSessionId)?.messages.length ?? 0;
+
+  const onContentScroll = () => {
+    const element = scrollRef.current;
+    if (!element) return;
+    const nearBottom = element.scrollHeight - element.scrollTop - element.clientHeight < 80;
+    atBottomRef.current = nearBottom;
+    setAtBottom(nearBottom);
+    if (nearBottom) setNewWhileAway(0);
+  };
+
+  const jumpToLatest = () => {
+    const element = scrollRef.current;
+    if (!element) return;
+    element.scrollTop = element.scrollHeight;
+    atBottomRef.current = true;
+    setAtBottom(true);
+    setNewWhileAway(0);
+    // Reaching the newest message clears the "New messages" marker.
+    if (activeSessionId) {
+      setNewMsgSince((prev) => {
+        if (!(activeSessionId in prev)) return prev;
+        const next = { ...prev };
+        delete next[activeSessionId];
+        return next;
+      });
+    }
+  };
+
+  // Opening a conversation always starts at the newest message.
+  useEffect(() => {
+    atBottomRef.current = true;
+    setAtBottom(true);
+    setNewWhileAway(0);
+  }, [activeSessionId]);
+
   useEffect(() => {
     const element = scrollRef.current;
-    if (element) element.scrollTop = element.scrollHeight;
+    if (!element) return;
+    if (atBottomRef.current) {
+      element.scrollTop = element.scrollHeight;
+    } else {
+      setNewWhileAway((count) => count + 1);
+    }
   }, [activeSessionId, activeMessageCount]);
 
   useEffect(() => {
@@ -880,6 +1003,22 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     // Picking a conversation closes the narrow-screen drawer.
     setMobileNavOpen(false);
   }, [activeSessionId]);
+
+  // Escape closes the narrow-screen conversation drawer.
+  useEffect(() => {
+    if (!mobileNavOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMobileNavOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mobileNavOpen]);
+
+  // Return focus to the menu button when the drawer closes.
+  useEffect(() => {
+    if (wasMobileNavOpen.current && !mobileNavOpen) mobileNavBtnRef.current?.focus();
+    wasMobileNavOpen.current = mobileNavOpen;
+  }, [mobileNavOpen]);
 
   useEffect(() => {
     if (activeBotId) localStorage.setItem("botifyr.activeBotId", activeBotId);
@@ -2472,6 +2611,9 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       : activeSession.messages
     : [];
   const findMatches = findTerm ? visibleMessages.length : 0;
+  const firstNewIndex = activeSession
+    ? firstUnreadIndex(visibleMessages, newMsgSince[activeSession.id], user?.id)
+    : -1;
 
   // Reset the match position whenever the query changes.
   useEffect(() => {
@@ -3361,6 +3503,20 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       .catch(() => {});
   }, [user, client]);
 
+  // Remember where reading left off when a conversation is opened, so incoming
+  // messages that arrive afterwards can be marked "New messages".
+  useEffect(() => {
+    if (!activeSessionId) return;
+    setNewMsgSince((prev) => {
+      const boundary = readAt[activeSessionId];
+      if (!boundary || prev[activeSessionId] === boundary) return prev;
+      return { ...prev, [activeSessionId]: boundary };
+    });
+    // Intentionally runs only when the conversation changes; `readAt` is read
+    // at open time before the mark-read effect below advances it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSessionId]);
+
   // Opening a conversation marks it read (so the unread badge clears) and
   // records a read receipt on the server for the other participants.
   useEffect(() => {
@@ -3942,7 +4098,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
           onClick={() => setMobileNavOpen(false)}
         />
       )}
-      <aside className="sidebar">
+      <aside className="sidebar" aria-label="Chats and contacts">
         <div className="sidebar-top">
           <button className="round" type="button" title="Search" onClick={() => setSearchOpen((v) => !v)}>
             <SearchIcon size={16} />
@@ -4313,6 +4469,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
             focusCompanyId={startupFocusId}
             createNonce={companyCreateNonce}
             onOpenOffice={openOffice}
+            renderOfficeEmbedded={renderOfficeEmbedded}
             onCreated={handleCompanyCreated}
           />
         )}
@@ -4467,6 +4624,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
             {!showNewChat && (
               <header className="topbar">
                 <button
+                  ref={mobileNavBtnRef}
                   className="mobile-nav-btn"
                   type="button"
                   title="Show chats"
@@ -4605,7 +4763,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
 
             {billingNotice && <div className="notice warn">{billingNotice}</div>}
 
-            <section className="content" ref={scrollRef}>
+            <section className="content" ref={scrollRef} onScroll={onContentScroll}>
               {error && <div className="error">{error}</div>}
 
               {!activeSession && (
@@ -4637,6 +4795,11 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                           dayKeyOf(message.createdAt)) && (
                         <div className="date-sep-thread" role="separator">
                           {dayLabelOf(message.createdAt)}
+                        </div>
+                      )}
+                      {msgIndex === firstNewIndex && (
+                        <div className="new-msg-divider" role="separator">
+                          New messages
                         </div>
                       )}
                       {(() => {
@@ -5016,6 +5179,20 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
               )}
             </section>
 
+            {activeSession && !atBottom && (
+              <button
+                className="jump-latest"
+                type="button"
+                onClick={jumpToLatest}
+                aria-label="Jump to the latest messages"
+              >
+                {newWhileAway > 0
+                  ? `${newWhileAway} new message${newWhileAway > 1 ? "s" : ""}`
+                  : "Latest"}
+                <ChevronIcon size={15} className="chev-down" />
+              </button>
+            )}
+
             {(pendingApprovals.length > 0 || approvalNotice) && (
               <div className="approval-panel">
                 <div className="approval-panel-head">
@@ -5273,6 +5450,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                   <button
                     className="send round"
                     type="submit"
+                    title="Send message"
+                    aria-label="Send message"
                     disabled={!text.trim() || !activeSessionId || sending}
                   >
                     <SendIcon size={16} />
