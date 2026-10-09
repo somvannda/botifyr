@@ -276,6 +276,54 @@ select option {
   color: var(--muted);
 }
 
+/* Form controls — text inputs, textareas and checks share the dropdown's look.
+   Bespoke classes (higher specificity) still win where a control is special. */
+input[type="text"],
+input[type="search"],
+input[type="email"],
+input[type="password"],
+input[type="url"],
+input[type="tel"],
+input[type="number"],
+input:not([type]),
+textarea {
+  background-color: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  color: var(--text);
+  padding: var(--space-2) var(--space-3);
+  font: inherit;
+  font-size: var(--text-lg);
+  line-height: 1.4;
+  outline: none;
+}
+
+input[type="text"]::placeholder,
+input[type="search"]::placeholder,
+input[type="email"]::placeholder,
+input[type="password"]::placeholder,
+input[type="url"]::placeholder,
+input[type="tel"]::placeholder,
+input[type="number"]::placeholder,
+input:not([type])::placeholder,
+textarea::placeholder {
+  color: var(--muted);
+}
+
+input:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  width: var(--space-4);
+  height: var(--space-4);
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
 html,
 body,
 #root {
