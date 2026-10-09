@@ -4,9 +4,11 @@
 > conventions used by the Feed experience (Feed, Posts, Reels, Stories, Pages,
 > Composer). Last updated: Oct 2026.
 >
-> Companion docs: [`design-system-plan.md`](design-system-plan.md),
+> Companion docs: [`design-system-spec.md`](design-system-spec.md) (specification),
+> [`design-system-plan.md`](design-system-plan.md),
 > [`design-system-components.md`](design-system-components.md),
-> [`design-system-progress.md`](design-system-progress.md).
+> [`design-system-progress.md`](design-system-progress.md),
+> [`agent-progress/design-system-manager.md`](agent-progress/design-system-manager.md).
 
 ## 1. Method
 
