@@ -2894,6 +2894,7 @@ export async function buildServer(options: ServerOptions) {
       result?: string | null;
       phase?: WorkItem["phase"];
       status?: WorkItem["status"];
+      verified?: boolean;
       assigneeBotId?: string | null;
       department?: Department;
     };
@@ -2912,6 +2913,7 @@ export async function buildServer(options: ServerOptions) {
     else if (typeof request.body?.result === "string") item.result = request.body.result.slice(0, 4000);
     if (request.body?.phase) item.phase = request.body.phase;
     if (request.body?.status) item.status = request.body.status;
+    if (typeof request.body?.verified === "boolean") item.verified = request.body.verified;
     if (request.body?.assigneeBotId === null) item.assigneeBotId = undefined;
     else if (typeof request.body?.assigneeBotId === "string") item.assigneeBotId = request.body.assigneeBotId;
     if (request.body?.department) item.department = toDepartment(request.body.department);

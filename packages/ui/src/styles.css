@@ -13198,3 +13198,31 @@ a.feed-follow-btn {
   flex-direction: column;
   gap: var(--space-3);
 }
+
+/* Work-item verification (docs/startup-workspace.md). */
+.cws-verify {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  flex: none;
+}
+
+.cws-verify.verified {
+  color: var(--ok);
+  border-color: rgba(63, 209, 139, 0.4);
+  background: rgba(63, 209, 139, 0.12);
+}
+
+.cws-verify:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

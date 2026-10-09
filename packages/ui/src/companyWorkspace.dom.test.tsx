@@ -242,4 +242,26 @@ describe("CompanyWorkspace (DOM)", () => {
       expect(retryTask).toHaveBeenCalledWith("t2");
     });
   });
+
+  it("lets the CEO verify a completed work item", async () => {
+    const doneItem = { ...work, status: "done" as const, result: "PR #12" };
+    const updateWorkItem = vi.fn().mockResolvedValue(doneItem);
+    const client = fakeClient({
+      listQuests: vi.fn().mockResolvedValue([quest]),
+      listWorkItems: vi.fn().mockResolvedValue([doneItem]),
+      updateWorkItem,
+    });
+    render(
+      <CompanyWorkspace
+        client={client}
+        companies={[company]}
+        bots={[]}
+        onOpenOffice={() => {}}
+        onCreated={() => {}}
+      />,
+    );
+    fireEvent.click(await screen.findByRole("tab", { name: "Board" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Verify" }));
+    await waitFor(() => expect(updateWorkItem).toHaveBeenCalledWith("w1", { verified: true }));
+  });
 });

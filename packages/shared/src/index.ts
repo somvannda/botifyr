@@ -367,6 +367,8 @@ export interface WorkItem {
   result?: string;
   phase: WorkPhase;
   status: WorkStatus;
+  /** The deliverable was reviewed and meets the mission's acceptance bar. */
+  verified?: boolean;
   /** The employee (bot) it is assigned to, if any. */
   assigneeBotId?: string;
   department: Department;
