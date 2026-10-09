@@ -941,8 +941,8 @@ describe("Pages experience", () => {
   it("shows a Page's photos and opens the lightbox", async () => {
     const listPageMedia = vi.fn().mockResolvedValue({
       items: [
-        { id: "m1", imageUrl: "/v1/feed/image?t=a" },
-        { id: "m2", imageUrl: "/v1/feed/image?t=b" },
+        { id: "m1", url: "/v1/feed/image?t=a" },
+        { id: "m2", url: "/v1/feed/image?t=b" },
       ],
       nextCursor: null,
     });
@@ -954,6 +954,17 @@ describe("Pages experience", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Open photo 1" }));
     expect(await screen.findByRole("dialog", { name: "Image viewer" })).toBeTruthy();
+  });
+
+  it("shows a Page's videos", async () => {
+    const listPageMedia = vi
+      .fn()
+      .mockResolvedValue({ items: [{ id: "v1", url: "/v1/feed/image?t=vid" }], nextCursor: null });
+    const { container } = renderPage(makePageClient(makePage(), [], { listPageMedia }));
+    await screen.findByRole("heading", { name: /Acme Coffee/ });
+
+    fireEvent.click(screen.getByRole("tab", { name: "Videos" }));
+    await waitFor(() => expect(container.querySelectorAll("video.page-video")).toHaveLength(1));
   });
 });
 

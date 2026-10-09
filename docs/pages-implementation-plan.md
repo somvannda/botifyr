@@ -30,17 +30,18 @@ action column) and fix the identity/resilience gaps:
 
 ## B. Page navigation
 
-A **three-tab** model, using only data/endpoints that exist:
+A **four-tab** model, using only data/endpoints that exist:
 
 | Tab | Backing data | Notes |
 | --- | --- | --- |
 | **Posts** | `GET /v1/pages/:handle/posts?cursor=&limit=` | Reuses the shared `PostCard`; "Load more". |
 | **About** | `page.about`, `category`, `followers`, `cta`, `createdAt` | Always available. |
 | **Photos** | `GET /v1/pages/:handle/media` | Grid + shared lightbox; lazy-loaded. |
+| **Videos** | `GET /v1/pages/:handle/media?kind=video` | Native `<video controls>`; lazy-loaded. |
 
 Tabs are `<button role="tab">` with a visible active state, keyboard focus, and
-no tab for an unsupported section. Videos/Reels/Stories/Reviews are still
-**not** shown (no Page-scoped read endpoints).
+no tab for an unsupported section. Reels/Stories/Reviews are still **not** shown
+(no Page-scoped read endpoints).
 
 ## C. Page feed
 

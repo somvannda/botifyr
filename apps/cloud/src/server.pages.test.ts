@@ -469,9 +469,35 @@ describe("pages", () => {
         headers: auth(alice.token),
       });
       expect(photos.statusCode).toBe(200);
-      const items = (photos.json() as { items: Array<{ id: string; imageUrl: string }> }).items;
+      const items = (photos.json() as { items: Array<{ id: string; url: string }> }).items;
       expect(items.map((item) => item.id)).toContain(media.id);
-      expect(items[0]?.imageUrl).toContain("/v1/feed/image?t=");
+      expect(items[0]?.url).toContain("/v1/feed/image?t=");
+
+      // Videos are listed under `kind=video` and excluded from the default (image) list.
+      const clip = await app.inject({
+        method: "POST",
+        url: "/v1/uploads",
+        headers: auth(alice.token),
+        payload: { name: "clip.mp4", mime: "video/mp4", data: "data:video/mp4;base64,AAAA" },
+      });
+      expect(clip.statusCode).toBe(201);
+      const video = clip.json() as { id: string };
+      const videoPost = await app.inject({
+        method: "POST",
+        url: "/v1/posts",
+        headers: auth(alice.token),
+        payload: { body: "with video", mediaId: video.id, pageId: page.id },
+      });
+      expect(videoPost.statusCode).toBe(201);
+
+      const videos = await app.inject({
+        method: "GET",
+        url: "/v1/pages/photos/media?kind=video",
+        headers: auth(alice.token),
+      });
+      const videoItems = (videos.json() as { items: Array<{ id: string; url: string }> }).items;
+      expect(videoItems.map((item) => item.id)).toContain(video.id);
+      expect(videoItems.map((item) => item.id)).not.toContain(media.id);
     } finally {
       await app.close();
       await rm(dir, { recursive: true, force: true }).catch(() => {});
