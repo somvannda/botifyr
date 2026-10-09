@@ -98,12 +98,15 @@ export function createOpenAIProvider(options: OpenAIProviderOptions): ModelProvi
   const echoReasoning = options.echoReasoning === true;
 
   /**
-   * POST a chat-completions request. If thinking mode rejects the request
-   * because a replayed assistant turn carried no reasoning (a zero-reasoning
-   * tool-call turn), retry once with a non-empty reasoning placeholder.
+   * POST a chat-completions request, with two targeted thinking-mode retries:
+   *  - a forced tool choice can be rejected ("Thinking mode does not support
+   *    this tool_choice"); relax it to "auto" once — the agent still nudges the
+   *    model with its redirect message, so this only drops a hard constraint.
+   *  - a replayed assistant turn that carried no reasoning can be rejected;
+   *    retry once with a non-empty reasoning placeholder.
    */
   async function post(messages: AgentMessage[], body: Record<string, unknown>): Promise<Response> {
-    const send = (stubReasoning: boolean): Promise<Response> =>
+    const send = (stubReasoning: boolean, toolChoice: unknown): Promise<Response> =>
       fetch(endpoint, {
         method: "POST",
         headers: {
@@ -112,18 +115,31 @@ export function createOpenAIProvider(options: OpenAIProviderOptions): ModelProvi
         },
         body: JSON.stringify({
           ...body,
+          ...(toolChoice === undefined ? {} : { tool_choice: toolChoice }),
           messages: messages.map((message) => toOpenAIMessage(message, echoReasoning, stubReasoning)),
         }),
       });
-    const response = await send(false);
+
+    let toolChoice = body.tool_choice;
+    let response = await send(false, toolChoice);
     if (response.ok) return response;
-    const detail = await response.text();
-    if (echoReasoning && /reasoning_content/i.test(detail)) {
-      const retry = await send(true);
-      if (retry.ok) return retry;
-      const retryDetail = await retry.text();
-      throw new Error(`model request failed (${retry.status}): ${retryDetail.slice(0, 500)}`);
+    let detail = await response.text();
+
+    // Any OpenAI-compatible endpoint that thinks by default (not just the
+    // deepseek preset) may reject a forced tool choice. Relax it and retry once.
+    if (toolChoice === "required" && /tool_choice/i.test(detail)) {
+      toolChoice = "auto";
+      response = await send(false, toolChoice);
+      if (response.ok) return response;
+      detail = await response.text();
     }
+
+    if (echoReasoning && /reasoning_content/i.test(detail)) {
+      response = await send(true, toolChoice);
+      if (response.ok) return response;
+      detail = await response.text();
+    }
+
     throw new Error(`model request failed (${response.status}): ${detail.slice(0, 500)}`);
   }
 

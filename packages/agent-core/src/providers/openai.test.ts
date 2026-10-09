@@ -148,4 +148,48 @@ describe("createOpenAIProvider reasoning echo", () => {
     expect(bodies[0].messages[1].reasoning_content).toBe("");
     expect(bodies[1].messages[1].reasoning_content).toBe("(none)");
   });
+
+  it("relaxes a forced tool choice for any thinking endpoint that rejects it", async () => {
+    const bodies: Array<Record<string, any>> = [];
+    let calls = 0;
+    vi.stubGlobal("fetch", async (_url: string, init: { body: string }) => {
+      bodies.push(JSON.parse(init.body));
+      calls += 1;
+      if (calls === 1) {
+        return {
+          ok: false,
+          status: 400,
+          text: async () =>
+            '{"error":{"message":"Thinking mode does not support this tool_choice","type":"invalid_request_error"}}',
+          json: async () => ({}),
+          body: null,
+        } as unknown as Response;
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ choices: [{ message: { content: "ok" } }] }),
+        text: async () => "",
+        body: null,
+      } as unknown as Response;
+    });
+
+    // echoReasoning is off: a non-deepseek preset pointed at a model that thinks
+    // by default, so the guard in effectiveToolChoice never fires.
+    const provider = createOpenAIProvider({
+      baseUrl: "https://api.example.com/v1",
+      model: "some-thinking-model",
+      apiKey: "k",
+    });
+    const result = await provider.complete({
+      messages: [{ role: "user", content: "hi" }],
+      tools: [{ name: "browser.goto", description: "go", parameters: { type: "object" } }],
+      toolChoice: "required",
+    });
+
+    expect(result.text).toBe("ok");
+    expect(bodies).toHaveLength(2);
+    expect(bodies[0].tool_choice).toBe("required");
+    expect(bodies[1].tool_choice).toBe("auto");
+  });
 });
