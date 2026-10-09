@@ -6,7 +6,9 @@
 
 ## Current status
 
-**Destination v2 — implemented + tested (in branch `agent/pages-destination-v2`, PR pending).**
+**Destination v2 — INTEGRATED + VERIFIED.** Stage: PLANNED → IMPLEMENTED →
+TESTED → **INTEGRATED** (PR **#13**, squash-merged to `origin/main` as
+`3105f9d`) → **VERIFIED** (CI green: Typecheck/Lint/Test + Cloud image).
 Adds the three requested capabilities on top of the verified base:
 
 - **A — timeline pagination:** `GET /v1/pages/:handle/posts?cursor=&limit=` returns
@@ -17,8 +19,8 @@ Adds the three requested capabilities on top of the verified base:
 - **C — hash routing:** `#/pages/:handle` in `BotifyrApp` (refresh, share,
   back/forward; activates the Feed view).
 
-Verified in the worktree: `typecheck` 0, `lint` 0, `npm test` **462/462**;
-cloud Pages tests **12/12**; UI Pages tests **11/11**.
+Local gate in the worktree: `typecheck` 0, `lint` 0, `npm test` **462/462**;
+cloud Pages tests **12/12**; UI Pages tests **11/11**; CI green on the PR.
 
 **Prior verified base** (on `origin/main`): PG-18/19/20 fixes, `listPostMedia`
 coordination fix, `pages.cta_url`, E2E seed fix (PR #5), CI green.
