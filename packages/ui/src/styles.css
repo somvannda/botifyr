@@ -4019,6 +4019,16 @@ body {
   background: var(--accent-soft);
 }
 
+.ghost.small.cws-stop {
+  border-color: var(--danger-border);
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.ghost.small.cws-stop:hover:not(:disabled) {
+  border-color: var(--danger);
+}
+
 .link {
   background: none;
   border: none;
