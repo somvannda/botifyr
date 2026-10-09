@@ -909,9 +909,7 @@ export class BotifyrClient {
   /** Recent agent runs for a workspace — real execution, including failures. */
   listWorkspaceActivity(
     workspaceId: string,
-  ): Promise<
-    Array<{ id: string; goal: string; status: string; error: string | null; updatedAt: string }>
-  > {
+  ): Promise<Array<{ id: string; goal: string; status: string; error: string | null; updatedAt: string }>> {
     return this.request(`/v1/workspaces/${workspaceId}/activity`);
   }
 
@@ -1385,7 +1383,11 @@ export class BotifyrClient {
 
   /** Mute/snooze an author (days), or unfollow with `null`. */
   muteAuthor(id: string, days: number | null = 30): Promise<{ ok: boolean }> {
-    return this.request(`/v1/authors/${id}/mute`, { method: "POST", json: true, body: JSON.stringify({ days }) });
+    return this.request(`/v1/authors/${id}/mute`, {
+      method: "POST",
+      json: true,
+      body: JSON.stringify({ days }),
+    });
   }
 
   unmuteAuthor(id: string): Promise<void> {
@@ -1640,6 +1642,11 @@ export class BotifyrClient {
 
   listAudit(taskId: string): Promise<AuditEvent[]> {
     return this.request(`/v1/tasks/${taskId}/audit`);
+  }
+
+  /** Tokens spent on one task, for provenance (docs/product-plan.md §3). */
+  usageForTask(taskId: string): Promise<{ tokens: number; requests: number }> {
+    return this.request(`/v1/tasks/${taskId}/usage`);
   }
 
   listDownloads(taskId: string): Promise<Array<{ name: string; size: number }>> {

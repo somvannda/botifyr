@@ -658,6 +658,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [secretValue, setSecretValue] = useState("");
 
   const [audit, setAudit] = useState<AuditEvent[]>([]);
+  /** Provenance: tokens spent on the shown task. */
+  const [taskUsage, setTaskUsage] = useState<{ tokens: number; requests: number } | null>(null);
   const [showAudit, setShowAudit] = useState(false);
   const [findOpen, setFindOpen] = useState(false);
   const [findQuery, setFindQuery] = useState("");
@@ -3038,7 +3040,12 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       return;
     }
     try {
-      setAudit(await client.listAudit(task.id));
+      const [events, usage] = await Promise.all([
+        client.listAudit(task.id),
+        client.usageForTask(task.id).catch(() => null),
+      ]);
+      setAudit(events);
+      setTaskUsage(usage);
       setShowAudit(true);
     } catch (err: unknown) {
       setError(messageOf(err));
@@ -5188,10 +5195,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                               {dmFileCard(displayText(decrypted, message.content, message.id)) ??
                                 displayText(decrypted, message.content, message.id)}
                               {reactionChips(message).map((chip) => (
-                                <span
-                                  key={chip.emoji}
-                                  className={`reaction${chip.mine ? " mine" : ""}`}
-                                >
+                                <span key={chip.emoji} className={`reaction${chip.mine ? " mine" : ""}`}>
                                   {chip.emoji}
                                   {chip.count > 1 ? ` ${chip.count}` : ""}
                                 </span>
@@ -5232,10 +5236,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                               <div className="msg-translation">{translations[message.id]}</div>
                             )}
                             {reactionChips(message).map((chip) => (
-                              <span
-                                key={chip.emoji}
-                                className={`reaction${chip.mine ? " mine" : ""}`}
-                              >
+                              <span key={chip.emoji} className={`reaction${chip.mine ? " mine" : ""}`}>
                                 {chip.emoji}
                                 {chip.count > 1 ? ` ${chip.count}` : ""}
                               </span>
@@ -5252,10 +5253,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                           <div className="msg-user-bubble">
                             {displayText(decrypted, message.content, message.id)}
                             {reactionChips(message).map((chip) => (
-                              <span
-                                key={chip.emoji}
-                                className={`reaction${chip.mine ? " mine" : ""}`}
-                              >
+                              <span key={chip.emoji} className={`reaction${chip.mine ? " mine" : ""}`}>
                                 {chip.emoji}
                                 {chip.count > 1 ? ` ${chip.count}` : ""}
                               </span>
@@ -5296,10 +5294,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                             </div>
                           )}
                           {reactionChips(message).map((chip) => (
-                            <span
-                              key={chip.emoji}
-                              className={`reaction${chip.mine ? " mine" : ""}`}
-                            >
+                            <span key={chip.emoji} className={`reaction${chip.mine ? " mine" : ""}`}>
                               {chip.emoji}
                               {chip.count > 1 ? ` ${chip.count}` : ""}
                             </span>
@@ -5533,7 +5528,12 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
 
                   {showAudit && (
                     <div className="audit">
-                      <div className="audit-head">Audit log · {audit.length} events</div>
+                      <div className="audit-head">
+                        Audit log · {audit.length} events
+                        {taskUsage && taskUsage.tokens > 0
+                          ? ` · ${taskUsage.tokens.toLocaleString()} tokens`
+                          : ""}
+                      </div>
                       <ul>
                         {audit.length === 0 && <li className="muted">No events recorded yet.</li>}
                         {audit.map((entry) => (
@@ -6080,7 +6080,12 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       {feedActive && (
         <aside className="bot-panel feed-rail">
           <div className="feed-rail-title">Discover</div>
-          <FeedRail client={client} onOpenPage={setFeedPage} onOpenGroup={setFeedGroup} onOpenAlbum={setFeedAlbum} />
+          <FeedRail
+            client={client}
+            onOpenPage={setFeedPage}
+            onOpenGroup={setFeedGroup}
+            onOpenAlbum={setFeedAlbum}
+          />
         </aside>
       )}
 

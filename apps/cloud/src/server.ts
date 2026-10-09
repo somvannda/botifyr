@@ -2814,9 +2814,7 @@ export async function buildServer(options: ServerOptions) {
       const roles = await store.listBotRoles(workspace.id);
       const botIds = new Set(roles.map((role) => role.botId));
       const bots = await store.listBots(userId);
-      const sessions = new Set(
-        bots.filter((bot) => botIds.has(bot.id)).map((bot) => bot.sessionId),
-      );
+      const sessions = new Set(bots.filter((bot) => botIds.has(bot.id)).map((bot) => bot.sessionId));
       const tasks = await store.listTasksForUser(userId);
       return tasks
         .filter((task) => sessions.has(task.sessionId))
@@ -5423,7 +5421,11 @@ export async function buildServer(options: ServerOptions) {
       const followedPages = (await store.listFollowedPageIds(userId)).filter((id) => !blocked.has(id));
       const nowIso = new Date().toISOString();
       const isVideo = (id: string) => /\.(mp4|m4v|webm|mov)$/i.test(id);
-      const posts = await store.listFeedPosts([userId, ...friendIds, ...followedPages], (limit + 1) * 3, cursor);
+      const posts = await store.listFeedPosts(
+        [userId, ...friendIds, ...followedPages],
+        (limit + 1) * 3,
+        cursor,
+      );
       const cache = new Map<string, FeedAuthorDto>();
       const items = [];
       let last: string | null = null;

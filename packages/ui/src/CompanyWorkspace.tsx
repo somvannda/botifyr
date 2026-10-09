@@ -15,7 +15,7 @@ import type {
 } from "@botifyr/shared";
 import { ROLE_CATALOG } from "@botifyr/shared";
 import type { BotifyrClient } from "@botifyr/client";
-import { CheckIcon, CloseIcon, CubeIcon, PlayIcon, SendIcon, SparkIcon } from "./Icons";
+import { CheckIcon, CloseIcon, CubeIcon, PlayIcon, RefreshIcon, SendIcon, SparkIcon } from "./Icons";
 
 const ROLE_BY_ID = new Map(ROLE_CATALOG.map((role) => [role.id, role]));
 const DEFAULT_EMOJI = "🤖";
@@ -143,6 +143,8 @@ export function CompanyWorkspace({
   void budget; // referenced; surfaced in the UI as that work lands
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
+  busyRef.current = busy;
   const [tab, setTab] = useState<Section>("home");
   const [draft, setDraft] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
@@ -186,14 +188,6 @@ export function CompanyWorkspace({
         return;
       }
       setLoading(true);
-      // "Since your last visit" is measured from the previous open (local).
-      try {
-        const key = `botifyr.lastVisit.${id}`;
-        setLastVisitAt(localStorage.getItem(key));
-        localStorage.setItem(key, new Date().toISOString());
-      } catch {
-        setLastVisitAt(null);
-      }
       try {
         const [it, nd, bd, gr, rp, qs, wk, ws, pr, ac] = await Promise.all([
           client.listWorkItems(id).catch(() => []),
@@ -225,8 +219,33 @@ export function CompanyWorkspace({
     [client],
   );
 
+  // "Since your last visit" is measured from the previous open (local). Kept out
+  // of `load` so a refresh/auto-refresh doesn't reset the delta.
+  useEffect(() => {
+    if (!selectedId) {
+      setLastVisitAt(null);
+      return;
+    }
+    try {
+      const key = `botifyr.lastVisit.${selectedId}`;
+      setLastVisitAt(localStorage.getItem(key));
+      localStorage.setItem(key, new Date().toISOString());
+    } catch {
+      setLastVisitAt(null);
+    }
+  }, [selectedId]);
+
   useEffect(() => {
     if (selectedId) void load(selectedId);
+  }, [selectedId, load]);
+
+  // Keep the workspace live while it is open — agents work on schedules.
+  useEffect(() => {
+    if (!selectedId) return;
+    const timer = window.setInterval(() => {
+      if (!busyRef.current) void load(selectedId);
+    }, 20000);
+    return () => window.clearInterval(timer);
   }, [selectedId, load]);
 
   // A host "Start a company" action opens the inline onboarding (no modal).
@@ -857,6 +876,15 @@ export function CompanyWorkspace({
             }}
           >
             ＋ New
+          </button>
+          <button
+            className="ghost small"
+            type="button"
+            disabled={busy || loading}
+            title="Refresh — pull the latest from the company"
+            onClick={() => void refresh()}
+          >
+            <RefreshIcon size={14} /> Refresh
           </button>
           <button
             className="ghost small"
