@@ -58,9 +58,9 @@ import {
   boardFingerprint,
   buildStandup,
   buildWeeklyReport,
-  hasOpenWork,
   planCompanyDirections,
   rewriteBrief,
+  shouldContinueWorking,
   shouldRunSchedule,
   toDepartment,
   uniqueWorkspaceName,
@@ -1097,11 +1097,17 @@ export async function buildServer(options: ServerOptions) {
   const CONTINUE_MAX = Math.max(0, Number(process.env.BOTIFYR_CONTINUE_MAX ?? 20));
   const CONTINUE_WINDOW_MS = 60 * 60 * 1000;
 
-  async function maybeContinueWorking(bot: Bot, workspaceId: string, before: string): Promise<void> {
+  async function maybeContinueWorking(
+    bot: Bot,
+    workspaceId: string,
+    isChair: boolean,
+    before: string,
+  ): Promise<void> {
     if (CONTINUE_MAX === 0 || !bot.schedule) return;
     const items = await store.listWorkItems(workspaceId).catch(() => []);
-    // Nothing left to do, or the run didn't change the board → stop (wait for cadence).
-    if (!hasOpenWork(items) || boardFingerprint(items) === before) return;
+    const progressed = boardFingerprint(items) !== before;
+    // Nothing left to do, or nothing to keep going on → wait for the cadence.
+    if (!shouldContinueWorking(items, isChair, progressed)) return;
     const now = Date.now();
     const entry = continueBudget.get(bot.id);
     const budget =
@@ -1174,7 +1180,10 @@ export async function buildServer(options: ServerOptions) {
         // A finished run leaves the item in review; only company.report (which
         // requires a result) sets done, and the CEO verifies it.
         await advanceAssignedItems(bot, "in_progress", "review");
-        if (workspace) await maybeContinueWorking(bot, workspace.id, boardBefore).catch(() => {});
+        if (workspace) {
+          const isChair = workspace.ceoBotId === bot.id;
+          await maybeContinueWorking(bot, workspace.id, isChair, boardBefore).catch(() => {});
+        }
       })
       .catch((error) => app.log.error({ err: error, taskId: task.id }, "scheduled run failed"));
   }

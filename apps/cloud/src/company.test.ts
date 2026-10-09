@@ -11,6 +11,7 @@ import {
   planCompanyDirections,
   sanitizeDNA,
   sanitizePlan,
+  shouldContinueWorking,
   shouldRunSchedule,
   withinOperatingHours,
 } from "./company.js";
@@ -33,6 +34,26 @@ describe("board continuation signals", () => {
     expect(boardFingerprint(items)).toBe(boardFingerprint([...items]));
     expect(hasOpenWork(items)).toBe(true);
     expect(hasOpenWork([{ status: "done" }])).toBe(false);
+  });
+});
+
+describe("shouldContinueWorking", () => {
+  it("keeps the chair going while work is unassigned", () => {
+    expect(shouldContinueWorking([{ status: "todo" }, { status: "done" }], true, false)).toBe(true);
+  });
+
+  it("does not continue a chair with no unassigned work and no progress", () => {
+    expect(shouldContinueWorking([{ status: "todo", assigneeBotId: "b1" }], true, false)).toBe(false);
+  });
+
+  it("continues an employee only when its run progressed and work remains", () => {
+    const items = [{ status: "in_progress", assigneeBotId: "b1" }, { status: "done" }];
+    expect(shouldContinueWorking(items, false, true)).toBe(true);
+    expect(shouldContinueWorking(items, false, false)).toBe(false);
+  });
+
+  it("stops when the board is fully done", () => {
+    expect(shouldContinueWorking([{ status: "done" }, { status: "done" }], true, true)).toBe(false);
   });
 });
 
