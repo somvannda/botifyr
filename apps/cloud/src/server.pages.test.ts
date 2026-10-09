@@ -1,4 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { rm } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createLocalChannel } from "@botifyr/channels";
 import { MemoryStore } from "./store/memory.js";
 import { buildServer } from "./server.js";
@@ -108,9 +112,9 @@ describe("pages", () => {
       headers: auth(alice.token),
     });
     expect(timeline.statusCode).toBe(200);
-    expect((timeline.json() as Array<{ body: string }>).map((entry) => entry.body)).toContain(
-      "hello from the page",
-    );
+    expect(
+      (timeline.json() as { items: Array<{ body: string }> }).items.map((entry) => entry.body),
+    ).toContain("hello from the page");
 
     await app.close();
   });
@@ -254,7 +258,7 @@ describe("pages", () => {
       url: "/v1/pages/pins/posts",
       headers: auth(alice.token),
     });
-    expect((timeline.json() as Array<{ id: string }>)[0]?.id).toBe(first.id);
+    expect((timeline.json() as { items: Array<{ id: string }> }).items[0]?.id).toBe(first.id);
 
     // A post from a different Page can't be pinned here.
     const other = await createPage(alice.token, "Other Page", "otherpage");
@@ -391,6 +395,89 @@ describe("pages", () => {
     expect((patched.json() as { ctaUrl?: string }).ctaUrl).toBe("https://example.com/book");
 
     await app.close();
+  });
+
+  it("pages the Page timeline with a stable cursor and no duplicates", async () => {
+    const { app, signUp, auth, createPage } = await setup();
+    const alice = await signUp("alice-pagination@example.com");
+    const page = await createPage(alice.token, "Paged", "paged");
+    for (let i = 0; i < 3; i++) {
+      const res = await app.inject({
+        method: "POST",
+        url: "/v1/posts",
+        headers: auth(alice.token),
+        payload: { body: `post ${i}`, pageId: page.id },
+      });
+      expect(res.statusCode).toBe(201);
+    }
+
+    const first = await app.inject({
+      method: "GET",
+      url: "/v1/pages/paged/posts?limit=2",
+      headers: auth(alice.token),
+    });
+    expect(first.statusCode).toBe(200);
+    const firstPage = first.json() as { items: Array<{ id: string }>; nextCursor: string | null };
+    expect(firstPage.items).toHaveLength(2);
+    expect(firstPage.nextCursor).toBeTruthy();
+
+    const second = await app.inject({
+      method: "GET",
+      url: `/v1/pages/paged/posts?limit=2&cursor=${encodeURIComponent(firstPage.nextCursor as string)}`,
+      headers: auth(alice.token),
+    });
+    expect(second.statusCode).toBe(200);
+    const secondPage = second.json() as { items: Array<{ id: string }>; nextCursor: string | null };
+    const ids = [...firstPage.items, ...secondPage.items].map((post) => post.id);
+    expect(ids).toHaveLength(3);
+    expect(new Set(ids).size).toBe(ids.length);
+
+    await app.close();
+  });
+
+  it("lists a Page's photos (image media) with signed URLs", async () => {
+    const previous = process.env.BOTIFYR_DOWNLOADS_DIR;
+    const dir = join(tmpdir(), `botifyr-pages-${randomUUID()}`);
+    process.env.BOTIFYR_DOWNLOADS_DIR = dir;
+    const { app, signUp, auth, createPage } = await setup();
+    try {
+      const alice = await signUp("alice-photos@example.com");
+      const page = await createPage(alice.token, "Photos", "photos");
+
+      const png =
+        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+      const upload = await app.inject({
+        method: "POST",
+        url: "/v1/uploads",
+        headers: auth(alice.token),
+        payload: { name: "pic.png", mime: "image/png", data: png },
+      });
+      expect(upload.statusCode).toBe(201);
+      const media = upload.json() as { id: string };
+
+      const post = await app.inject({
+        method: "POST",
+        url: "/v1/posts",
+        headers: auth(alice.token),
+        payload: { body: "with photo", mediaId: media.id, pageId: page.id },
+      });
+      expect(post.statusCode).toBe(201);
+
+      const photos = await app.inject({
+        method: "GET",
+        url: "/v1/pages/photos/media",
+        headers: auth(alice.token),
+      });
+      expect(photos.statusCode).toBe(200);
+      const items = (photos.json() as { items: Array<{ id: string; imageUrl: string }> }).items;
+      expect(items.map((item) => item.id)).toContain(media.id);
+      expect(items[0]?.imageUrl).toContain("/v1/feed/image?t=");
+    } finally {
+      await app.close();
+      await rm(dir, { recursive: true, force: true }).catch(() => {});
+      if (previous === undefined) delete process.env.BOTIFYR_DOWNLOADS_DIR;
+      else process.env.BOTIFYR_DOWNLOADS_DIR = previous;
+    }
   });
 });
 

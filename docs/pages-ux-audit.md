@@ -92,8 +92,17 @@ Captured headlessly by `scripts/feed-screenshots.mjs` (now seeds a Page):
 
 ## Explicitly out of scope (documented, not hidden)
 
-- **Page-scoped Photos/Videos/Reels/Stories sections** — no read endpoint.
+- **Page Videos/Reels/Stories sections** — no Page-scoped read endpoint
+  (Photos shipped via `GET /v1/pages/:handle/media`).
 - **Page contact/website/hours** — no schema field.
-- **Timeline pagination** — endpoint returns a fixed 20, no cursor.
-- **URL/deep-link routing for Pages** — the app has no router; state lives in
-  `BotifyrApp`.
+- **`verified` badge** — `verified` is always `false` at creation.
+
+## Shipped after the original audit
+
+- **Timeline pagination (PG-10)** — `GET /v1/pages/:handle/posts?cursor=&limit=`
+  (keyset) with a **Load more** control.
+- **Photos section (PG-06)** — `GET /v1/pages/:handle/media` + a **Photos** tab
+  and the shared lightbox.
+- **URL/deep-link routing (PG-07)** — `#/pages/:handle` (refresh, share,
+  back/forward) in `BotifyrApp`.
+- **CTA destination (PG-11)** — `cta_url` (label + destination).
