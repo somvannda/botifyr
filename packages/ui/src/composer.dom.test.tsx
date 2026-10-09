@@ -171,6 +171,34 @@ describe("Composer publish lifecycle", () => {
     expect(container.querySelector(".feed-composer-thumb")).toBeNull();
   });
 
+  it("reports byte-level upload progress", async () => {
+    const upload = deferred<{ id: string }>();
+    const client = makeClient({
+      uploadFileRaw: vi.fn(
+        (_input: unknown, onProgress?: (loaded: number, total: number) => void): unknown => {
+          onProgress?.(40, 100);
+          return upload.promise;
+        },
+      ) as unknown as BotifyrClient["uploadFileRaw"],
+    });
+    const { container } = renderFeed(client);
+    await screen.findByText("existing post");
+
+    // A 100-byte file makes the byte percentage easy to assert.
+    fireEvent.change(fileInput(container), { target: { files: [imageFile("clip.png", "image/png", 100)] } });
+    fireEvent.change(screen.getByLabelText("Post text"), { target: { value: "go" } });
+    await waitFor(() => expect(container.querySelector(".feed-composer-thumb")).toBeTruthy());
+
+    fireEvent.click(screen.getByRole("button", { name: "Post" }));
+    const bar = await screen.findByRole("progressbar", { name: "Uploading media" });
+    await waitFor(() => expect(bar.getAttribute("aria-valuenow")).toBe("40"));
+    expect(bar.getAttribute("aria-valuemax")).toBe("100");
+
+    await act(async () => {
+      upload.resolve({ id: "media-1" });
+    });
+  });
+
   it("keeps the draft and shows a composer error when the API fails", async () => {
     const client = makeClient({ createPost: vi.fn().mockRejectedValue(new Error("network down")) });
     renderFeed(client);
