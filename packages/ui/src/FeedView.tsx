@@ -1485,7 +1485,14 @@ function PostCard({
               maxLength={4000}
               value={shareCaption}
               onChange={(event) => setShareCaption(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  void submitShare();
+                }
+              }}
               aria-label="Share caption"
+              autoFocus
             />
             <p className="feed-share-note">Shared to your friends. Per-share privacy isn’t available yet.</p>
             <div className="feed-confirm-actions">
@@ -3780,8 +3787,7 @@ function GroupView({
         if (active) setGroup(record);
       })
       .catch(() => {
-        if (active)
-          setLoadError("We couldn't load this group. It may have been removed, or it's private.");
+        if (active) setLoadError("We couldn't load this group. It may have been removed, or it's private.");
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -3949,7 +3955,9 @@ function GroupView({
     setBusyMemberId(userId);
     try {
       await client.setGroupMemberRole(group.id, userId, role);
-      setMembers((prev) => (prev ?? []).map((entry) => (entry.userId === userId ? { ...entry, role } : entry)));
+      setMembers((prev) =>
+        (prev ?? []).map((entry) => (entry.userId === userId ? { ...entry, role } : entry)),
+      );
     } catch {
       setNotice("Couldn't update that role.");
     } finally {
@@ -3986,9 +3994,7 @@ function GroupView({
 
   const updatePost = (next: FeedPost) => setPosts((prev) => prev.map((p) => (p.id === next.id ? next : p)));
   const removePost = (id: string) => setPosts((prev) => prev.filter((p) => p.id !== id));
-  const mediaPosts = posts.filter(
-    (post) => (post.images?.length ?? 0) > 0 || (post.videos?.length ?? 0) > 0,
-  );
+  const mediaPosts = posts.filter((post) => (post.images?.length ?? 0) > 0 || (post.videos?.length ?? 0) > 0);
   const joinLabel = group?.owner
     ? "Owner"
     : group?.joined
@@ -4123,7 +4129,11 @@ function GroupView({
             <div className="feed-rail-head">Group settings</div>
             <label>
               Name
-              <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+              <input
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                required
+              />
             </label>
             <label>
               Handle
@@ -4145,7 +4155,10 @@ function GroupView({
             </label>
             <label>
               Avatar emoji
-              <input value={form.avatarEmoji} onChange={(e) => setForm({ ...form, avatarEmoji: e.target.value })} />
+              <input
+                value={form.avatarEmoji}
+                onChange={(e) => setForm({ ...form, avatarEmoji: e.target.value })}
+              />
             </label>
             <div className="group-image-row">
               <div className="group-image-field">
@@ -4332,8 +4345,9 @@ function GroupView({
           </div>
         )}
 
-        {section === "media" && group && (
-          mediaPosts.length === 0 ? (
+        {section === "media" &&
+          group &&
+          (mediaPosts.length === 0 ? (
             <div className="feed-state">No photos or videos yet.</div>
           ) : (
             <div className="group-media-grid">
@@ -4350,8 +4364,7 @@ function GroupView({
                 ) : null;
               })}
             </div>
-          )
-        )}
+          ))}
 
         {section === "discussion" && (
           <>
