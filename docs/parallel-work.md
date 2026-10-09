@@ -88,8 +88,8 @@ most damaging local mistake: pushing `main` directly (which is how one
 workstream's local merge silently replaces another's work).
 
 - `.githooks/pre-push` rejects any push that updates `refs/heads/main`.
-- `scripts/install-hooks.mjs` points Git at it (`core.hooksPath`) and runs on
-  every `npm install` / `npm ci` via the `prepare` script. Run it by hand with
+- `scripts/install-hooks.mjs` points Git at it (`core.hooksPath`). Every
+  `npm run wt -- new` installs it for the whole repo; run it once by hand with
   `npm run hooks:install`.
 
 This is a guardrail, not a wall: `git push --no-verify` bypasses it, so keep it
