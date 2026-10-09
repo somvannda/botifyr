@@ -33,10 +33,12 @@
     ],
   },
 
-  // Bound how many agentic steps a single Build request may take.
+  // Bound how many agentic steps a single Build request may take. On the last
+  // step OpenCode removes tools and forces a summary, so too low a value stops
+  // features mid-way. New user input resets the allowance.
   "agents": {
     "build": {
-      "steps": 12,
+      "steps": 40,
     },
   },
 }

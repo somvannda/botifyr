@@ -120,8 +120,8 @@ Backend-dependent (documented, **not** implemented):
 | FEED-4 | Skeleton loading, richer empty, error retry | Loading shows 3 skeleton cards; empty explains next step; error has a working Retry | **Done** |
 | FEED-5 | Responsive tuning <720px | No horizontal overflow; actions remain readable and on one row | **Done** |
 | FEED-6 | Render `avatarUrl` photo with emoji/initial fallback | If author has a photo, it renders; otherwise emoji/initial | Backlog (P2) |
-| FEED-7 | Reaction breakdown tooltip | Hover/focus the reaction summary shows per-type counts | Backlog (P2) |
-| FEED-8 | Long-post "Show more" clamp | Posts over ~12 lines clamp with a toggle | Backlog (P2) |
+| FEED-7 | Reaction breakdown tooltip | Hover/focus the reaction summary shows per-type counts | **Done** |
+| FEED-8 | Long-post "Show more" clamp | Posts over ~12 lines clamp with a toggle | **Done** |
 
 ## H. Validation strategy
 

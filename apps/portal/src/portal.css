@@ -123,25 +123,10 @@ button.portal-chip:hover {
   background: rgba(63, 209, 139, 0.12);
 }
 
+/* Narrow-screen layout (the conversation drawer, single-column shell) is owned
+   by the shared UI (packages/ui/src/styles.css) so the desktop and web hosts
+   stay pixel-identical. Do not add host-specific responsive overrides here. */
 @media (max-width: 820px) {
-  .app {
-    grid-template-columns: 1fr;
-  }
-
-  .sidebar {
-    display: none;
-  }
-
-  .sidebar.portal-open {
-    display: flex;
-    position: fixed;
-    z-index: 300;
-    top: 0;
-    bottom: 0;
-    left: 0;
-    width: 280px;
-  }
-
   .portal-mobile-only {
     display: inline-flex;
   }

@@ -2879,6 +2879,35 @@ body {
   margin-top: 2px;
 }
 
+/* Per-message time + thread date separators ------------------------------ */
+.msg-time {
+  display: block;
+  margin-top: 4px;
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+
+.msg-time.out {
+  text-align: right;
+}
+
+.date-sep-thread {
+  align-self: center;
+  margin: 14px auto 8px;
+  padding: 3px 12px;
+  width: fit-content;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
 /* Composer bar */
 .composer {
   display: block;
@@ -6669,6 +6698,99 @@ body {
   }
 }
 
+/* Right employee/contact panel: overlay instead of squeezing the chat once the
+   viewport can no longer spare a third column. */
+@media (max-width: 1100px) {
+  .app.with-panel:not(.with-office) {
+    grid-template-columns: 280px 1fr;
+  }
+
+  .app.with-panel:not(.with-office) .bot-panel {
+    position: fixed;
+    top: var(--titlebar, 0px);
+    right: 0;
+    bottom: 0;
+    width: min(340px, 86vw);
+    z-index: 150;
+    box-shadow: -24px 0 64px rgba(0, 0, 0, 0.5);
+  }
+}
+
+/* Narrow screens: the conversation list becomes an off-canvas drawer, the chat
+   takes the full width, and the right panel is hidden. */
+.mobile-nav-btn {
+  display: none;
+}
+
+.mobile-nav-overlay {
+  display: none;
+}
+
+@media (max-width: 820px) {
+  .app,
+  .app.with-panel,
+  .app.with-office,
+  .app.with-panel.with-office {
+    grid-template-columns: 1fr;
+  }
+
+  .app.with-panel .bot-panel {
+    display: none;
+  }
+
+  .mobile-nav-btn {
+    display: inline-grid;
+    place-items: center;
+    flex: none;
+    width: 34px;
+    height: 34px;
+    margin-right: 4px;
+    border-radius: 9px;
+    border: 1px solid var(--border);
+    background: var(--panel-2);
+    color: var(--text);
+    cursor: pointer;
+  }
+
+  .mobile-nav-btn:hover {
+    background: var(--hover);
+  }
+
+  .sidebar {
+    position: fixed;
+    top: var(--titlebar, 0px);
+    left: 0;
+    bottom: 0;
+    width: min(320px, 86vw);
+    z-index: 210;
+    transform: translateX(-102%);
+    transition: transform 0.22s ease;
+    box-shadow: 24px 0 64px rgba(0, 0, 0, 0.5);
+    overflow-y: auto;
+  }
+
+  .app.mobile-nav-open .sidebar {
+    transform: none;
+  }
+
+  .mobile-nav-overlay {
+    display: block;
+    position: fixed;
+    inset: var(--titlebar, 0px) 0 0 0;
+    z-index: 205;
+    background: rgba(0, 0, 0, 0.55);
+  }
+
+  .content {
+    padding: 18px 16px;
+  }
+
+  .thread,
+  .composer-bar {
+    max-width: 100%;
+  }
+}
+
 .office3d-docked {
   min-width: 0;
   display: flex;
@@ -8210,6 +8332,31 @@ a.feed-follow-btn {
   height: 1px;
   background: var(--border);
   margin: 4px 2px;
+}
+
+/* FEED-8: clamp very long posts with a "See more" toggle. */
+.feed-body-clamped {
+  display: -webkit-box;
+  -webkit-line-clamp: 12;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.feed-body-toggle {
+  margin-top: 4px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+
+.feed-body-toggle:hover {
+  color: var(--text);
+  text-decoration: underline;
 }
 
 /* FEED-2: one consistent keyboard focus ring across the Feed. */

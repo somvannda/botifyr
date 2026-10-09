@@ -7,6 +7,7 @@ import { BotifyrApp, type BotBridge } from "@botifyr/ui";
  * are identical by construction.
  */
 const tauriBridge: BotBridge = {
+  kind: "desktop",
   openExternal: async (url: string) => {
     const { openUrl } = await import("@tauri-apps/plugin-opener");
     await openUrl(url);

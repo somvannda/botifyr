@@ -1650,6 +1650,11 @@ export async function buildServer(options: ServerOptions) {
   const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET ?? "";
   const googleRedirect =
     process.env.GOOGLE_REDIRECT_URI ?? `http://localhost:${process.env.PORT ?? 8787}/auth/google/callback`;
+  // Where browser sign-ins return to if the callback window can't close itself
+  // (e.g. the popup was blocked and the user used a normal tab). Desktop users
+  // never see this — they go back through the `botifyr://` deep link below.
+  const portalUrl = process.env.PORTAL_URL ?? "https://botifyr.xyz/portal/";
+  const adminUrl = process.env.ADMIN_URL ?? "http://localhost:4324";
   const pendingSignins = new Map<
     string,
     { token: string; refreshToken: string; expiresAt: string; createdAt: number }
@@ -1667,15 +1672,30 @@ export async function buildServer(options: ServerOptions) {
     `.foot{color:#8b8b92;font-size:12.5px}a{color:#8b8b92}</style></head>` +
     `<body><div class="wrap"><img class="logo" src="/logo.png" alt="Botifyr" />${body}</div></body></html>`;
 
-  const successPage = (): string =>
+  // Browser sign-ins (web portal, admin console) return to the tab that started
+  // the flow — it is already polling and picks the session up — so we close this
+  // window and offer a manual link. Desktop sign-ins invite the user back to the
+  // app via the `botifyr://` deep link.
+  const browserSuccessPage = (returnUrl: string): string =>
     page(
+      `<h1>All set! You're signed in.</h1>` +
+        `<p class="foot">This window will close on its own. If it doesn't, ` +
+        `<a href="${returnUrl}">return to Botifyr</a>.</p>` +
+        `<script>setTimeout(function(){window.close()},600);</script>`,
+    );
+
+  const successPage = (host: "desktop" | "web" | "admin"): string => {
+    if (host === "web") return browserSuccessPage(portalUrl);
+    if (host === "admin") return browserSuccessPage(adminUrl);
+    return page(
       `<h1>All set! Feel free to return to Botifyr.</h1>` +
         `<a class="btn" href="botifyr://open" onclick="setTimeout(function(){window.close()},400);return true;">Open Botifyr</a>` +
         `<hr /><p class="foot">For any issues, visit <a href="https://botifyr.xyz/help">botifyr.xyz/help</a>.</p>`,
     );
+  };
 
   const messagePage = (message: string): string =>
-    page(`<h1>${message}</h1><p class="foot">You can close this tab and return to the Botifyr app.</p>`);
+    page(`<h1>${message}</h1><p class="foot">You can close this tab and return to Botifyr.</p>`);
 
   app.get("/auth/config", async () => ({ google: Boolean(googleClientId) }));
 
@@ -1702,6 +1722,14 @@ export async function buildServer(options: ServerOptions) {
       if (error || !code || !state) {
         return reply.type("text/html").send(messagePage("Sign-in was cancelled."));
       }
+      // The client prefixes the state with its host (`web:` / `desktop:` /
+      // `admin:`), so the finish page knows whether to close back to the
+      // browser or deep-link into the desktop app.
+      const host: "desktop" | "web" | "admin" = state.startsWith("web:")
+        ? "web"
+        : state.startsWith("admin:")
+          ? "admin"
+          : "desktop";
       try {
         const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
           method: "POST",
@@ -1760,13 +1788,13 @@ export async function buildServer(options: ServerOptions) {
         const session = await issueSession(record.id);
         pendingSignins.set(state, { ...session, createdAt: Date.now() });
 
-        return reply.type("text/html").header("cache-control", "no-store").send(successPage());
+        return reply.type("text/html").header("cache-control", "no-store").send(successPage(host));
       } catch (error) {
         app.log.error({ err: error }, "google sign-in failed");
         // Idempotent: authorizing once then reloading the callback reuses the
         // code (Google rejects it) — if we already have the token, still succeed.
         if (pendingSignins.has(state)) {
-          return reply.type("text/html").header("cache-control", "no-store").send(successPage());
+          return reply.type("text/html").header("cache-control", "no-store").send(successPage(host));
         }
         return reply
           .type("text/html")

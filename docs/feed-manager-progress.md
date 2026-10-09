@@ -60,13 +60,52 @@ emoji), reactions, a threaded reply, a poll vote. Viewer token injected into
   empty/error states (see FEED-1/3/4).
 - `packages/ui/src/styles.css` — menu, focus-visible, media reservation,
   skeleton/empty/error, responsive.
+- `packages/ui/src/FeedView.dom.test.tsx` — new focused tests for FEED-1.
 - `docs/feed-improvement-plan.md`, `docs/feed-manager-progress.md` (this file).
 
-## Tests & results
+## Tests & results (actual)
 
-- (pending this checkpoint) `npm run typecheck -w @botifyr/ui` → _fill in_.
-- Live re-inspection of the running app after changes → _fill in_.
-- `vitest` suite → _fill in_.
+- `npm run typecheck -w @botifyr/ui` → **passed** (tsc --noEmit, no errors).
+- `npx vitest run packages/ui` → **40 passed / 40** (8 files).
+- New `packages/ui/src/FeedView.dom.test.tsx` (3 tests) → **3 passed**:
+  4 primary actions + 1 More button; destructive actions only inside the menu;
+  Delete-in-menu for own posts.
+- `npx eslint packages/ui/src/FeedView.tsx packages/ui/src/FeedView.dom.test.tsx`
+  → **clean**.
+- **Live verification (running app, desktop dev host :1420, seeded feed):**
+  - Action bar = exactly 5 controls on one row
+    (`Love`, `Comment`, `Share`, `Save`, `More options`).
+  - `⋯` menu = `Hide this post`, `Snooze <author> for 30 days`,
+    `Unfollow <author>`, `Report post`, `Block <author>` (5 items).
+  - Keyboard focus ring confirmed: focused control `matches(':focus-visible')`
+    → `true`, computed `outline: 2px solid rgb(109, 139, 255)`.
+  - Media reserves space: single image `min-height: 160px`; grid cells square
+    (`aspect-ratio: 1 / 1`, 193×193).
+  - Hiding via the menu removed the post (6 → 5) and closed the menu.
+  - No horizontal overflow at 1460px.
+
+### Full-repo gate (actual)
+
+- `npm test` → **314 passed / 314** (56 files).
+- `npm run lint` → **0 errors**, 52 warnings (pre-existing, in
+  `BotifyrApp.tsx`/`CompanyWorkspace.tsx` — unrelated to Feed).
+- `npm run typecheck` → `@botifyr/ui` and all other packages **pass**; the
+  `@botifyr/portal` workspace fails with **52 pre-existing `TS6133`
+  (unused-variable) errors, all in `packages/ui/src/BotifyrApp.tsx`** — a file
+  with unrelated uncommitted changes that this task did not touch. **No Feed
+  file (`FeedView.tsx`/`styles.css`) produces a type error.** Verified with
+  `npm run typecheck -w @botifyr/portal | Select-String "FeedView|styles.css"`
+  → no matches.
+
+### P2 batch (second pass)
+
+- **FEED-7** reaction breakdown: the reaction summary now carries a `title`
+  listing per-type counts (`reactionBreakdown`).
+- **FEED-8** long-post clamp: `PostBody` clamps bodies over ~520 chars / >6
+  newlines to 12 lines behind a **See more / See less** toggle.
+- New test covers the clamp (`FeedView.dom.test.tsx`).
+- `npm run typecheck -w @botifyr/ui` → **passed**; `npx vitest run packages/ui`
+  → **44 passed / 44**.
 
 ## Blockers / caveats
 
@@ -78,7 +117,33 @@ emoji), reactions, a threaded reply, a poll vote. Viewer token injected into
 
 ## Exact next action
 
-Run `npm run typecheck -w @botifyr/ui`, then reload the live app, open the Feed,
-and verify: 5-button action bar, `⋯` menu contents, focus ring, square media grid
-with reserved space, skeleton/empty/error states. Update the "Tests & results"
-section with actual output.
+Run the full repo gate once: `npm run typecheck && npm run lint && npm test`.
+Then optionally attempt screenshots (foreground the desktop window) and pick up
+the P2 backlog (FEED-6/7/8).
+
+## Final Handover
+
+**Completed (verified):**
+- FEED-1 action hierarchy + More-options menu — implemented, DOM-tested, and
+  confirmed in the running app.
+- FEED-2 keyboard focus ring — implemented and confirmed via real Tab focus.
+- FEED-3 reserved media space + square grid — implemented and confirmed live.
+- FEED-4 skeletons / empty state / error Retry — implemented (skeletons, empty
+  copy, and Retry are in code + covered by types; auto-verified structurally).
+- FEED-5 responsive `<720px` rules — implemented (verified via CSS + DOM at the
+  current width; no viewport-emulation tool available).
+
+**Partially completed / not verified:**
+- Screenshots of before/after — blocked ("Screenshot needs a visible tab").
+- Narrow-viewport rendering — not exercised in a real resized browser.
+- Full-repo gate (`typecheck && lint && test` across all workspaces) — pending.
+
+**Known limitations:**
+- Backend-dependent ideas (copy-link/permalinks, ranking explainability) are
+  documented, not implemented.
+- P2 items (avatar photos, reaction breakdown, long-post clamp) are backlogged.
+
+**Exact commands that passed:**
+- `npm run typecheck -w @botifyr/ui`
+- `npx vitest run packages/ui`
+- `npx eslint packages/ui/src/FeedView.tsx packages/ui/src/FeedView.dom.test.tsx`

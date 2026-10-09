@@ -6,6 +6,12 @@
  * the web are the same UI.
  */
 export interface BotBridge {
+  /**
+   * Which host is rendering the app. The desktop app returns to itself after
+   * sign-in (via the `botifyr://` deep link / an already-open window); the web
+   * portal stays in the browser and finishes sign-in in the tab that opened it.
+   */
+  kind: "desktop" | "web";
   /** Open a URL outside the app (system browser / new tab). */
   openExternal(url: string): void | Promise<void>;
   /** Bring the host window to the front (desktop only). */
@@ -20,6 +26,7 @@ export interface BotBridge {
 
 /** Default browser implementation (used by the web portal). */
 export const webBridge: BotBridge = {
+  kind: "web",
   openExternal: (url: string) => {
     window.open(url, "_blank", "noopener,noreferrer");
   },

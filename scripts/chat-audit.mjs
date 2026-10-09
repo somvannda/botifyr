@@ -111,9 +111,23 @@ for (const vp of VIEWPORTS) {
   const metrics = await page.evaluate(MEASURE);
   const scenes = {};
 
+  // Narrow screens: the conversation list is a drawer behind a menu button.
+  if (vp.name !== "desktop") {
+    const navBtn = page.locator(".mobile-nav-btn").first();
+    if (await navBtn.count()) {
+      await navBtn.click({ force: true }).catch(() => {});
+      await page.waitForTimeout(450);
+      await page.screenshot({ path: `${OUT}/${LABEL}-${vp.name}-nav.png` });
+      scenes.nav = await page.evaluate(MEASURE);
+    }
+  }
+
   // Click a conversation row by its visible name, resilient to re-renders.
   const openConv = async (name) => {
-    const row = page.locator(".conv-item", { hasText: name }).first();
+    const row = page
+      .locator(".conv-item")
+      .filter({ has: page.locator(".conv-name", { hasText: name }) })
+      .first();
     if (!(await row.count())) return false;
     for (let attempt = 0; attempt < 3; attempt++) {
       try {

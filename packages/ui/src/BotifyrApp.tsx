@@ -4,7 +4,6 @@ import type {
   FormEvent,
   KeyboardEvent as ReactKeyboardEvent,
   MouseEvent as ReactMouseEvent,
-  PointerEvent as ReactPointerEvent,
   ReactNode,
   WheelEvent as ReactWheelEvent,
 } from "react";
@@ -15,12 +14,8 @@ import type {
   BotRole,
   CapabilityGrant,
   ChatMessage,
-  CodeRepo,
-  CompanyDirection,
-  CompanyDNA,
   CompanyReport,
   ConnectionInfo,
-  CreateWorkspaceRequest,
   LearnedSkill,
   Quest,
   RuntimeConfig,
@@ -34,7 +29,6 @@ import type {
   WorkspaceBudget,
   WorkspaceWithRoles,
 } from "@botifyr/shared";
-import { ROLE_CATALOG } from "@botifyr/shared";
 import {
   AuthError,
   BotifyrClient,
@@ -71,6 +65,7 @@ import {
   MicIcon,
   MobileIcon,
   MonitorIcon,
+  MoonIcon,
   MoreIcon,
   PanelIcon,
   PauseIcon,
@@ -84,6 +79,7 @@ import {
   SendIcon,
   SmileyIcon,
   StopIcon,
+  SunIcon,
   UserIcon,
   UserPlusIcon,
   UsersIcon,
@@ -143,55 +139,18 @@ function cleanEmoji(value: string | undefined, isGroup: boolean): string {
   if (!trimmed || trimmed.includes("?")) return isGroup ? DEFAULT_GROUP_EMOJI : DEFAULT_EMOJI;
   return trimmed;
 }
-
-/** Emoji per department, used to render a direction's proposed team. */
-const DIRECTION_EMOJI: Record<string, string> = {
-  exec: "🧭",
-  product: "📦",
-  engineering: "💻",
-  design: "🎨",
-  data: "📊",
-  ai: "🤖",
-  growth: "📈",
-  marketing: "📣",
-  sales: "💰",
-  support: "🎧",
-  success: "🤝",
-  ops: "⚙️",
-  finance: "💵",
-  legal: "⚖️",
-  people: "🧑‍💼",
-  logistics: "🚚",
-};
-
-const ROLE_BY_ID = new Map(ROLE_CATALOG.map((role) => [role.id, role]));
-
-/** Turn a chosen direction's role ids into hire-ready members (docs/company-quests.md §2). */
-function membersFromDirection(direction: CompanyDirection): NonNullable<CreateWorkspaceRequest["members"]> {
-  return direction.roles
-    .map((id) => ROLE_BY_ID.get(id))
-    .filter((role): role is (typeof ROLE_CATALOG)[number] => Boolean(role))
-    .map((role) => ({
-      name: role.title,
-      emoji: DIRECTION_EMOJI[role.department] ?? DEFAULT_EMOJI,
-      title: role.title,
-      department: role.department,
-      instructions: role.jobDescription,
-      isChair: role.id === "exec.ceo",
-    }));
-}
 const TOKEN_KEY = "botifyr.token";
 const REFRESH_KEY = "botifyr.refresh";
 
 /** Local calendar day key (YYYY-MM-DD) used to group messages by date. */
-function dayKeyOf(iso: string | undefined): string {
+export function dayKeyOf(iso: string | undefined): string {
   const date = iso ? new Date(iso) : new Date();
   if (Number.isNaN(date.getTime())) return "";
   return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
 }
 
 /** "Today" / "Yesterday" / a readable date, for thread date separators. */
-function dayLabelOf(iso: string | undefined): string {
+export function dayLabelOf(iso: string | undefined): string {
   const date = iso ? new Date(iso) : new Date();
   if (Number.isNaN(date.getTime())) return "";
   const today = new Date();
@@ -203,7 +162,7 @@ function dayLabelOf(iso: string | undefined): string {
 }
 
 /** Wall-clock time for a message (e.g. "09:03"). */
-function clockOf(iso: string | undefined): string {
+export function clockOf(iso: string | undefined): string {
   const date = iso ? new Date(iso) : new Date();
   if (Number.isNaN(date.getTime())) return "";
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -280,78 +239,6 @@ function token(): string {
 }
 
 const PENDING_KEY = "botifyr.pendingState";
-
-/** A HQ footer icon button: flashes on click, and stays lit when `pressed`. */
-function HqButton({
-  title,
-  onClick,
-  primary,
-  danger,
-  disabled,
-  pressed,
-  children,
-}: {
-  title: string;
-  onClick: () => void;
-  primary?: boolean;
-  danger?: boolean;
-  disabled?: boolean;
-  pressed?: boolean;
-  children: ReactNode;
-}) {
-  const [flash, setFlash] = useState(false);
-  const on = pressed || flash;
-  return (
-    <button
-      className={`hq-icon-btn${primary ? " primary" : ""}${danger ? " danger" : ""}${on ? " active" : ""}`}
-      type="button"
-      title={title}
-      aria-label={title}
-      aria-pressed={pressed}
-      disabled={disabled}
-      onClick={() => {
-        setFlash(true);
-        window.setTimeout(() => setFlash(false), 650);
-        onClick();
-      }}
-    >
-      {children}
-    </button>
-  );
-}
-
-/** Department → friendly label for the file categories. */
-const DEPARTMENT_LABELS: Record<string, string> = {
-  exec: "Strategy",
-  product: "Product",
-  engineering: "Engineering",
-  growth: "Growth & Sales",
-  ops: "Operations",
-  finance: "Finance",
-  support: "Customer Success",
-  design: "Design",
-};
-
-/** Inference rules (B): map a filename to a category when no department is set. */
-const FILE_CATEGORIES: Array<{ id: string; label: string; test: RegExp }> = [
-  { id: "exec", label: "Strategy", test: /PLAN|OKR|BRIEF|ROADMAP|STRATEGY|VISION|CHARTER|MISSION/i },
-  { id: "engineering", label: "Engineering", test: /CODE|API|ARCH|TECH|ENGINEER|SPEC|SCHEMA/i },
-  { id: "product", label: "Product", test: /BACKLOG|FEATURE|PRODUCT|DESIGN|UX|UI/i },
-  { id: "growth", label: "Growth & Sales", test: /GROWTH|MARKET|SALES|CHANNEL|CAMPAIGN|ICP|PRICING/i },
-  { id: "finance", label: "Finance", test: /BUDGET|FINANCE|REVENUE|COST|INVOICE|PAYROLL/i },
-  { id: "support", label: "Customer Success", test: /SUPPORT|SUCCESS|ONBOARD|CUSTOMER|CHURN/i },
-];
-
-/** Explicit department wins; otherwise infer from the filename. */
-function fileCategory(file: { name: string; department?: string }): { id: string; label: string } {
-  if (file.department) {
-    return { id: file.department, label: DEPARTMENT_LABELS[file.department] ?? file.department };
-  }
-  for (const category of FILE_CATEGORIES) {
-    if (category.test.test(file.name)) return { id: category.id, label: category.label };
-  }
-  return { id: "other", label: "Other" };
-}
 
 export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const client = useMemo(() => new BotifyrClient(CLOUD_URL), []);
@@ -484,83 +371,50 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     text: string;
   } | null>(null);
   const [createBotMode, setCreateBotMode] = useState<"bot" | "group" | "edit" | null>(null);
-  const [companySetupOpen, setCompanySetupOpen] = useState(false);
   /** Bumped to open the Startup Workspace's inline "new company" flow. */
   const [companyCreateNonce, setCompanyCreateNonce] = useState(0);
-  const [companySource, setCompanySource] = useState("");
-  const [companyPlan, setCompanyPlan] = useState<
-    | (CreateWorkspaceRequest & {
-        template?: string;
-        rationale?: string[];
-        directions?: CompanyDirection[];
-        notes?: string[];
-      })
-    | null
-  >(null);
-  const [companyDirectionId, setCompanyDirectionId] = useState<string | null>(null);
   const [companyBusy, setCompanyBusy] = useState(false);
   const [companyError, setCompanyError] = useState<string | null>(null);
   const [companyEdit, setCompanyEdit] = useState<{ id: string; name: string } | null>(null);
-  const [companyStep, setCompanyStep] = useState<"source" | "review" | "confirm">("source");
   const [confirmCompanyDelete, setConfirmCompanyDelete] = useState(false);
   const [confirmClearBoard, setConfirmClearBoard] = useState(false);
-  const [wizardUseHours, setWizardUseHours] = useState(false);
-  const [wizardHoursStart, setWizardHoursStart] = useState("9");
-  const [wizardHoursEnd, setWizardHoursEnd] = useState("18");
-  const [wizardWeekdays, setWizardWeekdays] = useState(true);
-  const [wizardTimezone, setWizardTimezone] = useState("");
-  const [wizardBudget, setWizardBudget] = useState("");
-  const [wizardActivate, setWizardActivate] = useState(false);
   const [boardWorkspace, setBoardWorkspace] = useState<{ id: string; name: string } | null>(null);
   /** Company the Startup Workspace should focus (set by the sidebar board button). */
   const [startupFocusId, setStartupFocusId] = useState<string | null>(null);
   // The Company HQ opens as a full main area by default; "Float" turns it into a
   // smaller, movable panel over the chat.
-  const [hqFloating, setHqFloating] = useState(false);
-  const [hqPos, setHqPos] = useState({ x: 0, y: 0 });
-  const hqDragRef = useRef<{ x: number; y: number; dx: number; dy: number } | null>(null);
+  const [, setHqFloating] = useState(false);
+  const [, setHqPos] = useState({ x: 0, y: 0 });
   /** Company shown in the 3D office. Kept separate from the HQ dialog. */
   const [officeCompany, setOfficeCompany] = useState<{ id: string; name: string } | null>(null);
   const [showOffice3d, setShowOffice3d] = useState(false);
   const [office3dDock, setOffice3dDock] = useState(true);
-  const [repoName, setRepoName] = useState("");
-  const [repoPath, setRepoPath] = useState("");
-  const [repoUrl, setRepoUrl] = useState("");
-  const [repoToken, setRepoToken] = useState("");
-  const [renameBotId, setRenameBotId] = useState<string | null>(null);
-  const [renameValue, setRenameValue] = useState("");
   const [boardItems, setBoardItems] = useState<Array<WorkItem>>([]);
-  const [boardTitle, setBoardTitle] = useState("");
-  const [boardBusy, setBoardBusy] = useState(false);
-  /** Which work item's outcome is being edited, and its draft. */
-  const [resultEditId, setResultEditId] = useState<string | null>(null);
-  const [resultDraft, setResultDraft] = useState("");
-  const [hqTab, setHqTab] = useState<
+  const [, setBoardTitle] = useState("");
+  const [, setBoardBusy] = useState(false);
+  const [, setHqTab] = useState<
     "briefing" | "need" | "team" | "board" | "budget" | "standup" | "plans" | "changes" | "office" | "wiki"
   >("briefing");
-  const [hqNeeds, setHqNeeds] = useState<Array<Task>>([]);
-  const [hqBudget, setHqBudget] = useState<WorkspaceBudget | null>(null);
-  const [budgetInput, setBudgetInput] = useState("");
-  const [hqGrants, setHqGrants] = useState<Array<CapabilityGrant>>([]);
+  const [, setHqNeeds] = useState<Array<Task>>([]);
+  const [, setHqBudget] = useState<WorkspaceBudget | null>(null);
+  const [, setBudgetInput] = useState("");
+  const [, setHqGrants] = useState<Array<CapabilityGrant>>([]);
   const [hqReports, setHqReports] = useState<Array<CompanyReport>>([]);
-  const [hqQuests, setHqQuests] = useState<Array<Quest>>([]);
+  const [, setHqQuests] = useState<Array<Quest>>([]);
   /** When the CEO last opened this company's HQ — drives the "since your last visit" delta. */
   const [lastVisitAt, setLastVisitAt] = useState<string | null>(null);
-  const [growTitle, setGrowTitle] = useState("");
-  const [growObjective, setGrowObjective] = useState("");
-  const [hqWiki, setHqWiki] = useState<
+  const [, setHqWiki] = useState<
     Array<{ id: string; name: string; content: string; department?: string }>
   >([]);
-  const [openFile, setOpenFile] = useState<string | null>(null);
   const [filePreview, setFilePreview] = useState<{ name: string; content: string } | null>(null);
-  const [hqChanges, setHqChanges] = useState<
+  const [, setHqChanges] = useState<
     Array<{ repo: string; path: string; content: string; diff: string; exists: boolean }>
   >([]);
-  const [addMemberBotId, setAddMemberBotId] = useState("");
-  const [hoursStart, setHoursStart] = useState("9");
-  const [hoursEnd, setHoursEnd] = useState("18");
-  const [hoursWeekdays, setHoursWeekdays] = useState(true);
-  const [hoursTimezone, setHoursTimezone] = useState("");
+  const [, setAddMemberBotId] = useState("");
+  const [, setHoursStart] = useState("9");
+  const [, setHoursEnd] = useState("18");
+  const [, setHoursWeekdays] = useState(true);
+  const [, setHoursTimezone] = useState("");
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [editingBotId, setEditingBotId] = useState<string | null>(null);
   const [botName, setBotName] = useState("");
@@ -1566,24 +1420,45 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     setAuthBusy(true);
     setAuthError(null);
     cancelSigninRef.current = false;
+
+    // On the web, open the sign-in window *synchronously*, still inside the
+    // click, so popup blockers allow it — we point it at the cloud once config
+    // is checked. Desktop opens the system browser instead and returns by
+    // polling (later focusing its own window).
+    const isWeb = bridge.kind === "web";
+    let popup: Window | null = null;
+    if (isWeb) {
+      try {
+        popup = window.open("about:blank", "botifyr-signin", "popup,width=520,height=680");
+      } catch {
+        popup = null;
+      }
+    }
+
     try {
       const cfg = await client.authConfig();
       if (!cfg.google) {
         setAuthError(
           "Google sign-in isn't configured yet. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET on the cloud.",
         );
+        popup?.close();
         return;
       }
 
-      const state = crypto.randomUUID();
+      // The host prefix tells the cloud who started sign-in, so its callback
+      // page can send a browser user back to the portal instead of the desktop
+      // app. The admin console uses the same trick with `admin:`.
+      const state = `${isWeb ? "web" : "desktop"}:${crypto.randomUUID()}`;
       localStorage.setItem(PENDING_KEY, state);
       const url = `${CLOUD_URL}/auth/google?state=${encodeURIComponent(state)}`;
       setSigninUrl(url);
-      await openExternal(url);
+      if (popup) popup.location.href = url;
+      else await openExternal(url);
 
       const ok = await pollForToken(state);
       if (!ok) setAuthError("Sign-in timed out. Please try again.");
     } catch (err: unknown) {
+      popup?.close();
       setAuthError(messageOf(err));
     } finally {
       setAuthBusy(false);
@@ -1639,119 +1514,6 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     setShowNewChat(false);
   }
 
-  function openCompanySetup() {
-    setCompanySetupOpen(true);
-    setCompanySource("");
-    setCompanyPlan(null);
-    setCompanyDirectionId(null);
-    setCompanyError(null);
-    setCompanyStep("source");
-    setWizardUseHours(false);
-    setWizardHoursStart("9");
-    setWizardHoursEnd("18");
-    setWizardWeekdays(true);
-    setWizardTimezone("");
-    setWizardBudget("");
-    setWizardActivate(false);
-    setShowNewChat(false);
-  }
-
-  function closeCompanySetup() {
-    setCompanySetupOpen(false);
-    setCompanyPlan(null);
-    setCompanyDirectionId(null);
-    setCompanyError(null);
-    setCompanyBusy(false);
-  }
-
-  /** A pasted value is treated as a URL when it looks like one, else an idea. */
-  function looksLikeUrl(value: string): boolean {
-    return /^https?:\/\//i.test(value) || /^[\w-]+\.[a-z]{2,}(\/|$)/i.test(value);
-  }
-
-  async function runCompanyPlan() {
-    const value = companySource.trim();
-    if (!value || companyBusy) return;
-    setCompanyBusy(true);
-    setCompanyError(null);
-    try {
-      const plan = await client.planCompany({ kind: looksLikeUrl(value) ? "url" : "idea", value });
-      // Keep the suggested name unique so two companies never look identical.
-      const taken = new Set(workspaces.map((entry) => entry.name.trim().toLowerCase()));
-      let suggested = plan.name;
-      if (taken.has(suggested.trim().toLowerCase())) {
-        for (let n = 2; n < 1000; n += 1) {
-          if (!taken.has(`${plan.name} ${n}`.toLowerCase())) {
-            suggested = `${plan.name} ${n}`;
-            break;
-          }
-        }
-      }
-      setCompanyPlan({ ...plan, name: suggested });
-      setCompanyStep("review");
-    } catch (err: unknown) {
-      setCompanyError(messageOf(err));
-    } finally {
-      setCompanyBusy(false);
-    }
-  }
-
-  async function createCompany() {
-    if (!companyPlan || companyBusy) return;
-    setCompanyBusy(true);
-    setCompanyError(null);
-    try {
-      // Promote the bot you set the company up with (the Founder) to CEO.
-      const founder =
-        bots.find((bot) => bot.id === activeBotId && !bot.workspace) ??
-        bots.find((bot) => !bot.workspace && bot.name === "Botifyr") ??
-        bots.find((bot) => !bot.workspace);
-      const created = await client.createWorkspace({ ...companyPlan, ceoBotId: founder?.id });
-      // Apply the optional settings chosen in the wizard (best-effort).
-      try {
-        if (wizardUseHours) {
-          await client.updateWorkspace(created.id, {
-            operatingHours: {
-              start: Math.max(0, Math.min(23, Math.floor(Number(wizardHoursStart) || 0))),
-              end: Math.max(1, Math.min(24, Math.floor(Number(wizardHoursEnd) || 24))),
-              days: wizardWeekdays ? [1, 2, 3, 4, 5] : undefined,
-              timezone: wizardTimezone.trim() || undefined,
-            },
-          });
-        }
-        const budget = Math.max(0, Math.floor(Number(wizardBudget) || 0));
-        if (budget > 0) await client.setWorkspaceBudget(created.id, budget);
-        if (wizardActivate)
-          await client.activateCompany(
-            created.id,
-            "supervised",
-            Intl.DateTimeFormat().resolvedOptions().timeZone,
-          );
-      } catch {
-        // Settings are best-effort; the company already exists.
-      }
-      const [botList, sessionList, workspaceList] = await Promise.all([
-        client.listBots(),
-        client.listSessions(),
-        client.listWorkspaces(),
-      ]);
-      setBots(botList);
-      setSessions(sessionList);
-      setWorkspaces(workspaceList);
-      setWorkspaceFilter("startups");
-      const chairId = created.ceoBotId ?? created.roles[0]?.botId;
-      const chair = botList.find((bot) => bot.id === chairId);
-      if (chair) {
-        setActiveBotId(chair.id);
-        setActiveSessionId(chair.sessionId);
-      }
-      closeCompanySetup();
-    } catch (err: unknown) {
-      setCompanyError(messageOf(err));
-      setCompanyBusy(false);
-    }
-  }
-
   /** A company was created inside the Startup Workspace → refresh and focus it. */
   async function handleCompanyCreated(created: WorkspaceWithRoles) {
     const [botList, workspaceList] = await Promise.all([client.listBots(), client.listWorkspaces()]);
@@ -1759,61 +1521,6 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     setWorkspaces(workspaceList);
     setStartupFocusId(created.id);
     setWorkspaceFilter("startups");
-  }
-
-  /** Apply a chosen direction: its team and its first quest. */
-  function chooseDirection(direction: CompanyDirection) {
-    setCompanyDirectionId(direction.id);
-    setCompanyPlan((prev) =>
-      prev
-        ? {
-            ...prev,
-            directionId: direction.id,
-            members: membersFromDirection(direction),
-            quest: {
-              title: direction.title,
-              objective: direction.objective,
-              acceptance: [direction.objective],
-              roadmap: direction.roadmap,
-            },
-          }
-        : prev,
-    );
-  }
-
-  /** Edit the company's DNA (the shared brief) before hiring — the Charter step. */
-  function updatePlanDna(patch: Partial<CompanyDNA>) {
-    setCompanyPlan((prev) => (prev?.dna ? { ...prev, dna: { ...prev.dna, ...patch } } : prev));
-  }
-
-  function updatePlanMember(
-    index: number,
-    patch: Partial<NonNullable<CreateWorkspaceRequest["members"]>[number]>,
-  ) {
-    setCompanyPlan((prev) => {
-      if (!prev?.members) return prev;
-      return { ...prev, members: prev.members.map((m, i) => (i === index ? { ...m, ...patch } : m)) };
-    });
-  }
-
-  function removePlanMember(index: number) {
-    setCompanyPlan((prev) => {
-      if (!prev?.members) return prev;
-      return { ...prev, members: prev.members.filter((_, i) => i !== index) };
-    });
-  }
-
-  function addPlanMember() {
-    setCompanyPlan((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        members: [
-          ...(prev.members ?? []),
-          { name: "New hire", emoji: "🤖", title: "Member", department: "ops", isChair: false },
-        ],
-      };
-    });
   }
 
   async function renameCompany() {
@@ -1910,20 +1617,6 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     }
   }
 
-  /** Drag the floated HQ panel by its header. */
-  function onHqHeaderDown(event: ReactPointerEvent) {
-    if (!hqFloating) return;
-    hqDragRef.current = { x: hqPos.x, y: hqPos.y, dx: event.clientX, dy: event.clientY };
-  }
-  function onHqHeaderMove(event: ReactPointerEvent) {
-    const drag = hqDragRef.current;
-    if (!drag) return;
-    setHqPos({ x: drag.x + (event.clientX - drag.dx), y: drag.y + (event.clientY - drag.dy) });
-  }
-  function onHqHeaderUp() {
-    hqDragRef.current = null;
-  }
-
   function closeBoard() {
     setBoardWorkspace(null);
     setBoardItems([]);
@@ -1946,32 +1639,6 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     setShowOffice3d(true);
   }
 
-  async function runStandup(kind: "standup" | "weekly" = "standup") {
-    const workspace = boardWorkspace;
-    if (!workspace) return;
-    setBoardBusy(true);
-    try {
-      const report = await client.runStandup(workspace.id, kind);
-      setHqReports((prev) => [report, ...prev]);
-    } finally {
-      setBoardBusy(false);
-    }
-  }
-
-  /** Run now: fire every employee's scheduled pass immediately, then refresh. */
-  async function runNow() {
-    const workspace = boardWorkspace;
-    if (!workspace) return;
-    setBoardBusy(true);
-    try {
-      await client.runCompany(workspace.id).catch(() => null);
-      setBoardItems(await client.listWorkItems(workspace.id).catch(() => boardItems));
-      void refreshNeeds(workspace.id);
-    } finally {
-      setBoardBusy(false);
-    }
-  }
-
   /** Open an employee's live screen (their sandbox desktop) from the Office tab. */
   function openEmployee(bot: Bot) {
     closeBoard();
@@ -1979,98 +1646,6 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     setShowBotPanel(true);
     setBotPanelTab("computer");
     void client.startComputer(bot.sessionId).catch(() => {});
-  }
-
-  async function toggleGrant(subject: string, capability: string, granted: boolean) {
-    const workspace = boardWorkspace;
-    if (!workspace) return;
-    await client.setCapabilityGrant(workspace.id, { subject, capability, granted }).catch(() => {});
-    setHqGrants(await client.listCapabilityGrants(workspace.id).catch(() => []));
-  }
-
-  /** Move a capability up/down the trust ladder (docs/product-plan.md §3). */
-  async function setGrantState(subject: string, capability: string, state: CapabilityGrant["state"]) {
-    const workspace = boardWorkspace;
-    if (!workspace) return;
-    await client
-      .setCapabilityGrant(workspace.id, { subject, capability, granted: true, state })
-      .catch(() => {});
-    setHqGrants(await client.listCapabilityGrants(workspace.id).catch(() => []));
-  }
-
-  /** Pause/resume the company: paused companies stop their autonomous schedules. */
-  async function setCompanyStatus(status: "active" | "paused") {
-    const workspace = boardWorkspace;
-    if (!workspace) return;
-    await client.updateWorkspace(workspace.id, { status }).catch(() => {});
-    setWorkspaces(await client.listWorkspaces().catch(() => workspaces));
-  }
-
-  /** Save the company's connected code repositories (read-only for engineering). */
-  async function saveRepos(next: CodeRepo[]) {
-    const workspace = boardWorkspace;
-    if (!workspace) return;
-    setBoardBusy(true);
-    try {
-      const updated = await client.updateWorkspace(workspace.id, { repos: next }).catch(() => null);
-      if (updated) setWorkspaces(await client.listWorkspaces().catch(() => workspaces));
-    } finally {
-      setBoardBusy(false);
-    }
-  }
-
-  /** Clone a repo from a URL (with an optional vault token) and connect it. */
-  async function addRemoteRepo() {
-    const workspace = boardWorkspace;
-    if (!workspace || !repoUrl.trim()) return;
-    setBoardBusy(true);
-    try {
-      await client
-        .addWorkspaceRepo(workspace.id, {
-          name: repoName.trim() || "repo",
-          url: repoUrl.trim(),
-          tokenSecret: repoToken.trim() || undefined,
-        })
-        .catch(() => null);
-      setWorkspaces(await client.listWorkspaces().catch(() => workspaces));
-      setRepoName("");
-      setRepoPath("");
-      setRepoUrl("");
-      setRepoToken("");
-    } finally {
-      setBoardBusy(false);
-    }
-  }
-
-  /** Rename an employee's roster name (not their role title). */
-  async function saveRename(botId: string) {
-    const name = renameValue.trim().slice(0, 40);
-    if (!name) return;
-    const updated = await client.updateBot(botId, { name }).catch(() => null);
-    if (updated) setBots((prev) => prev.map((bot) => (bot.id === updated.id ? updated : bot)));
-    setRenameBotId(null);
-    setRenameValue("");
-  }
-
-  /** Re-fetch the company wiki. */
-  async function refreshWiki(workspaceId: string) {
-    const wiki = await client.listWorkspaceFiles(workspaceId).catch(() => []);
-    setHqWiki(
-      wiki.map((file) => ({
-        id: file.id,
-        name: file.name,
-        content: file.content,
-        department: file.department,
-      })),
-    );
-  }
-
-  /** Set (or clear, with "") a file's department/category. */
-  async function setFileDept(fileId: string, department: string) {
-    const workspace = boardWorkspace;
-    if (!workspace) return;
-    await client.updateFile(fileId, { department }).catch(() => null);
-    await refreshWiki(workspace.id);
   }
 
   /** Open a file referenced in chat: company wiki first, else the bot's Library. */
@@ -2115,218 +1690,12 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     }
   }
 
-  /** Trust every employee in this company (skip their approval prompts). */
-  async function trustAll() {
-    const workspace = boardWorkspace;
-    if (!workspace) return;
-    const roles = workspaceByName.get(workspace.name)?.roles ?? [];
-    if (roles.length === 0) return;
-    setBoardBusy(true);
-    try {
-      const updated = await Promise.all(
-        roles.map((role) => client.updateBot(role.botId, { autoApprove: true }).catch(() => null)),
-      );
-      setBots((prev) => prev.map((bot) => updated.find((entry) => entry?.id === bot.id) ?? bot));
-    } finally {
-      setBoardBusy(false);
-    }
-  }
-
-  /** One-click halt: cancel every running task across the company's employees. */
-  async function stopCompany() {
-    const workspace = boardWorkspace;
-    if (!workspace) return;
-    setBoardBusy(true);
-    try {
-      await client.stopCompany(workspace.id).catch(() => null);
-    } finally {
-      setBoardBusy(false);
-    }
-  }
-
-  /** Set the company's autonomy level (manual = deactivate). */
-  async function setAutonomy(level: "manual" | "supervised" | "autonomous") {
-    const workspace = boardWorkspace;
-    if (!workspace) return;
-    setBoardBusy(true);
-    try {
-      const updated =
-        level === "manual"
-          ? await client.deactivateCompany(workspace.id).catch(() => null)
-          : await client
-              .activateCompany(workspace.id, level, Intl.DateTimeFormat().resolvedOptions().timeZone)
-              .catch(() => null);
-      if (updated) setWorkspaces(await client.listWorkspaces().catch(() => workspaces));
-    } finally {
-      setBoardBusy(false);
-    }
-  }
-
-  /** Attach an existing (personal) bot to this company. */
-  async function addExistingMember() {
-    const workspace = boardWorkspace;
-    if (!workspace || !addMemberBotId) return;
-    setBoardBusy(true);
-    try {
-      const bot = bots.find((entry) => entry.id === addMemberBotId);
-      await client
-        .addWorkspaceMember(workspace.id, { botId: addMemberBotId, title: bot?.name })
-        .catch(() => null);
-      setAddMemberBotId("");
-      const [botList, workspaceList] = await Promise.all([client.listBots(), client.listWorkspaces()]);
-      setBots(botList);
-      setWorkspaces(workspaceList);
-    } finally {
-      setBoardBusy(false);
-    }
-  }
-
-  async function saveBudget() {
-    const workspace = boardWorkspace;
-    if (!workspace) return;
-    const limitTokens = Math.max(0, Math.floor(Number(budgetInput) || 0));
-    setBoardBusy(true);
-    try {
-      setHqBudget(await client.setWorkspaceBudget(workspace.id, limitTokens));
-    } finally {
-      setBoardBusy(false);
-    }
-  }
-
-  /** Operating hours: scheduled work only happens inside this window (cost control). */
-  async function saveHours() {
-    const workspace = boardWorkspace;
-    if (!workspace) return;
-    setBoardBusy(true);
-    try {
-      await client
-        .updateWorkspace(workspace.id, {
-          operatingHours: {
-            start: Math.max(0, Math.min(23, Math.floor(Number(hoursStart) || 0))),
-            end: Math.max(1, Math.min(24, Math.floor(Number(hoursEnd) || 24))),
-            days: hoursWeekdays ? [1, 2, 3, 4, 5] : undefined,
-            timezone: hoursTimezone.trim() || undefined,
-          },
-        })
-        .catch(() => null);
-      setWorkspaces(await client.listWorkspaces().catch(() => workspaces));
-    } finally {
-      setBoardBusy(false);
-    }
-  }
-
   async function refreshNeeds(workspaceId: string) {
     setHqNeeds(await client.listWorkspaceNeeds(workspaceId).catch(() => []));
   }
 
-  async function resolveNeed(task: Task, decision: "allow" | "deny") {
-    const workspace = boardWorkspace;
-    const approvalId = task.approval?.id;
-    if (!approvalId) return;
-    await client.resolveApproval(task.id, approvalId, decision).catch(() => {});
-    if (workspace) await refreshNeeds(workspace.id);
-  }
-
   async function refreshBoard(workspaceId: string) {
     setBoardItems(await client.listWorkItems(workspaceId).catch(() => []));
-  }
-
-  async function addBoardItem() {
-    const workspace = boardWorkspace;
-    const title = boardTitle.trim();
-    if (!workspace || !title) return;
-    setBoardBusy(true);
-    try {
-      await client.createWorkItem(workspace.id, { title });
-      setBoardTitle("");
-      await refreshBoard(workspace.id);
-    } finally {
-      setBoardBusy(false);
-    }
-  }
-
-  async function setWorkStatus(id: string, status: WorkItem["status"]) {
-    const workspace = boardWorkspace;
-    await client.updateWorkItem(id, { status }).catch(() => {});
-    if (workspace) await refreshBoard(workspace.id);
-  }
-
-  async function deleteBoardItem(id: string) {
-    const workspace = boardWorkspace;
-    await client.deleteWorkItem(id).catch(() => {});
-    if (workspace) await refreshBoard(workspace.id);
-  }
-
-  /** Record what a work item produced (its outcome) — the "what shipped" text. */
-  async function saveWorkResult(id: string) {
-    const workspace = boardWorkspace;
-    const value = resultDraft.trim();
-    setResultEditId(null);
-    await client.updateWorkItem(id, { result: value || null }).catch(() => {});
-    if (workspace) await refreshBoard(workspace.id);
-  }
-
-  async function refreshQuests(workspaceId: string) {
-    setHqQuests(await client.listQuests(workspaceId).catch(() => []));
-  }
-
-  /** Promote a proposed quest to the active mission (one active at a time). */
-  async function activateQuest(questId: string) {
-    const workspace = boardWorkspace;
-    if (!workspace) return;
-    await client.updateQuest(questId, { status: "active" }).catch(() => {});
-    await refreshQuests(workspace.id);
-  }
-
-  /** Mark the active quest done and refresh the board. */
-  async function finishQuest(questId: string) {
-    const workspace = boardWorkspace;
-    if (!workspace) return;
-    await client.completeQuest(workspace.id, questId).catch(() => {});
-    await refreshQuests(workspace.id);
-    await refreshBoard(workspace.id);
-  }
-
-  /** Set the active quest's autonomy dial (docs/company-quests.md §9). */
-  async function setQuestTrust(trust: Quest["trust"]) {
-    const workspace = boardWorkspace;
-    const quest = hqActiveQuest;
-    if (!workspace || !quest) return;
-    setHqQuests((prev) => prev.map((entry) => (entry.id === quest.id ? { ...entry, trust } : entry)));
-    await client.updateQuest(quest.id, { trust }).catch(() => {});
-  }
-
-  /** Set (or clear) the active quest's token budget. */
-  async function setQuestBudget(value: string) {
-    const workspace = boardWorkspace;
-    const quest = hqActiveQuest;
-    if (!workspace || !quest) return;
-    const tokens = Math.max(0, Math.floor(Number(value) || 0));
-    setHqQuests((prev) =>
-      prev.map((entry) => (entry.id === quest.id ? { ...entry, budgetTokens: tokens || undefined } : entry)),
-    );
-    await client.updateQuest(quest.id, { budgetTokens: tokens || null }).catch(() => {});
-  }
-
-  /** Grow: start the company's next quest (docs/company-quests.md §10.3). */
-  async function startNewQuest() {
-    const workspace = boardWorkspace;
-    const title = growTitle.trim();
-    if (!workspace || !title || boardBusy) return;
-    setBoardBusy(true);
-    try {
-      await client.createQuest(workspace.id, {
-        title,
-        objective: growObjective.trim() || title,
-        activate: true,
-      });
-      setGrowTitle("");
-      setGrowObjective("");
-      await refreshQuests(workspace.id);
-      await refreshBoard(workspace.id);
-    } finally {
-      setBoardBusy(false);
-    }
   }
 
   function openCreateBot(mode: "bot" | "group") {
@@ -3730,13 +3099,6 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   for (const workspace of workspaces) {
     if (!workspaceByName.has(workspace.name)) workspaceByName.set(workspace.name, workspace);
   }
-  /** The quest the HQ banner shows: the active mission, else the first proposed. */
-  const hqActiveQuest =
-    hqQuests.find((quest) => quest.status === "active") ??
-    hqQuests.find((quest) => quest.status === "proposed") ??
-    null;
-  /** Proposed quests wait on the CEO in the "Needs you" queue. */
-  const hqPendingQuests = hqQuests.filter((quest) => quest.status === "proposed");
   /** "Since your last visit" — computed from local visit state + the loaded data. */
   const sinceMs = lastVisitAt ? new Date(lastVisitAt).getTime() : 0;
   const hqShippedSince = sinceMs
@@ -3749,15 +3111,6 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   // badge as that work lands).
   void hqShippedSince;
   void hqNewReports;
-  /** Capabilities that have earned a promotion review (docs/product-plan.md §3). */
-  const hqPromotions = hqGrants.filter((grant) => {
-    const state = grant.state ?? "gated";
-    if (state === "trusted") return false;
-    const needed = grant.capability.startsWith("ads.") || grant.capability.startsWith("payments.") ? 10 : 5;
-    return (grant.successes ?? 0) >= needed && (grant.failures ?? 0) === 0;
-  });
-  /** The whole decision queue: approvals + proposed quests + promotion reviews. */
-  const hqInboxCount = hqNeeds.length + hqPendingQuests.length + hqPromotions.length;
   const roleByBotId = new Map<string, BotRole>();
   const workspaceIdByBotId = new Map<string, string>();
   for (const workspace of workspaces) {
@@ -4329,6 +3682,31 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     );
   };
 
+  /** Resolve "system" to the effective scheme so the toggle reflects what's on screen. */
+  const effectiveDark =
+    theme === "dark" ||
+    (theme === "system" &&
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-color-scheme: dark)").matches);
+
+  /** Light/dark switch shown in the header, immediately before the bell. */
+  const themeToggle = (
+    <button
+      className="bot-menu-btn"
+      type="button"
+      title={effectiveDark ? "Switch to light mode" : "Switch to dark mode"}
+      aria-label={effectiveDark ? "Switch to light mode" : "Switch to dark mode"}
+      onClick={() => {
+        const next = effectiveDark ? "light" : "dark";
+        setTheme(next);
+        localStorage.setItem("botifyr.theme", next);
+      }}
+    >
+      {effectiveDark ? <SunIcon size={16} /> : <MoonIcon size={16} />}
+    </button>
+  );
+
   /** The bell + dropdown; teleported into the OS title bar when the host provides a slot. */
   const notificationCentre = (
     <div className="notif-wrap" ref={notifWrapRef}>
@@ -4433,7 +3811,14 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     <div
       className={`app${feedActive || (!startupsActive && showBotPanel && (activeBot || (activeSession && (activeSession.kind === "dm" || activeSession.kind === "group")))) ? " with-panel" : ""}${officeDocked ? " with-office" : ""}${density === "compact" ? " density-compact" : ""}${mobileNavOpen ? " mobile-nav-open" : ""}`}
     >
-      {titlebarSlot && createPortal(notificationCentre, titlebarSlot)}
+      {titlebarSlot &&
+        createPortal(
+          <>
+            {themeToggle}
+            {notificationCentre}
+          </>,
+          titlebarSlot,
+        )}
       {modelNotice && (
         <div className="model-banner" role="status">
           <span>{modelNotice}</span>
@@ -5145,7 +4530,12 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                   </span>
                 )}
                 <div className="topbar-right">
-                  {!titlebarSlot && notificationCentre}
+                  {!titlebarSlot && (
+                    <>
+                      {themeToggle}
+                      {notificationCentre}
+                    </>
+                  )}
                   {activeSession && (
                     <button
                       className="bot-menu-btn"
@@ -5257,6 +4647,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                               {message.id === lastOwnMessageId &&
                                 peerReadAt &&
                                 message.createdAt <= peerReadAt && <div className="read-receipt">Seen</div>}
+                              <time className="msg-time out">{clockOf(message.createdAt)}</time>
                             </div>
                             <SelfAvatar user={user} email={user.email} className="msg-user-avatar" />
                           </div>
@@ -5296,6 +4687,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                               </span>
                             ))}
                             {actionsFor(message, label)}
+                            <time className="msg-time">{clockOf(message.createdAt)}</time>
                           </div>
                         </div>
                       );
@@ -5312,6 +4704,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                                 {chip.count > 1 ? ` ${chip.count}` : ""}
                               </span>
                             ))}
+                            <time className="msg-time out">{clockOf(message.createdAt)}</time>
                           </div>
                           <SelfAvatar user={user} email={user.email} className="msg-user-avatar" />
                         </div>

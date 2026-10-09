@@ -1,7 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import type { BotifyrClient, FeedComment, FeedPost, Group, Page, Person, Story } from "@botifyr/client";
-import { CameraIcon, ChartIcon, ForwardIcon, MessageIcon, MoreIcon, SendIcon, SmileyIcon, SparkIcon } from "./Icons";
+import {
+  CameraIcon,
+  ChartIcon,
+  ForwardIcon,
+  MessageIcon,
+  MoreIcon,
+  SendIcon,
+  SmileyIcon,
+  SparkIcon,
+} from "./Icons";
 
 /**
  * Feed — the social wall / timeline (see docs/feed.md).
@@ -76,6 +85,38 @@ function Avatar({ emoji, name, size = 40 }: { emoji?: string; name?: string; siz
     >
       {glyph}
     </span>
+  );
+}
+
+/** Human-readable breakdown of a post's reactions, e.g. "Love: 2\nLike: 1". */
+function reactionBreakdown(reactions?: Record<string, number>): string {
+  const entries = Object.entries(reactions ?? {}).filter(([, count]) => count > 0);
+  return entries
+    .map(([key, count]) => `${REACTIONS.find((entry) => entry.key === key)?.label ?? key}: ${count}`)
+    .join("\n");
+}
+
+/**
+ * Post body with a "See more" clamp for long posts, so one wall of text can't
+ * dominate the feed. Short posts render exactly as before.
+ */
+function PostBody({ text }: { text: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const long = text.length > 520 || (text.match(/\n/g)?.length ?? 0) > 6;
+  return (
+    <>
+      <p className={`feed-body${long && !expanded ? " feed-body-clamped" : ""}`}>{text}</p>
+      {long && (
+        <button
+          type="button"
+          className="feed-body-toggle"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((value) => !value)}
+        >
+          {expanded ? "See less" : "See more"}
+        </button>
+      )}
+    </>
   );
 }
 
@@ -361,7 +402,7 @@ function PostCard({
         <div className="feed-audience-badge">🕒 Scheduled</div>
       )}
       {post.repostOf && <div className="feed-repost-label">🔁 Shared a post</div>}
-      {post.body && <p className="feed-body">{post.body}</p>}
+      {post.body && <PostBody text={post.body} />}
 
       {post.hashtags && post.hashtags.length > 0 && (
         <div className="feed-tags">
@@ -395,11 +436,22 @@ function PostCard({
       ) : post.images && post.images.length > 1 ? (
         <div className={`feed-image-grid feed-image-grid-${Math.min(post.images.length, 4)}`}>
           {post.images.map((src) => (
-            <img key={src} className="feed-image-img" src={`${cloudUrl}${src}`} alt="Post attachment" loading="lazy" />
+            <img
+              key={src}
+              className="feed-image-img"
+              src={`${cloudUrl}${src}`}
+              alt="Post attachment"
+              loading="lazy"
+            />
           ))}
         </div>
       ) : post.imageUrl ? (
-        <img className="feed-image-img" src={`${cloudUrl}${post.imageUrl}`} alt="Post attachment" loading="lazy" />
+        <img
+          className="feed-image-img"
+          src={`${cloudUrl}${post.imageUrl}`}
+          alt="Post attachment"
+          loading="lazy"
+        />
       ) : post.mediaId ? (
         <div className="feed-image feed-image-placeholder">📷 Image</div>
       ) : null}
@@ -407,7 +459,8 @@ function PostCard({
       {post.poll && (
         <div className="feed-poll">
           {post.poll.options.map((option) => {
-            const pct = post.poll && post.poll.total > 0 ? Math.round((option.votes / post.poll.total) * 100) : 0;
+            const pct =
+              post.poll && post.poll.total > 0 ? Math.round((option.votes / post.poll.total) * 100) : 0;
             const chosen = post.poll?.myVote === option.id;
             const showPct = Boolean(post.poll?.myVote) || Boolean(post.poll?.closed);
             return (
@@ -433,7 +486,7 @@ function PostCard({
 
       <div className="feed-stats">
         {post.likes > 0 && (
-          <span className="feed-reaction-summary" title="Reactions">
+          <span className="feed-reaction-summary" title={reactionBreakdown(post.reactions)}>
             {Object.entries(post.reactions ?? {})
               .filter(([, count]) => count > 0)
               .slice(0, 3)
@@ -448,7 +501,11 @@ function PostCard({
             {post.comments} comment{post.comments === 1 ? "" : "s"}
           </button>
         )}
-        {post.shares > 0 && <span>{post.shares} share{post.shares === 1 ? "" : "s"}</span>}
+        {post.shares > 0 && (
+          <span>
+            {post.shares} share{post.shares === 1 ? "" : "s"}
+          </span>
+        )}
       </div>
 
       {pickOpen && (
@@ -481,12 +538,24 @@ function PostCard({
           ) : (
             <HeartIcon size={17} />
           )}
-          {post.myReaction ? (REACTIONS.find((entry) => entry.key === post.myReaction)?.label ?? "Like") : "Like"}
+          {post.myReaction
+            ? (REACTIONS.find((entry) => entry.key === post.myReaction)?.label ?? "Like")
+            : "Like"}
         </button>
-        <button type="button" className="feed-action" onClick={() => void toggleComments()} aria-expanded={commentsOpen}>
+        <button
+          type="button"
+          className="feed-action"
+          onClick={() => void toggleComments()}
+          aria-expanded={commentsOpen}
+        >
           <MessageIcon size={17} /> Comment
         </button>
-        <button type="button" className="feed-action" onClick={() => void share()} aria-pressed={post.sharedByMe}>
+        <button
+          type="button"
+          className="feed-action"
+          onClick={() => void share()}
+          aria-pressed={post.sharedByMe}
+        >
           <ForwardIcon size={17} /> Share
         </button>
         <button
@@ -640,7 +709,12 @@ function PostCard({
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
             />
-            <button className="feed-comment-send" type="submit" disabled={!draft.trim() || busy} aria-label="Send comment">
+            <button
+              className="feed-comment-send"
+              type="submit"
+              disabled={!draft.trim() || busy}
+              aria-label="Send comment"
+            >
               <SendIcon size={15} />
             </button>
           </form>
@@ -670,7 +744,14 @@ function PageView({
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
-  const [form, setForm] = useState({ name: "", handle: "", category: "", about: "", cta: "", avatarEmoji: "" });
+  const [form, setForm] = useState({
+    name: "",
+    handle: "",
+    category: "",
+    about: "",
+    cta: "",
+    avatarEmoji: "",
+  });
   const [saving, setSaving] = useState(false);
   const [roles, setRoles] = useState<Array<{ userId: string; role: string; person: Person | null }>>([]);
   const [roleQuery, setRoleQuery] = useState("");
@@ -837,7 +918,10 @@ function PageView({
     if (!page) return;
     try {
       await client.setPageRole(page.id, person.id, role);
-      setRoles((prev) => [...prev.filter((entry) => entry.userId !== person.id), { userId: person.id, role, person }]);
+      setRoles((prev) => [
+        ...prev.filter((entry) => entry.userId !== person.id),
+        { userId: person.id, role, person },
+      ]);
       setRoleQuery("");
       setRoleResults([]);
     } catch {
@@ -885,7 +969,11 @@ function PageView({
       <div className="feed-scroll">
         {page && (
           <div className="page-head">
-            {page.coverUrl ? <img className="page-cover" src={page.coverUrl} alt="" /> : <div className="page-cover" />}
+            {page.coverUrl ? (
+              <img className="page-cover" src={page.coverUrl} alt="" />
+            ) : (
+              <div className="page-cover" />
+            )}
             <div className="page-head-body">
               <Avatar emoji={page.avatarEmoji} name={page.name} size={64} />
               <div className="page-head-meta">
@@ -961,11 +1049,17 @@ function PageView({
             </label>
             <label>
               Handle
-              <input value={form.handle} onChange={(event) => setForm({ ...form, handle: event.target.value })} />
+              <input
+                value={form.handle}
+                onChange={(event) => setForm({ ...form, handle: event.target.value })}
+              />
             </label>
             <label>
               Category
-              <input value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })} />
+              <input
+                value={form.category}
+                onChange={(event) => setForm({ ...form, category: event.target.value })}
+              />
             </label>
             <label>
               Avatar emoji
@@ -1001,10 +1095,15 @@ function PageView({
                 {roles.map((entry) => (
                   <div key={entry.userId} className="page-role-row">
                     <span>
-                      {entry.person?.displayName || (entry.person?.handle ? `@${entry.person.handle}` : entry.userId)}
+                      {entry.person?.displayName ||
+                        (entry.person?.handle ? `@${entry.person.handle}` : entry.userId)}
                     </span>
                     <span className="feed-bot-badge">{entry.role}</span>
-                    <button type="button" className="ghost small" onClick={() => void removeRole(entry.userId)}>
+                    <button
+                      type="button"
+                      className="ghost small"
+                      onClick={() => void removeRole(entry.userId)}
+                    >
                       Remove
                     </button>
                   </div>
@@ -1106,8 +1205,9 @@ function PageView({
               inbox.map((entry) => (
                 <div key={entry.id} className="page-role-row">
                   <span>
-                    {entry.author.displayName || (entry.author.handle ? `@${entry.author.handle}` : "Someone")}:{" "}
-                    {entry.body}
+                    {entry.author.displayName ||
+                      (entry.author.handle ? `@${entry.author.handle}` : "Someone")}
+                    : {entry.body}
                   </span>
                   <button
                     type="button"
@@ -1271,7 +1371,13 @@ function ReelsView({
           reels.map((post) => (
             <div key={post.id} className="reel">
               {post.videos?.[0] && (
-                <video className="reel-video" src={`${cloudUrl}${post.videos[0]}`} controls loop playsInline />
+                <video
+                  className="reel-video"
+                  src={`${cloudUrl}${post.videos[0]}`}
+                  controls
+                  loop
+                  playsInline
+                />
               )}
               <div className="reel-meta">
                 {authorEmoji(post.author)} {authorName(post.author)}
@@ -1599,7 +1705,9 @@ export function FeedView({
       reader.onload = () => {
         const data = typeof reader.result === "string" ? reader.result : "";
         if (data) {
-          setAttachments((prev) => (prev.length >= 4 ? prev : [...prev, { name: file.name, mime: file.type, data }]));
+          setAttachments((prev) =>
+            prev.length >= 4 ? prev : [...prev, { name: file.name, mime: file.type, data }],
+          );
         }
       };
       reader.readAsDataURL(file);
@@ -1612,7 +1720,10 @@ export function FeedView({
       else setLoadingMore(true);
       setError(null);
       try {
-        const page = await client.listFeed(mode === "reset" ? undefined : (cursor ?? undefined), 20, { tab, sort });
+        const page = await client.listFeed(mode === "reset" ? undefined : (cursor ?? undefined), 20, {
+          tab,
+          sort,
+        });
         setPosts((prev) => (mode === "reset" ? page.items : [...prev, ...page.items]));
         setCursor(page.nextCursor);
       } catch (err) {
@@ -1838,12 +1949,22 @@ export function FeedView({
           {stories.map((story) => (
             <button key={story.id} type="button" className="story-tile" onClick={() => setStoryView(story)}>
               <span className="story-avatar">
-                {story.imageUrl ? <img src={`${cloudUrl}${story.imageUrl}`} alt="" /> : authorEmoji(story.author)}
+                {story.imageUrl ? (
+                  <img src={`${cloudUrl}${story.imageUrl}`} alt="" />
+                ) : (
+                  authorEmoji(story.author)
+                )}
               </span>
               <span className="story-name">{authorName(story.author)}</span>
             </button>
           ))}
-          <input ref={storyRef} type="file" accept="image/*" style={{ display: "none" }} onChange={addStory} />
+          <input
+            ref={storyRef}
+            type="file"
+            accept="image/*"
+            style={{ display: "none" }}
+            onChange={addStory}
+          />
         </div>
         <form className="feed-composer" onSubmit={publish}>
           <div className="feed-composer-row">
@@ -1966,7 +2087,9 @@ export function FeedView({
                   placeholder={`Option ${index + 1}`}
                   value={option}
                   onChange={(event) =>
-                    setPollOptions((prev) => prev.map((value, i) => (i === index ? event.target.value : value)))
+                    setPollOptions((prev) =>
+                      prev.map((value, i) => (i === index ? event.target.value : value)),
+                    )
                   }
                 />
               ))}
@@ -1999,7 +2122,11 @@ export function FeedView({
             >
               <ChartIcon size={16} /> Poll
             </button>
-            <button className="feed-post-btn" type="submit" disabled={(!draft.trim() && attachments.length === 0) || posting}>
+            <button
+              className="feed-post-btn"
+              type="submit"
+              disabled={(!draft.trim() && attachments.length === 0) || posting}
+            >
               {posting ? "Saving…" : scheduledAt ? "Schedule" : "Post"}
             </button>
           </div>
@@ -2083,7 +2210,9 @@ export function FeedView({
           ) : (
             <div className="story-text">{storyView.caption}</div>
           )}
-          {storyView.caption && storyView.imageUrl && <div className="story-caption">{storyView.caption}</div>}
+          {storyView.caption && storyView.imageUrl && (
+            <div className="story-caption">{storyView.caption}</div>
+          )}
           <button type="button" className="story-close" onClick={() => setStoryView(null)} aria-label="Close">
             ✕
           </button>
@@ -2344,36 +2473,38 @@ export function FeedRail({
         <div className="feed-rail-head">
           <SparkIcon size={15} /> Who to follow
         </div>
-      {people === null ? (
-        <div className="feed-state">Loading…</div>
-      ) : people.length === 0 ? (
-        <div className="feed-state">No suggestions right now.</div>
-      ) : (
-        <ul className="feed-rail-people">
-          {people.map((person) => {
-            const sent = requested[person.id] === true;
-            return (
-              <li key={person.id} className="feed-rail-person">
-                <Avatar emoji={person.avatarEmoji} name={person.displayName} size={36} />
-                <div className="feed-rail-person-meta">
-                  <span className="feed-rail-person-name">
-                    {person.displayName || (person.handle ? `@${person.handle}` : "Someone")}
-                  </span>
-                  <span className="feed-rail-person-sub">{person.handle ? `@${person.handle}` : "New here"}</span>
-                </div>
-                <button
-                  type="button"
-                  className={`feed-follow-btn${sent ? " following" : ""}`}
-                  disabled={sent || busy === person.id}
-                  onClick={() => void follow(person)}
-                >
-                  {sent ? "Requested" : busy === person.id ? "…" : "Follow"}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+        {people === null ? (
+          <div className="feed-state">Loading…</div>
+        ) : people.length === 0 ? (
+          <div className="feed-state">No suggestions right now.</div>
+        ) : (
+          <ul className="feed-rail-people">
+            {people.map((person) => {
+              const sent = requested[person.id] === true;
+              return (
+                <li key={person.id} className="feed-rail-person">
+                  <Avatar emoji={person.avatarEmoji} name={person.displayName} size={36} />
+                  <div className="feed-rail-person-meta">
+                    <span className="feed-rail-person-name">
+                      {person.displayName || (person.handle ? `@${person.handle}` : "Someone")}
+                    </span>
+                    <span className="feed-rail-person-sub">
+                      {person.handle ? `@${person.handle}` : "New here"}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className={`feed-follow-btn${sent ? " following" : ""}`}
+                    disabled={sent || busy === person.id}
+                    onClick={() => void follow(person)}
+                  >
+                    {sent ? "Requested" : busy === person.id ? "…" : "Follow"}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </div>
 
       {trending.length > 0 && (
@@ -2404,7 +2535,9 @@ export function FeedRail({
                   <span className="feed-rail-person-name">
                     {person.displayName || (person.handle ? `@${person.handle}` : "Blocked user")}
                   </span>
-                  <span className="feed-rail-person-sub">{person.handle ? `@${person.handle}` : "Blocked"}</span>
+                  <span className="feed-rail-person-sub">
+                    {person.handle ? `@${person.handle}` : "Blocked"}
+                  </span>
                 </div>
                 <button type="button" className="feed-follow-btn" onClick={() => void unblock(person)}>
                   Unblock
