@@ -8102,6 +8102,10 @@ body {
   width: 100%;
   max-width: 620px;
   display: flex;
+  /* Never let the column feed shrink the tray: without this the horizontal
+     scroll container's min-content height collapses and the composer/posts
+     paint over the tiles. */
+  flex: none;
   gap: var(--space-2);
   overflow-x: auto;
   padding-bottom: var(--space-1);
