@@ -148,6 +148,15 @@ export interface PollRecord {
   closed: boolean;
 }
 
+/** Whether anyone may join a group, or a request must be approved. */
+export type GroupPrivacy = "public" | "private";
+
+/**
+ * A member's role. The owner (`GroupRecord.ownerId`) is always an admin and is
+ * not stored separately; `admin` here means an additional administrator.
+ */
+export type GroupRole = "admin" | "moderator" | "member";
+
 /** A group: a community with members and its own post stream. */
 export interface GroupRecord {
   id: string;
@@ -156,6 +165,14 @@ export interface GroupRecord {
   handle: string;
   about?: string;
   avatarEmoji?: string;
+  /** Uploaded profile photo (data URL or signed media path). */
+  avatarUrl?: string;
+  /** Cover/banner image. */
+  coverUrl?: string;
+  /** Discovery category, e.g. "Technology". */
+  category?: string;
+  /** Public groups anyone may join; private groups require approval. */
+  privacy: GroupPrivacy;
   createdAt: string;
   updatedAt: string;
 }
@@ -163,7 +180,17 @@ export interface GroupRecord {
 export interface GroupMemberRecord {
   groupId: string;
   userId: string;
-  role: "admin" | "member";
+  role: GroupRole;
+  createdAt?: string;
+}
+
+/** A pending or resolved request to join a (private) group. */
+export interface GroupJoinRequestRecord {
+  groupId: string;
+  userId: string;
+  status: "pending" | "approved" | "rejected";
+  createdAt: string;
+  updatedAt: string;
 }
 
 /** A 24-hour ephemeral story (docs/feed-next.md §FR-13). */
@@ -532,6 +559,26 @@ export interface Store {
   listGroupMembers(groupId: string): Promise<GroupMemberRecord[]>;
   /** Newest-first posts belonging to a group. */
   listGroupPosts(groupId: string, limit: number): Promise<PostRecord[]>;
+  /** Public groups matching an optional text query and/or category (discovery). */
+  listDiscoverableGroups(opts: {
+    query?: string;
+    category?: string;
+    limit: number;
+    offset: number;
+  }): Promise<GroupRecord[]>;
+  /** Groups owned by this user (the ones they manage). */
+  listGroupsOwnedBy(userId: string): Promise<GroupRecord[]>;
+  /** Distinct categories across public groups, for the discovery filters. */
+  listGroupCategories(): Promise<string[]>;
+  getGroupMember(groupId: string, userId: string): Promise<GroupMemberRecord | null>;
+  countGroupMembers(groupId: string): Promise<number>;
+  /** Every join request for a group (any status), newest first. */
+  listGroupJoinRequests(groupId: string): Promise<GroupJoinRequestRecord[]>;
+  getGroupJoinRequest(groupId: string, userId: string): Promise<GroupJoinRequestRecord | null>;
+  setGroupJoinRequest(record: GroupJoinRequestRecord): Promise<void>;
+  deleteGroupJoinRequest(groupId: string, userId: string): Promise<boolean>;
+  /** Delete a post regardless of author (group moderator/admin action). */
+  deletePostById(id: string): Promise<boolean>;
 
   /* Stories (docs/feed-next.md §FR-13) */
   createStory(record: StoryRecord): Promise<void>;

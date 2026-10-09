@@ -10,6 +10,7 @@ import type {
   DeviceKey,
   FileRecord,
   FriendRequestRecord,
+  GroupJoinRequestRecord,
   GroupMemberRecord,
   GroupRecord,
   InvoiceRecord,
@@ -97,6 +98,8 @@ export class MemoryStore implements Store {
   private groups = new Map<string, GroupRecord>();
   /** Keyed by `${groupId}:${userId}`. */
   private groupMembers = new Map<string, GroupMemberRecord>();
+  /** Keyed by `${groupId}:${userId}`. */
+  private groupJoinRequests = new Map<string, GroupJoinRequestRecord>();
   /** Keyed by `${userId}:${postId}`. */
   private postSaves = new Set<string>();
   private postHides = new Set<string>();
@@ -942,11 +945,18 @@ export class MemoryStore implements Store {
     this.groups.delete(id);
     for (const [key, member] of [...this.groupMembers])
       if (member.groupId === id) this.groupMembers.delete(key);
+    for (const [key, request] of [...this.groupJoinRequests])
+      if (request.groupId === id) this.groupJoinRequests.delete(key);
     return true;
   }
 
   async setGroupMember(record: GroupMemberRecord): Promise<void> {
-    this.groupMembers.set(`${record.groupId}:${record.userId}`, { ...record });
+    const key = `${record.groupId}:${record.userId}`;
+    const existing = this.groupMembers.get(key);
+    this.groupMembers.set(key, {
+      ...record,
+      createdAt: record.createdAt ?? existing?.createdAt ?? new Date().toISOString(),
+    });
   }
 
   async deleteGroupMember(groupId: string, userId: string): Promise<boolean> {
@@ -955,6 +965,95 @@ export class MemoryStore implements Store {
 
   async isGroupMember(groupId: string, userId: string): Promise<boolean> {
     return this.groupMembers.has(`${groupId}:${userId}`);
+  }
+
+  async listGroupsOwnedBy(userId: string): Promise<GroupRecord[]> {
+    return [...this.groups.values()]
+      .filter((group) => group.ownerId === userId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map((group) => ({ ...group }));
+  }
+
+  async listDiscoverableGroups(opts: {
+    query?: string;
+    category?: string;
+    limit: number;
+    offset: number;
+  }): Promise<GroupRecord[]> {
+    const query = opts.query?.trim().toLowerCase() ?? "";
+    const category = opts.category?.trim().toLowerCase() ?? "";
+    return [...this.groups.values()]
+      .filter((group) => group.privacy === "public")
+      .filter(
+        (group) =>
+          !category || (group.category ?? "").toLowerCase() === category,
+      )
+      .filter(
+        (group) =>
+          !query ||
+          group.name.toLowerCase().includes(query) ||
+          group.handle.toLowerCase().includes(query) ||
+          (group.about ?? "").toLowerCase().includes(query),
+      )
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(opts.offset, opts.offset + opts.limit)
+      .map((group) => ({ ...group }));
+  }
+
+  async listGroupCategories(): Promise<string[]> {
+    const categories = new Set<string>();
+    for (const group of this.groups.values()) {
+      if (group.privacy === "public" && group.category) categories.add(group.category);
+    }
+    return [...categories].sort((a, b) => a.localeCompare(b));
+  }
+
+  async getGroupMember(groupId: string, userId: string): Promise<GroupMemberRecord | null> {
+    const record = this.groupMembers.get(`${groupId}:${userId}`);
+    return record ? { ...record } : null;
+  }
+
+  async countGroupMembers(groupId: string): Promise<number> {
+    let count = 0;
+    for (const member of this.groupMembers.values()) if (member.groupId === groupId) count += 1;
+    return count;
+  }
+
+  async listGroupJoinRequests(groupId: string): Promise<GroupJoinRequestRecord[]> {
+    return [...this.groupJoinRequests.values()]
+      .filter((request) => request.groupId === groupId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map((request) => ({ ...request }));
+  }
+
+  async getGroupJoinRequest(groupId: string, userId: string): Promise<GroupJoinRequestRecord | null> {
+    const record = this.groupJoinRequests.get(`${groupId}:${userId}`);
+    return record ? { ...record } : null;
+  }
+
+  async setGroupJoinRequest(record: GroupJoinRequestRecord): Promise<void> {
+    this.groupJoinRequests.set(`${record.groupId}:${record.userId}`, { ...record });
+  }
+
+  async deleteGroupJoinRequest(groupId: string, userId: string): Promise<boolean> {
+    return this.groupJoinRequests.delete(`${groupId}:${userId}`);
+  }
+
+  async deletePostById(id: string): Promise<boolean> {
+    const record = this.posts.get(id);
+    if (!record) return false;
+    this.posts.delete(id);
+    for (const [key, comment] of [...this.postComments]) {
+      if (comment.postId === id) this.postComments.delete(key);
+    }
+    for (const key of [...this.postReactions.keys()])
+      if (key.startsWith(`${id}:`)) this.postReactions.delete(key);
+    for (const key of [...this.postShares]) if (key.startsWith(`${id}:`)) this.postShares.delete(key);
+    this.postMedia.delete(id);
+    this.postTags.delete(id);
+    this.polls.delete(id);
+    for (const key of [...this.pollVotes.keys()]) if (key.startsWith(`${id}:`)) this.pollVotes.delete(key);
+    return true;
   }
 
   async listAlbums(ownerId: string): Promise<Array<{ name: string; count: number }>> {

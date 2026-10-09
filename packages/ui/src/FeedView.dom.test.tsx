@@ -1550,3 +1550,81 @@ describe("Post reuse across contexts", () => {
     expect(screen.getByRole("button", { name: "More options" })).toBeTruthy();
   });
 });
+
+/**
+ * Groups (communities): discovery, detail tabs, membership gating, and the
+ * member composer all reuse the shared Feed post experience.
+ */
+describe("Groups", () => {
+  const baseGroup = {
+    id: "g1",
+    handle: "hikers",
+    name: "Weekend Hikers",
+    about: "Trails on Saturdays",
+    category: "Sports",
+    privacy: "public" as const,
+    avatarEmoji: "🥾",
+    ownerId: "owner-1",
+    members: 3,
+    joined: true,
+    role: "member" as const,
+    owner: false,
+    requestPending: false,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+
+  function groupClient(overrides: Record<string, unknown> = {}): BotifyrClient {
+    return {
+      ...makeClient([makePost({ body: "Hello group" })]),
+      getGroup: vi.fn().mockResolvedValue(baseGroup),
+      groupPosts: vi.fn().mockResolvedValue([makePost({ body: "Hello group" })]),
+      groupMembers: vi.fn().mockResolvedValue([]),
+      groupRequests: vi.fn().mockResolvedValue([]),
+      ...overrides,
+    } as unknown as BotifyrClient;
+  }
+
+  it("renders the group detail tabs and a composer for members", async () => {
+    render(
+      <FeedView client={groupClient()} cloudUrl="http://cloud" viewerId="viewer-1" groupHandle="hikers" />,
+    );
+    expect(await screen.findByRole("tab", { name: "Discussion" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Members" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "About" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Photos" })).toBeTruthy();
+    expect(await screen.findByText("Hello group")).toBeTruthy();
+    expect(screen.getByRole("textbox", { name: "Post in Weekend Hikers" })).toBeTruthy();
+  });
+
+  it("hides the composer and offers a request action for a private non-member", async () => {
+    const client = groupClient({
+      getGroup: vi.fn().mockResolvedValue({
+        ...baseGroup,
+        privacy: "private",
+        joined: false,
+        role: null,
+        requestPending: false,
+      }),
+      // A non-member can't read a private stream; the header must still render.
+      groupPosts: vi.fn().mockRejectedValue(new Error("forbidden")),
+    });
+    render(<FeedView client={client} cloudUrl="http://cloud" viewerId="viewer-1" groupHandle="hikers" />);
+    expect(await screen.findByRole("button", { name: "Request to join" })).toBeTruthy();
+    expect(screen.queryByRole("textbox", { name: /Post in/ })).toBeNull();
+  });
+
+  it("opens the groups landing with discovery results and a create action", async () => {
+    const client = groupClient({
+      discoverGroups: vi.fn().mockResolvedValue([baseGroup]),
+      groupCategories: vi.fn().mockResolvedValue({ categories: ["Sports"] }),
+      listGroups: vi.fn().mockResolvedValue([]),
+      listManagedGroups: vi.fn().mockResolvedValue([]),
+    });
+    render(<FeedView client={client} cloudUrl="http://cloud" viewerId="viewer-1" />);
+    fireEvent.click(screen.getByRole("button", { name: "Open Groups" }));
+    expect(await screen.findByRole("button", { name: /Create group/ })).toBeTruthy();
+    expect(await screen.findByText("Weekend Hikers")).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Discover" })).toBeTruthy();
+  });
+});

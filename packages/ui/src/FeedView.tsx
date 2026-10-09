@@ -1,23 +1,39 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode, UIEvent } from "react";
-import type { BotifyrClient, FeedComment, FeedPost, Group, Page, Person } from "@botifyr/client";
+import type {
+  BotifyrClient,
+  FeedComment,
+  FeedPost,
+  Group,
+  GroupJoinRequest,
+  GroupMember,
+  Page,
+  Person,
+} from "@botifyr/client";
 import type { Session } from "@botifyr/shared";
 import {
   BookmarkIcon,
   CameraIcon,
   ChartIcon,
+  CheckIcon,
+  CloseIcon,
   CubeIcon,
   ForwardIcon,
   FullscreenIcon,
+  GearIcon,
   HomeIcon,
+  LockIcon,
   MenuIcon,
   MessageIcon,
   MoreIcon,
   PanelIcon,
   PauseIcon,
   PlayIcon,
+  PlusIcon,
   RefreshIcon,
+  SearchIcon,
   SendIcon,
+  ShieldIcon,
   SmileyIcon,
   SparkIcon,
   UsersIcon,
@@ -639,7 +655,7 @@ function PostCard({
   const [confirm, setConfirm] = useState<null | "delete" | "block">(null);
   const [commentError, setCommentError] = useState<string | null>(null);
   const [allCommentsShown, setAllCommentsShown] = useState(false);
-  const [highlight, setHighlight] = useState(false);
+  const [highlight, setHighlight] = useState(Boolean(focus));
   const [editing, setEditing] = useState(false);
   const [editDraft, setEditDraft] = useState(post.body);
   const inFlight = useRef(new Set<string>());
@@ -3314,75 +3330,363 @@ function AlbumView({
   );
 }
 
+/** Read a picked image as a data URL, or reject when it is larger than `maxBytes`. */
+function readImageDataUrl(file: File, maxBytes: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (file.size > maxBytes) {
+      reject(new Error("That image is too large — pick one under 3 MB."));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
+    reader.onerror = () => reject(new Error("Couldn't read that image."));
+    reader.readAsDataURL(file);
+  });
+}
+
+/** One group card in discovery / your-groups lists. */
+function GroupCard({
+  group,
+  cloudUrl,
+  busy,
+  onOpen,
+  onAction,
+}: {
+  group: Group;
+  cloudUrl: string;
+  busy: boolean;
+  onOpen: () => void;
+  onAction: () => void;
+}) {
+  const actionLabel = group.joined
+    ? "View group"
+    : group.requestPending
+      ? "Request pending"
+      : group.privacy === "private"
+        ? "Request to join"
+        : "Join";
+  return (
+    <div className="group-card">
+      <button type="button" className="group-card-cover" onClick={onOpen} aria-label={`Open ${group.name}`}>
+        {group.coverUrl ? (
+          <img src={resolveAvatar(group.coverUrl, cloudUrl)} alt="" loading="lazy" />
+        ) : (
+          <span className="group-card-cover-fallback" />
+        )}
+      </button>
+      <div className="group-card-body">
+        <button type="button" className="group-card-title" onClick={onOpen}>
+          <Avatar
+            emoji={group.avatarEmoji}
+            name={group.name}
+            url={resolveAvatar(group.avatarUrl, cloudUrl)}
+            size={44}
+          />
+          <span className="group-card-meta">
+            <span className="group-card-name">
+              {group.name}
+              {group.privacy === "private" && <LockIcon size={12} />}
+            </span>
+            <span className="feed-list-sub">
+              {group.members} member{group.members === 1 ? "" : "s"}
+              {group.category ? ` · ${group.category}` : ""}
+            </span>
+          </span>
+        </button>
+        {group.about && <p className="group-card-about">{group.about}</p>}
+        <div className="group-card-actions">
+          <button
+            type="button"
+            className={`feed-follow-btn${group.joined ? " following" : ""}`}
+            disabled={busy || group.requestPending}
+            aria-busy={busy}
+            onClick={group.joined ? onOpen : onAction}
+          >
+            {busy ? "Working…" : actionLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function GroupView({
   client,
   cloudUrl,
   viewerId,
   handle,
   onBack,
+  onChanged,
 }: {
   client: BotifyrClient;
   cloudUrl: string;
   viewerId?: string;
   handle: string;
   onBack: () => void;
+  /** Called after a mutation so the host can refresh discovery/rails. */
+  onChanged?: () => void;
 }) {
   const [group, setGroup] = useState<Group | null>(null);
   const [posts, setPosts] = useState<FeedPost[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [section, setSection] = useState<"discussion" | "members" | "about" | "media">("discussion");
   const [draft, setDraft] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [posting, setPosting] = useState(false);
+  const [postError, setPostError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [joinBusy, setJoinBusy] = useState(false);
+  const [joinError, setJoinError] = useState<string | null>(null);
+  const [members, setMembers] = useState<GroupMember[] | null>(null);
+  const [requests, setRequests] = useState<GroupJoinRequest[] | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [form, setForm] = useState({
+    name: "",
+    handle: "",
+    about: "",
+    category: "",
+    avatarEmoji: "",
+    privacy: "public" as "public" | "private",
+  });
+  const [avatarUrl, setAvatarUrl] = useState<string | undefined>();
+  const [coverUrl, setCoverUrl] = useState<string | undefined>();
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmLeave, setConfirmLeave] = useState(false);
+  const [busyMemberId, setBusyMemberId] = useState<string | null>(null);
+  const avatarInputRef = useRef<HTMLInputElement | null>(null);
+  const coverInputRef = useRef<HTMLInputElement | null>(null);
+  const [nonce, setNonce] = useState(0);
 
   useEffect(() => {
     let active = true;
     setLoading(true);
-    Promise.all([client.getGroup(handle), client.groupPosts(handle)])
-      .then(([record, list]) => {
-        if (!active) return;
-        setGroup(record);
-        setPosts(list);
+    setLoadError(null);
+    client
+      .getGroup(handle)
+      .then((record) => {
+        if (active) setGroup(record);
       })
-      .catch(() => {})
+      .catch(() => {
+        if (active)
+          setLoadError("We couldn't load this group. It may have been removed, or it's private.");
+      })
       .finally(() => {
         if (active) setLoading(false);
+      });
+    // The stream can fail independently (a private group the viewer can't read
+    // yet), so fetch it separately and keep the group header visible.
+    client
+      .groupPosts(handle)
+      .then((list) => {
+        if (active) setPosts(list);
+      })
+      .catch(() => {
+        if (active) setPosts([]);
       });
     return () => {
       active = false;
     };
-  }, [client, handle]);
+  }, [client, handle, nonce]);
+
+  const isAdmin = group?.role === "admin";
+  const canModerate = isAdmin || group?.role === "moderator";
+  const isMember = Boolean(group?.joined);
+
+  useEffect(() => {
+    if (!group || section !== "members") return;
+    let active = true;
+    client
+      .groupMembers(group.id)
+      .then((list) => {
+        if (active) setMembers(list);
+      })
+      .catch(() => {
+        if (active) setMembers([]);
+      });
+    if (isAdmin) {
+      client
+        .groupRequests(group.id)
+        .then((list) => {
+          if (active) setRequests(list);
+        })
+        .catch(() => {
+          if (active) setRequests([]);
+        });
+    }
+    return () => {
+      active = false;
+    };
+  }, [client, group, section, isAdmin, nonce]);
 
   async function toggleJoin() {
-    if (!group) return;
+    if (!group || joinBusy) return;
+    setJoinBusy(true);
+    setJoinError(null);
+    setNotice(null);
     try {
-      if (group.joined) await client.leaveGroup(group.id);
-      else await client.joinGroup(group.id);
-      setGroup({ ...group, joined: !group.joined, members: group.members + (group.joined ? -1 : 1) });
-    } catch {
-      // ignore
+      if (group.joined) {
+        await client.leaveGroup(group.id);
+        setGroup({ ...group, joined: false, role: null, members: Math.max(0, group.members - 1) });
+        setNotice("You left the group.");
+      } else {
+        const result = await client.joinGroup(group.id);
+        if (result.status === "pending") {
+          setGroup({ ...group, requestPending: true });
+          setNotice("Request sent — a group admin will review it.");
+        } else {
+          setGroup({
+            ...group,
+            joined: true,
+            role: "member",
+            requestPending: false,
+            members: group.members + 1,
+          });
+          setNotice("Welcome to the group!");
+        }
+      }
+      onChanged?.();
+    } catch (err) {
+      setJoinError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+    } finally {
+      setJoinBusy(false);
     }
   }
 
   async function post(event: FormEvent) {
     event.preventDefault();
     const body = draft.trim();
-    if (!body || !group || busy) return;
-    setBusy(true);
-    setError(null);
+    if (!body || !group || posting) return;
+    setPosting(true);
+    setPostError(null);
     try {
       const created = await client.createPost({ body, groupId: group.id });
       setPosts((prev) => [created, ...prev]);
       setDraft("");
     } catch (err) {
       // Keep the text so a failed group post can be retried.
-      setError(err instanceof Error ? err.message : "Couldn't post to this group");
+      setPostError(err instanceof Error ? err.message : "Couldn't post to this group");
     } finally {
-      setBusy(false);
+      setPosting(false);
+    }
+  }
+
+  function openSettings() {
+    if (!group) return;
+    setForm({
+      name: group.name,
+      handle: group.handle,
+      about: group.about ?? "",
+      category: group.category ?? "",
+      avatarEmoji: group.avatarEmoji ?? "",
+      privacy: group.privacy,
+    });
+    setAvatarUrl(group.avatarUrl);
+    setCoverUrl(group.coverUrl);
+    setFormError(null);
+    setEditing(true);
+  }
+
+  async function saveSettings(event: FormEvent) {
+    event.preventDefault();
+    if (!group) return;
+    setSaving(true);
+    setFormError(null);
+    try {
+      const updated = await client.updateGroup(group.id, {
+        name: form.name,
+        handle: form.handle,
+        about: form.about,
+        category: form.category,
+        avatarEmoji: form.avatarEmoji,
+        privacy: form.privacy,
+        avatarUrl: avatarUrl ?? "",
+        coverUrl: coverUrl ?? "",
+      });
+      setGroup(updated);
+      setEditing(false);
+      setNotice("Group updated.");
+      onChanged?.();
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "Couldn't save the changes.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function resolveRequest(userId: string, action: "approve" | "reject") {
+    if (!group) return;
+    setBusyMemberId(userId);
+    try {
+      await client.resolveGroupRequest(group.id, userId, action);
+      setRequests((prev) => (prev ?? []).filter((entry) => entry.userId !== userId));
+      if (action === "approve") {
+        setGroup({ ...group, members: group.members + 1 });
+        setMembers(await client.groupMembers(group.id));
+      }
+      onChanged?.();
+    } catch {
+      setNotice("Couldn't process that request.");
+    } finally {
+      setBusyMemberId(null);
+    }
+  }
+
+  async function setRole(userId: string, role: "admin" | "moderator" | "member") {
+    if (!group) return;
+    setBusyMemberId(userId);
+    try {
+      await client.setGroupMemberRole(group.id, userId, role);
+      setMembers((prev) => (prev ?? []).map((entry) => (entry.userId === userId ? { ...entry, role } : entry)));
+    } catch {
+      setNotice("Couldn't update that role.");
+    } finally {
+      setBusyMemberId(null);
+    }
+  }
+
+  async function removeMember(userId: string) {
+    if (!group) return;
+    setBusyMemberId(userId);
+    try {
+      await client.removeGroupMember(group.id, userId);
+      setMembers((prev) => (prev ?? []).filter((entry) => entry.userId !== userId));
+      setGroup({ ...group, members: Math.max(0, group.members - 1) });
+    } catch {
+      setNotice("Couldn't remove that member.");
+    } finally {
+      setBusyMemberId(null);
+    }
+  }
+
+  async function deleteGroup() {
+    if (!group) return;
+    try {
+      await client.deleteGroup(group.id);
+      onChanged?.();
+      onBack();
+    } catch {
+      setNotice("Couldn't delete the group.");
+    } finally {
+      setConfirmDelete(false);
     }
   }
 
   const updatePost = (next: FeedPost) => setPosts((prev) => prev.map((p) => (p.id === next.id ? next : p)));
   const removePost = (id: string) => setPosts((prev) => prev.filter((p) => p.id !== id));
+  const mediaPosts = posts.filter(
+    (post) => (post.images?.length ?? 0) > 0 || (post.videos?.length ?? 0) > 0,
+  );
+  const joinLabel = group?.owner
+    ? "Owner"
+    : group?.joined
+      ? "Leave"
+      : group?.requestPending
+        ? "Request pending"
+        : group?.privacy === "private"
+          ? "Request to join"
+          : "Join";
 
   return (
     <div className="feed">
@@ -3393,88 +3697,439 @@ function GroupView({
         <span className="feed-topbar-title">{group?.name ?? "Group"}</span>
       </div>
       <div className="feed-scroll">
-        {group && (
-          <div className="page-head">
-            <div className="page-head-body">
-              <Avatar emoji={group.avatarEmoji} name={group.name} size={64} />
-              <div className="page-head-meta">
-                <div className="page-name">{group.name}</div>
-                <div className="page-sub">
-                  @{group.handle} · {group.members} member{group.members === 1 ? "" : "s"}
-                </div>
-                {group.about && <p className="page-about">{group.about}</p>}
-              </div>
-              <button
-                type="button"
-                className={`feed-follow-btn${group.joined ? " following" : ""}`}
-                onClick={() => void toggleJoin()}
-              >
-                {group.joined ? "Leave" : "Join"}
-              </button>
-            </div>
+        {loading && !group ? (
+          <div className="feed-state">Loading…</div>
+        ) : loadError && !group ? (
+          <div className="page-error" role="alert">
+            <p>{loadError}</p>
+            <button type="button" className="feed-more" onClick={() => setNonce((n) => n + 1)}>
+              Retry
+            </button>
           </div>
-        )}
-
-        {group?.joined && (
-          <form className="feed-composer" onSubmit={post}>
-            <div className="feed-composer-row">
-              <Avatar name="You" />
-              <textarea
-                className="feed-composer-input"
-                aria-label={`Post in ${group.name}`}
-                placeholder={`Post in ${group.name}…`}
-                rows={2}
-                value={draft}
-                onChange={(event) => setDraft(event.target.value)}
-              />
-            </div>
-            {error && (
-              <div className="feed-composer-error" role="alert">
-                {error}
-              </div>
-            )}
-            <div className="feed-composer-actions">
-              {draft.length > 0 && (
-                <span
-                  className={`feed-composer-count${draft.length > MAX_POST_CHARS ? " over" : ""}`}
-                  aria-live="polite"
-                >
-                  {draft.length} / {MAX_POST_CHARS}
-                </span>
+        ) : group ? (
+          <>
+            <div className="page-head">
+              {group.coverUrl ? (
+                <img
+                  className="page-cover group-cover"
+                  src={resolveAvatar(group.coverUrl, cloudUrl)}
+                  alt=""
+                  decoding="async"
+                />
+              ) : (
+                <div className="page-cover group-cover" />
               )}
-              <button
-                className="feed-post-btn"
-                type="submit"
-                aria-busy={busy}
-                disabled={!draft.trim() || busy || draft.length > MAX_POST_CHARS}
+              <div className="page-head-body">
+                <Avatar
+                  emoji={group.avatarEmoji}
+                  name={group.name}
+                  url={resolveAvatar(group.avatarUrl, cloudUrl)}
+                  size={64}
+                />
+                <div className="page-head-meta">
+                  <h1 className="page-name">
+                    {group.name}
+                    {group.privacy === "private" && (
+                      <span className="group-privacy-badge" title="Private group">
+                        <LockIcon size={13} /> Private
+                      </span>
+                    )}
+                  </h1>
+                  <div className="page-sub">
+                    @{group.handle}
+                    {group.category ? ` · ${group.category}` : ""} · {group.members} member
+                    {group.members === 1 ? "" : "s"}
+                  </div>
+                  {group.about && <p className="page-about">{group.about}</p>}
+                </div>
+                <div className="page-head-actions">
+                  {isAdmin && (
+                    <button type="button" className="ghost small" onClick={openSettings}>
+                      <GearIcon size={15} /> Settings
+                    </button>
+                  )}
+                  {group.owner ? (
+                    <>
+                      <span className="feed-bot-badge">Owner</span>
+                      <button
+                        type="button"
+                        className="ghost small danger"
+                        onClick={() => setConfirmDelete(true)}
+                      >
+                        Delete
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      className={`feed-follow-btn${group.joined ? " following" : ""}`}
+                      disabled={joinBusy || group.requestPending}
+                      aria-busy={joinBusy}
+                      onClick={() => (group.joined ? setConfirmLeave(true) : void toggleJoin())}
+                    >
+                      {joinBusy ? "Working…" : joinLabel}
+                    </button>
+                  )}
+                </div>
+              </div>
+              {joinError && (
+                <p className="page-follow-error" role="alert">
+                  {joinError}
+                </p>
+              )}
+              {notice && (
+                <p className="group-notice" role="status">
+                  {notice}
+                </p>
+              )}
+            </div>
+
+            <div className="page-tabs" role="tablist" aria-label="Group sections">
+              {(["discussion", "members", "about", "media"] as const).map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  role="tab"
+                  aria-selected={section === key}
+                  className={`page-tab${section === key ? " active" : ""}`}
+                  onClick={() => setSection(key)}
+                >
+                  {key === "discussion"
+                    ? "Discussion"
+                    : key === "members"
+                      ? "Members"
+                      : key === "about"
+                        ? "About"
+                        : "Photos"}
+                </button>
+              ))}
+            </div>
+          </>
+        ) : null}
+
+        {editing && group && (
+          <form className="page-settings group-settings" onSubmit={saveSettings}>
+            <div className="feed-rail-head">Group settings</div>
+            <label>
+              Name
+              <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+            </label>
+            <label>
+              Handle
+              <input value={form.handle} onChange={(e) => setForm({ ...form, handle: e.target.value })} />
+            </label>
+            <label>
+              Category
+              <input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
+            </label>
+            <label>
+              Privacy
+              <select
+                value={form.privacy}
+                onChange={(e) => setForm({ ...form, privacy: e.target.value as "public" | "private" })}
               >
-                {busy ? "Posting…" : "Post"}
+                <option value="public">Public — anyone can join</option>
+                <option value="private">Private — approval required</option>
+              </select>
+            </label>
+            <label>
+              Avatar emoji
+              <input value={form.avatarEmoji} onChange={(e) => setForm({ ...form, avatarEmoji: e.target.value })} />
+            </label>
+            <div className="group-image-row">
+              <div className="group-image-field">
+                <span>Profile image</span>
+                {avatarUrl ? <img className="group-image-preview round" src={avatarUrl} alt="" /> : null}
+                <input
+                  ref={avatarInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="group-image-input"
+                  aria-label="Choose a profile image"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    try {
+                      setAvatarUrl(await readImageDataUrl(file, 3 * 1024 * 1024));
+                      setFormError(null);
+                    } catch (err) {
+                      setFormError(err instanceof Error ? err.message : "Couldn't read that image.");
+                    }
+                  }}
+                />
+                <button type="button" className="ghost small" onClick={() => avatarInputRef.current?.click()}>
+                  <CameraIcon size={15} /> Choose
+                </button>
+              </div>
+              <div className="group-image-field">
+                <span>Cover image</span>
+                {coverUrl ? <img className="group-image-preview" src={coverUrl} alt="" /> : null}
+                <input
+                  ref={coverInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="group-image-input"
+                  aria-label="Choose a cover image"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    try {
+                      setCoverUrl(await readImageDataUrl(file, 4 * 1024 * 1024));
+                      setFormError(null);
+                    } catch (err) {
+                      setFormError(err instanceof Error ? err.message : "Couldn't read that image.");
+                    }
+                  }}
+                />
+                <button type="button" className="ghost small" onClick={() => coverInputRef.current?.click()}>
+                  <CameraIcon size={15} /> Choose
+                </button>
+              </div>
+            </div>
+            <label>
+              About
+              <textarea
+                rows={3}
+                value={form.about}
+                onChange={(e) => setForm({ ...form, about: e.target.value })}
+              />
+            </label>
+            {formError && (
+              <p className="feed-composer-error" role="alert">
+                {formError}
+              </p>
+            )}
+            <div className="page-settings-actions">
+              <button type="button" className="ghost small" onClick={() => setEditing(false)}>
+                Cancel
+              </button>
+              <button className="feed-post-btn" type="submit" disabled={saving}>
+                {saving ? "Saving…" : "Save"}
               </button>
             </div>
           </form>
         )}
 
-        {loading ? (
-          <div className="feed-state">Loading…</div>
-        ) : posts.length === 0 ? (
-          <div className="feed-state">No posts yet.</div>
-        ) : (
-          posts.map((post) => (
-            <PostCard
-              key={post.id}
-              post={post}
-              client={client}
-              cloudUrl={cloudUrl}
-              canDelete={!post.pageId && post.author.id === viewerId}
-              viewerId={viewerId}
-              onChange={updatePost}
-              onDelete={removePost}
-              onBlock={(authorId) => setPosts((prev) => prev.filter((p) => p.author.id !== authorId))}
-              onRepost={(next) => setPosts((prev) => [next, ...prev])}
-            />
-          ))
+        {section === "about" && group && (
+          <div className="page-about-panel">
+            <div className="feed-rail-head">About</div>
+            <p className="page-about-text">{group.about || "This group hasn't added a description yet."}</p>
+            <dl className="page-fact-list">
+              <div className="page-fact">
+                <dt>Handle</dt>
+                <dd>@{group.handle}</dd>
+              </div>
+              {group.category && (
+                <div className="page-fact">
+                  <dt>Category</dt>
+                  <dd>{group.category}</dd>
+                </div>
+              )}
+              <div className="page-fact">
+                <dt>Privacy</dt>
+                <dd>{group.privacy === "private" ? "Private" : "Public"}</dd>
+              </div>
+              <div className="page-fact">
+                <dt>Members</dt>
+                <dd>{group.members}</dd>
+              </div>
+              <div className="page-fact">
+                <dt>Created</dt>
+                <dd>{new Date(group.createdAt).toLocaleDateString()}</dd>
+              </div>
+            </dl>
+          </div>
+        )}
+
+        {section === "members" && group && (
+          <div className="group-members">
+            {isAdmin && requests && requests.length > 0 && (
+              <div className="group-admin-block">
+                <div className="feed-rail-head">Join requests ({requests.length})</div>
+                {requests.map((request) => (
+                  <div key={request.userId} className="group-row">
+                    <span className="group-row-name">
+                      {request.person?.displayName ||
+                        (request.person?.handle ? `@${request.person.handle}` : request.userId)}
+                    </span>
+                    <button
+                      type="button"
+                      className="ghost small"
+                      disabled={busyMemberId === request.userId}
+                      onClick={() => void resolveRequest(request.userId, "approve")}
+                    >
+                      <CheckIcon size={14} /> Approve
+                    </button>
+                    <button
+                      type="button"
+                      className="ghost small danger"
+                      disabled={busyMemberId === request.userId}
+                      onClick={() => void resolveRequest(request.userId, "reject")}
+                    >
+                      <CloseIcon size={14} /> Reject
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {members === null ? (
+              <div className="feed-state">Loading…</div>
+            ) : members.length === 0 ? (
+              <div className="feed-state">No members yet.</div>
+            ) : (
+              members.map((member) => (
+                <div key={member.userId} className="group-row">
+                  <Avatar
+                    emoji={member.person?.avatarEmoji}
+                    name={member.person?.displayName ?? member.person?.handle ?? "Member"}
+                    url={resolveAvatar(member.person?.avatarUrl, cloudUrl)}
+                    size={36}
+                  />
+                  <span className="group-row-name">
+                    {member.person?.displayName ||
+                      (member.person?.handle ? `@${member.person.handle}` : member.userId)}
+                    <span className="feed-bot-badge">{member.owner ? "Owner" : member.role}</span>
+                  </span>
+                  {isAdmin && !member.owner && (
+                    <>
+                      <select
+                        className="page-pin-select"
+                        aria-label={`Role for ${member.userId}`}
+                        value={member.role}
+                        disabled={busyMemberId === member.userId}
+                        onChange={(e) =>
+                          void setRole(member.userId, e.target.value as "admin" | "moderator" | "member")
+                        }
+                      >
+                        <option value="member">Member</option>
+                        <option value="moderator">Moderator</option>
+                        <option value="admin">Admin</option>
+                      </select>
+                      <button
+                        type="button"
+                        className="ghost small danger"
+                        disabled={busyMemberId === member.userId}
+                        onClick={() => void removeMember(member.userId)}
+                      >
+                        Remove
+                      </button>
+                    </>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {section === "media" && group && (
+          mediaPosts.length === 0 ? (
+            <div className="feed-state">No photos or videos yet.</div>
+          ) : (
+            <div className="group-media-grid">
+              {mediaPosts.map((post) => {
+                const src = [...(post.images ?? []), ...(post.videos ?? [])][0];
+                return src ? (
+                  <img
+                    key={post.id}
+                    className="group-media-item"
+                    src={resolveAvatar(src, cloudUrl)}
+                    alt=""
+                    loading="lazy"
+                  />
+                ) : null;
+              })}
+            </div>
+          )
+        )}
+
+        {section === "discussion" && (
+          <>
+            {isMember && group && (
+              <form className="feed-composer" onSubmit={post}>
+                <div className="feed-composer-row">
+                  <Avatar name="You" />
+                  <textarea
+                    className="feed-composer-input"
+                    aria-label={`Post in ${group.name}`}
+                    placeholder={`Post in ${group.name}…`}
+                    rows={2}
+                    value={draft}
+                    onChange={(event) => setDraft(event.target.value)}
+                  />
+                </div>
+                {postError && (
+                  <div className="feed-composer-error" role="alert">
+                    {postError}
+                  </div>
+                )}
+                <div className="feed-composer-actions">
+                  {draft.length > 0 && (
+                    <span
+                      className={`feed-composer-count${draft.length > MAX_POST_CHARS ? " over" : ""}`}
+                      aria-live="polite"
+                    >
+                      {draft.length} / {MAX_POST_CHARS}
+                    </span>
+                  )}
+                  <button
+                    className="feed-post-btn"
+                    type="submit"
+                    aria-busy={posting}
+                    disabled={!draft.trim() || posting || draft.length > MAX_POST_CHARS}
+                  >
+                    {posting ? "Posting…" : "Post"}
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {loading ? (
+              <div className="feed-state">Loading…</div>
+            ) : posts.length === 0 ? (
+              <div className="feed-state">
+                {isMember ? "No posts yet — start the conversation." : "No posts to show yet."}
+              </div>
+            ) : (
+              posts.map((post) => (
+                <PostCard
+                  key={post.id}
+                  post={post}
+                  client={client}
+                  cloudUrl={cloudUrl}
+                  canDelete={canModerate || (!post.pageId && post.author.id === viewerId)}
+                  viewerId={viewerId}
+                  onChange={updatePost}
+                  onDelete={removePost}
+                  onBlock={(authorId) => setPosts((prev) => prev.filter((p) => p.author.id !== authorId))}
+                  onRepost={(next) => setPosts((prev) => [next, ...prev])}
+                />
+              ))
+            )}
+          </>
         )}
       </div>
+
+      {confirmDelete && (
+        <ConfirmDialog
+          title="Delete this group?"
+          message={`"${group?.name ?? "This group"}" and all of its posts and memberships will be removed. This can't be undone.`}
+          confirmLabel="Delete"
+          onConfirm={() => void deleteGroup()}
+          onCancel={() => setConfirmDelete(false)}
+        />
+      )}
+      {confirmLeave && (
+        <ConfirmDialog
+          title="Leave this group?"
+          message={`You'll stop seeing posts from ${group?.name ?? "this group"}.`}
+          confirmLabel="Leave"
+          onConfirm={() => {
+            setConfirmLeave(false);
+            void toggleJoin();
+          }}
+          onCancel={() => setConfirmLeave(false)}
+        />
+      )}
     </div>
   );
 }
@@ -3551,31 +4206,157 @@ interface ComposerAttachment {
   previewUrl: string;
 }
 
-/** Feed navigation: a simple list of the viewer's Groups. */
+/** Groups landing: discovery, the viewer's groups, and the groups they manage. */
 function GroupsView({
   client,
+  cloudUrl,
   onBack,
   onOpenGroup,
+  onChanged,
 }: {
   client: BotifyrClient;
+  cloudUrl: string;
   onBack: () => void;
   onOpenGroup?: (handle: string) => void;
+  onChanged?: () => void;
 }) {
+  const [tab, setTab] = useState<"discover" | "mine" | "managed">("discover");
+  const [searchInput, setSearchInput] = useState("");
+  const [query, setQuery] = useState("");
+  const [category, setCategory] = useState("");
+  const [categories, setCategories] = useState<string[]>([]);
   const [groups, setGroups] = useState<Group[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
+    name: "",
+    about: "",
+    category: "",
+    avatarEmoji: "",
+    privacy: "public" as "public" | "private",
+  });
+  const [avatarUrl, setAvatarUrl] = useState<string | undefined>();
+  const [coverUrl, setCoverUrl] = useState<string | undefined>();
+  const avatarInputRef = useRef<HTMLInputElement | null>(null);
+  const coverInputRef = useRef<HTMLInputElement | null>(null);
+
   useEffect(() => {
     let active = true;
     client
-      .listGroups()
-      .then((list) => {
-        if (active) setGroups(list);
+      .groupCategories()
+      .then((result) => {
+        if (active) setCategories(result.categories);
       })
-      .catch(() => {
-        if (active) setGroups([]);
-      });
+      .catch(() => {});
     return () => {
       active = false;
     };
   }, [client]);
+
+  // Debounce the search box so typing doesn't fire a request per keystroke.
+  useEffect(() => {
+    if (tab !== "discover") return;
+    const timer = window.setTimeout(() => setQuery(searchInput.trim()), 300);
+    return () => window.clearTimeout(timer);
+  }, [searchInput, tab]);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError(null);
+    const request =
+      tab === "mine"
+        ? client.listGroups()
+        : tab === "managed"
+          ? client.listManagedGroups()
+          : client.discoverGroups({ query, category });
+    request
+      .then((list) => {
+        if (active) setGroups(list);
+      })
+      .catch(() => {
+        if (active) {
+          setGroups([]);
+          setError("We couldn't load groups. Please try again.");
+        }
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [client, tab, query, category]);
+
+  function patchGroup(id: string, patch: Partial<Group>) {
+    setGroups((prev) => (prev ?? []).map((entry) => (entry.id === id ? { ...entry, ...patch } : entry)));
+  }
+
+  async function act(group: Group) {
+    if (group.joined) {
+      onOpenGroup?.(group.handle);
+      return;
+    }
+    if (group.requestPending || busyId) return;
+    setBusyId(group.id);
+    setNotice(null);
+    try {
+      const result = await client.joinGroup(group.id);
+      if (result.status === "pending") {
+        patchGroup(group.id, { requestPending: true });
+        setNotice(`Request sent to ${group.name}.`);
+      } else {
+        patchGroup(group.id, { joined: true, role: "member", members: group.members + 1 });
+        setNotice(`You joined ${group.name}.`);
+        onChanged?.();
+      }
+    } catch {
+      setError("Couldn't join that group.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function create(event: FormEvent) {
+    event.preventDefault();
+    if (saving) return;
+    setSaving(true);
+    setCreateError(null);
+    try {
+      const group = await client.createGroup({
+        name: form.name,
+        about: form.about,
+        category: form.category,
+        avatarEmoji: form.avatarEmoji,
+        privacy: form.privacy,
+        avatarUrl,
+        coverUrl,
+      });
+      setCreating(false);
+      setForm({ name: "", about: "", category: "", avatarEmoji: "", privacy: "public" });
+      setAvatarUrl(undefined);
+      setCoverUrl(undefined);
+      setNotice(`Created ${group.name}.`);
+      onChanged?.();
+      onOpenGroup?.(group.handle);
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : "Couldn't create the group.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const emptyCopy =
+    tab === "mine"
+      ? { emoji: "👥", title: "No groups yet", sub: "Groups you join will appear here." }
+      : tab === "managed"
+        ? { emoji: "🛠️", title: "Nothing managed yet", sub: "Groups you create show up here." }
+        : { emoji: "🔍", title: "No groups found", sub: "Try a different search or category." };
 
   return (
     <div className="feed">
@@ -3584,33 +4365,219 @@ function GroupsView({
           ← Back
         </button>
         <span className="feed-topbar-title">Groups</span>
+        <button
+          type="button"
+          className="feed-follow-btn"
+          onClick={() => {
+            setCreating((value) => !value);
+            setCreateError(null);
+          }}
+        >
+          {creating ? <CloseIcon size={14} /> : <PlusIcon size={14} />}
+          {creating ? "Cancel" : "Create group"}
+        </button>
       </div>
       <div className="feed-scroll">
-        {groups === null ? (
+        {creating && (
+          <form className="page-settings group-create" onSubmit={create}>
+            <div className="feed-rail-head">Create a group</div>
+            <label>
+              Name
+              <input
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                placeholder="e.g. Weekend Hikers"
+                required
+              />
+            </label>
+            <label>
+              About
+              <textarea
+                rows={3}
+                value={form.about}
+                onChange={(e) => setForm({ ...form, about: e.target.value })}
+                placeholder="What is this group about?"
+              />
+            </label>
+            <label>
+              Category
+              <input
+                value={form.category}
+                onChange={(e) => setForm({ ...form, category: e.target.value })}
+                placeholder="e.g. Sports"
+                list="group-category-options"
+              />
+            </label>
+            <datalist id="group-category-options">
+              {categories.map((name) => (
+                <option key={name} value={name} />
+              ))}
+            </datalist>
+            <label>
+              Privacy
+              <select
+                value={form.privacy}
+                onChange={(e) => setForm({ ...form, privacy: e.target.value as "public" | "private" })}
+              >
+                <option value="public">Public — anyone can join</option>
+                <option value="private">Private — approval required</option>
+              </select>
+            </label>
+            <div className="group-image-row">
+              <div className="group-image-field">
+                <span>Profile image</span>
+                {avatarUrl ? <img className="group-image-preview round" src={avatarUrl} alt="" /> : null}
+                <input
+                  ref={avatarInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="group-image-input"
+                  aria-label="Choose a profile image"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    try {
+                      setAvatarUrl(await readImageDataUrl(file, 3 * 1024 * 1024));
+                      setCreateError(null);
+                    } catch (err) {
+                      setCreateError(err instanceof Error ? err.message : "Couldn't read that image.");
+                    }
+                  }}
+                />
+                <button type="button" className="ghost small" onClick={() => avatarInputRef.current?.click()}>
+                  <CameraIcon size={15} /> Choose
+                </button>
+              </div>
+              <div className="group-image-field">
+                <span>Cover image</span>
+                {coverUrl ? <img className="group-image-preview" src={coverUrl} alt="" /> : null}
+                <input
+                  ref={coverInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="group-image-input"
+                  aria-label="Choose a cover image"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    try {
+                      setCoverUrl(await readImageDataUrl(file, 4 * 1024 * 1024));
+                      setCreateError(null);
+                    } catch (err) {
+                      setCreateError(err instanceof Error ? err.message : "Couldn't read that image.");
+                    }
+                  }}
+                />
+                <button type="button" className="ghost small" onClick={() => coverInputRef.current?.click()}>
+                  <CameraIcon size={15} /> Choose
+                </button>
+              </div>
+            </div>
+            {createError && (
+              <p className="feed-composer-error" role="alert">
+                {createError}
+              </p>
+            )}
+            <div className="page-settings-actions">
+              <button type="button" className="ghost small" onClick={() => setCreating(false)}>
+                Cancel
+              </button>
+              <button className="feed-post-btn" type="submit" disabled={saving}>
+                {saving ? "Creating…" : "Create"}
+              </button>
+            </div>
+          </form>
+        )}
+
+        <div className="group-toolbar">
+          <nav className="page-tabs group-scope" role="tablist" aria-label="Group scope">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === "discover"}
+              className={`page-tab${tab === "discover" ? " active" : ""}`}
+              onClick={() => setTab("discover")}
+            >
+              <SearchIcon size={14} /> Discover
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === "mine"}
+              className={`page-tab${tab === "mine" ? " active" : ""}`}
+              onClick={() => setTab("mine")}
+            >
+              <UsersIcon size={14} /> Your groups
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === "managed"}
+              className={`page-tab${tab === "managed" ? " active" : ""}`}
+              onClick={() => setTab("managed")}
+            >
+              <ShieldIcon size={14} /> Managed by you
+            </button>
+          </nav>
+          {tab === "discover" && (
+            <div className="group-filters">
+              <span className="group-search">
+                <SearchIcon size={15} />
+                <input
+                  aria-label="Search groups"
+                  placeholder="Search groups"
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                />
+              </span>
+              <select
+                aria-label="Filter by category"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+              >
+                <option value="">All categories</option>
+                {categories.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+
+        {notice && (
+          <p className="group-notice" role="status">
+            {notice}
+          </p>
+        )}
+        {error && (
+          <p className="page-follow-error" role="alert">
+            {error}
+          </p>
+        )}
+
+        {loading ? (
           <div className="feed-state">Loading…</div>
-        ) : groups.length === 0 ? (
+        ) : !groups || groups.length === 0 ? (
           <div className="feed-empty">
-            <div className="feed-empty-emoji">👥</div>
-            <div className="feed-empty-title">No groups yet</div>
-            <div className="feed-empty-sub">Groups you join will appear here.</div>
+            <div className="feed-empty-emoji">{emptyCopy.emoji}</div>
+            <div className="feed-empty-title">{emptyCopy.title}</div>
+            <div className="feed-empty-sub">{emptyCopy.sub}</div>
           </div>
         ) : (
-          groups.map((group) => (
-            <button
-              key={group.id}
-              type="button"
-              className="feed-list-row"
-              onClick={() => onOpenGroup?.(group.handle)}
-            >
-              <Avatar emoji={group.avatarEmoji} name={group.name} size={40} />
-              <span className="feed-list-meta">
-                <span className="feed-list-name">{group.name}</span>
-                <span className="feed-list-sub">
-                  {group.members} member{group.members === 1 ? "" : "s"}
-                </span>
-              </span>
-            </button>
-          ))
+          <div className="group-grid">
+            {groups.map((group) => (
+              <GroupCard
+                key={group.id}
+                group={group}
+                cloudUrl={cloudUrl}
+                busy={busyId === group.id}
+                onOpen={() => onOpenGroup?.(group.handle)}
+                onAction={() => void act(group)}
+              />
+            ))}
+          </div>
         )}
       </div>
     </div>
@@ -3692,6 +4659,7 @@ export function FeedView({
   onOpenMarketplace,
   onStoryReplySent,
   focusPostId,
+  onChanged,
 }: {
   client: BotifyrClient;
   viewerId?: string;
@@ -3715,6 +4683,8 @@ export function FeedView({
   onStoryReplySent?: (session: Session) => void;
   /** Permalink target: scroll to and highlight this post when it loads. */
   focusPostId?: string | null;
+  /** Called after a group mutation so the host can refresh rails/stores. */
+  onChanged?: () => void;
 }) {
   const [posts, setPosts] = useState<FeedPost[]>([]);
   const [loading, setLoading] = useState(true);
@@ -4306,11 +5276,13 @@ export function FeedView({
     return withNav(
       <GroupsView
         client={client}
+        cloudUrl={cloudUrl}
         onBack={() => setGroupsOpen(false)}
         onOpenGroup={(handle) => {
           setGroupsOpen(false);
           onOpenGroup?.(handle);
         }}
+        onChanged={onChanged}
       />,
     );
   }
@@ -4323,6 +5295,7 @@ export function FeedView({
         viewerId={viewerId}
         handle={groupHandle}
         onBack={() => onOpenGroup?.(null)}
+        onChanged={onChanged}
       />,
     );
   }
@@ -4809,11 +5782,14 @@ export function FeedView({
 
 export function FeedRail({
   client,
+  refreshKey = 0,
   onOpenPage,
   onOpenGroup,
   onOpenAlbum,
 }: {
   client: BotifyrClient;
+  /** Bumped by the host after a mutation so the rail reloads its lists. */
+  refreshKey?: number;
   onOpenPage?: (handle: string) => void;
   onOpenGroup?: (handle: string) => void;
   onOpenAlbum?: (name: string) => void;
@@ -4914,7 +5890,7 @@ export function FeedRail({
     return () => {
       active = false;
     };
-  }, [client]);
+  }, [client, refreshKey]);
 
   useEffect(() => {
     let active = true;

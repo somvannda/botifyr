@@ -82,7 +82,9 @@ import type {
   LearnedSkillRecord,
   MediaRecipe,
   ModelPricingRecord,
+  GroupJoinRequestRecord,
   GroupRecord,
+  GroupRole,
   PageRecord,
   PlatformSettings,
   Plan,
@@ -696,6 +698,9 @@ export async function buildServer(options: ServerOptions) {
       case "presence":
       case "friend.request":
       case "typing":
+        return event.toUserId === userId;
+      case "group.request":
+      case "group.joined":
         return event.toUserId === userId;
       case "p2p.signal":
         return event.toUserId === userId;
@@ -4751,9 +4756,24 @@ export async function buildServer(options: ServerOptions) {
     "/v1/posts/:id",
     { preHandler: requireAuth },
     async (request, reply) => {
-      const ok = await store.deletePost(request.userId as string, request.params.id);
-      if (!ok) return reply.code(404).send({ error: "post not found" });
-      return reply.code(204).send();
+      const userId = request.userId as string;
+      const post = await store.getPost(request.params.id);
+      if (!post) return reply.code(404).send({ error: "post not found" });
+      if (await store.deletePost(userId, post.id)) return reply.code(204).send();
+      // A group moderator or admin may remove any post in their group.
+      if (post.groupId) {
+        const group = await store.getGroup(post.groupId);
+        const role = group
+          ? group.ownerId === userId
+            ? "admin"
+            : ((await store.getGroupMember(group.id, userId))?.role ?? null)
+          : null;
+        if (role === "admin" || role === "moderator") {
+          await store.deletePostById(post.id);
+          return reply.code(204).send();
+        }
+      }
+      return reply.code(404).send({ error: "post not found" });
     },
   );
 
@@ -5485,51 +5505,125 @@ export async function buildServer(options: ServerOptions) {
   );
 
   /* Groups: communities with their own post stream. */
-  const groupDto = async (group: GroupRecord, viewerId: string) => ({
-    id: group.id,
-    handle: group.handle,
-    name: group.name,
-    about: group.about,
-    avatarEmoji: group.avatarEmoji,
-    ownerId: group.ownerId,
-    members: (await store.listGroupMembers(group.id)).length,
-    joined: await store.isGroupMember(group.id, viewerId),
-    createdAt: group.createdAt,
-  });
+  const groupDto = async (group: GroupRecord, viewerId: string) => {
+    const isOwner = group.ownerId === viewerId;
+    const member = isOwner ? null : await store.getGroupMember(group.id, viewerId);
+    const request = await store.getGroupJoinRequest(group.id, viewerId);
+    return {
+      id: group.id,
+      handle: group.handle,
+      name: group.name,
+      about: group.about,
+      avatarEmoji: group.avatarEmoji,
+      avatarUrl: group.avatarUrl,
+      coverUrl: group.coverUrl,
+      category: group.category,
+      privacy: group.privacy,
+      ownerId: group.ownerId,
+      members: await store.countGroupMembers(group.id),
+      joined: isOwner || Boolean(member),
+      role: isOwner ? ("admin" as const) : (member?.role ?? null),
+      owner: isOwner,
+      requestPending: request?.status === "pending",
+      createdAt: group.createdAt,
+      updatedAt: group.updatedAt,
+    };
+  };
+
+  /** The caller's role in a group: "admin" for the owner, else the stored role. */
+  const groupRoleOf = async (group: GroupRecord, userId: string): Promise<GroupRole | null> => {
+    if (group.ownerId === userId) return "admin";
+    return (await store.getGroupMember(group.id, userId))?.role ?? null;
+  };
+  const groupAdmins = async (group: GroupRecord): Promise<string[]> => {
+    const members = await store.listGroupMembers(group.id);
+    const ids = new Set<string>([group.ownerId]);
+    for (const member of members) if (member.role === "admin") ids.add(member.userId);
+    return [...ids];
+  };
 
   app.get("/v1/groups", { preHandler: requireAuth }, async (request) => {
     const userId = request.userId as string;
-    const groups = await store.listGroupsForUser(userId);
+    const seen = new Set<string>();
+    const groups: GroupRecord[] = [];
+    for (const group of [
+      ...(await store.listGroupsForUser(userId)),
+      ...(await store.listGroupsOwnedBy(userId)),
+    ]) {
+      if (seen.has(group.id)) continue;
+      seen.add(group.id);
+      groups.push(group);
+    }
     return Promise.all(groups.map((group) => groupDto(group, userId)));
   });
 
-  app.post<{ Body: { name?: string; about?: string; avatarEmoji?: string } }>(
-    "/v1/groups",
+  /* "Groups you manage" (owner) for the admin surface. */
+  app.get("/v1/groups/managed", { preHandler: requireAuth }, async (request) => {
+    const userId = request.userId as string;
+    const groups = await store.listGroupsOwnedBy(userId);
+    return Promise.all(groups.map((group) => groupDto(group, userId)));
+  });
+
+  /* Public-group discovery: search + category filter + pagination. */
+  app.get<{ Querystring: { q?: string; category?: string; limit?: string; offset?: string } }>(
+    "/v1/groups/discover",
     { preHandler: requireAuth },
-    async (request, reply) => {
+    async (request) => {
       const userId = request.userId as string;
-      const name = (request.body?.name ?? "").trim().slice(0, 60);
-      if (name.length < 2) return reply.code(400).send({ error: "name must be at least 2 characters" });
-      const handle = slugify(name);
-      if (handle.length < 3) return reply.code(400).send({ error: "handle must be at least 3 characters" });
-      if (await store.getGroupByHandle(handle))
-        return reply.code(409).send({ error: "that group name is taken" });
-      const now = new Date().toISOString();
-      const record: GroupRecord = {
-        id: randomUUID(),
-        ownerId: userId,
-        name,
-        handle,
-        about: request.body?.about?.trim().slice(0, 500) || undefined,
-        avatarEmoji: request.body?.avatarEmoji?.trim().slice(0, 8) || undefined,
-        createdAt: now,
-        updatedAt: now,
-      };
-      await store.createGroup(record);
-      await store.setGroupMember({ groupId: record.id, userId, role: "admin" });
-      return reply.code(201).send(await groupDto(record, userId));
+      const limit = Math.max(1, Math.min(50, Number(request.query?.limit ?? 24) || 24));
+      const offset = Math.max(0, Number(request.query?.offset ?? 0) || 0);
+      const groups = await store.listDiscoverableGroups({
+        query: request.query?.q?.trim() || undefined,
+        category: request.query?.category?.trim() || undefined,
+        limit,
+        offset,
+      });
+      return Promise.all(groups.map((group) => groupDto(group, userId)));
     },
   );
+
+  app.get("/v1/groups/categories", { preHandler: requireAuth }, async () => ({
+    categories: await store.listGroupCategories(),
+  }));
+
+  app.post<{
+    Body: {
+      name?: string;
+      handle?: string;
+      about?: string;
+      avatarEmoji?: string;
+      avatarUrl?: string;
+      coverUrl?: string;
+      category?: string;
+      privacy?: string;
+    };
+  }>("/v1/groups", { preHandler: requireAuth }, async (request, reply) => {
+    const userId = request.userId as string;
+    const name = (request.body?.name ?? "").trim().slice(0, 60);
+    if (name.length < 2) return reply.code(400).send({ error: "name must be at least 2 characters" });
+    const handle = slugify(request.body?.handle || name);
+    if (handle.length < 3) return reply.code(400).send({ error: "handle must be at least 3 characters" });
+    if (await store.getGroupByHandle(handle))
+      return reply.code(409).send({ error: "that group name is taken" });
+    const now = new Date().toISOString();
+    const record: GroupRecord = {
+      id: randomUUID(),
+      ownerId: userId,
+      name,
+      handle,
+      about: request.body?.about?.trim().slice(0, 500) || undefined,
+      avatarEmoji: request.body?.avatarEmoji?.trim().slice(0, 8) || undefined,
+      avatarUrl: typeof request.body?.avatarUrl === "string" ? request.body.avatarUrl.trim() || undefined : undefined,
+      coverUrl: typeof request.body?.coverUrl === "string" ? request.body.coverUrl.trim() || undefined : undefined,
+      category: request.body?.category?.trim().slice(0, 40) || undefined,
+      privacy: request.body?.privacy === "private" ? "private" : "public",
+      createdAt: now,
+      updatedAt: now,
+    };
+    await store.createGroup(record);
+    await store.setGroupMember({ groupId: record.id, userId, role: "admin" });
+    return reply.code(201).send(await groupDto(record, userId));
+  });
 
   app.get<{ Params: { handle: string } }>(
     "/v1/groups/:handle",
@@ -5541,6 +5635,62 @@ export async function buildServer(options: ServerOptions) {
     },
   );
 
+  /* Edit a group (owner or admin). */
+  app.patch<{
+    Params: { id: string };
+    Body: {
+      name?: string;
+      handle?: string;
+      about?: string;
+      avatarEmoji?: string;
+      avatarUrl?: string;
+      coverUrl?: string;
+      category?: string;
+      privacy?: string;
+    };
+  }>("/v1/groups/:id", { preHandler: requireAuth }, async (request, reply) => {
+    const userId = request.userId as string;
+    const group = await store.getGroup(request.params.id);
+    if (!group) return reply.code(404).send({ error: "group not found" });
+    const role = await groupRoleOf(group, userId);
+    if (role !== "admin") return reply.code(403).send({ error: "not allowed" });
+    if (typeof request.body?.name === "string")
+      group.name = request.body.name.trim().slice(0, 60) || group.name;
+    if (typeof request.body?.handle === "string") {
+      const handle = slugify(request.body.handle);
+      if (handle.length < 3) return reply.code(400).send({ error: "handle must be at least 3 characters" });
+      const clash = await store.getGroupByHandle(handle);
+      if (clash && clash.id !== group.id) return reply.code(409).send({ error: "that handle is taken" });
+      group.handle = handle;
+    }
+    if (typeof request.body?.about === "string")
+      group.about = request.body.about.trim().slice(0, 500) || undefined;
+    if (typeof request.body?.avatarEmoji === "string")
+      group.avatarEmoji = request.body.avatarEmoji.trim().slice(0, 8) || undefined;
+    if (typeof request.body?.avatarUrl === "string")
+      group.avatarUrl = request.body.avatarUrl.trim() || undefined;
+    if (typeof request.body?.coverUrl === "string")
+      group.coverUrl = request.body.coverUrl.trim() || undefined;
+    if (typeof request.body?.category === "string")
+      group.category = request.body.category.trim().slice(0, 40) || undefined;
+    if (request.body?.privacy === "public" || request.body?.privacy === "private")
+      group.privacy = request.body.privacy;
+    group.updatedAt = new Date().toISOString();
+    await store.updateGroup(group);
+    return groupDto(group, userId);
+  });
+
+  /* Delete a group (owner only). */
+  app.delete<{ Params: { id: string } }>(
+    "/v1/groups/:id",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const ok = await store.deleteGroup(request.userId as string, request.params.id);
+      if (!ok) return reply.code(404).send({ error: "group not found" });
+      return reply.code(204).send();
+    },
+  );
+
   app.get<{ Params: { handle: string } }>(
     "/v1/groups/:handle/posts",
     { preHandler: requireAuth },
@@ -5548,6 +5698,10 @@ export async function buildServer(options: ServerOptions) {
       const group = await store.getGroupByHandle(request.params.handle);
       if (!group) return reply.code(404).send({ error: "group not found" });
       const userId = request.userId as string;
+      // Private groups: only members can read the stream.
+      if (group.privacy === "private" && !(await groupRoleOf(group, userId))) {
+        return reply.code(403).send({ error: "this group is private" });
+      }
       const nowIso = new Date().toISOString();
       const posts = (await store.listGroupPosts(group.id, 50)).filter(
         (post) => canSeePost(post, userId) && !isFutureScheduled(post, nowIso),
@@ -5559,23 +5713,196 @@ export async function buildServer(options: ServerOptions) {
     },
   );
 
+  /* Join a public group immediately, or request to join a private one. */
   app.post<{ Params: { id: string } }>(
     "/v1/groups/:id/join",
     { preHandler: requireAuth },
     async (request, reply) => {
+      const userId = request.userId as string;
       const group = await store.getGroup(request.params.id);
       if (!group) return reply.code(404).send({ error: "group not found" });
-      await store.setGroupMember({ groupId: group.id, userId: request.userId as string, role: "member" });
-      return { ok: true };
+      if (await groupRoleOf(group, userId)) return { ok: true, status: "joined" as const };
+      if (group.privacy === "public") {
+        await store.setGroupMember({ groupId: group.id, userId, role: "member" });
+        return { ok: true, status: "joined" as const };
+      }
+      const existing = await store.getGroupJoinRequest(group.id, userId);
+      if (existing?.status === "pending") return { ok: true, status: "pending" as const };
+      const now = new Date().toISOString();
+      const record: GroupJoinRequestRecord = {
+        groupId: group.id,
+        userId,
+        status: "pending",
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+      };
+      await store.setGroupJoinRequest(record);
+      const actor = await store.getUserById(userId);
+      const fromName = actor?.displayName ?? actor?.handle;
+      for (const adminId of await groupAdmins(group)) {
+        emit({
+          type: "group.request",
+          groupId: group.id,
+          groupName: group.name,
+          fromUserId: userId,
+          fromName,
+          toUserId: adminId,
+        });
+      }
+      return { ok: true, status: "pending" as const };
     },
   );
 
+  /* Leave a group, or withdraw a pending join request. */
   app.delete<{ Params: { id: string } }>(
     "/v1/groups/:id/join",
     { preHandler: requireAuth },
     async (request, reply) => {
-      await store.deleteGroupMember(request.params.id, request.userId as string);
+      const userId = request.userId as string;
+      const group = await store.getGroup(request.params.id);
+      if (group && group.ownerId === userId) {
+        return reply.code(400).send({ error: "owners can't leave — delete the group instead" });
+      }
+      await store.deleteGroupMember(request.params.id, userId);
+      await store.deleteGroupJoinRequest(request.params.id, userId);
       return reply.code(204).send();
+    },
+  );
+
+  /* Members with their roles and profiles. */
+  app.get<{ Params: { id: string } }>(
+    "/v1/groups/:id/members",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const group = await store.getGroup(request.params.id);
+      if (!group) return reply.code(404).send({ error: "group not found" });
+      const userId = request.userId as string;
+      if (group.privacy === "private" && !(await groupRoleOf(group, userId))) {
+        return reply.code(403).send({ error: "this group is private" });
+      }
+      const members = await store.listGroupMembers(group.id);
+      const byUser = new Map(members.map((member) => [member.userId, member]));
+      if (!byUser.has(group.ownerId)) {
+        byUser.set(group.ownerId, { groupId: group.id, userId: group.ownerId, role: "admin" });
+      }
+      const people = await store.listUsersByIds([...byUser.keys()]);
+      const personById = new Map(people.map((person) => [person.id, person]));
+      return [...byUser.values()].map((member) => ({
+        userId: member.userId,
+        role: member.role,
+        owner: member.userId === group.ownerId,
+        person: personById.has(member.userId) ? personOf(personById.get(member.userId)!) : null,
+      }));
+    },
+  );
+
+  /* Assign a member's role (owner/admin only; the owner is fixed). */
+  app.put<{ Params: { id: string; userId: string }; Body: { role?: string } }>(
+    "/v1/groups/:id/members/:userId",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const callerId = request.userId as string;
+      const group = await store.getGroup(request.params.id);
+      if (!group) return reply.code(404).send({ error: "group not found" });
+      if ((await groupRoleOf(group, callerId)) !== "admin")
+        return reply.code(403).send({ error: "not allowed" });
+      const targetId = request.params.userId;
+      if (targetId === group.ownerId) return reply.code(400).send({ error: "the owner is always an admin" });
+      const role = request.body?.role;
+      if (role !== "admin" && role !== "moderator" && role !== "member")
+        return reply.code(400).send({ error: "invalid role" });
+      if (!(await store.getGroupMember(group.id, targetId)))
+        return reply.code(404).send({ error: "not a member" });
+      await store.setGroupMember({ groupId: group.id, userId: targetId, role });
+      return { ok: true };
+    },
+  );
+
+  /* Remove a member (admin), or leave (self). */
+  app.delete<{ Params: { id: string; userId: string } }>(
+    "/v1/groups/:id/members/:userId",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const callerId = request.userId as string;
+      const group = await store.getGroup(request.params.id);
+      if (!group) return reply.code(404).send({ error: "group not found" });
+      const targetId = request.params.userId;
+      if (targetId === group.ownerId) return reply.code(400).send({ error: "can't remove the owner" });
+      if (callerId !== targetId && (await groupRoleOf(group, callerId)) !== "admin")
+        return reply.code(403).send({ error: "not allowed" });
+      await store.deleteGroupMember(group.id, targetId);
+      await store.deleteGroupJoinRequest(group.id, targetId);
+      return reply.code(204).send();
+    },
+  );
+
+  /* Pending join requests (owner/admin only). */
+  app.get<{ Params: { id: string } }>(
+    "/v1/groups/:id/requests",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const group = await store.getGroup(request.params.id);
+      if (!group) return reply.code(404).send({ error: "group not found" });
+      if ((await groupRoleOf(group, request.userId as string)) !== "admin")
+        return reply.code(403).send({ error: "not allowed" });
+      const requests = (await store.listGroupJoinRequests(group.id)).filter(
+        (entry) => entry.status === "pending",
+      );
+      const people = await store.listUsersByIds(requests.map((entry) => entry.userId));
+      const personById = new Map(people.map((person) => [person.id, person]));
+      return requests.map((entry) => ({
+        userId: entry.userId,
+        status: entry.status,
+        createdAt: entry.createdAt,
+        person: personById.has(entry.userId) ? personOf(personById.get(entry.userId)!) : null,
+      }));
+    },
+  );
+
+  /* Approve or reject a join request (owner/admin only). */
+  app.post<{ Params: { id: string; userId: string }; Body: { action?: string } }>(
+    "/v1/groups/:id/requests/:userId",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const group = await store.getGroup(request.params.id);
+      if (!group) return reply.code(404).send({ error: "group not found" });
+      if ((await groupRoleOf(group, request.userId as string)) !== "admin")
+        return reply.code(403).send({ error: "not allowed" });
+      const targetId = request.params.userId;
+      const action = request.body?.action;
+      if (action !== "approve" && action !== "reject")
+        return reply.code(400).send({ error: "action must be approve or reject" });
+      const pending = await store.getGroupJoinRequest(group.id, targetId);
+      if (!pending || pending.status !== "pending")
+        return reply.code(404).send({ error: "no pending request" });
+      const now = new Date().toISOString();
+      if (action === "approve") {
+        await store.setGroupMember({ groupId: group.id, userId: targetId, role: "member" });
+        await store.setGroupJoinRequest({ ...pending, status: "approved", updatedAt: now });
+        emit({ type: "group.joined", groupId: group.id, groupName: group.name, toUserId: targetId });
+      } else {
+        await store.setGroupJoinRequest({ ...pending, status: "rejected", updatedAt: now });
+      }
+      return { ok: true };
+    },
+  );
+
+  /* Add someone to a group directly (owner/admin). */
+  app.post<{ Params: { id: string }; Body: { userId?: string } }>(
+    "/v1/groups/:id/invite",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const group = await store.getGroup(request.params.id);
+      if (!group) return reply.code(404).send({ error: "group not found" });
+      if ((await groupRoleOf(group, request.userId as string)) !== "admin")
+        return reply.code(403).send({ error: "not allowed" });
+      const targetId = request.body?.userId?.trim();
+      if (!targetId) return reply.code(400).send({ error: "userId is required" });
+      if (!(await store.getUserById(targetId))) return reply.code(404).send({ error: "user not found" });
+      await store.setGroupMember({ groupId: group.id, userId: targetId, role: "member" });
+      await store.deleteGroupJoinRequest(group.id, targetId);
+      emit({ type: "group.joined", groupId: group.id, groupName: group.name, toUserId: targetId });
+      return { ok: true };
     },
   );
 

@@ -11,6 +11,7 @@ import type {
   DeviceKey,
   FileRecord,
   FriendRequestRecord,
+  GroupJoinRequestRecord,
   GroupMemberRecord,
   GroupRecord,
   InvoiceRecord,
@@ -1489,8 +1490,8 @@ export class PostgresStore implements Store {
 
   async createGroup(record: GroupRecord): Promise<void> {
     await this.pool.query(
-      "INSERT INTO groups (id, owner_id, name, handle, about, avatar_emoji, created_at, updated_at) " +
-        "VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
+      "INSERT INTO groups (id, owner_id, name, handle, about, avatar_emoji, avatar_url, cover_url, category, privacy, created_at, updated_at) " +
+        "VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)",
       [
         record.id,
         record.ownerId,
@@ -1498,6 +1499,10 @@ export class PostgresStore implements Store {
         record.handle,
         record.about ?? null,
         record.avatarEmoji ?? null,
+        record.avatarUrl ?? null,
+        record.coverUrl ?? null,
+        record.category ?? null,
+        record.privacy,
         record.createdAt,
         record.updatedAt,
       ],
@@ -1526,13 +1531,17 @@ export class PostgresStore implements Store {
 
   async updateGroup(record: GroupRecord): Promise<void> {
     await this.pool.query(
-      "UPDATE groups SET name=$2, handle=$3, about=$4, avatar_emoji=$5, updated_at=$6 WHERE id=$1",
+      "UPDATE groups SET name=$2, handle=$3, about=$4, avatar_emoji=$5, avatar_url=$6, cover_url=$7, category=$8, privacy=$9, updated_at=$10 WHERE id=$1",
       [
         record.id,
         record.name,
         record.handle,
         record.about ?? null,
         record.avatarEmoji ?? null,
+        record.avatarUrl ?? null,
+        record.coverUrl ?? null,
+        record.category ?? null,
+        record.privacy,
         record.updatedAt,
       ],
     );
@@ -1567,8 +1576,110 @@ export class PostgresStore implements Store {
   }
 
   async listGroupMembers(groupId: string): Promise<GroupMemberRecord[]> {
-    const { rows } = await this.pool.query("SELECT * FROM group_members WHERE group_id = $1", [groupId]);
+    const { rows } = await this.pool.query(
+      "SELECT * FROM group_members WHERE group_id = $1 ORDER BY created_at ASC",
+      [groupId],
+    );
     return rows.map(toGroupMember);
+  }
+
+  async listGroupsOwnedBy(userId: string): Promise<GroupRecord[]> {
+    const { rows } = await this.pool.query(
+      "SELECT * FROM groups WHERE owner_id = $1 ORDER BY created_at DESC",
+      [userId],
+    );
+    return rows.map(toGroup);
+  }
+
+  async listDiscoverableGroups(opts: {
+    query?: string;
+    category?: string;
+    limit: number;
+    offset: number;
+  }): Promise<GroupRecord[]> {
+    const clauses = ["privacy = 'public'"];
+    const params: unknown[] = [];
+    const query = opts.query?.trim();
+    if (query) {
+      params.push(`%${query.toLowerCase()}%`);
+      clauses.push(
+        `(lower(name) LIKE $${params.length} OR lower(handle) LIKE $${params.length} OR lower(coalesce(about, '')) LIKE $${params.length})`,
+      );
+    }
+    if (opts.category?.trim()) {
+      params.push(opts.category.trim());
+      clauses.push(`lower(coalesce(category, '')) = lower($${params.length})`);
+    }
+    const limit = Math.max(1, Math.min(50, opts.limit));
+    params.push(limit);
+    const limitIdx = params.length;
+    params.push(Math.max(0, opts.offset));
+    const offsetIdx = params.length;
+    const { rows } = await this.pool.query(
+      `SELECT * FROM groups WHERE ${clauses.join(" AND ")} ORDER BY created_at DESC LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
+      params,
+    );
+    return rows.map(toGroup);
+  }
+
+  async listGroupCategories(): Promise<string[]> {
+    const { rows } = await this.pool.query(
+      "SELECT DISTINCT category FROM groups WHERE privacy = 'public' AND category IS NOT NULL ORDER BY category",
+    );
+    return rows.map((row) => row.category as string);
+  }
+
+  async getGroupMember(groupId: string, userId: string): Promise<GroupMemberRecord | null> {
+    const { rows } = await this.pool.query(
+      "SELECT * FROM group_members WHERE group_id = $1 AND user_id = $2",
+      [groupId, userId],
+    );
+    return rows[0] ? toGroupMember(rows[0]) : null;
+  }
+
+  async countGroupMembers(groupId: string): Promise<number> {
+    const { rows } = await this.pool.query(
+      "SELECT COUNT(*)::int AS n FROM group_members WHERE group_id = $1",
+      [groupId],
+    );
+    return Number(rows[0]?.n ?? 0);
+  }
+
+  async listGroupJoinRequests(groupId: string): Promise<GroupJoinRequestRecord[]> {
+    const { rows } = await this.pool.query(
+      "SELECT * FROM group_join_requests WHERE group_id = $1 ORDER BY created_at DESC",
+      [groupId],
+    );
+    return rows.map(toGroupJoinRequest);
+  }
+
+  async getGroupJoinRequest(groupId: string, userId: string): Promise<GroupJoinRequestRecord | null> {
+    const { rows } = await this.pool.query(
+      "SELECT * FROM group_join_requests WHERE group_id = $1 AND user_id = $2",
+      [groupId, userId],
+    );
+    return rows[0] ? toGroupJoinRequest(rows[0]) : null;
+  }
+
+  async setGroupJoinRequest(record: GroupJoinRequestRecord): Promise<void> {
+    await this.pool.query(
+      "INSERT INTO group_join_requests (group_id, user_id, status, created_at, updated_at) VALUES ($1,$2,$3,$4,$5) " +
+        "ON CONFLICT (group_id, user_id) DO UPDATE SET status = EXCLUDED.status, updated_at = EXCLUDED.updated_at",
+      [record.groupId, record.userId, record.status, record.createdAt, record.updatedAt],
+    );
+  }
+
+  async deleteGroupJoinRequest(groupId: string, userId: string): Promise<boolean> {
+    const result = await this.pool.query(
+      "DELETE FROM group_join_requests WHERE group_id = $1 AND user_id = $2",
+      [groupId, userId],
+    );
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async deletePostById(id: string): Promise<boolean> {
+    const result = await this.pool.query("DELETE FROM posts WHERE id = $1", [id]);
+    return (result.rowCount ?? 0) > 0;
   }
 
   async listAlbums(ownerId: string): Promise<Array<{ name: string; count: number }>> {
@@ -2274,6 +2385,10 @@ function toGroup(row: any): GroupRecord {
     handle: row.handle,
     about: row.about ?? undefined,
     avatarEmoji: row.avatar_emoji ?? undefined,
+    avatarUrl: row.avatar_url ?? undefined,
+    coverUrl: row.cover_url ?? undefined,
+    category: row.category ?? undefined,
+    privacy: row.privacy === "private" ? "private" : "public",
     createdAt: new Date(row.created_at).toISOString(),
     updatedAt: new Date(row.updated_at).toISOString(),
   };
@@ -2283,7 +2398,19 @@ function toGroupMember(row: any): GroupMemberRecord {
   return {
     groupId: row.group_id,
     userId: row.user_id,
-    role: row.role === "admin" ? "admin" : "member",
+    role: row.role === "admin" || row.role === "moderator" ? row.role : "member",
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : undefined,
+  };
+}
+
+function toGroupJoinRequest(row: any): GroupJoinRequestRecord {
+  return {
+    groupId: row.group_id,
+    userId: row.user_id,
+    status:
+      row.status === "approved" || row.status === "rejected" ? row.status : "pending",
+    createdAt: new Date(row.created_at).toISOString(),
+    updatedAt: new Date(row.updated_at).toISOString(),
   };
 }
 

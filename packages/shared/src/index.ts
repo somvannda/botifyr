@@ -675,6 +675,8 @@ export type ServerEvent =
   | { type: "feed.comment"; postId: string; fromUserId: string; fromName?: string; toUserId: string }
   | { type: "feed.share"; postId: string; fromUserId: string; fromName?: string; toUserId: string }
   | { type: "feed.mention"; postId: string; fromUserId: string; fromName?: string; toUserId: string }
+  | { type: "group.request"; groupId: string; groupName: string; fromUserId: string; fromName?: string; toUserId: string }
+  | { type: "group.joined"; groupId: string; groupName: string; toUserId: string }
   | { type: "p2p.signal"; toUserId: string; to: string; from: string; data: unknown }
   | { type: "task.completed"; task: Task }
   | { type: "task.failed"; task: Task };
