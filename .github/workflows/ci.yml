@@ -12,10 +12,21 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# --- Self-hosted runner (optional; recommended for a private repo) ---------------
+# GitHub-hosted Actions minutes are capped (2,000/mo on Free, 3,000 on Pro) and
+# this repo's parallel PR + main-push runs use them fast. Self-hosted minutes are
+# free. To switch: register a runner on the host with the `botifyr` label, then
+#   gh variable set CI_RUNNER --body '["self-hosted","botifyr"]'
+# While CI_RUNNER is unset, jobs fall back to ubuntu-latest, so this is safe to
+# land before the runner exists.
+
 jobs:
   checks:
     name: Typecheck / Lint / Test
-    runs-on: ubuntu-latest
+    # Runs on a self-hosted runner once the repo variable CI_RUNNER is set
+    # (e.g. ["self-hosted","botifyr"]) — self-hosted minutes are free, which is
+    # the fix for the 2,000-min/month Free ceiling. Until then, GitHub-hosted.
+    runs-on: ${{ vars.CI_RUNNER != '' && fromJSON(vars.CI_RUNNER) || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v5
 
@@ -44,7 +55,8 @@ jobs:
 
   cloud:
     name: Cloud image
-    runs-on: ubuntu-latest
+    # Same runner selection as `checks` — see above.
+    runs-on: ${{ vars.CI_RUNNER != '' && fromJSON(vars.CI_RUNNER) || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v5
 
