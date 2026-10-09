@@ -85,3 +85,32 @@ preserving functionality.
 - Note: a transient concurrent `reactToStory` error broke the build mid-run; the
   owning workstream fixed it. No action taken on another owner's in-progress code.
 
+## Final delivery (merged to origin/main)
+
+- **PR #4 — Friend requests** in the Feed sidebar (Accept/Decline, real API).
+- **PR #7 — Online contacts** ("Online now", real `listFriends()` presence).
+- Sidebar now: Friend requests · Online now · Your Groups · Pages to follow · Your
+  Pages · Who to follow · Top posts · Blocked — all real data; no sponsored/
+  birthdays (no data, omitted rather than faked).
+- **Bottom menu persists across Feed sub-views** via a shared `FeedBottomNav` +
+  `.feed-shell` (Reels/Groups/Page/Group/Tag/Album); "Feed" returns home.
+- Duplicate topbar **Reels** button removed.
+
+### Verification (actual)
+
+- CI per PR: `Typecheck / Lint / Test` + `Cloud image` → green.
+- Local integrated run (primary, commit `051a8bf`): `npm run typecheck` passed;
+  `npm run lint` clean; `npm test` → **467 passed / 467** (65 files).
+
+### Handoff
+
+- Agent 9 Final Integrated QA: `docs/agent-progress/feed-qa-handoff.md`.
+
+### Still open
+
+- **Reference screenshot** not supplied → pixel-accurate pass pending.
+- Composer horizontal compaction (Agent 8) and story-card sizing (Agent 6)
+  delegated per product owner instruction.
+- Backend gaps (documented): DB-1 realtime `feed.*`, DB-2 pagination tie-break,
+  story-view endpoint, Reels captions, Page tabs/cursor, permalinks.
+
