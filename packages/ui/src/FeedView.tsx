@@ -4577,6 +4577,7 @@ export function FeedRail({
   const [requested, setRequested] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [requests, setRequests] = useState<Array<{ id: string; person: Person }>>([]);
+  const [onlineFriends, setOnlineFriends] = useState<Person[]>([]);
 
   useEffect(() => {
     let active = true;
@@ -4710,6 +4711,19 @@ export function FeedRail({
     };
   }, [client]);
 
+  useEffect(() => {
+    let active = true;
+    client
+      .listFriends()
+      .then((list) => {
+        if (active) setOnlineFriends(list.filter((person) => person.online).slice(0, 6));
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [client]);
+
   async function followSuggestedPage(page: Page) {
     try {
       await client.followPage(page.id);
@@ -4763,6 +4777,31 @@ export function FeedRail({
                   >
                     Decline
                   </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {onlineFriends.length > 0 && (
+        <div className="feed-rail-section">
+          <div className="feed-rail-head">
+            <UsersIcon size={15} /> Online now
+          </div>
+          <ul className="feed-rail-people">
+            {onlineFriends.map((person) => (
+              <li key={person.id} className="feed-rail-person">
+                <span className="feed-rail-online-wrap">
+                  <Avatar emoji={person.avatarEmoji} name={person.displayName} size={36} />
+                  <span className="feed-rail-online-dot" aria-hidden="true" />
+                </span>
+                <div className="feed-rail-person-meta">
+                  <span className="feed-rail-person-name">
+                    {person.displayName || (person.handle ? `@${person.handle}` : "Someone")}
+                  </span>
+                  <span className="feed-rail-person-sub">
+                    {person.handle ? `@${person.handle}` : "Online"}
+                  </span>
                 </div>
               </li>
             ))}
