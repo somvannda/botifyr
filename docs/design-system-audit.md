@@ -55,7 +55,7 @@ typography or elevation. Those values were inlined per rule.
 | DS-4 | `--muted` in light theme (`#6b7280`) = **4.47:1** on `--bg` — just under AA. | Medium | Measured in-app | **Fixed** (`#616875`, 5.19:1) |
 | DS-5 | Reduced-motion honoured only for skeletons + story progress; `.reaction-btn` hover scale still animated. | Low | `styles.css` | **Fixed** |
 | DS-6 | Radii ungoverned: 54× `999px`, then `8/9/10/11/12/14/16px` — no scale. | Low | `grep border-radius` | **Fixed** (275 declarations → `--radius-*`; 10 legacy one-offs documented) |
-| DS-7 | Type scale inlined: 74× `12.5px`, 73× `12px`, 64× `13px`, … 26 distinct sizes. | Low | `grep font-size` | Documented (see components doc) |
+| DS-7 | Type scale inlined: 74× `12.5px`, 73× `12px`, 64× `13px`, … 26 distinct sizes. | Low | `grep font-size` | **Fixed** (12 `--text-*` steps; 433 declarations adopted) |
 | DS-8 | Spacing inlined; no scale. | Low | `grep gap/padding` | Documented (8-pt-ish grid) |
 | DS-9 | Global accent literals remained outside the Feed (chat, workspace, page composer). | Low | 12× `rgba(109,139,255,…)` outside Feed | **Fixed** (all → tokens/`color-mix`) |
 | DS-10 | Red family drift app-wide: `#f0556b`, `#f87171`, `#ef4444`, `#e5484d`, `--danger #ff6b6b`. | Low | `grep` counts | **Fixed** (all unified to `--danger*`) |

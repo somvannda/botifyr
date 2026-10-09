@@ -2843,6 +2843,18 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     }
   }
 
+  /** After replying to a story, open that DM (docs/feed-next.md §FR-13). */
+  function openStoryConversation(session: Session): void {
+    exitFeed();
+    setSessions((prev) => {
+      const exists = prev.some((entry) => entry.id === session.id);
+      return exists ? prev.map((entry) => (entry.id === session.id ? session : entry)) : [session, ...prev];
+    });
+    setActiveBotId(null);
+    setActiveSessionId(session.id);
+    setShowPeople(false);
+  }
+
   /** Open an existing human conversation from the Chats list. */
   function openChat(session: Session): void {
     exitFeed();
@@ -4509,6 +4521,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
             onOpenAlbum={setFeedAlbum}
             onOpenNav={() => setMobileNavOpen(true)}
             onOpenMarketplace={() => setShowConnectApps(true)}
+            onStoryReplySent={openStoryConversation}
           />
         )}
         {startupsActive && (

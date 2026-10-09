@@ -50,13 +50,16 @@ system. Audit → plan (`docs/design-system-plan.md`), components
    `--focus-ring` (was `var(--accent)`), so the ring is a single token.
 7. **Shape scale adopted app-wide** (DS-T5): 275 `border-radius` declarations
    now use `--radius-*` (value-preserving). A few legacy one-offs remain.
+8. **Type scale adopted app-wide** (DS-T10): 12 `--text-*` steps; 433
+   `font-size` declarations tokenised (value-preserving — computed sizes
+   unchanged, verified in-app). Display sizes remain literal.
 8. **Automated a11y (DS-T11):** axe-core on `.feed` reports **0 violations** in
    both themes, including with the composer enabled. Fixed the light
    accent-on-tint contrast (→ `#3d52c2`), a `label-title-only` finding
    (`aria-label="Schedule for later"` in `FeedView.tsx`), and white-on-accent
    solid buttons (`--accent-solid`).
-9. **Guard test** `packages/ui/src/designSystem.test.ts` (29 assertions),
-   including pinned dark/light token values as a visual-regression guard.
+9. **Guard test** `packages/ui/src/designSystem.test.ts` (30 assertions),
+   including pinned dark/light token values and shape/type-scale adoption.
 10. **Screenshots** for dark/light Feed (desktop + mobile) and the confirm dialog.
 
 ## Files modified / created
@@ -89,15 +92,15 @@ system. Audit → plan (`docs/design-system-plan.md`), components
 
 | Command | Result |
 | --- | --- |
-| `npx vitest run packages/ui/src/designSystem.test.ts` | **29 passed** |
-| `npx vitest run packages/ui/src/designSystem.test.ts parity.test.ts smoke.dom.test.tsx` | **31 passed** |
-| `npm test` | **420 passed, 16 failed** — the 16 are `FeedView.dom.test.tsx` Reels tests from the concurrent workstream (mid-edit); last full-green run was 429 |
+| `npx vitest run packages/ui/src/designSystem.test.ts` | **30 passed** |
+| `npx vitest run packages/ui/src/designSystem.test.ts parity.test.ts smoke.dom.test.tsx` | **35 passed** |
+| `npm test` | **451 passed** (64 files) |
 | `npm run typecheck -w @botifyr/ui` | **clean** |
 | `npm run lint` | **0 errors** |
 | `npx prettier --check` (new files) | clean |
 | In-app contrast audit (dark & light) | all Feed text ≥4.5:1 (audit §4.1) |
 | axe-core 4.10.2 scoped to `.feed` (dark & light, composer enabled) | **0 violations** |
-| `getComputedStyle` probe | `.feed-tag` / `.feed-tab.active` → `color(srgb 0.427… / 0.14)` (dark) |
+| `getComputedStyle` probe | `.feed-tag` → `color(srgb 0.427… / 0.14)`; `--focus-ring` = `#6d8bff`/`#3d52c2`; `--accent-solid` = `#5568e0`/`#3d52c2` |
 | Visual | dark + light Feed and the confirm dialog render correctly (`docs/assets/design-system/`) |
 
 ## Remaining tasks
@@ -111,10 +114,10 @@ system. Audit → plan (`docs/design-system-plan.md`), components
 
 ## Blockers / caveats
 
-- Concurrent workstream is actively editing `FeedView.tsx`/`styles.css`; the full
-  gate was green (`npm test` 429 passed) but `FeedView.dom.test.tsx` (their
-  Reels tests) is currently mid-edit and flapping. My files
-  (`designSystem`/`parity`/`smoke`) stay green.
+- Concurrent workstream refactored `FeedView.tsx` into `Stories.tsx`/`feedKit.tsx`
+  and is now changing `@botifyr/client` exports; the tree flaps between green
+  (e.g. `npm test` 451 passed) and typecheck errors in their files
+  (`Session` export). My design-system files stay green (30 guard tests).
 - Fresh Playwright contexts no longer authenticate (the app now requires device
   keys), so `scripts/design-system-screenshots.mjs` re-capture failed; the saved
   screenshots predate the final light-accent tweak (hue-only change).
@@ -124,8 +127,8 @@ system. Audit → plan (`docs/design-system-plan.md`), components
 
 ## Exact next action
 
-Introduce type/spacing tokens (DS-T10): define `--space-*` (4/8/12/16/20/24) and
-a `--text-*` scale, adopt them in the Feed's shared surfaces (card, composer,
-action bar, metadata) without changing computed values, add them to the guard
-test, re-run `npx vitest run packages/ui/src/designSystem.test.ts`, and inspect
-the Feed in both themes.
+Finish DS-T10's spacing half: define a `--space-*` scale and adopt it in the
+Feed's shared surfaces (card, composer, action bar, metadata). The Feed's spacing
+is off-grid (5/6/7/9/10/14px), so normalise deliberately and inspect both themes,
+or add explicit steps. Then re-run `npx vitest run
+packages/ui/src/designSystem.test.ts` and `npm test`.

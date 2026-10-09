@@ -299,6 +299,19 @@ export function signinHost(state: string): "desktop" | "web" | "admin" {
   return "desktop";
 }
 
+/** Stable feed keyset cursor: `${createdAt}|${id}` (DB-2, docs/feed-discovery-plan.md). */
+export function encodeFeedCursor(post: { createdAt: string; id: string }): string {
+  return `${post.createdAt}|${post.id}`;
+}
+
+/** Parse a feed cursor. A cursor without an id degrades to "strictly older than". */
+export function decodeFeedCursor(cursor: string): { createdAt: string; id: string } {
+  const index = cursor.indexOf("|");
+  return index === -1
+    ? { createdAt: cursor, id: "" }
+    : { createdAt: cursor.slice(0, index), id: cursor.slice(index + 1) };
+}
+
 export async function buildServer(options: ServerOptions) {
   const { store, vaultKey, localChannel } = options;
 
@@ -4460,7 +4473,8 @@ export async function buildServer(options: ServerOptions) {
       const hidden = new Set(await store.listHiddenPostIds(userId));
       const muted = new Set(await store.listMutedAuthorIds(userId, nowIso));
       const savedIds = new Set(await store.listSavedPostIds(userId));
-      const posts = (await store.listFeedPosts(authorIds, limit + 1, cursor)).filter(
+      const before = cursor ? decodeFeedCursor(cursor) : undefined;
+      const posts = (await store.listFeedPosts(authorIds, limit + 1, before)).filter(
         (post) =>
           !post.groupId &&
           !hidden.has(post.id) &&
@@ -4471,7 +4485,8 @@ export async function buildServer(options: ServerOptions) {
       const hasMore = posts.length > limit;
       const page = hasMore ? posts.slice(0, limit) : posts;
       for (const record of page) items.push(await feedPostOf(record, userId, cache, 0, savedIds));
-      return { items, nextCursor: hasMore ? (page[page.length - 1]?.createdAt ?? null) : null };
+      const last = page[page.length - 1];
+      return { items, nextCursor: hasMore && last ? encodeFeedCursor(last) : null };
     },
   );
 
@@ -4599,6 +4614,28 @@ export async function buildServer(options: ServerOptions) {
     return reply.code(201).send(await feedPostOf(record, userId, new Map()));
   });
 
+  /* Composer draft (docs/composer-implementation-plan.md §W). One per user, so
+     a draft typed on one device can be resumed on another. */
+  app.get("/v1/posts/draft", { preHandler: requireAuth }, async (request) => {
+    return (await store.getPostDraft(request.userId as string)) ?? null;
+  });
+
+  app.put<{ Body: { body?: string } }>("/v1/posts/draft", { preHandler: requireAuth }, async (request) => {
+    const userId = request.userId as string;
+    const body = typeof request.body?.body === "string" ? request.body.body.slice(0, MAX_POST_BODY) : "";
+    if (!body.trim()) {
+      await store.deletePostDraft(userId);
+      return { ok: true, cleared: true };
+    }
+    await store.savePostDraft({ userId, body, updatedAt: new Date().toISOString() });
+    return { ok: true };
+  });
+
+  app.delete("/v1/posts/draft", { preHandler: requireAuth }, async (request) => {
+    await store.deletePostDraft(request.userId as string);
+    return { ok: true };
+  });
+
   app.delete<{ Params: { id: string } }>(
     "/v1/posts/:id",
     { preHandler: requireAuth },
@@ -4678,7 +4715,7 @@ export async function buildServer(options: ServerOptions) {
     },
   );
 
-  app.get<{ Params: { id: string } }>(
+  app.get<{ Params: { id: string }; Querystring: { limit?: string; cursor?: string } }>(
     "/v1/posts/:id/comments",
     { preHandler: requireAuth },
     async (request) => {
@@ -4692,7 +4729,15 @@ export async function buildServer(options: ServerOptions) {
         if (record.hidden || blocked.has(record.authorId)) continue;
         items.push(await feedCommentOf(record, request.userId as string, cache));
       }
-      return items;
+      // Backward compatible: no `limit` → the full array (existing clients);
+      // with `limit` → a page `{ items, nextCursor }` (POST-12 comment pagination).
+      const rawLimit = Number(request.query?.limit);
+      if (!Number.isFinite(rawLimit) || rawLimit <= 0) return items;
+      const limit = Math.min(50, Math.max(1, Math.floor(rawLimit)));
+      const offset = Math.max(0, Number.parseInt(request.query?.cursor ?? "0", 10) || 0);
+      const page = items.slice(offset, offset + limit);
+      const nextCursor = offset + limit < items.length ? String(offset + limit) : null;
+      return { items: page, nextCursor };
     },
   );
 
@@ -5065,6 +5110,7 @@ export async function buildServer(options: ServerOptions) {
     avatarUrl: page.avatarUrl,
     coverUrl: page.coverUrl,
     cta: page.cta,
+    ctaUrl: page.ctaUrl,
     verified: page.verified,
     pinnedPostId: page.pinnedPostId,
     workspaceId: page.workspaceId,
@@ -5093,6 +5139,7 @@ export async function buildServer(options: ServerOptions) {
       avatarUrl?: string;
       coverUrl?: string;
       cta?: string;
+      ctaUrl?: string;
     };
   }>("/v1/pages", { preHandler: requireAuth }, async (request, reply) => {
     const userId = request.userId as string;
@@ -5117,6 +5164,10 @@ export async function buildServer(options: ServerOptions) {
       coverUrl:
         typeof request.body?.coverUrl === "string" ? request.body.coverUrl.trim() || undefined : undefined,
       cta: request.body?.cta?.trim().slice(0, 40) || undefined,
+      ctaUrl:
+        typeof request.body?.ctaUrl === "string"
+          ? request.body.ctaUrl.trim().slice(0, 500) || undefined
+          : undefined,
       verified: false,
       createdAt: now,
       updatedAt: now,
@@ -5166,6 +5217,7 @@ export async function buildServer(options: ServerOptions) {
       avatarUrl?: string;
       coverUrl?: string;
       cta?: string;
+      ctaUrl?: string;
     };
   }>("/v1/pages/:id", { preHandler: requireAuth }, async (request, reply) => {
     const userId = request.userId as string;
@@ -5192,6 +5244,8 @@ export async function buildServer(options: ServerOptions) {
       page.avatarUrl = request.body.avatarUrl.trim() || undefined;
     if (typeof request.body?.coverUrl === "string") page.coverUrl = request.body.coverUrl.trim() || undefined;
     if (typeof request.body?.cta === "string") page.cta = request.body.cta.trim().slice(0, 40) || undefined;
+    if (typeof request.body?.ctaUrl === "string")
+      page.ctaUrl = request.body.ctaUrl.trim().slice(0, 500) || undefined;
     page.updatedAt = new Date().toISOString();
     await store.updatePage(page);
     return pageDto(page, userId);
@@ -5558,10 +5612,11 @@ export async function buildServer(options: ServerOptions) {
       const followedPages = (await store.listFollowedPageIds(userId)).filter((id) => !blocked.has(id));
       const nowIso = new Date().toISOString();
       const isVideo = (id: string) => /\.(mp4|m4v|webm|mov)$/i.test(id);
+      const before = cursor ? decodeFeedCursor(cursor) : undefined;
       const posts = await store.listFeedPosts(
         [userId, ...friendIds, ...followedPages],
         (limit + 1) * 3,
-        cursor,
+        before,
       );
       const cache = new Map<string, FeedAuthorDto>();
       const items = [];
@@ -5575,7 +5630,7 @@ export async function buildServer(options: ServerOptions) {
           media.length > 0 ? media.map((entry) => entry.mediaId) : record.mediaId ? [record.mediaId] : [];
         if (!ids.some(isVideo)) continue;
         items.push(await feedPostOf(record, userId, cache));
-        last = record.createdAt;
+        last = encodeFeedCursor(record);
         if (items.length >= limit) break;
       }
       return { items, nextCursor: items.length >= limit ? last : null };

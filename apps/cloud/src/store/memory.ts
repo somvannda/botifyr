@@ -25,6 +25,7 @@ import type {
   PlatformSettings,
   PollRecord,
   PostCommentRecord,
+  PostDraftRecord,
   PostMediaRecord,
   PostRecord,
   PostReportRecord,
@@ -84,6 +85,7 @@ export class MemoryStore implements Store {
   private postShares = new Set<string>();
   /** postId → ordered media ids (multi-image). */
   private postMedia = new Map<string, PostMediaRecord[]>();
+  private postDrafts = new Map<string, PostDraftRecord>();
   /** postId → hashtags (lower-case, no `#`). */
   private postTags = new Map<string, Set<string>>();
   private polls = new Map<string, { options: Array<{ id: string; label: string }>; closesAt?: string }>();
@@ -1121,6 +1123,19 @@ export class MemoryStore implements Store {
     return (this.postMedia.get(postId) ?? []).map((entry) => ({ ...entry }));
   }
 
+  async getPostDraft(userId: string): Promise<PostDraftRecord | null> {
+    const draft = this.postDrafts.get(userId);
+    return draft ? { ...draft } : null;
+  }
+
+  async savePostDraft(draft: PostDraftRecord): Promise<void> {
+    this.postDrafts.set(draft.userId, { ...draft });
+  }
+
+  async deletePostDraft(userId: string): Promise<void> {
+    this.postDrafts.delete(userId);
+  }
+
   async addPostTag(postId: string, tag: string): Promise<void> {
     const set = this.postTags.get(postId) ?? new Set<string>();
     set.add(tag.replace(/^#/, "").toLowerCase());
@@ -1142,11 +1157,24 @@ export class MemoryStore implements Store {
       .map((post) => ({ ...post }));
   }
 
-  async listFeedPosts(authorIds: string[], limit: number, before?: string): Promise<PostRecord[]> {
+  async listFeedPosts(
+    authorIds: string[],
+    limit: number,
+    before?: { createdAt: string; id: string },
+  ): Promise<PostRecord[]> {
     const authors = new Set(authorIds);
+    // Stable keyset: strictly older than (createdAt, id) so equal timestamps are
+    // ordered by id and never skipped (DB-2).
+    const afterBefore = (record: PostRecord): boolean => {
+      if (!before) return true;
+      if (record.createdAt !== before.createdAt) return record.createdAt < before.createdAt;
+      return record.id < before.id;
+    };
     return [...this.posts.values()]
-      .filter((record) => authors.has(record.authorId) && (!before || record.createdAt < before))
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .filter((record) => authors.has(record.authorId) && afterBefore(record))
+      .sort((a, b) =>
+        a.createdAt === b.createdAt ? b.id.localeCompare(a.id) : b.createdAt.localeCompare(a.createdAt),
+      )
       .slice(0, Math.max(1, Math.min(100, limit)))
       .map((record) => ({ ...record }));
   }

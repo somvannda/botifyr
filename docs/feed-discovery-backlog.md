@@ -32,7 +32,7 @@
 | ID | Description | Status | Evidence / remaining work |
 | --- | --- | --- | --- |
 | DB-1 | Realtime `feed.*` events were emitted but never delivered — `canReceive` in `apps/cloud/src/server.ts` had no `feed.*` cases, so the websocket fan-out dropped them | **Fixed + verified** | `feedEventRecipient` in `apps/cloud/src/events.ts` + `canReceive` routing; `apps/cloud/src/feed-realtime.test.ts` (websocket) and `events.test.ts`. Follow-up: friends' *new posts* still need recipient resolution at the emit site (`feed.post` carries only `authorId`) |
-| DB-2 | Cursor pagination uses `created_at < cursor` (strict), so posts sharing the boundary timestamp can be **skipped** | Documented (backend) | source: `apps/cloud/src/store/postgres.ts` `listFeedPosts`; fix = keyset on `(created_at, id)` |
+| DB-2 | Cursor pagination used `created_at < cursor` (strict), so posts sharing the boundary timestamp could be **skipped** | **Fixed + verified** | `encodeFeedCursor`/`decodeFeedCursor` (`server.ts`) + keyset `listFeedPosts` (`(created_at, id)`, postgres + memory); `apps/cloud/src/feed-pagination.test.ts` |
 
 ## Cross-workstream notes
 

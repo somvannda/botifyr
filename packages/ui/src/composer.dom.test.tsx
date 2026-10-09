@@ -51,6 +51,9 @@ function makeClient(overrides: Partial<BotifyrClient> = {}): BotifyrClient {
     searchPeople: vi.fn().mockResolvedValue([]),
     uploadFile: vi.fn().mockResolvedValue({ id: "media-1" }),
     uploadFileRaw: vi.fn().mockResolvedValue({ id: "media-1" }),
+    getPostDraft: vi.fn().mockResolvedValue(null),
+    savePostDraft: vi.fn().mockResolvedValue({ ok: true }),
+    deletePostDraft: vi.fn().mockResolvedValue({ ok: true }),
     createPost: vi.fn().mockResolvedValue(makePost({ id: "new-post", body: "hello" })),
     reportPost: vi.fn().mockResolvedValue(undefined),
     blockUser: vi.fn().mockResolvedValue(undefined),
@@ -84,6 +87,16 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
+beforeEach(() => {
+  // jsdom does not implement object URLs used for composer previews.
+  Object.defineProperty(URL, "createObjectURL", {
+    value: vi.fn(() => `blob:mock-${Math.random().toString(36).slice(2)}`),
+    configurable: true,
+    writable: true,
+  });
+  Object.defineProperty(URL, "revokeObjectURL", { value: vi.fn(), configurable: true, writable: true });
+});
+
 afterEach(() => {
   cleanup();
   localStorage.clear();
@@ -110,11 +123,11 @@ describe("Composer media limits", () => {
     const { container } = renderFeed(client);
     await screen.findByText("existing post");
 
-    const big = imageFile("clip.mp4", "video/mp4", 16 * 1024 * 1024);
+    const big = imageFile("clip.mp4", "video/mp4", 51 * 1024 * 1024);
     fireEvent.change(fileInput(container), { target: { files: [big] } });
 
     expect(await screen.findByText(/too large/)).toBeTruthy();
-    expect(client.uploadFile).not.toHaveBeenCalled();
+    expect(client.uploadFileRaw).not.toHaveBeenCalled();
   });
 
   it("rejects a non-media file with a clear message", async () => {
@@ -132,7 +145,7 @@ describe("Composer media limits", () => {
 describe("Composer publish lifecycle", () => {
   it("shows upload progress, then confirms success", async () => {
     const upload = deferred<{ id: string }>();
-    const client = makeClient({ uploadFile: vi.fn().mockReturnValue(upload.promise) });
+    const client = makeClient({ uploadFileRaw: vi.fn().mockReturnValue(upload.promise) });
     const { container } = renderFeed(client);
     await screen.findByText("existing post");
 
@@ -226,15 +239,15 @@ describe("Composer image descriptions", () => {
     fireEvent.click(screen.getByRole("button", { name: "Post" }));
 
     await waitFor(() =>
-      expect(client.createPost).toHaveBeenCalledWith(
-        expect.objectContaining({ alts: ["A cat on a mat"] }),
-      ),
+      expect(client.createPost).toHaveBeenCalledWith(expect.objectContaining({ alts: ["A cat on a mat"] })),
     );
   });
 
   it("uses the stored alt text when rendering a post image", async () => {
     const post = makePost({ images: ["/v1/feed/image?t=a"], imageAlts: ["A red fox"] });
-    const { container } = renderFeed(makeClient({ listFeed: vi.fn().mockResolvedValue({ items: [post], nextCursor: null }) }));
+    const { container } = renderFeed(
+      makeClient({ listFeed: vi.fn().mockResolvedValue({ items: [post], nextCursor: null }) }),
+    );
     await screen.findByText("existing post");
 
     const img = container.querySelector("img.feed-image-img");
@@ -262,5 +275,31 @@ describe("Composer draft persistence", () => {
 
     fireEvent.change(screen.getByLabelText("Post text"), { target: { value: "saved locally" } });
     await waitFor(() => expect(localStorage.getItem("botifyr.feedDraft")).toBe("saved locally"));
+  });
+
+  it("restores a server-synced draft when local storage is empty", async () => {
+    const client = makeClient({
+      getPostDraft: vi
+        .fn()
+        .mockResolvedValue({ body: "from another device", updatedAt: new Date().toISOString() }),
+    });
+    renderFeed(client);
+    await screen.findByText("existing post");
+
+    await waitFor(() =>
+      expect(screen.getByLabelText("Post text")).toHaveProperty("value", "from another device"),
+    );
+    expect(screen.getByText("Draft restored")).toBeTruthy();
+  });
+
+  it("clears the server draft after publishing", async () => {
+    const client = makeClient();
+    renderFeed(client);
+    await screen.findByText("existing post");
+
+    fireEvent.change(screen.getByLabelText("Post text"), { target: { value: "ship it" } });
+    fireEvent.click(screen.getByRole("button", { name: "Post" }));
+
+    await waitFor(() => expect(client.deletePostDraft).toHaveBeenCalled());
   });
 });

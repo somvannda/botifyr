@@ -211,6 +211,8 @@ export interface Page {
   avatarUrl?: string;
   coverUrl?: string;
   cta?: string;
+  /** Destination for the CTA button; `cta` is the label. */
+  ctaUrl?: string;
   verified: boolean;
   /** Post pinned to the top of the Page timeline. */
   pinnedPostId?: string;
@@ -691,7 +693,8 @@ export class BotifyrClient {
     return this.request(`/v1/uploads/raw?${params.toString()}`, {
       method: "POST",
       body: input.blob,
-      contentType: input.mime || "application/octet-stream",
+      // Always octet-stream on the wire; the real MIME travels in `mime=`.
+      contentType: "application/octet-stream",
     });
   }
 
@@ -1332,6 +1335,18 @@ export class BotifyrClient {
     return this.request(`/v1/posts/${id}/comments`);
   }
 
+  /** One page of a post's comments, newest page last (POST-12). */
+  listCommentsPage(
+    id: string,
+    cursor?: string,
+    limit = 20,
+  ): Promise<{ items: FeedComment[]; nextCursor: string | null }> {
+    const params = new URLSearchParams();
+    params.set("limit", String(limit));
+    if (cursor) params.set("cursor", cursor);
+    return this.request(`/v1/posts/${id}/comments?${params.toString()}`);
+  }
+
   addComment(id: string, body: string, parentId?: string): Promise<FeedComment> {
     return this.request(`/v1/posts/${id}/comments`, {
       method: "POST",
@@ -1364,6 +1379,24 @@ export class BotifyrClient {
   /** Posts carrying a hashtag (no leading `#` needed). */
   listTagPosts(tag: string): Promise<FeedPost[]> {
     return this.request(`/v1/tags/${encodeURIComponent(tag.replace(/^#/, ""))}/posts`);
+  }
+
+  /** The viewer's saved composer draft (server-synced), if any. */
+  getPostDraft(): Promise<{ body: string; updatedAt: string } | null> {
+    return this.request("/v1/posts/draft");
+  }
+
+  /** Save (or clear, when blank) the composer draft. */
+  savePostDraft(body: string): Promise<{ ok: boolean }> {
+    return this.request("/v1/posts/draft", {
+      method: "PUT",
+      json: true,
+      body: JSON.stringify({ body }),
+    });
+  }
+
+  deletePostDraft(): Promise<{ ok: boolean }> {
+    return this.request("/v1/posts/draft", { method: "DELETE" });
   }
 
   /** The viewer's own upcoming (scheduled) posts. */
@@ -1501,6 +1534,7 @@ export class BotifyrClient {
     avatarUrl?: string;
     coverUrl?: string;
     cta?: string;
+    ctaUrl?: string;
   }): Promise<Page> {
     return this.request("/v1/pages", { method: "POST", json: true, body: JSON.stringify(input) });
   }
@@ -1520,6 +1554,7 @@ export class BotifyrClient {
       avatarUrl: string;
       coverUrl: string;
       cta: string;
+      ctaUrl: string;
     }>,
   ): Promise<Page> {
     return this.request(`/v1/pages/${id}`, { method: "PATCH", json: true, body: JSON.stringify(input) });

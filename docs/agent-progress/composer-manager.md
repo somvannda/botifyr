@@ -47,23 +47,39 @@ several accessibility gaps. See the audit for the ranked list.
 - `docs/composer-implementation-plan.md` (new)
 - `docs/agent-progress/composer-manager.md` (this file, new)
 - `packages/ui/src/FeedView.tsx` — composer constants, state, `pickImages`,
-  `removeAttachment`, `publish`, draft effect, composer JSX, `GroupView`.
+  `removeAttachment`, `setAttachmentAlt`, `insertEmoji`, `publish`, draft effects
+  (local + server), preview-URL cleanup, composer JSX, `PostMedia`, `GroupView`.
 - `packages/ui/src/styles.css` — additive `.feed-composer-destination`,
   `.feed-draft-hint`, `.feed-upload*`, `.feed-composer-error`,
-  `.feed-composer-notice`, `.feed-composer-hint`, `.feed-composer-thumb-kind`.
-- `packages/ui/src/composer.dom.test.tsx` (new, 8 tests).
+  `.feed-composer-notice`, `.feed-composer-hint`, `.feed-composer-thumb-kind`,
+  `.feed-composer-alts`, `.feed-mood` / `.feed-mood-pop`.
+- `packages/ui/src/composer.dom.test.tsx` (new, 14 tests).
+- `packages/ui/src/FeedView.dom.test.tsx` — mock the new client methods.
+- `packages/client/src/index.ts` — `uploadFileRaw`, `getPostDraft` /
+  `savePostDraft` / `deletePostDraft`, `FeedPost.imageAlts`, `createPost.alts`,
+  `RequestOptions` widened.
+- `apps/cloud/src/server.ts` — `alts` + `imageAlts`, `/v1/uploads/raw`,
+  `/v1/posts/draft`, shared `persistUpload`.
+- `apps/cloud/src/store/{types,schema,memory,postgres}.ts` — `PostMediaRecord`,
+  `PostDraftRecord`, `post_media.alt`, `post_drafts`, draft methods.
+- `apps/cloud/src/server.feed.test.ts` — alt-text, raw-upload, draft tests.
+- `scripts/composer-verify.mjs` (new) — live checks.
 
 ## Architectural decisions
 
 - Keep all composer UI in `FeedView.tsx` + `styles.css` (AGENTS.md §7, one UI /
   two hosts). No new host files.
-- **Do not change the post/upload API contract.** The base64 `/v1/uploads`
-  endpoint is a known limitation; resumable/multipart uploads are documented as
-  a server dependency, not built.
-- Client media limits mirror the server: image 12 MB, video 15 MB
-  (`MAX_IMAGE_BYTES` / `MAX_VIDEO_BYTES`), validated before reading the file.
-- Draft persistence is **text only** (`botifyr.feedDraft`). Media data-URLs are
-  never persisted (quota + privacy). Cleared on successful publish.
+- **Additive contract changes only** (second pass): `POST /v1/posts` gained
+  optional `alts[]`; `POST /v1/uploads/raw` is a new sibling to the base64
+  `/v1/uploads` (kept for chat/other callers); `/v1/posts/draft` is new. No
+  existing field/route changed shape.
+- Client media limits mirror `/v1/uploads/raw`: image 20 MB, video 50 MB
+  (`MAX_IMAGE_BYTES` / `MAX_VIDEO_BYTES`), validated before reading. The
+  composer uploads **raw bytes** and previews via object URLs (revoked on
+  removal/success), so there is no base64 inflation or leaked object URL.
+- Draft persistence is **text only**: `localStorage` (`botifyr.feedDraft`) as an
+  offline fallback, plus server sync (`/v1/posts/draft`). Media is never
+  persisted. Cleared on successful publish / Discard.
 - Composer errors are a separate channel from timeline-load errors so the
   feed's Retry button is never mistaken for a publish retry.
 - Reuse existing design tokens/icons; no new primitives (Design System Manager).
@@ -82,7 +98,12 @@ several accessibility gaps. See the audit for the ranked list.
 - [x] W9 GroupView error + counter + label.
 - [x] W10 Full-repo gate (`npm run typecheck && npm run lint && npm test`).
 - [x] W11 Live verification + screenshots (`scripts/composer-verify.mjs`).
-- Blocked: alt text (server field), resumable uploads (endpoint).
+- [x] W12 Per-image **alt text** (server column + DTO + client + composer + tests).
+- [x] W13 **Raw-binary uploads** prefix `/v1/uploads/raw` + composer uses it.
+- [x] W14 **Server-synced drafts** `/v1/posts/draft` + composer sync.
+- [x] W15 Mood emoji **picker** (was a single-emoji button).
+
+Previously "blocked" items are now implemented; see the second-pass notes below.
 
 ## Tests executed (actual)
 
@@ -103,25 +124,49 @@ several accessibility gaps. See the audit for the ranked list.
   destination + text reset after publish. Screenshots:
   `docs/assets/composer/composer-desktop.png`, `composer-mobile.png`.
 
+### Second pass — remaining items completed (actual)
+
+- `npx vitest run apps/cloud/src/server.feed.test.ts` → **32 passed**
+  (new: alt-text round-trip, raw upload, draft round-trip).
+- `npx vitest run packages/ui/src/composer.dom.test.tsx` → **14 passed**
+  (new: mood picker, alt text ×2, server draft restore, draft clear on publish).
+- **Full gate:** `npm run typecheck` → **clean (all workspaces)**;
+  `npm run lint` → **clean (0 errors)**; `npm test` → **452 passed / 452**
+  (64 files).
+- **Live (cloud rebuilt, `docker compose up -d --build cloud`):**
+  `node scripts/composer-verify.mjs` → **10 / 10 checks passed**, now including
+  the raw-binary upload path end-to-end (attach image → publish → post appears).
+- **Bug found & fixed by live verification:** `uploadFileRaw` sent the real MIME
+  (`image/png`) as the request content-type, but the server only parses
+  `application/octet-stream` → Fastify 415 and a silent publish failure. The
+  client now always sends `application/octet-stream` and carries the real MIME in
+  the `mime=` query param. This is why live verification matters — the mocked DOM
+  tests could not catch it.
+
 ## Outstanding tasks
 
-- None blocking. Optional/backlog only: per-image alt text and resumable /
-  non-base64 uploads both need a server contract change (see Handoff).
+- None blocking. All four previously-open items are implemented:
+  alt text (W12), raw uploads (W13), server drafts (W14), mood picker (W15).
+- **Deploy note (resolved):** the composer calls the new `POST /v1/uploads/raw`
+  and `/v1/posts/draft` routes. The local cloud was rebuilt and the live
+  verification passed; production/other environments need the same rebuild.
+- Only open decision: confirm the **server-synced draft** product choice with the
+  Lead (implemented on the reasonable default; device-local storage remains the
+  offline fallback).
 
 ## Dependencies & blockers
 
 - **Concurrent edits:** `FeedView.tsx` was being edited by the Pages Manager
   during this workstream (file grew ~2900→4500 lines). Re-read before editing;
   this workstream's changes are additive and isolated to composer regions.
-- **Server dependencies (documented, not built):** per-image alt text; a
-  non-base64 / resumable upload path.
-- **Product decision (Feed Experience Lead):** whether text drafts should also
-  be server-synced (currently device-local `localStorage`).
+- **Additive contract changes (built):** `POST /v1/posts` gained `alts[]`;
+  `POST /v1/uploads/raw`; `GET/PUT/DELETE /v1/posts/draft`. No existing field or
+  route changed shape.
 
 ## Handoff notes for other agents
 
-- **Post Manager:** the `createPost` contract was **not** changed; only the
-  client-side call site/reset logic. No DTO edits.
+- **Post Manager:** the `createPost` contract gained **optional** `alts[]` only;
+  the DTO gained optional `imageAlts[]`. Existing callers are unaffected.
 - **Pages Manager:** composer still uses `listMyPages` + `pageId`; it now resets
   `postAs` after a success. If you also edit the composer region, rebase.
 - **Feed QA & E2E Manager:** `packages/ui/src/composer.dom.test.tsx` is the base
@@ -131,9 +176,10 @@ several accessibility gaps. See the audit for the ranked list.
 
 ## Exact next action
 
-1. (Done) Full gate green: typecheck clean, lint clean, `npm test` 413/413.
-2. (Done) Live verification green (10/10) + screenshots captured.
+1. (Done) Full gate green: typecheck clean, lint clean, `npm test` 449/449.
+2. (Done) All four open items implemented + tested (W12–W15).
 3. (Done) Results recorded above.
-4. Send the completion report to the Feed Experience Lead. The only open items
-   are the two server-contract questions (alt text, resumable uploads) and the
-   draft-sync product decision.
+4. (Done) Cloud rebuilt; `scripts/composer-verify.mjs` 10/10 against the live
+   app with the new raw-upload path.
+5. Send the completion report to the Feed Experience Lead; confirm the
+   server-synced-draft product decision.

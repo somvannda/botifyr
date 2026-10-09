@@ -176,7 +176,8 @@ const studioPage = await req("/v1/pages", {
     name: `Northwind Studio ${stamp}`,
     category: "Design studio",
     about: "We design calm interfaces and write about the process behind them.",
-    cta: "https://example.com/work",
+    cta: "Visit shop",
+    ctaUrl: "https://example.com/work",
   },
 });
 await req("/v1/posts", {

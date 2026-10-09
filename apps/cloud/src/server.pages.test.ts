@@ -360,6 +360,38 @@ describe("pages", () => {
 
     await app.close();
   });
+
+  it("stores and updates a Page's CTA label and link", async () => {
+    const { app, signUp, auth } = await setup();
+    const alice = await signUp("alice-cta@example.com");
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/v1/pages",
+      headers: auth(alice.token),
+      payload: {
+        name: "CTA Page",
+        handle: "ctapage",
+        cta: "Visit shop",
+        ctaUrl: "https://example.com/shop",
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    const page = created.json() as { id: string; cta?: string; ctaUrl?: string };
+    expect(page.cta).toBe("Visit shop");
+    expect(page.ctaUrl).toBe("https://example.com/shop");
+
+    const patched = await app.inject({
+      method: "PATCH",
+      url: `/v1/pages/${page.id}`,
+      headers: auth(alice.token),
+      payload: { ctaUrl: "https://example.com/book" },
+    });
+    expect(patched.statusCode).toBe(200);
+    expect((patched.json() as { ctaUrl?: string }).ctaUrl).toBe("https://example.com/book");
+
+    await app.close();
+  });
 });
 
 /**

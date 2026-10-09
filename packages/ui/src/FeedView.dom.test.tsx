@@ -38,6 +38,9 @@ function makeClient(
     reactStory: vi.fn().mockResolvedValue({ ok: true }),
     listReels: vi.fn().mockResolvedValue({ items: extras.reels ?? [], nextCursor: null }),
     listMyPages: vi.fn().mockResolvedValue([]),
+    getPostDraft: vi.fn().mockResolvedValue(null),
+    savePostDraft: vi.fn().mockResolvedValue({ ok: true }),
+    deletePostDraft: vi.fn().mockResolvedValue({ ok: true }),
     openDm: vi.fn().mockResolvedValue({
       id: "dm-1",
       kind: "dm",
@@ -77,6 +80,7 @@ function makeClient(
     followPage: vi.fn().mockResolvedValue({ ok: true }),
     unfollowPage: vi.fn().mockResolvedValue(undefined),
     listComments: vi.fn().mockResolvedValue([]),
+    listCommentsPage: vi.fn().mockResolvedValue({ items: [], nextCursor: null }),
     addComment: vi.fn().mockImplementation((_id: string, body: string) =>
       Promise.resolve({
         id: `comment-${body}`,
@@ -361,6 +365,30 @@ describe("FeedView action hierarchy", () => {
     await screen.findByText(/Sent/);
     expect(asMock(client.openDm)).toHaveBeenCalledWith("author-s1");
     expect(asMock(client.sendDm)).toHaveBeenCalledWith("dm-1", "nice story");
+  });
+
+  it("opens the DM after a story reply when the host handles it (EXP-9)", async () => {
+    const stories = [makeStory("s1", "Alice")];
+    const client = makeClient([], { stories });
+    const onStoryReplySent = vi.fn();
+    render(
+      <FeedView
+        client={client}
+        cloudUrl="http://cloud"
+        viewerId="viewer-1"
+        onStoryReplySent={onStoryReplySent}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /Alice/ }));
+    await screen.findByRole("dialog", { name: /Story by Alice/ });
+    fireEvent.change(screen.getByRole("textbox", { name: /Reply to Alice/ }), {
+      target: { value: "hi" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(onStoryReplySent).toHaveBeenCalledTimes(1));
+    expect(onStoryReplySent.mock.calls[0][0]).toMatchObject({ id: "dm-1" });
   });
 
   it("records a story view through the API when opened (EXP-2)", async () => {
@@ -755,6 +783,21 @@ describe("Pages experience", () => {
     await screen.findByRole("heading", { name: /Acme Coffee/ });
     expect(screen.queryByRole("button", { name: "Order now" })).toBeNull();
     expect(nonUrl.container.querySelector(".page-cta-badge")?.textContent).toBe("Order now");
+  });
+
+  it("links the CTA label to a dedicated ctaUrl (EXP-8)", async () => {
+    const { container } = renderPage(
+      makePageClient(makePage({ cta: "Visit shop", ctaUrl: "https://acme.co/shop" })),
+    );
+    await screen.findByRole("heading", { name: /Acme Coffee/ });
+    const link = container.querySelector("a.feed-follow-btn");
+    expect(link?.getAttribute("href")).toBe("https://acme.co/shop");
+    // The button shows the owner's label, not the raw URL.
+    expect(link?.textContent).toBe("Visit shop");
+
+    // The About section surfaces the same destination.
+    fireEvent.click(screen.getByRole("tab", { name: "About" }));
+    expect(container.querySelector(".page-fact a")?.getAttribute("href")).toBe("https://acme.co/shop");
   });
 
   it("shows owner controls only to managers (permissions)", async () => {
@@ -1195,7 +1238,7 @@ describe("Post interactions", () => {
     const deleteComment = vi.fn().mockResolvedValue(undefined);
     const client = {
       ...makeClient([makePost({ comments: 1 })]),
-      listComments: vi.fn().mockResolvedValue([comment]),
+      listCommentsPage: vi.fn().mockResolvedValue({ items: [comment], nextCursor: null }),
       deleteComment,
     } as unknown as BotifyrClient;
     render(<FeedView client={client} cloudUrl="http://cloud" viewerId="viewer-1" />);
@@ -1261,7 +1304,7 @@ describe("Post interactions", () => {
     );
     const client = {
       ...makeClient([makePost({ comments: 1 })]),
-      listComments: vi.fn().mockResolvedValue([comment]),
+      listCommentsPage: vi.fn().mockResolvedValue({ items: [comment], nextCursor: null }),
       addComment,
     } as unknown as BotifyrClient;
     render(<FeedView client={client} cloudUrl="http://cloud" viewerId="viewer-1" />);
@@ -1303,5 +1346,107 @@ describe("Post interactions", () => {
     const time = container.querySelector(".feed-author time");
     expect(time?.getAttribute("datetime")).toBe(createdAt);
     expect(time?.getAttribute("title")).toBeTruthy();
+  });
+
+  it("previews the first two comments behind a View-all action (POST comment preview)", async () => {
+    const comments = [1, 2, 3].map((n) => ({
+      id: `c${n}`,
+      author: { id: "author-1", handle: "alice", displayName: "Alice", online: false },
+      body: `comment ${n}`,
+      createdAt: new Date().toISOString(),
+    }));
+    const client = {
+      ...makeClient([makePost({ comments: 3 })]),
+      listCommentsPage: vi.fn().mockResolvedValue({ items: comments, nextCursor: null }),
+    } as unknown as BotifyrClient;
+    render(<FeedView client={client} cloudUrl="http://cloud" viewerId="viewer-1" />);
+    await screen.findByText("A quiet feed is a happy feed.");
+
+    fireEvent.click(screen.getByRole("button", { name: "Comment" }));
+    await screen.findByText("comment 1");
+    expect(screen.getByText("comment 2")).toBeTruthy();
+    expect(screen.queryByText("comment 3")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /View all 3 comments/ }));
+    expect(await screen.findByText("comment 3")).toBeTruthy();
+  });
+
+  it("loads more comments a page at a time (POST-12)", async () => {
+    const make = (n: number) => ({
+      id: `c${n}`,
+      author: { id: "author-1", handle: "alice", displayName: "Alice", online: false },
+      body: `comment ${n}`,
+      createdAt: new Date(Date.now() + n).toISOString(),
+    });
+    const listCommentsPage = vi
+      .fn()
+      .mockResolvedValueOnce({ items: [make(1), make(2)], nextCursor: "2" })
+      .mockResolvedValueOnce({ items: [make(3)], nextCursor: null });
+    const client = {
+      ...makeClient([makePost({ comments: 3 })]),
+      listCommentsPage,
+    } as unknown as BotifyrClient;
+    render(<FeedView client={client} cloudUrl="http://cloud" viewerId="viewer-1" />);
+    await screen.findByText("A quiet feed is a happy feed.");
+
+    fireEvent.click(screen.getByRole("button", { name: "Comment" }));
+    await screen.findByText("comment 1");
+    // The first page has two threads and more available.
+    expect(screen.queryByText("comment 3")).toBeNull();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Load more comments" }));
+    expect(await screen.findByText("comment 3")).toBeTruthy();
+    expect(listCommentsPage).toHaveBeenLastCalledWith("post-1", "2", 20);
+  });
+});
+
+/**
+ * Reusable post experience: the same `PostCard` (rich text, media, actions)
+ * must render consistently in the Group stream and album timelines, not just
+ * the main Feed (docs/post-improvement-plan.md §D / §E).
+ */
+describe("Post reuse across contexts", () => {
+  it("renders the shared post card in a Group stream", async () => {
+    const post = makePost({ body: "Group post with https://example.com/g and #grouptag" });
+    const client = {
+      ...makeClient([]),
+      getGroup: vi.fn().mockResolvedValue({
+        id: "g1",
+        handle: "acme",
+        name: "Acme",
+        ownerId: "owner",
+        members: 3,
+        joined: true,
+        createdAt: new Date().toISOString(),
+      }),
+      groupPosts: vi.fn().mockResolvedValue([post]),
+    } as unknown as BotifyrClient;
+    const { container } = render(
+      <FeedView client={client} cloudUrl="http://cloud" viewerId="viewer-1" groupHandle="acme" />,
+    );
+
+    await screen.findByText(/Group post/);
+    expect(container.querySelector(".feed-post .feed-body a.feed-link")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "More options" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Comment" })).toBeTruthy();
+  });
+
+  it("renders the shared post card in an album timeline", async () => {
+    const post = makePost({
+      body: "Album photo caption",
+      images: ["/a.png", "/b.png"],
+      imageUrl: "/a.png",
+    });
+    const client = {
+      ...makeClient([]),
+      listAlbumPosts: vi.fn().mockResolvedValue([post]),
+    } as unknown as BotifyrClient;
+    const { container } = render(
+      <FeedView client={client} cloudUrl="http://cloud" viewerId="viewer-1" albumName="Trip" />,
+    );
+
+    await screen.findByText("Album photo caption");
+    expect(container.querySelectorAll(".feed-image-grid .feed-image-img")).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "More options" })).toBeTruthy();
   });
 });

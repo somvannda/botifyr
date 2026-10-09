@@ -33,7 +33,7 @@
 | EXP-4 | Reels | Buffering/error/Retry + missing/empty states | P2 | Reels Manager | **Verified** | same (R-02/R-09) |
 | EXP-5 | Composer | Character counter + limit enforcement | P2 | Composer Manager | **Verified** | Feed test |
 | EXP-7 | Composer | Draft persistence (`botifyr.feedDraft`) | P3 | Composer Manager | **Verified** | `FEED_DRAFT_KEY` + tests |
-| EXP-8 | Pages | CTA rendering (link only when a real URL, else badge) | P3 | Pages Manager | **Verified** | `agent-progress/pages-manager.md` |
+| EXP-8 | Pages | CTA label + destination (`cta` + `cta_url`): real link when set, else badge | P3 | Pages Manager | **Verified** | `agent-progress/pages-manager.md`; component + cloud tests |
 | EXP-9 | Stories | Replies via DM + reactions (`story_reactions`) | P3 | Stories Manager | **Verified** | Feed tests (reply + reaction); `story_views`/`story_reactions` |
 | FEED-D1…D6 | Feed | Infinite scroll, end state, de-dup, scroll restore, refresh, new-activity banner | P1 | Feed & Discovery | **Verified** | live `scripts/feed-discovery-verify.mjs` |
 | POST-1…POST-11 | Posts | Rich text, media component, confirm dialogs, optimistic guards | P1 | Post Manager | **Verified** | `post-improvement-progress.md`, 8 tests |

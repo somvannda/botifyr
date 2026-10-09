@@ -9,12 +9,13 @@
 ## Current status
 
 **Implementation complete and verified, including the previously backend-blocked
-story views and reactions.** Repo-wide `npm test` → **437 passed / 0 failed**
-(63 files). Stories Playwright E2E → **2 passed** (desktop + mobile: open, react,
-pause, close). Live Feed QA (`scripts/feed-qa.mjs`) → "Story viewer opens"
-**true**, **0 console errors**. Cloud container rebuilt; new routes live
-(unauthenticated `POST /v1/stories/:id/view` → 401). `npm run typecheck` clean
-across all workspaces; ESLint 0 errors; Prettier clean.
+story views and reactions, the Stories module extraction, and reply-opens-DM.**
+Repo-wide `npm test` → **452 passed / 0 failed** (64 files). Stories Playwright
+E2E → **2 passed** (desktop + mobile: open, react, pause, close). Live Feed QA
+(`scripts/feed-qa.mjs`) → "Story viewer opens" **true**, **0 console errors**.
+Cloud container rebuilt; new routes live (unauthenticated `POST
+/v1/stories/:id/view` → 401). `npm run typecheck` clean across all workspaces;
+ESLint 0 errors; Prettier clean.
 
 > Concurrent-writer note: sibling agents edit shared files; one introduced (then
 > fixed) a backtick typo in `apps/cloud/src/store/schema.ts`. The earlier 4
@@ -25,10 +26,10 @@ across all workspaces; ESLint 0 errors; Prettier clean.
 ## Environment
 
 - Repo `G:\Developments\botifyr.xyz` (npm workspaces). Node ≥20.
-- **A sibling agent is actively rewriting `packages/ui/src/FeedView.tsx` and
-  `styles.css`** (hash changed repeatedly within seconds during this session).
-  Stories edits were applied by exact-text match to the stable Stories regions;
-  re-verify the file after that workstream settles.
+- Stories now live in **`packages/ui/src/Stories.tsx`** (+ shared helpers in
+  `packages/ui/src/feedKit.tsx`), so the earlier `FeedView.tsx` contention no
+  longer affects story edits. `FeedView.tsx`/`styles.css` remain shared with
+  sibling agents; re-verify the gate if that workstream resumes.
 
 ## Files inspected
 
@@ -44,17 +45,15 @@ across all workspaces; ESLint 0 errors; Prettier clean.
 
 ## Files modified
 
-- `packages/ui/src/FeedView.tsx`
-  - Replaced pre-change `STORY_DURATION_MS` + `StoryViewer` with grouped,
-    pausable viewer + helpers (`StoryGroup`, `groupStories`, `storyDuration`,
-    `readSeenStories`).
-  - New state: `storiesLoading`, `storyError`, id-keyed `storyOpen`,
-    `seenStories` seeded from storage, `storyGroups` memo.
-  - `loadStories` callback; seen-persistence effect; close-stale-story effect.
-  - Handlers: `addStory` (now `loadStories`), `markStorySeen`, `openStory`,
-    `navigateStory`, `replyToStory` (DM).
-  - Grouped tray with own-story tile, skeletons, retry, empty label.
-  - Viewer usage resolves indices from ids; hides reply on your own story.
+- `packages/ui/src/Stories.tsx` **(new)** — self-contained story surface:
+  `StoriesStrip` (fetch, creator grouping, seen store, tray, viewer) +
+  `StoryViewer` (progress, pause/resume, taps, keyboard, error, replies,
+  reactions).
+- `packages/ui/src/feedKit.tsx` **(new)** — shared `Avatar`/`authorName`/
+  `authorEmoji`/`relativeTime`/`resolveAvatar`, used by Feed + Stories (no cycle).
+- `packages/ui/src/FeedView.tsx` — story logic extracted to `Stories.tsx`; now
+  renders `<StoriesStrip client cloudUrl viewerId />` and imports helpers from
+  `feedKit`; `useMemo`/`Story` imports removed.
 - `packages/ui/src/styles.css`
   - Raised `.story-viewer-head`/`.story-nav` z-index; immersive media sizing and
     centred caption; new `.story-own*`, `.story-taps`/`.story-tap`,
@@ -76,6 +75,8 @@ across all workspaces; ESLint 0 errors; Prettier clean.
 - `apps/cloud/src/server.feed.test.ts` — "records story views and reactions".
 - `packages/client/src/index.ts` — `Story` gains `viewedByMe`/`reactions`/
   `myReaction`; added `viewStory` + `reactStory`.
+- `packages/ui/src/BotifyrApp.tsx` — `openStoryConversation` + `onStoryReplySent`
+  wiring so a story reply opens the DM (FR-13).
 - `packages/ui/src/styles.css` — `.story-reactions`/`.story-reaction`, spacing,
   more opaque viewer backdrop.
 - `e2e/stories.spec.ts` — live Stories journey at desktop + mobile 390px (open,
@@ -99,6 +100,11 @@ across all workspaces; ESLint 0 errors; Prettier clean.
   `viewedByMe` seeds the local seen store).
 - **Story reactions** (`story_reactions` + `POST /v1/stories/:id/reaction`;
   optimistic UI, refetch on failure, toggle-to-clear).
+- **Reply opens the DM:** after sending, `onStoryReplySent` → `BotifyrApp`
+  opens the conversation (FR-13).
+- **Modularized:** the story surface moved to `packages/ui/src/Stories.tsx`
+  (self-contained `StoriesStrip` + `StoryViewer`), with shared helpers in
+  `packages/ui/src/feedKit.tsx`; `FeedView` now just renders `<StoriesStrip />`.
 
 ## Decisions & rationale
 
@@ -109,16 +115,17 @@ across all workspaces; ESLint 0 errors; Prettier clean.
   `viewedByMe` seeds the local `localStorage` seen store so it survives across
   devices. The local list updates immediately (optimistic).
 - **Id-keyed open story** instead of an index, so a refresh cannot swap content.
-- **In-place in `FeedView.tsx`** (not a new module) because `StoryViewer` already
-  lives there; noted as a future extraction to reduce sibling-agent contention.
+- **Own module.** Stories live in `Stories.tsx` (not inside `FeedView.tsx`) to
+  keep the logic modular and end shared-file contention; shared presentational
+  helpers moved to `feedKit.tsx` to avoid an import cycle.
 
 ## Test results (actual)
 
-- `npm test` (repo-wide) → **437 passed / 0 failed** (63 files).
-- `npx vitest run packages/ui/src/FeedView.dom.test.tsx` → **66 passed** (13
+- `npm test` (repo-wide) → **452 passed / 0 failed** (64 files).
+- `npx vitest run packages/ui/src/FeedView.dom.test.tsx` → **72 passed** (14
   Stories tests: grouping, per-creator progress, expiry hidden, end-of-collection
   close, keyboard nav, tab-hidden pause, seen + persistence, pause/resume, reply,
-  media error, view-recorded, reaction toggle).
+  reply-opens-DM, media error, view-recorded, reaction toggle).
 - `npx vitest run apps/cloud/src/server.feed.test.ts` → **2 story tests passed**
   (expiry + "records story views and reactions").
 - `npx playwright test e2e/stories.spec.ts` → **2 passed** (desktop + mobile 390px:
@@ -132,13 +139,13 @@ across all workspaces; ESLint 0 errors; Prettier clean.
 
 ## Outstanding tasks
 
-1. Optional: extract Stories into `packages/ui/src/Stories.tsx`.
-2. Optional: prefetch only the next story's image; post-send DM navigation.
+1. Optional: prefetch only the next story's image.
+2. Optional: commit the work (currently uncommitted).
 
 ## Dependencies & blockers
 
-- **Not ours:** 4 `server.feed.test.ts` post-media/alt-text failures from a sibling
-  workstream. Also fixed their `schema.ts` backtick typo that broke the transform.
+- **Resolved:** the sibling workstream's post-media/alt-text failures and the
+  `schema.ts` backtick typo were fixed; the gate is green.
 - **No video stories:** the `Story` DTO has no video field.
 - **Coordination:** `FeedView.tsx`/`styles.css` are shared; re-run the gate if they
   resume editing.
@@ -146,12 +153,12 @@ across all workspaces; ESLint 0 errors; Prettier clean.
 ## Next concrete actions
 
 1. Keep the local seen store as an optimistic cache alongside the server route.
-2. Optional: extract Stories into its own module to end shared-file contention.
+2. Commit per owner for clean attribution.
 
 ## Handoff notes
 
-- Stories logic is in `FeedView.tsx` near `StoryViewer`/`storyGroups`; grep
-  `storyGroups`, `storyOpen`, `storyDuration`, `groupStories`, `reactToStory`.
+- Stories logic lives in `packages/ui/src/Stories.tsx`; shared helpers in
+  `packages/ui/src/feedKit.tsx`. `FeedView` renders `<StoriesStrip />`.
 - Strip opens at the first unseen story; "seen" is per-story-id (local + server
   `viewedByMe`), aggregated per creator in the tray.
 - Story views/reactions live in `story_views`/`story_reactions`; server routes in

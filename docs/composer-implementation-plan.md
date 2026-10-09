@@ -79,11 +79,36 @@
   `aria-label` on the textarea in `GroupView`. No media/destination there
   (groups are text streams).
 
-### Backlog / Blocked
-- **Alt text per image** — Blocked (needs a server field + DTO). Documented.
-- **Resumable / multipart uploads** — Blocked (endpoint is base64 JSON).
-- **Collapsed composer + full emoji picker** — Backlog.
-- **`listScheduled` management UI** — Backlog (owned with Post Manager).
+### W12 — Per-image alt text (second pass) · Done
+- `post_media.alt` column (+ idempotent `ALTER TABLE … ADD COLUMN IF NOT
+  EXISTS`), `PostMediaRecord`, `POST /v1/posts` accepts `alts[]` (index-aligned
+  with `[mediaId, …mediaIds]`), feed DTO returns `imageAlts` parallel to
+  `images`.
+- Client `FeedPost.imageAlts` + `createPost({ alts })`; composer renders one alt
+  input per attachment; post images/lightbox use the stored alt.
+- Tested: server round-trip; UI sends alt + renders alt.
+
+### W13 — Raw-binary uploads (second pass) · Done
+- New `POST /v1/uploads/raw?name=&mime=` (content-type `application/octet-stream`,
+  limit 50 MB) with a shared `persistUpload` helper; base64 `/v1/uploads`
+  unchanged for other callers.
+- Client `uploadFileRaw({ name, mime, blob })`; composer streams raw bytes and
+  raises the caps to image 20 MB / video 50 MB; previews use object URLs with
+  proper revocation.
+
+### W14 — Server-synced drafts (second pass) · Done
+- `post_drafts` table + `GET/PUT/DELETE /v1/posts/draft`; client
+  `getPostDraft`/`savePostDraft`/`deletePostDraft`; composer adopts a server
+  draft on mount when the local draft is empty, debounce-saves on change, and
+  clears on publish/discard. `localStorage` stays as the offline fallback.
+
+### W15 — Mood emoji picker (second pass) · Done
+- The "Mood" button opens a `role="listbox"` picker (reuses `.emoji-pop` /
+  `.emoji-choice`) and inserts the chosen emoji at the caret.
+
+### Backlog
+- Collapsed composer state; `listScheduled` management UI (Post Manager).
+- Byte-accurate upload progress (would need XHR/streams).
 
 ## Coordinate-don't-duplicate
 

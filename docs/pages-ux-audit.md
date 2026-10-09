@@ -56,7 +56,7 @@ Legend: severity **S1** (blocking/broken) · **S2** (high) · **S3** (medium) ·
 
 | # | Severity | Finding | Evidence | Impact | Fix | Deps |
 | --- | --- | --- | --- | --- | --- | --- |
-| PG-11 | S2 | The **CTA is a dead control** when `page.cta` is not a URL: it renders a `<button>` with no handler. | FeedView.tsx ~1197 ` <button …>{page.cta}</button>`. | Violates "no visible controls that do nothing"; a click does nothing. | Render an `<a>` only for real URLs; otherwise a non-interactive badge. | Backend `cta_url` (future) |
+| PG-11 | S2 | The **CTA is a dead control** when `page.cta` is not a URL: it renders a `<button>` with no handler. | FeedView.tsx ~1197 ` <button …>{page.cta}</button>`. | Violates "no visible controls that do nothing"; a click does nothing. | Render an `<a>` only for real URLs; otherwise a non-interactive badge. **Now backed by `pages.cta_url`** (label + destination). | ✅ `cta_url` shipped |
 | PG-12 | S3 | The URL CTA's label shows only the **domain**, discarding the author's CTA text. | FeedView.tsx ~1194 `page.cta.replace(/^https?:\/\//i,"").split("/")[0]`. | The button's words don't match what the owner set. | Show the CTA text; keep the URL as `href`. | — |
 | PG-13 | S3 | Follow failure leaves no feedback; the button shows no pending state beyond `disabled`. | `toggleFollow` `.catch(() => {})` (FeedView.tsx ~1120). | A failed follow looks like nothing happened; no retry cue. | Set an inline error + `aria-busy`; keep optimistic update only on success. | — |
 | PG-14 | S4 | Follow toggles optimistically before the server confirms. | FeedView.tsx ~1119. | A failed request can leave a stale count until reload (the server response isn't used). | Update from confirmed result; revert on error. | — |
@@ -94,7 +94,6 @@ Captured headlessly by `scripts/feed-screenshots.mjs` (now seeds a Page):
 
 - **Page-scoped Photos/Videos/Reels/Stories sections** — no read endpoint.
 - **Page contact/website/hours** — no schema field.
-- **CTA destination** — only a label (`pages.cta`), no `cta_url`.
 - **Timeline pagination** — endpoint returns a fixed 20, no cursor.
 - **URL/deep-link routing for Pages** — the app has no router; state lives in
   `BotifyrApp`.

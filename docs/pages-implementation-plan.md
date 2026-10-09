@@ -18,10 +18,10 @@ action column) and fix the identity/resilience gaps:
   verified marker kept as a text suffix (no badge design exists yet).
 - **Sub-line** — `@handle · category · N followers` (ellipsis, no wrap).
 - **Description** — `page.about` if present.
-- **CTA** — a real `<a target="_blank" rel="noreferrer">` **only** when
-  `page.cta` is `http(s)`/`mailto:`/`tel:`; its label is the owner's CTA text.
-  Otherwise a non-interactive badge (no dead button). *Dependency:* a
-  `cta_url` field would let arbitrary CTA labels link somewhere.
+- **CTA** — a real `<a target="_blank" rel="noreferrer">` whose `href` is
+  `pages.cta_url` (falling back to a `cta` that is itself a URL) and whose label
+  is the owner's `cta` text. With no destination it renders a non-interactive
+  badge (no dead button). **Shipped** (`cta_url` schema/API/UI).
 - **Follow** — pill button; pending/disabled while in flight, `aria-busy`.
 - **Owner controls** — `role` ∈ {admin, editor} get Pin / Community / Insights /
   Settings; keep them out of the visitor header.
@@ -91,7 +91,7 @@ emoji/CTA), **Roles**, **Community** (comment moderation), **Insights** (+ CSV),
 | --- | --- | --- |
 | Shared `PostCard` interface (props unchanged) | Post Manager | Reused as-is |
 | `.page-*` styles + tokens | Design System Manager | Additive classes only |
-| `cta_url` schema field | Cloud | **Needed** for arbitrary CTA labels |
+| `cta_url` schema field | Cloud | **Shipped** (schema + API + UI + tests) |
 | Page-scoped media/story endpoints | Cloud | **Needed** for Photos/Reels/Stories tabs |
 | Timeline cursor pagination | Cloud | **Needed** for "load more" |
 | URL routing for Pages | Feed Experience Lead | Recommendation only |

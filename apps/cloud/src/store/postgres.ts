@@ -26,6 +26,7 @@ import type {
   PlatformSettings,
   PollRecord,
   PostCommentRecord,
+  PostDraftRecord,
   PostMediaRecord,
   PostRecord,
   PostReportRecord,
@@ -1302,6 +1303,32 @@ export class PostgresStore implements Store {
     }));
   }
 
+  async getPostDraft(userId: string): Promise<PostDraftRecord | null> {
+    const { rows } = await this.pool.query(
+      "SELECT user_id, body, updated_at FROM post_drafts WHERE user_id = $1",
+      [userId],
+    );
+    const row = rows[0];
+    if (!row) return null;
+    return {
+      userId: row.user_id as string,
+      body: row.body as string,
+      updatedAt: new Date(row.updated_at as string | Date).toISOString(),
+    };
+  }
+
+  async savePostDraft(draft: PostDraftRecord): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO post_drafts (user_id, body, updated_at) VALUES ($1,$2,$3)
+       ON CONFLICT (user_id) DO UPDATE SET body = EXCLUDED.body, updated_at = EXCLUDED.updated_at`,
+      [draft.userId, draft.body, draft.updatedAt],
+    );
+  }
+
+  async deletePostDraft(userId: string): Promise<void> {
+    await this.pool.query("DELETE FROM post_drafts WHERE user_id = $1", [userId]);
+  }
+
   async addPostTag(postId: string, tag: string): Promise<void> {
     await this.pool.query("INSERT INTO post_hashtags (post_id, tag) VALUES ($1,$2) ON CONFLICT DO NOTHING", [
       postId,
@@ -1334,16 +1361,21 @@ export class PostgresStore implements Store {
     return (result.rowCount ?? 0) > 0;
   }
 
-  async listFeedPosts(authorIds: string[], limit: number, before?: string): Promise<PostRecord[]> {
+  async listFeedPosts(
+    authorIds: string[],
+    limit: number,
+    before?: { createdAt: string; id: string },
+  ): Promise<PostRecord[]> {
     if (authorIds.length === 0) return [];
     const capped = Math.max(1, Math.min(100, limit));
     const { rows } = before
       ? await this.pool.query(
-          "SELECT * FROM posts WHERE author_id = ANY($1) AND created_at < $2 ORDER BY created_at DESC LIMIT $3",
-          [authorIds, before, capped],
+          "SELECT * FROM posts WHERE author_id = ANY($1) AND (created_at, id) < ($2::timestamptz, $3::text) " +
+            "ORDER BY created_at DESC, id DESC LIMIT $4",
+          [authorIds, before.createdAt, before.id, capped],
         )
       : await this.pool.query(
-          "SELECT * FROM posts WHERE author_id = ANY($1) ORDER BY created_at DESC LIMIT $2",
+          "SELECT * FROM posts WHERE author_id = ANY($1) ORDER BY created_at DESC, id DESC LIMIT $2",
           [authorIds, capped],
         );
     return rows.map(toPost);
@@ -1885,8 +1917,8 @@ export class PostgresStore implements Store {
 
   async createPage(record: PageRecord): Promise<void> {
     await this.pool.query(
-      "INSERT INTO pages (id, owner_id, workspace_id, bot_id, handle, name, category, about, avatar_emoji, avatar_url, cover_url, cta, verified, created_at, updated_at) " +
-        "VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)",
+      "INSERT INTO pages (id, owner_id, workspace_id, bot_id, handle, name, category, about, avatar_emoji, avatar_url, cover_url, cta, cta_url, verified, created_at, updated_at) " +
+        "VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)",
       [
         record.id,
         record.ownerId,
@@ -1900,6 +1932,7 @@ export class PostgresStore implements Store {
         record.avatarUrl ?? null,
         record.coverUrl ?? null,
         record.cta ?? null,
+        record.ctaUrl ?? null,
         record.verified,
         record.createdAt,
         record.updatedAt,
@@ -1934,7 +1967,7 @@ export class PostgresStore implements Store {
 
   async updatePage(record: PageRecord): Promise<void> {
     await this.pool.query(
-      "UPDATE pages SET handle=$2, name=$3, category=$4, about=$5, avatar_emoji=$6, avatar_url=$7, cover_url=$8, cta=$9, verified=$10, updated_at=$11 WHERE id=$1",
+      "UPDATE pages SET handle=$2, name=$3, category=$4, about=$5, avatar_emoji=$6, avatar_url=$7, cover_url=$8, cta=$9, cta_url=$10, verified=$11, updated_at=$12 WHERE id=$1",
       [
         record.id,
         record.handle,
@@ -1945,6 +1978,7 @@ export class PostgresStore implements Store {
         record.avatarUrl ?? null,
         record.coverUrl ?? null,
         record.cta ?? null,
+        record.ctaUrl ?? null,
         record.verified,
         record.updatedAt,
       ],
@@ -2265,6 +2299,7 @@ function toPage(row: any): PageRecord {
     avatarUrl: row.avatar_url ?? undefined,
     coverUrl: row.cover_url ?? undefined,
     cta: row.cta ?? undefined,
+    ctaUrl: row.cta_url ?? undefined,
     verified: row.verified === true,
     pinnedPostId: row.pinned_post_id ?? undefined,
     createdAt: new Date(row.created_at).toISOString(),

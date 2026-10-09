@@ -46,8 +46,8 @@ owns:
    that share a boundary timestamp.
 
 This workstream **implemented and verified** the timeline fixes (FEED-D1…D7, D10)
-plus the **DB-1 realtime-delivery fix**, and documented the remaining backend
-dependency (DB-2).
+plus the two backend fixes it surfaced — **DB-1** (realtime delivery) and **DB-2**
+(stable keyset pagination).
 
 ## B. Current-state architecture
 
@@ -104,7 +104,7 @@ because no live screenshots of those apps were captured here.
 | D7 | Sort control is an unlabelled toggle; state unclear | Improvement | Medium | Every session | Low | High *(verified)* | Low | **Fixed** |
 | D8 | `Top` sort has no pagination (server returns `nextCursor: null`) | Backend limitation | Low | Power users | Low | High *(source)* | Medium | Documented |
 | DB-1 | Realtime `feed.*` events never reach clients | **Backend defect** | High | Any live update | High | High *(verified)* | Low | **Fixed** |
-| DB-2 | Cursor pagination can skip posts sharing a boundary `createdAt` | **Backend defect** | Medium | Rapid posting | Medium | High *(source)* | Medium | Documented |
+| DB-2 | Cursor pagination can skip posts sharing a boundary `createdAt` | **Backend defect** | Medium | Rapid posting | Medium | High *(verified)* | Medium | **Fixed** |
 
 ## E. Proposed experience
 
@@ -154,7 +154,9 @@ Priorities justified by user impact × frequency × severity × confidence ÷ ef
     Remaining follow-up: deliver *friends'* new posts (needs recipient
     resolution at the emit site, since `feed.post` carries only `authorId`).
   - **DB-2** keyset pagination that is stable across equal timestamps
-    (e.g. `(created_at, id) < (cursor_at, cursor_id)`) — **documented**.
+    (e.g. `(created_at, id) < (cursor_at, cursor_id)`) — **fixed & verified**
+    (`encodeFeedCursor`/`decodeFeedCursor`; store `listFeedPosts` keyset;
+    `feed-pagination.test.ts`).
 
 ## G. Engineering backlog
 
@@ -170,7 +172,7 @@ Priorities justified by user impact × frequency × severity × confidence ÷ ef
 | FEED-D10 | Freshness without realtime | On regaining focus/visibility, check the newest post and raise the "New activity" banner if it changed (throttled; list untouched) | P2 | **Implemented + verified** |
 | FEED-D8 | Paginate the `Top` sort | `Top` can scroll beyond one page | P3 | Documented (backend) |
 | DB-1 | Deliver `feed.*` realtime events | Connected clients receive the feed events they are eligible for | P1 | **Fixed + verified** (`canReceive` + `feedEventRecipient`; `feed-realtime.test.ts`, `events.test.ts`) |
-| DB-2 | Stable keyset pagination | No posts skipped when several share a `createdAt` | P2 | **Documented** (backend) |
+| DB-2 | Stable keyset pagination | No posts skipped when several share a `createdAt` | P2 | **Fixed + verified** (`encodeFeedCursor`/`decodeFeedCursor`; store keyset; `feed-pagination.test.ts`) |
 
 ## H. Testing strategy
 

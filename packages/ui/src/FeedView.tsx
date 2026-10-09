@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode, UIEvent } from "react";
-import type { BotifyrClient, FeedComment, FeedPost, Group, Page, Person, Story } from "@botifyr/client";
+import type { BotifyrClient, FeedComment, FeedPost, Group, Page, Person } from "@botifyr/client";
+import type { Session } from "@botifyr/shared";
 import {
   BookmarkIcon,
   CameraIcon,
@@ -22,6 +23,8 @@ import {
   UsersIcon,
   VolumeIcon,
 } from "./Icons";
+import { authorEmoji, authorName, Avatar, relativeTime, resolveAvatar } from "./feedKit";
+import { StoriesStrip } from "./Stories";
 
 /**
  * Feed — the social wall / timeline (see docs/feed.md).
@@ -30,29 +33,6 @@ import {
  * `sharePost`, `listComments`, `addComment`, and `deletePost`. Visibility is
  * friends-only, enforced server-side.
  */
-
-function authorName(author: { displayName?: string; handle?: string }): string {
-  return author.displayName?.trim() || (author.handle ? `@${author.handle}` : "Someone");
-}
-
-function authorEmoji(author: { avatarEmoji?: string }): string {
-  return author.avatarEmoji?.trim() || "🙂";
-}
-
-/** "3m", "2h", "5d", or a date — from an ISO timestamp. */
-function relativeTime(iso: string): string {
-  const then = new Date(iso).getTime();
-  if (!Number.isFinite(then)) return "";
-  const secs = Math.max(0, Math.round((Date.now() - then) / 1000));
-  if (secs < 45) return "now";
-  const mins = Math.round(secs / 60);
-  if (mins < 60) return `${mins}m`;
-  const hours = Math.round(mins / 60);
-  if (hours < 24) return `${hours}h`;
-  const days = Math.round(hours / 24);
-  if (days < 7) return `${days}d`;
-  return new Date(iso).toLocaleDateString();
-}
 
 function HeartIcon({ size = 18, filled = false }: { size?: number; filled?: boolean }) {
   return (
@@ -83,49 +63,6 @@ const REACTIONS: Array<{ key: string; emoji: string; label: string }> = [
 
 function reactionEmoji(key: string | null | undefined): string {
   return REACTIONS.find((entry) => entry.key === key)?.emoji ?? "👍";
-}
-
-/** Resolve an author avatar path to a loadable URL (absolute URLs pass through). */
-function resolveAvatar(url: string | undefined, cloudUrl?: string): string | undefined {
-  if (!url) return undefined;
-  if (/^(https?:|data:|blob:)/.test(url)) return url;
-  if (!cloudUrl) return undefined;
-  return `${cloudUrl}${url.startsWith("/") ? "" : "/"}${url}`;
-}
-
-function Avatar({
-  emoji,
-  name,
-  url,
-  size = 40,
-}: {
-  emoji?: string;
-  name?: string;
-  url?: string;
-  size?: number;
-}) {
-  const glyph = emoji?.trim() || name?.trim().charAt(0).toUpperCase() || "🙂";
-  if (url) {
-    return (
-      <img
-        className="feed-avatar feed-avatar-photo"
-        style={{ width: size, height: size }}
-        src={url}
-        alt={name ?? ""}
-        loading="lazy"
-      />
-    );
-  }
-  return (
-    <span
-      className="feed-avatar"
-      style={{ width: size, height: size, fontSize: size * 0.5 }}
-      title={name}
-      aria-hidden="true"
-    >
-      {glyph}
-    </span>
-  );
 }
 
 /** Human-readable breakdown of a post's reactions, e.g. "Love: 2\nLike: 1". */
@@ -660,6 +597,9 @@ function PostCard({
   const [comments, setComments] = useState<FeedComment[] | null>(null);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [commentsLoading, setCommentsLoading] = useState(false);
+  const [commentsCursor, setCommentsCursor] = useState<string | null>(null);
+  const [commentsHasMore, setCommentsHasMore] = useState(false);
+  const [commentsLoadingMore, setCommentsLoadingMore] = useState(false);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [pickOpen, setPickOpen] = useState(false);
@@ -669,6 +609,7 @@ function PostCard({
   const [feedback, setFeedback] = useState<{ kind: "error" | "info"; text: string } | null>(null);
   const [confirm, setConfirm] = useState<null | "delete" | "block">(null);
   const [commentError, setCommentError] = useState<string | null>(null);
+  const [allCommentsShown, setAllCommentsShown] = useState(false);
   const inFlight = useRef(new Set<string>());
   const moreBtnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -807,13 +748,32 @@ function PostCard({
     if (open && comments === null && !commentsLoading) {
       setCommentsLoading(true);
       try {
-        setComments(await client.listComments(post.id));
+        const page = await client.listCommentsPage(post.id, undefined, 20);
+        setComments(page.items);
+        setCommentsCursor(page.nextCursor);
+        setCommentsHasMore(Boolean(page.nextCursor));
       } catch {
         setComments([]);
         setFeedback({ kind: "error", text: "Couldn't load comments. Please try again." });
       } finally {
         setCommentsLoading(false);
       }
+    }
+  }
+
+  async function loadMoreComments() {
+    if (!commentsCursor || commentsLoadingMore) return;
+    setCommentsLoadingMore(true);
+    try {
+      const page = await client.listCommentsPage(post.id, commentsCursor, 20);
+      setComments((prev) => [...(prev ?? []), ...page.items]);
+      setCommentsCursor(page.nextCursor);
+      setCommentsHasMore(Boolean(page.nextCursor));
+      setAllCommentsShown(true);
+    } catch {
+      setFeedback({ kind: "error", text: "Couldn't load more comments. Please try again." });
+    } finally {
+      setCommentsLoadingMore(false);
     }
   }
 
@@ -827,6 +787,7 @@ function PostCard({
       const comment = await client.addComment(post.id, body, replyTo ?? undefined);
       setComments((prev) => [...(prev ?? []), comment]);
       onChange({ ...post, comments: post.comments + 1 });
+      setAllCommentsShown(true);
       setDraft("");
       setReplyTo(null);
     } catch {
@@ -917,6 +878,8 @@ function PostCard({
   }, [pickOpen]);
 
   const gallery = post.images && post.images.length > 0 ? post.images : post.imageUrl ? [post.imageUrl] : [];
+  const topLevelComments = (comments ?? []).filter((comment) => !comment.parentId);
+  const visibleThreads = allCommentsShown ? topLevelComments : topLevelComments.slice(0, 2);
 
   return (
     <article className="feed-post">
@@ -1205,35 +1168,48 @@ function PostCard({
       {commentsOpen && (
         <div className="feed-comments">
           {commentsLoading && <div className="feed-state">Loading comments…</div>}
-          {(comments ?? [])
-            .filter((comment) => !comment.parentId)
-            .map((comment) => (
-              <div key={comment.id} className="feed-comment-thread">
-                <CommentRow
-                  comment={comment}
-                  client={client}
-                  cloudUrl={cloudUrl}
-                  viewerId={viewerId}
-                  onChange={updateComment}
-                  onReply={() => setReplyTo(comment.id)}
-                  onDelete={removeComment}
-                />
-                {(comments ?? [])
-                  .filter((reply) => reply.parentId === comment.id)
-                  .map((reply) => (
-                    <div key={reply.id} className="feed-comment-reply">
-                      <CommentRow
-                        comment={reply}
-                        client={client}
-                        cloudUrl={cloudUrl}
-                        viewerId={viewerId}
-                        onChange={updateComment}
-                        onDelete={removeComment}
-                      />
-                    </div>
-                  ))}
-              </div>
-            ))}
+          {visibleThreads.map((comment) => (
+            <div key={comment.id} className="feed-comment-thread">
+              <CommentRow
+                comment={comment}
+                client={client}
+                cloudUrl={cloudUrl}
+                viewerId={viewerId}
+                onChange={updateComment}
+                onReply={() => setReplyTo(comment.id)}
+                onDelete={removeComment}
+              />
+              {(comments ?? [])
+                .filter((reply) => reply.parentId === comment.id)
+                .map((reply) => (
+                  <div key={reply.id} className="feed-comment-reply">
+                    <CommentRow
+                      comment={reply}
+                      client={client}
+                      cloudUrl={cloudUrl}
+                      viewerId={viewerId}
+                      onChange={updateComment}
+                      onDelete={removeComment}
+                    />
+                  </div>
+                ))}
+            </div>
+          ))}
+          {topLevelComments.length > 2 && !allCommentsShown && (
+            <button type="button" className="feed-comments-more" onClick={() => setAllCommentsShown(true)}>
+              View all {topLevelComments.length} comments
+            </button>
+          )}
+          {commentsHasMore && (
+            <button
+              type="button"
+              className="feed-comments-more"
+              onClick={() => void loadMoreComments()}
+              disabled={commentsLoadingMore}
+            >
+              {commentsLoadingMore ? "Loading…" : "Load more comments"}
+            </button>
+          )}
           {replyTo && (
             <div className="feed-comment-replying">
               <span>Replying to a comment</span>
@@ -1332,6 +1308,7 @@ function PageView({
     category: "",
     about: "",
     cta: "",
+    ctaUrl: "",
     avatarEmoji: "",
   });
   const [saving, setSaving] = useState(false);
@@ -1393,6 +1370,7 @@ function PageView({
       category: page.category ?? "",
       about: page.about ?? "",
       cta: page.cta ?? "",
+      ctaUrl: page.ctaUrl ?? "",
       avatarEmoji: page.avatarEmoji ?? "",
     });
     setEditing(true);
@@ -1480,6 +1458,7 @@ function PageView({
           category: form.category,
           about: form.about,
           cta: form.cta,
+          ctaUrl: form.ctaUrl,
           avatarEmoji: form.avatarEmoji,
         }),
       );
@@ -1561,7 +1540,13 @@ function PageView({
   const canViewInsights = canManage || page?.role === "analyst";
   const isStaff = canManage || canModerate || canViewInsights;
   const cta = page?.cta?.trim() ?? "";
-  const ctaHref = /^(https?:|mailto:|tel:)/i.test(cta) ? cta : "";
+  const ctaUrl = page?.ctaUrl?.trim() ?? "";
+  // A dedicated CTA destination wins; fall back to a `cta` that is itself a URL.
+  const ctaHref = /^(https?:|mailto:|tel:)/i.test(ctaUrl)
+    ? ctaUrl
+    : /^(https?:|mailto:|tel:)/i.test(cta)
+      ? cta
+      : "";
   const createdLabel = page ? new Date(page.createdAt).toLocaleDateString() : "";
   const updatePost = (next: FeedPost) => setPosts((prev) => prev.map((p) => (p.id === next.id ? next : p)));
   const removePost = (id: string) => setPosts((prev) => prev.filter((p) => p.id !== id));
@@ -1745,6 +1730,15 @@ function PageView({
             <label>
               Call to action
               <input value={form.cta} onChange={(event) => setForm({ ...form, cta: event.target.value })} />
+            </label>
+            <label>
+              Call to action link
+              <input
+                type="url"
+                placeholder="https://…"
+                value={form.ctaUrl}
+                onChange={(event) => setForm({ ...form, ctaUrl: event.target.value })}
+              />
             </label>
             <label>
               About
@@ -3327,459 +3321,6 @@ interface ComposerAttachment {
   previewUrl: string;
 }
 
-/** How long a photo story shows before auto-advancing. */
-const STORY_IMAGE_DURATION_MS = 5000;
-/** How long a text-only story shows (quicker to read than a photo). */
-const STORY_TEXT_DURATION_MS = 4000;
-/** A press held longer than this pauses instead of advancing. */
-const STORY_HOLD_MS = 220;
-const STORY_SEEN_KEY = "botifyr.seenStories";
-/** Cap the locally-remembered seen list so it cannot grow without bound. */
-const STORY_SEEN_LIMIT = 500;
-/** Quick reactions offered on a story (docs/feed-next.md §FR-13). */
-const STORY_REACTIONS = ["❤️", "😂", "😮", "😢", "👏"];
-
-/** A creator's collection of active stories, in play order. */
-type StoryGroup = { author: Story["author"]; stories: Story[] };
-
-function storyDuration(story: Story): number {
-  return story.imageUrl ? STORY_IMAGE_DURATION_MS : STORY_TEXT_DURATION_MS;
-}
-
-/** Read the locally-remembered "seen" story ids (the API has no view route). */
-function readSeenStories(): Record<string, true> {
-  try {
-    const raw = localStorage.getItem(STORY_SEEN_KEY);
-    const list = raw ? (JSON.parse(raw) as unknown) : [];
-    if (!Array.isArray(list)) return {};
-    return Object.fromEntries(
-      list.filter((id): id is string => typeof id === "string").map((id) => [id, true]),
-    );
-  } catch {
-    return {};
-  }
-}
-
-/**
- * Group a flat, newest-first story list into per-creator collections. Creators
- * keep the order they first appear in (most recent story first); each creator's
- * own stories play oldest→newest so the collection reads chronologically.
- */
-function groupStories(stories: Story[]): StoryGroup[] {
-  const now = Date.now();
-  const groups = new Map<string, StoryGroup>();
-  for (const story of stories) {
-    // The server filters expired stories, but one may lapse while the app is open.
-    if (new Date(story.expiresAt).getTime() <= now) continue;
-    const existing = groups.get(story.author.id);
-    if (existing) existing.stories.push(story);
-    else groups.set(story.author.id, { author: story.author, stories: [story] });
-  }
-  for (const group of groups.values()) {
-    group.stories.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-  }
-  return [...groups.values()];
-}
-
-/**
- * Full-screen story viewer. Progress segments cover the active creator's
- * collection; the timer advances within the collection, then to the next
- * creator, then exits. Supports tap zones, hold-to-pause, keyboard, and a reply
- * bar when the host provides one.
- */
-function StoryViewer({
-  groups,
-  groupIndex,
-  storyIndex,
-  cloudUrl,
-  onClose,
-  onSeen,
-  onNavigate,
-  onReplyToStory,
-  onReact,
-}: {
-  groups: StoryGroup[];
-  groupIndex: number;
-  storyIndex: number;
-  cloudUrl: string;
-  onClose: () => void;
-  onSeen: (storyId: string) => void;
-  onNavigate: (groupIndex: number, storyIndex: number) => void;
-  onReplyToStory?: (author: Story["author"], text: string) => Promise<void> | void;
-  onReact?: (storyId: string, emoji: string) => void;
-}) {
-  const group = groups[groupIndex];
-  const story = group?.stories[storyIndex];
-  const duration = story ? storyDuration(story) : STORY_IMAGE_DURATION_MS;
-
-  const [userPaused, setUserPaused] = useState(false);
-  const [pageHidden, setPageHidden] = useState(false);
-  const [elapsed, setElapsed] = useState(0);
-  const [cycle, setCycle] = useState(0);
-  const [mediaError, setMediaError] = useState(false);
-  const [reloadKey, setReloadKey] = useState(0);
-  const [reply, setReply] = useState("");
-  const [replyState, setReplyState] = useState<"idle" | "sending" | "sent" | "error">("idle");
-
-  const paused = userPaused || pageHidden;
-  const pausedRef = useRef(false);
-  pausedRef.current = paused;
-  const startedAtRef = useRef(0);
-  const elapsedRef = useRef(0);
-  const closeRef = useRef<HTMLButtonElement | null>(null);
-  const restoreRef = useRef<HTMLElement | null>(null);
-  const holdTimerRef = useRef<number | null>(null);
-  const heldRef = useRef(false);
-  const suppressClickRef = useRef(false);
-  const advanceRef = useRef<() => void>(() => {});
-  const backRef = useRef<() => void>(() => {});
-
-  // Reset per-story state whenever the active story changes.
-  useEffect(() => {
-    elapsedRef.current = 0;
-    startedAtRef.current = Date.now();
-    setElapsed(0);
-    setUserPaused(false);
-    setMediaError(false);
-    setReloadKey(0);
-    setReply("");
-    setReplyState("idle");
-  }, [story?.id]);
-
-  // Record that the active story was viewed (locally; the API has no view route).
-  useEffect(() => {
-    if (story) onSeen(story.id);
-  }, [story, onSeen]);
-
-  // Move focus into the viewer, and restore it to the opener on close.
-  useEffect(() => {
-    restoreRef.current = (document.activeElement as HTMLElement | null) ?? null;
-    closeRef.current?.focus();
-    return () => restoreRef.current?.focus?.();
-  }, []);
-
-  // Backgrounding the tab pauses progression instead of counting down unseen.
-  useEffect(() => {
-    function onVisibility() {
-      const hidden = document.hidden;
-      // Freeze the elapsed offset when leaving, so returning resumes (not restarts).
-      if (hidden && !pausedRef.current) {
-        elapsedRef.current += Date.now() - startedAtRef.current;
-        setElapsed(elapsedRef.current);
-      }
-      setPageHidden(hidden);
-    }
-    document.addEventListener("visibilitychange", onVisibility);
-    onVisibility();
-    return () => document.removeEventListener("visibilitychange", onVisibility);
-  }, []);
-
-  function restart() {
-    elapsedRef.current = 0;
-    startedAtRef.current = Date.now();
-    setElapsed(0);
-    setUserPaused(false);
-    setCycle((value) => value + 1);
-  }
-  function advance() {
-    if (!group) return;
-    if (storyIndex + 1 < group.stories.length) onNavigate(groupIndex, storyIndex + 1);
-    else if (groupIndex + 1 < groups.length) onNavigate(groupIndex + 1, 0);
-    else onClose();
-  }
-  function back() {
-    if (!group) return;
-    if (storyIndex > 0) onNavigate(groupIndex, storyIndex - 1);
-    else if (groupIndex > 0) onNavigate(groupIndex - 1, groups[groupIndex - 1].stories.length - 1);
-    else restart();
-  }
-  advanceRef.current = advance;
-  backRef.current = back;
-
-  function pause() {
-    if (pausedRef.current) return;
-    elapsedRef.current += Date.now() - startedAtRef.current;
-    setElapsed(elapsedRef.current);
-    setUserPaused(true);
-  }
-  function resume() {
-    setUserPaused(false);
-  }
-
-  // Advance timer: restarts only when the story, paused state, duration or an
-  // explicit restart changes — not on ordinary re-renders.
-  useEffect(() => {
-    if (!story || paused) return;
-    startedAtRef.current = Date.now();
-    const remaining = Math.max(0, duration - elapsedRef.current);
-    const timer = window.setTimeout(() => advanceRef.current(), remaining);
-    return () => window.clearTimeout(timer);
-  }, [story, paused, duration, cycle]);
-
-  // Keyboard: Esc closes; ←/→ navigate; Space toggles pause. Never hijack keys
-  // while the reply field is focused.
-  useEffect(() => {
-    function onKey(event: KeyboardEvent) {
-      const target = event.target as HTMLElement | null;
-      const typing =
-        !!target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
-      if (event.key === "Escape") {
-        onClose();
-        return;
-      }
-      if (typing) return;
-      if (event.key === "ArrowRight") {
-        event.preventDefault();
-        advanceRef.current();
-      } else if (event.key === "ArrowLeft") {
-        event.preventDefault();
-        backRef.current();
-      } else if (event.key === " " || event.key === "Spacebar") {
-        event.preventDefault();
-        if (pausedRef.current) resume();
-        else pause();
-      }
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  if (!group || !story) return null;
-
-  function startHold() {
-    heldRef.current = false;
-    holdTimerRef.current = window.setTimeout(() => {
-      heldRef.current = true;
-      pause();
-    }, STORY_HOLD_MS);
-  }
-  function endHold() {
-    if (holdTimerRef.current !== null) {
-      window.clearTimeout(holdTimerRef.current);
-      holdTimerRef.current = null;
-    }
-    if (heldRef.current) {
-      heldRef.current = false;
-      suppressClickRef.current = true;
-      resume();
-    }
-  }
-  function tap(next: () => void) {
-    if (suppressClickRef.current) {
-      suppressClickRef.current = false;
-      return;
-    }
-    next();
-  }
-  async function submitReply() {
-    const value = reply.trim();
-    if (!value || !onReplyToStory || replyState === "sending") return;
-    setReplyState("sending");
-    try {
-      await onReplyToStory(story.author, value);
-      setReply("");
-      setReplyState("sent");
-    } catch {
-      setReplyState("error");
-    }
-  }
-
-  return (
-    <div
-      className="story-viewer"
-      role="dialog"
-      aria-modal="true"
-      aria-label={`Story by ${authorName(story.author)}`}
-    >
-      <div className="story-progress" aria-hidden="true">
-        {group.stories.map((entry, i) => (
-          <span key={entry.id} className={`story-seg${i < storyIndex ? " done" : ""}`}>
-            {i === storyIndex && (
-              <span
-                key={entry.id}
-                className="story-seg-fill"
-                style={{
-                  animationDuration: `${duration}ms`,
-                  animationDelay: `${-elapsed}ms`,
-                  animationPlayState: paused ? "paused" : "running",
-                }}
-              />
-            )}
-          </span>
-        ))}
-      </div>
-
-      <div className="story-viewer-head">
-        <Avatar
-          emoji={authorEmoji(story.author)}
-          name={authorName(story.author)}
-          url={resolveAvatar(story.author.avatarUrl, cloudUrl)}
-          size={32}
-        />
-        <span className="story-viewer-name">{authorName(story.author)}</span>
-        <span className="story-viewer-when">{relativeTime(story.createdAt)}</span>
-        {paused && (
-          <span className="story-paused" role="status">
-            Paused
-          </span>
-        )}
-        <button
-          ref={closeRef}
-          type="button"
-          className="story-close"
-          onClick={onClose}
-          aria-label="Close story"
-        >
-          ✕
-        </button>
-      </div>
-
-      <div className="story-viewer-body">
-        {story.imageUrl && !mediaError && (
-          <img
-            key={`${story.id}-${reloadKey}`}
-            src={`${cloudUrl}${story.imageUrl}`}
-            alt=""
-            onError={() => setMediaError(true)}
-          />
-        )}
-        {story.imageUrl && mediaError && (
-          <div className="story-error" role="alert">
-            <p>This story couldn’t load.</p>
-            <div className="story-error-actions">
-              <button
-                type="button"
-                onClick={() => {
-                  setMediaError(false);
-                  setReloadKey((value) => value + 1);
-                }}
-              >
-                Retry
-              </button>
-              <button type="button" onClick={advance}>
-                Next
-              </button>
-            </div>
-          </div>
-        )}
-        {!story.imageUrl && <div className="story-text">{story.caption}</div>}
-        {story.caption && story.imageUrl && !mediaError && (
-          <div className="story-caption">{story.caption}</div>
-        )}
-      </div>
-
-      {/* Tap zones: left third goes back, the rest advances. Hidden from AT —
-          the visible nav buttons and arrow keys are the accessible controls. */}
-      <div className="story-taps" aria-hidden="true">
-        <div
-          className="story-tap prev"
-          onClick={() => tap(backRef.current)}
-          onPointerDown={startHold}
-          onPointerUp={endHold}
-          onPointerLeave={endHold}
-        />
-        <div
-          className="story-tap next"
-          onClick={() => tap(advanceRef.current)}
-          onPointerDown={startHold}
-          onPointerUp={endHold}
-          onPointerLeave={endHold}
-        />
-      </div>
-
-      {(groups.length > 1 || group.stories.length > 1) && (
-        <>
-          <button
-            type="button"
-            className="story-nav prev"
-            aria-label="Previous story"
-            onClick={(event) => {
-              event.stopPropagation();
-              back();
-            }}
-          >
-            ‹
-          </button>
-          <button
-            type="button"
-            className="story-nav next"
-            aria-label="Next story"
-            onClick={(event) => {
-              event.stopPropagation();
-              advance();
-            }}
-          >
-            ›
-          </button>
-        </>
-      )}
-
-      {onReact && (
-        <div className="story-reactions" role="group" aria-label="React to this story">
-          {STORY_REACTIONS.map((emoji) => {
-            const count = story.reactions?.[emoji] ?? 0;
-            const active = story.myReaction === emoji;
-            return (
-              <button
-                key={emoji}
-                type="button"
-                className={`story-reaction${active ? " active" : ""}`}
-                aria-pressed={active}
-                aria-label={`React ${emoji}`}
-                onClick={() => onReact(story.id, emoji)}
-              >
-                <span aria-hidden="true">{emoji}</span>
-                {count > 0 && <span className="story-reaction-count">{count}</span>}
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      {onReplyToStory && (
-        <form
-          className="story-reply"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void submitReply();
-          }}
-        >
-          <input
-            className="story-reply-input"
-            type="text"
-            value={reply}
-            maxLength={500}
-            placeholder={`Reply to ${authorName(story.author)}…`}
-            aria-label={`Reply to ${authorName(story.author)}`}
-            onChange={(event) => {
-              setReply(event.target.value);
-              if (replyState !== "sending") setReplyState("idle");
-            }}
-          />
-          {replyState === "sent" ? (
-            <span className="story-reply-status" role="status">
-              Sent ✓
-            </span>
-          ) : (
-            <button
-              type="submit"
-              className="story-reply-send"
-              disabled={!reply.trim() || replyState === "sending"}
-            >
-              {replyState === "sending" ? "Sending…" : "Send"}
-            </button>
-          )}
-          {replyState === "error" && (
-            <span className="story-reply-status error" role="alert">
-              Couldn’t send
-            </span>
-          )}
-        </form>
-      )}
-    </div>
-  );
-}
-
 /** Feed navigation: a simple list of the viewer's Groups. */
 function GroupsView({
   client,
@@ -3846,6 +3387,66 @@ function GroupsView({
   );
 }
 
+/** The Feed-only bottom menu, shared by the home feed and its sub-views. */
+function FeedBottomNav({
+  tab,
+  onHome,
+  onReels,
+  onPages,
+  onGroups,
+  onMarketplace,
+}: {
+  tab: "all" | "friends" | "pages";
+  onHome: () => void;
+  onReels: () => void;
+  onPages: () => void;
+  onGroups: () => void;
+  onMarketplace?: () => void;
+}) {
+  return (
+    <nav className="feed-bottom-nav" aria-label="Feed navigation">
+      <button
+        type="button"
+        className={`bottom-nav-item${tab !== "pages" ? " active" : ""}`}
+        aria-current={tab !== "pages" ? "page" : undefined}
+        aria-label="Feed home"
+        onClick={onHome}
+      >
+        <HomeIcon size={20} />
+        <span>Feed</span>
+      </button>
+      <button type="button" className="bottom-nav-item" aria-label="Reels" onClick={onReels}>
+        <PlayIcon size={20} />
+        <span>Reels</span>
+      </button>
+      <button
+        type="button"
+        className={`bottom-nav-item${tab === "pages" ? " active" : ""}`}
+        aria-current={tab === "pages" ? "page" : undefined}
+        aria-label="Open Pages"
+        onClick={onPages}
+      >
+        <PanelIcon size={20} />
+        <span>Pages</span>
+      </button>
+      <button type="button" className="bottom-nav-item" aria-label="Open Groups" onClick={onGroups}>
+        <UsersIcon size={20} />
+        <span>Groups</span>
+      </button>
+      <button
+        type="button"
+        className="bottom-nav-item"
+        aria-label="Open Marketplace"
+        onClick={onMarketplace}
+        disabled={!onMarketplace}
+      >
+        <CubeIcon size={20} />
+        <span>Marketplace</span>
+      </button>
+    </nav>
+  );
+}
+
 export function FeedView({
   client,
   viewerId,
@@ -3859,6 +3460,7 @@ export function FeedView({
   onOpenAlbum,
   onOpenNav,
   onOpenMarketplace,
+  onStoryReplySent,
 }: {
   client: BotifyrClient;
   viewerId?: string;
@@ -3878,6 +3480,8 @@ export function FeedView({
   onOpenNav?: () => void;
   /** Open the Marketplace surface (owned by the host). */
   onOpenMarketplace?: () => void;
+  /** After a story reply is sent, open the DM conversation (FR-13). */
+  onStoryReplySent?: (session: Session) => void;
 }) {
   const [posts, setPosts] = useState<FeedPost[]>([]);
   const [loading, setLoading] = useState(true);
@@ -3918,16 +3522,9 @@ export function FeedView({
   const [creatingPage, setCreatingPage] = useState(false);
   const [newPageName, setNewPageName] = useState("");
   const [mentionResults, setMentionResults] = useState<Person[]>([]);
-  const [stories, setStories] = useState<Story[]>([]);
-  const [storiesLoading, setStoriesLoading] = useState(true);
-  const [storyError, setStoryError] = useState(false);
-  const [storyOpen, setStoryOpen] = useState<{ authorId: string; storyId: string } | null>(null);
-  const [seenStories, setSeenStories] = useState<Record<string, boolean>>(() => readSeenStories());
-  const storyGroups = useMemo(() => groupStories(stories), [stories]);
   const [reelsOpen, setReelsOpen] = useState(false);
   const [groupsOpen, setGroupsOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
-  const storyRef = useRef<HTMLInputElement | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
@@ -3945,6 +3542,8 @@ export function FeedView({
   /** attachment id -> uploaded media id, so a retry after a partial failure
    *  never re-uploads what already succeeded. */
   const uploadedMediaRef = useRef<Map<string, string>>(new Map());
+  /** Latest draft text, so the async server-draft fetch never clobbers typing. */
+  const draftRef = useRef(draft);
 
   /** As the user types `@name`, offer people to insert. */
   async function updateMentions(event: ChangeEvent<HTMLTextAreaElement>) {
@@ -4052,6 +3651,7 @@ export function FeedView({
   }
 
   viewKeyRef.current = `${tab}:${sort}`;
+  draftRef.current = draft;
 
   /** Load a page of the timeline. `reset` replaces the list; `more` appends. */
   const load = useCallback(
@@ -4209,121 +3809,38 @@ export function FeedView({
     previewUrlsRef.current = current;
   }, [attachments]);
 
-  const loadStories = useCallback(async () => {
-    setStoriesLoading(true);
-    setStoryError(false);
-    try {
-      const list = await client.listStories();
-      setStories(list);
-      // Adopt server-recorded views so "seen" survives across devices.
-      const viewed = list.filter((story) => story.viewedByMe).map((story) => story.id);
-      if (viewed.length > 0) {
-        setSeenStories((prev) => {
-          let changed = false;
-          const next = { ...prev };
-          for (const id of viewed) {
-            if (!next[id]) {
-              next[id] = true;
-              changed = true;
-            }
-          }
-          return changed ? next : prev;
-        });
-      }
-    } catch {
-      setStoryError(true);
-    } finally {
-      setStoriesLoading(false);
-    }
+  // Adopt a server-synced draft when nothing is on screen (e.g. another device).
+  useEffect(() => {
+    let active = true;
+    client
+      .getPostDraft()
+      .then((serverDraft) => {
+        if (!active || !serverDraft?.body) return;
+        if (draftRef.current.trim()) return; // never clobber text already on screen
+        setDraft(serverDraft.body);
+        setDraftRestored(true);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
   }, [client]);
 
+  // Debounced server save so a draft follows the user across devices. The first
+  // run never deletes, so an empty screen can't wipe a server draft before the
+  // read above has had a chance to adopt it.
+  const draftSyncedRef = useRef(false);
   useEffect(() => {
-    void loadStories();
-  }, [loadStories]);
-
-  // Remember viewed stories locally (the API has no story-view route yet).
-  useEffect(() => {
-    try {
-      const ids = Object.keys(seenStories).slice(-STORY_SEEN_LIMIT);
-      localStorage.setItem(STORY_SEEN_KEY, JSON.stringify(ids));
-    } catch {
-      // Storage may be unavailable; seen state simply won't persist.
-    }
-  }, [seenStories]);
-
-  // If the active story is removed or expires while open, close gracefully.
-  useEffect(() => {
-    if (
-      storyOpen &&
-      !storyGroups.some(
-        (group) =>
-          group.author.id === storyOpen.authorId && group.stories.some((s) => s.id === storyOpen.storyId),
-      )
-    ) {
-      setStoryOpen(null);
-    }
-  }, [storyGroups, storyOpen]);
-
-  async function addStory(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file || !file.type.startsWith("image/")) return;
-    const data = await new Promise<string>((resolve) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
-      reader.readAsDataURL(file);
-    });
-    if (!data) return;
-    try {
-      const media = await client.uploadFile({ name: file.name, mime: file.type, data });
-      await client.createStory({ mediaId: media.id });
-      await loadStories();
-    } catch {
-      // Ignore a failed story.
-    }
-  }
-
-  const markStorySeen = useCallback(
-    (storyId: string) => {
-      setSeenStories((prev) => (prev[storyId] ? prev : { ...prev, [storyId]: true }));
-      // Record the view server-side (best-effort; local state updates immediately).
-      void client.viewStory(storyId).catch(() => {});
-    },
-    [client],
-  );
-
-  function openStory(authorId: string, storyId: string) {
-    setStoryOpen({ authorId, storyId });
-  }
-
-  function navigateStory(groupIndex: number, storyIndex: number) {
-    const group = storyGroups[groupIndex];
-    const story = group?.stories[storyIndex];
-    if (group && story) setStoryOpen({ authorId: group.author.id, storyId: story.id });
-  }
-
-  /** React to a story: optimistic locally, reconciled by refetch on failure. */
-  function reactToStory(storyId: string, emoji: string) {
-    const current = stories.find((story) => story.id === storyId);
-    const prior = current?.myReaction ?? null;
-    const next = prior === emoji ? "" : emoji;
-    setStories((prev) =>
-      prev.map((story) => {
-        if (story.id !== storyId) return story;
-        const reactions = { ...(story.reactions ?? {}) };
-        if (prior) reactions[prior] = Math.max(0, (reactions[prior] ?? 1) - 1);
-        if (next) reactions[next] = (reactions[next] ?? 0) + 1;
-        return { ...story, reactions, myReaction: next || null };
-      }),
-    );
-    void client.reactStory(storyId, next).catch(() => void loadStories());
-  }
-
-  /** Reply to a story via the existing DM channel (docs/feed-next.md §FR-13). */
-  async function replyToStory(author: Story["author"], text: string): Promise<void> {
-    const session = await client.openDm(author.id);
-    await client.sendDm(session.id, text);
-  }
+    const handle = setTimeout(() => {
+      if (!draftSyncedRef.current) {
+        draftSyncedRef.current = true;
+        if (!draft.trim()) return;
+      }
+      if (draft.trim()) void client.savePostDraft(draft).catch(() => {});
+      else void client.deletePostDraft().catch(() => {});
+    }, 900);
+    return () => clearTimeout(handle);
+  }, [client, draft]);
 
   useEffect(() => {
     let active = true;
@@ -4413,6 +3930,7 @@ export function FeedView({
       setDraftRestored(false);
       uploadedMediaRef.current.clear();
       localStorage.removeItem(FEED_DRAFT_KEY);
+      void client.deletePostDraft().catch(() => {});
     } catch (err) {
       setComposerError(err instanceof Error ? err.message : "Couldn't publish that post");
     } finally {
@@ -4447,8 +3965,56 @@ export function FeedView({
     void load("reset");
   }
 
-  if (openTag) {
+  function goHome() {
+    setOpenTag(null);
+    setReelsOpen(false);
+    setGroupsOpen(false);
+    onOpenPage?.(null);
+    onOpenGroup?.(null);
+    onOpenAlbum?.(null);
+    setTab("all");
+  }
+  function goReels() {
+    setOpenTag(null);
+    setGroupsOpen(false);
+    onOpenPage?.(null);
+    onOpenGroup?.(null);
+    onOpenAlbum?.(null);
+    setReelsOpen(true);
+  }
+  function goPages() {
+    goHome();
+    setTab("pages");
+  }
+  function goGroups() {
+    setOpenTag(null);
+    setReelsOpen(false);
+    onOpenPage?.(null);
+    onOpenGroup?.(null);
+    onOpenAlbum?.(null);
+    setGroupsOpen(true);
+  }
+  const feedNav = (
+    <FeedBottomNav
+      tab={tab}
+      onHome={goHome}
+      onReels={goReels}
+      onPages={goPages}
+      onGroups={goGroups}
+      onMarketplace={onOpenMarketplace}
+    />
+  );
+  function withNav(content: ReactNode) {
     return (
+      <div className="feed-shell">
+        {content}
+        {feedNav}
+      </div>
+    );
+  }
+
+  if (openTag) {
+    return withNav(
       <TagView
         client={client}
         cloudUrl={cloudUrl}
@@ -4456,28 +4022,28 @@ export function FeedView({
         tag={openTag}
         onBack={() => setOpenTag(null)}
         onOpenTag={(next) => setOpenTag(next)}
-      />
+      />,
     );
   }
 
   if (albumName) {
-    return (
+    return withNav(
       <AlbumView
         client={client}
         cloudUrl={cloudUrl}
         viewerId={viewerId}
         name={albumName}
         onBack={() => onOpenAlbum?.(null)}
-      />
+      />,
     );
   }
 
   if (reelsOpen) {
-    return <ReelsView client={client} cloudUrl={cloudUrl} onBack={() => setReelsOpen(false)} />;
+    return withNav(<ReelsView client={client} cloudUrl={cloudUrl} onBack={() => setReelsOpen(false)} />);
   }
 
   if (groupsOpen) {
-    return (
+    return withNav(
       <GroupsView
         client={client}
         onBack={() => setGroupsOpen(false)}
@@ -4485,24 +4051,24 @@ export function FeedView({
           setGroupsOpen(false);
           onOpenGroup?.(handle);
         }}
-      />
+      />,
     );
   }
 
   if (groupHandle) {
-    return (
+    return withNav(
       <GroupView
         client={client}
         cloudUrl={cloudUrl}
         viewerId={viewerId}
         handle={groupHandle}
         onBack={() => onOpenGroup?.(null)}
-      />
+      />,
     );
   }
 
   if (pageHandle) {
-    return (
+    return withNav(
       <PageView
         client={client}
         cloudUrl={cloudUrl}
@@ -4510,7 +4076,7 @@ export function FeedView({
         handle={pageHandle}
         onBack={() => onOpenPage?.(null)}
         onOpenPage={(next) => onOpenPage?.(next)}
-      />
+      />,
     );
   }
 
@@ -4566,9 +4132,6 @@ export function FeedView({
         >
           <RefreshIcon size={16} />
         </button>
-        <button type="button" className="feed-composer-tool" onClick={() => setReelsOpen(true)}>
-          Reels
-        </button>
       </div>
 
       <div className="feed-scroll" ref={attachScroll} onScroll={onFeedScroll}>
@@ -4577,106 +4140,12 @@ export function FeedView({
             <RefreshIcon size={14} /> New activity — tap to refresh
           </button>
         )}
-        <div className="stories-strip">
-          {(() => {
-            const ownGroup = viewerId ? storyGroups.find((group) => group.author.id === viewerId) : undefined;
-            const ownSeen = ownGroup ? ownGroup.stories.every((s) => seenStories[s.id]) : false;
-            const others = storyGroups.filter((group) => !viewerId || group.author.id !== viewerId);
-            const firstUnseen = (group: StoryGroup): Story =>
-              group.stories.find((s) => !seenStories[s.id]) ?? group.stories[0];
-            return (
-              <>
-                <div className="story-tile story-own">
-                  <button
-                    type="button"
-                    className="story-own-main"
-                    onClick={() =>
-                      ownGroup
-                        ? openStory(ownGroup.author.id, firstUnseen(ownGroup).id)
-                        : storyRef.current?.click()
-                    }
-                    aria-label={ownGroup ? "View your story" : "Add to your story"}
-                  >
-                    <span
-                      className={`story-avatar${ownGroup && ownSeen ? " seen" : ""}${ownGroup ? "" : " add"}`}
-                    >
-                      {ownGroup?.stories[0]?.imageUrl ? (
-                        <img src={`${cloudUrl}${ownGroup.stories[0].imageUrl}`} alt="" />
-                      ) : (
-                        "＋"
-                      )}
-                    </span>
-                  </button>
-                  {ownGroup && (
-                    <button
-                      type="button"
-                      className="story-own-add"
-                      onClick={() => storyRef.current?.click()}
-                      aria-label="Add to your story"
-                    >
-                      ＋
-                    </button>
-                  )}
-                  <span className="story-name">Your story</span>
-                </div>
-
-                {storiesLoading && storyGroups.length === 0 && (
-                  <>
-                    <div className="story-tile story-skeleton" aria-hidden="true">
-                      <span className="story-avatar" />
-                    </div>
-                    <div className="story-tile story-skeleton" aria-hidden="true">
-                      <span className="story-avatar" />
-                    </div>
-                  </>
-                )}
-
-                {storyError && (
-                  <button type="button" className="story-tile story-retry" onClick={() => void loadStories()}>
-                    <span className="story-avatar add">↻</span>
-                    <span className="story-name">Retry</span>
-                  </button>
-                )}
-
-                {!storiesLoading && !storyError && others.length === 0 && !ownGroup && (
-                  <span className="story-empty" role="status">
-                    No stories yet
-                  </span>
-                )}
-
-                {others.map((group) => {
-                  const unseen = group.stories.some((s) => !seenStories[s.id]);
-                  const latest = group.stories[group.stories.length - 1];
-                  return (
-                    <button
-                      key={group.author.id}
-                      type="button"
-                      className="story-tile"
-                      onClick={() => openStory(group.author.id, firstUnseen(group).id)}
-                      aria-label={`${authorName(group.author)}${unseen ? " — new story" : " — viewed"}`}
-                    >
-                      <span className={`story-avatar${unseen ? "" : " seen"}`}>
-                        {latest.imageUrl ? (
-                          <img src={`${cloudUrl}${latest.imageUrl}`} alt="" />
-                        ) : (
-                          authorEmoji(group.author)
-                        )}
-                      </span>
-                      <span className="story-name">{authorName(group.author)}</span>
-                    </button>
-                  );
-                })}
-              </>
-            );
-          })()}
-          <input
-            ref={storyRef}
-            type="file"
-            accept="image/*"
-            style={{ display: "none" }}
-            onChange={addStory}
-          />
-        </div>
+        <StoriesStrip
+          client={client}
+          cloudUrl={cloudUrl}
+          viewerId={viewerId}
+          onReplySent={onStoryReplySent}
+        />
         <form className="feed-composer" onSubmit={publish}>
           <div className="feed-composer-row">
             <Avatar name="You" />
@@ -4708,6 +4177,7 @@ export function FeedView({
                   setDraft("");
                   setDraftRestored(false);
                   localStorage.removeItem(FEED_DRAFT_KEY);
+                  void client.deletePostDraft().catch(() => {});
                 }}
               >
                 Discard
@@ -5055,80 +4525,7 @@ export function FeedView({
         )}
       </div>
 
-      <nav className="feed-bottom-nav" aria-label="Feed navigation">
-        <button
-          type="button"
-          className={`bottom-nav-item${tab === "pages" ? "" : " active"}`}
-          aria-current={tab === "pages" ? undefined : "page"}
-          aria-label="Feed home"
-          onClick={() => setTab("all")}
-        >
-          <HomeIcon size={20} />
-          <span>Feed</span>
-        </button>
-        <button
-          type="button"
-          className="bottom-nav-item"
-          aria-label="Open Reels"
-          onClick={() => setReelsOpen(true)}
-        >
-          <PlayIcon size={20} />
-          <span>Reels</span>
-        </button>
-        <button
-          type="button"
-          className={`bottom-nav-item${tab === "pages" ? " active" : ""}`}
-          aria-current={tab === "pages" ? "page" : undefined}
-          aria-label="Open Pages"
-          onClick={() => setTab("pages")}
-        >
-          <PanelIcon size={20} />
-          <span>Pages</span>
-        </button>
-        <button
-          type="button"
-          className="bottom-nav-item"
-          aria-label="Open Groups"
-          onClick={() => setGroupsOpen(true)}
-        >
-          <UsersIcon size={20} />
-          <span>Groups</span>
-        </button>
-        <button
-          type="button"
-          className="bottom-nav-item"
-          aria-label="Open Marketplace"
-          onClick={() => onOpenMarketplace?.()}
-          disabled={!onOpenMarketplace}
-        >
-          <CubeIcon size={20} />
-          <span>Marketplace</span>
-        </button>
-      </nav>
-
-      {storyOpen &&
-        (() => {
-          const groupIndex = storyGroups.findIndex((group) => group.author.id === storyOpen.authorId);
-          if (groupIndex < 0) return null;
-          const activeGroup = storyGroups[groupIndex];
-          const storyIndex = Math.max(
-            0,
-            activeGroup.stories.findIndex((s) => s.id === storyOpen.storyId),
-          );
-          return (
-            <StoryViewer
-              groups={storyGroups}
-              groupIndex={groupIndex}
-              storyIndex={storyIndex}
-              cloudUrl={cloudUrl}
-              onClose={() => setStoryOpen(null)}
-              onSeen={markStorySeen}
-              onNavigate={navigateStory}
-              onReplyToStory={viewerId && activeGroup.author.id === viewerId ? undefined : replyToStory}
-              onReact={viewerId && activeGroup.author.id === viewerId ? undefined : reactToStory}
-            />
-          );
-        })()}
+      {feedNav}
     </div>
   );
 }

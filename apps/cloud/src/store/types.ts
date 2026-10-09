@@ -100,6 +100,13 @@ export interface PostMediaRecord {
   alt?: string;
 }
 
+/** A single in-progress composer draft, synced per user. */
+export interface PostDraftRecord {
+  userId: string;
+  body: string;
+  updatedAt: string;
+}
+
 /** A comment on a post. */
 export interface PostCommentRecord {
   id: string;
@@ -210,6 +217,8 @@ export interface PageRecord {
   avatarUrl?: string;
   coverUrl?: string;
   cta?: string;
+  /** Destination for the CTA button (http(s)/mailto/tel); `cta` is the label. */
+  ctaUrl?: string;
   verified: boolean;
   /** Post pinned to the top of the Page timeline. */
   pinnedPostId?: string;
@@ -463,13 +472,24 @@ export interface Store {
   addPostMedia(postId: string, mediaId: string, position: number, alt?: string): Promise<void>;
   /** Media attached to a post, ordered by position, with optional alt text. */
   listPostMedia(postId: string): Promise<PostMediaRecord[]>;
+  /* Composer draft (one per user, synced across devices). */
+  getPostDraft(userId: string): Promise<PostDraftRecord | null>;
+  savePostDraft(draft: PostDraftRecord): Promise<void>;
+  deletePostDraft(userId: string): Promise<void>;
   /* Hashtags */
   addPostTag(postId: string, tag: string): Promise<void>;
   listPostTags(postId: string): Promise<string[]>;
   /** Posts carrying a hashtag (lower-case, no `#`), newest first. */
   listPostsByTag(tag: string, limit: number): Promise<PostRecord[]>;
-  /** Newest-first posts by any of `authorIds`, paged by ISO `before` cursor. */
-  listFeedPosts(authorIds: string[], limit: number, before?: string): Promise<PostRecord[]>;
+  /**
+   * Newest-first posts by any of `authorIds`, paged by a stable keyset cursor
+   * `(createdAt, id)` so posts sharing a timestamp are never skipped (DB-2).
+   */
+  listFeedPosts(
+    authorIds: string[],
+    limit: number,
+    before?: { createdAt: string; id: string },
+  ): Promise<PostRecord[]>;
   listPostsByAuthor(authorId: string, limit: number): Promise<PostRecord[]>;
   /** Posts by `authorIds` since `sinceIso`, ranked by engagement. */
   listTrendingPosts(authorIds: string[], sinceIso: string, limit: number): Promise<PostRecord[]>;

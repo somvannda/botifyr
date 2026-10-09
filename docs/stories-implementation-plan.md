@@ -18,9 +18,12 @@ Owned by the Stories Manager:
 - The story reply control (routed through the existing DM channel).
 
 **Not** changed: shared tokens, global feed ranking, and unrelated messaging
-behaviour. Story logic lives in `FeedView.tsx` + `styles.css` alongside the rest
-of the Feed surface; a future refactor could lift it into its own module
-(`Stories.tsx`) to reduce file contention with sibling agents.
+behaviour. Story logic now lives in its own module **`packages/ui/src/Stories.tsx`**
+(the self-contained `StoriesStrip` + `StoryViewer`); shared presentational helpers
+(`Avatar`, `authorName`, `authorEmoji`, `relativeTime`, `resolveAvatar`) moved to
+`packages/ui/src/feedKit.tsx` so Stories and Feed share them without an import
+cycle. `FeedView.tsx` only renders `<StoriesStrip client cloudUrl viewerId />`;
+styles stay in `styles.css`.
 
 ## B. Data model (as it actually exists)
 
@@ -110,7 +113,9 @@ under the viewer; if it disappears, a guard effect closes the viewer.
   `POST /v1/stories/:id/reaction` (`story_reactions` table). The UI is optimistic
   with refetch-on-failure; tapping the active reaction clears it. `GET /v1/stories`
   returns `reactions` counts and `myReaction`.
-- **Planned:** navigating to the DM thread after sending.
+- **Open the DM (Done):** after a reply is sent, the host opens that conversation
+  (`onStoryReplySent` → `BotifyrApp.openStoryConversation`), matching FR-13's
+  "reply opens a DM".
 
 ## H. Expiration & availability (Done)
 

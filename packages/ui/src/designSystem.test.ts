@@ -90,6 +90,18 @@ describe("design tokens", () => {
       "--radius-card",
       "--radius-pill",
       "--radius-round",
+      "--text-4xs",
+      "--text-3xs",
+      "--text-2xs",
+      "--text-xs",
+      "--text-sm",
+      "--text-md",
+      "--text-lg",
+      "--text-xl",
+      "--text-2xl",
+      "--text-3xl",
+      "--text-4xl",
+      "--text-5xl",
     ]) {
       expect(dark[token], `:root is missing ${token}`).toBeTruthy();
     }
@@ -107,6 +119,25 @@ describe("design tokens", () => {
       expect(css, `border-radius: ${value} should use a --radius token`).not.toContain(
         `border-radius: ${value};`,
       );
+    }
+  });
+
+  it("adopts the type scale for the common font sizes", () => {
+    for (const value of [
+      "10px",
+      "10.5px",
+      "11px",
+      "11.5px",
+      "12px",
+      "12.5px",
+      "13px",
+      "13.5px",
+      "14px",
+      "15px",
+      "16px",
+      "18px",
+    ]) {
+      expect(css, `font-size: ${value} should use a --text token`).not.toContain(`font-size: ${value};`);
     }
   });
 

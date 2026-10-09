@@ -153,6 +153,55 @@ describe("feed", () => {
     await app.close();
   });
 
+  it("paginates comments when a limit is given, and stays legacy without one (POST-12)", async () => {
+    const { app, store, signUp, auth, createPost } = await setup();
+    const alice = await signUp("alice-cpage@example.com");
+    const bob = await signUp("bob-cpage@example.com");
+    await store.createFriendship(alice.user.id, bob.user.id);
+    const post = await createPost(alice.token, "many comments");
+    for (let i = 1; i <= 5; i += 1) {
+      await app.inject({
+        method: "POST",
+        url: `/v1/posts/${post.id}/comments`,
+        headers: auth(bob.token),
+        payload: { body: `comment ${i}` },
+      });
+    }
+
+    const paged = async (cursor?: string) => {
+      const res = await app.inject({
+        method: "GET",
+        url: `/v1/posts/${post.id}/comments?limit=2${cursor ? `&cursor=${cursor}` : ""}`,
+        headers: auth(alice.token),
+      });
+      expect(res.statusCode).toBe(200);
+      return res.json() as { items: FeedCommentDto[]; nextCursor: string | null };
+    };
+
+    const page1 = await paged();
+    expect(page1.items).toHaveLength(2);
+    expect(page1.nextCursor).toBe("2");
+    const page2 = await paged(page1.nextCursor ?? undefined);
+    expect(page2.items).toHaveLength(2);
+    expect(page2.nextCursor).toBe("4");
+    const page3 = await paged(page2.nextCursor ?? undefined);
+    expect(page3.items).toHaveLength(1);
+    expect(page3.nextCursor).toBeNull();
+
+    const bodies = [...page1.items, ...page2.items, ...page3.items].map((c) => c.body).sort();
+    expect(bodies).toEqual(["comment 1", "comment 2", "comment 3", "comment 4", "comment 5"]);
+
+    // Legacy callers (no `limit`) still receive the full array.
+    const legacy = await app.inject({
+      method: "GET",
+      url: `/v1/posts/${post.id}/comments`,
+      headers: auth(alice.token),
+    });
+    expect((legacy.json() as FeedCommentDto[]).length).toBe(5);
+
+    await app.close();
+  });
+
   it("toggles shares and only lets the author delete a post", async () => {
     const { app, store, signUp, auth, createPost } = await setup();
     const alice = await signUp("alice-share@example.com");
@@ -498,6 +547,66 @@ describe("feed", () => {
       if (previous === undefined) delete process.env.BOTIFYR_DOWNLOADS_DIR;
       else process.env.BOTIFYR_DOWNLOADS_DIR = previous;
       await rm(dir, { recursive: true, force: true }).catch(() => {});
+    }
+  });
+
+  it("accepts a raw-binary upload without base64 inflation", async () => {
+    const previous = process.env.BOTIFYR_DOWNLOADS_DIR;
+    const dir = join(tmpdir(), `botifyr-raw-${randomUUID()}`);
+    process.env.BOTIFYR_DOWNLOADS_DIR = dir;
+    const { app, signUp, auth } = await setup();
+    try {
+      const alice = await signUp("alice-raw@example.com");
+      const bytes = Buffer.from("hello raw upload", "utf8");
+      const upload = await app.inject({
+        method: "POST",
+        url: "/v1/uploads/raw?name=note.txt&mime=text/plain",
+        headers: { ...auth(alice.token), "content-type": "application/octet-stream" },
+        payload: bytes,
+      });
+      expect(upload.statusCode).toBe(201);
+      const media = upload.json() as { size: number; mime: string; name: string };
+      expect(media.size).toBe(bytes.length);
+      expect(media.mime).toBe("text/plain");
+      expect(media.name).toBe("note.txt");
+    } finally {
+      await app.close();
+      if (previous === undefined) delete process.env.BOTIFYR_DOWNLOADS_DIR;
+      else process.env.BOTIFYR_DOWNLOADS_DIR = previous;
+      await rm(dir, { recursive: true, force: true }).catch(() => {});
+    }
+  });
+
+  it("saves, reads and clears a composer draft", async () => {
+    const { app, signUp, auth } = await setup();
+    try {
+      const alice = await signUp("alice-draft@example.com");
+
+      const empty = await app.inject({ method: "GET", url: "/v1/posts/draft", headers: auth(alice.token) });
+      expect(empty.statusCode).toBe(200);
+      expect(empty.json()).toBeNull();
+
+      const save = await app.inject({
+        method: "PUT",
+        url: "/v1/posts/draft",
+        headers: auth(alice.token),
+        payload: { body: "half a thought" },
+      });
+      expect(save.statusCode).toBe(200);
+
+      const read = await app.inject({ method: "GET", url: "/v1/posts/draft", headers: auth(alice.token) });
+      expect((read.json() as { body: string }).body).toBe("half a thought");
+
+      const clear = await app.inject({
+        method: "DELETE",
+        url: "/v1/posts/draft",
+        headers: auth(alice.token),
+      });
+      expect(clear.statusCode).toBe(200);
+      const after = await app.inject({ method: "GET", url: "/v1/posts/draft", headers: auth(alice.token) });
+      expect(after.json()).toBeNull();
+    } finally {
+      await app.close();
     }
   });
 

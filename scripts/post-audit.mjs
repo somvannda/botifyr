@@ -222,9 +222,10 @@ await page.route(/\/v1\/feed(\?|$)/, async (route) => {
   const response = await route.fetch();
   const json = await response.json().catch(() => null);
   if (json?.items) {
+    const validSrc = json.items.map((p) => p.imageUrl || (p.images && p.images[0])).find(Boolean);
     for (const post of json.items) {
       if (post.body === "A short clip from the trip.") {
-        post.videos = ["/v1/feed/image?t=audit-video"];
+        post.videos = [validSrc ?? "/v1/feed/image?t=audit-video"];
         videoInjected = true;
       }
     }
@@ -362,8 +363,11 @@ report.horizontalOverflow390 = await page.evaluate(
   () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
 );
 
-report.consoleErrors = consoleErrors.filter((e) => !/ERR_FAILED|ERR_EMPTY_RESPONSE/.test(e)).slice(0, 10);
+report.consoleErrors = consoleErrors
+  .filter((e) => !/ERR_FAILED|ERR_EMPTY_RESPONSE|status of 404/.test(e))
+  .slice(0, 10);
 report.expectedAbortErrors = consoleErrors.filter((e) => /ERR_FAILED/.test(e)).length;
+report.expectedInjectedMediaErrors = consoleErrors.filter((e) => /status of 404/.test(e)).length;
 
 await browser.close();
 console.log(JSON.stringify(report, null, 2));

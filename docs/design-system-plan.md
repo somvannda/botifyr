@@ -49,7 +49,7 @@ Established product knowledge, not live captures:
 | DS-T7 | Token/contrast guard test | P1 | `designSystem.test.ts` | test green | **Done** |
 | DS-T8 | Tokenise the global accent literals (chat/workspace) | P2 | rest of `styles.css` | same computed colors | **Done** |
 | DS-T9 | Normalise the red family to `--danger*` | P2 | `styles.css` | one red role | **Done** |
-| DS-T10 | Type/spacing token scale | P3 | `styles.css` | documented scale adopted incrementally | **Deferred** (values are off-grid — 5/6/7/9/10/14px — so normalising changes visuals; documented in components doc) |
+| DS-T10 | Type/spacing token scale | P3 | `styles.css` | documented scale adopted incrementally | **Partial** (type scale adopted app-wide; spacing documented) |
 | DS-T11 | Automated a11y check (axe) + light-theme component pass | P3 | CI, UI | axe clean on Feed | **Partial** (axe clean on Feed; non-Feed pending) |
 | DS-T12 | `--danger-solid` for solid destructive buttons (white text ≥4.5:1) | P1 | `:root`, `.feed-confirm-danger` | 4.8:1 in both themes | **Done** |
 | DS-T13 | `--accent-solid` for solid accent buttons (white text ≥4.5:1) | P1 | `:root`, Feed buttons | ≥4.7:1 in both themes | **Done** |

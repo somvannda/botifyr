@@ -98,3 +98,26 @@ drive Feed sub-views; the host passes only `onOpenMarketplace`. No new API.
 - `npm run typecheck -w @botifyr/ui` → passed.
 - `npm test` → **436 passed / 436**.
 - Visual: `scripts/feed-screenshots.mjs` (desktop/tablet/mobile).
+
+## H. Agent status ledger (Phase 5.3)
+
+| # | Agent | Status | Evidence |
+| --- | --- | --- | --- |
+| 1 | Feed Experience Lead (me) | **Implemented / Delivering** | bottom menu, layout, docs |
+| 2 | Design System Manager | **Completed** (Feed region) | `design-system-progress.md` |
+| 3 | Feed & Discovery Manager | **Completed** | `feed-discovery-progress.md` |
+| 4 | Post Manager | **Completed** | `post-improvement-progress.md` |
+| 5 | Reels Manager | **Completed** | `agent-progress/reels-manager.md` |
+| 6 | Stories Manager | **Implementing** (extraction to `Stories.tsx`) | `agent-progress/stories-manager.md` |
+| 7 | Pages Manager | **Completed** | `agent-progress/pages-manager.md` |
+| 8 | Composer Manager | **Completed** | `composer-implementation-plan.md` |
+| 9 | Feed QA & E2E Manager | **Ready** for Final Integrated QA | `docs/agent-progress/feed-qa-handoff.md` |
+
+## I. Integration status
+
+- `npm test` → **452 passed / 452** (64 files); `@botifyr/ui` typecheck clean.
+- Feed menu renders in the home feed **and** in Feed sub-views (Reels/Groups/
+  Page/Group/Tag/Album) via the shared `FeedBottomNav` + `.feed-shell`.
+- Note: the shared tree is multi-author; transient typecheck breaks from the
+  Stories extraction occurred and were fixed by the owning workstream.
+

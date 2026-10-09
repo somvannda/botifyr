@@ -521,6 +521,13 @@ CREATE TABLE IF NOT EXISTS post_media (
 CREATE INDEX IF NOT EXISTS post_media_post_idx ON post_media (post_id, position);
 ALTER TABLE post_media ADD COLUMN IF NOT EXISTS alt TEXT;
 
+/* One in-progress composer draft per user (docs/composer-implementation-plan.md). */
+CREATE TABLE IF NOT EXISTS post_drafts (
+  user_id    TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  body       TEXT NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 /* Reactions (superset of likes). One per user per post. */
 CREATE TABLE IF NOT EXISTS post_reactions (
   post_id    TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
@@ -563,12 +570,14 @@ CREATE TABLE IF NOT EXISTS pages (
   avatar_url   TEXT,
   cover_url    TEXT,
   cta          TEXT,
+  cta_url      TEXT,
   verified     BOOLEAN NOT NULL DEFAULT false,
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE UNIQUE INDEX IF NOT EXISTS pages_handle_idx ON pages (lower(handle));
 ALTER TABLE pages ADD COLUMN IF NOT EXISTS pinned_post_id TEXT;
+ALTER TABLE pages ADD COLUMN IF NOT EXISTS cta_url TEXT;
 
 CREATE TABLE IF NOT EXISTS page_roles (
   page_id TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,

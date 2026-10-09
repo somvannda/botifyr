@@ -69,55 +69,60 @@ async function seedStory(): Promise<{ token: string }> {
   return { token: me.token };
 }
 
-for (const vp of VIEWPORTS) {
-  test(`a viewer can open, react to, pause, and close a story (${vp.name})`, async ({ page, request }) => {
-    const appUp = await request
-      .get(APP + "/")
-      .then((r) => r.ok())
-      .catch(() => false);
-    test.skip(!appUp, `App not reachable at ${APP}`);
-    const cloudUp = await request
-      .get(CLOUD + "/v1/stories")
-      .then((r) => r.status() < 500)
-      .catch(() => false);
-    test.skip(!cloudUp, `Cloud not reachable at ${CLOUD}`);
+test.describe("Stories viewer", () => {
+  // Seed via the API; run serially so parallel signups can't race.
+  test.describe.configure({ mode: "serial" });
 
-    const { token } = await seedStory();
+  for (const vp of VIEWPORTS) {
+    test(`a viewer can open, react to, pause, and close a story (${vp.name})`, async ({ page, request }) => {
+      const appUp = await request
+        .get(APP + "/")
+        .then((r) => r.ok())
+        .catch(() => false);
+      test.skip(!appUp, `App not reachable at ${APP}`);
+      const cloudUp = await request
+        .get(CLOUD + "/v1/stories")
+        .then((r) => r.status() < 500)
+        .catch(() => false);
+      test.skip(!cloudUp, `Cloud not reachable at ${CLOUD}`);
 
-    await page.setViewportSize({ width: vp.width, height: vp.height });
-    await page.addInitScript((value: string) => {
-      localStorage.setItem("botifyr.token", value);
-      localStorage.setItem("botifyr.theme", "dark");
-    }, token);
-    await page.goto(APP + "/", { waitUntil: "domcontentloaded" });
+      const { token } = await seedStory();
 
-    // The app lands on Chat. On narrow screens the sidebar is a drawer.
-    if (vp.width < 600) {
-      await page.getByRole("button", { name: "Show chats" }).click();
-    }
-    await page.getByRole("tab", { name: "Feed" }).click();
+      await page.setViewportSize({ width: vp.width, height: vp.height });
+      await page.addInitScript((value: string) => {
+        localStorage.setItem("botifyr.token", value);
+        localStorage.setItem("botifyr.theme", "dark");
+      }, token);
+      await page.goto(APP + "/", { waitUntil: "domcontentloaded" });
 
-    const tile = page.locator(".story-tile").last();
-    await expect(tile).toBeVisible({ timeout: 20_000 });
-    await tile.click();
+      // The app lands on Chat. On narrow screens the sidebar is a drawer.
+      if (vp.width < 600) {
+        await page.getByRole("button", { name: "Show chats" }).click();
+      }
+      await page.getByRole("tab", { name: "Feed" }).click();
 
-    const dialog = page.locator("[role='dialog']");
-    await expect(dialog).toBeVisible();
-    await page.screenshot({ path: vp.file });
+      const tile = page.locator(".story-tile").last();
+      await expect(tile).toBeVisible({ timeout: 20_000 });
+      await tile.click();
 
-    // Reactions are available on someone else's story and toggle.
-    const love = page.getByRole("button", { name: "React ❤️" });
-    await expect(love).toBeVisible();
-    await love.click();
-    await expect(love).toHaveAttribute("aria-pressed", "true");
+      const dialog = page.locator("[role='dialog']");
+      await expect(dialog).toBeVisible();
+      await page.screenshot({ path: vp.file });
 
-    // Space pauses (badge appears) and resumes.
-    await page.keyboard.press(" ");
-    await expect(page.locator(".story-paused")).toBeVisible();
-    await page.keyboard.press(" ");
+      // Reactions are available on someone else's story and toggle.
+      const love = page.getByRole("button", { name: "React ❤️" });
+      await expect(love).toBeVisible();
+      await love.click();
+      await expect(love).toHaveAttribute("aria-pressed", "true");
 
-    // Escape closes the viewer.
-    await page.keyboard.press("Escape");
-    await expect(dialog).toHaveCount(0);
-  });
-}
+      // Space pauses (badge appears) and resumes.
+      await page.keyboard.press(" ");
+      await expect(page.locator(".story-paused")).toBeVisible();
+      await page.keyboard.press(" ");
+
+      // Escape closes the viewer.
+      await page.keyboard.press("Escape");
+      await expect(dialog).toHaveCount(0);
+    });
+  }
+});

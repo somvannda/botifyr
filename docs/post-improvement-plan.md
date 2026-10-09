@@ -40,9 +40,10 @@ not missing surfaces:
 6. **Media has no broken-image fallback** and videos have no accessible name;
    inline `@mentions` are indistinguishable from body text. *(code review)*
 
-The work below is **frontend-only** and reuses the existing data contract.
-Backend-dependent ideas (comment pagination, copy-link permalinks, mention
-routing) are documented separately and are **not** implemented here.
+The work below is mostly frontend and reuses the existing data contract; comment
+pagination (POST-12) additionally adds a backward-compatible `limit`/`cursor` to
+the comments endpoint. Copy-link permalinks and `@mention` routing remain blocked
+on host routing / a profile surface (documented).
 
 ## B. Current implementation
 
@@ -96,9 +97,11 @@ screenshots captured this session.
 | 9 | Timestamps not semantic (no `<time>`, no full date) | Low | All posts | Low | High *(code)* | Low |
 | 10 | Report gives no confirmation | Low | Reporting | Low | Medium *(code)* | Low |
 
-Backend-dependent (documented, **not** implemented): comment paging/"view more"
-(`listComments` returns all), copy-post-link/permalinks (no stable public URL),
-`@mention` profile routing (no person-profile route from the Feed).
+Backend-dependent (documented): **comment pagination is now implemented**
+(POST-12 — server `limit`/`cursor` + `listCommentsPage` + "Load more comments").
+Still blocked on **host routing / other surfaces**: copy-post-link/permalinks
+(`BotifyrApp` has no URL handling) and `@mention` profile routing (no
+person-profile surface).
 
 ## E. Target experience
 

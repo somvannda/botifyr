@@ -65,3 +65,23 @@ preserving functionality.
 1. Get the reference screenshot → do a spacing/typography/sizing pass.
 2. Coordinate removal of the topbar "Reels" button.
 3. Hand to Agent 9 for Final Integrated QA once feature agents report complete.
+
+## Polish pass (per user "go")
+
+- **Bottom menu polish:** larger icons (22px), 52px min touch target, 11.5px labels,
+  hover background, active accent + indicator.
+- **Removed the duplicate topbar "Reels" button**; the Feed menu's Reels now owns
+  the accessible name `Reels` (Reels tests still pass — 69/69).
+- **Right-rail section headings** now have a subtle separator.
+- Deferred to owners (to avoid cross-owner churn): composer horizontal compaction
+  (Composer Manager) and story-card sizing (Stories Manager); story cards already
+  have uniform size + seen ring.
+
+### Test results after polish
+
+- `npm run typecheck -w @botifyr/ui` → passed.
+- `npm test` → **446 passed / 446** (63 files).
+- `FeedView.dom.test.tsx` → **69 passed**.
+- Note: a transient concurrent `reactToStory` error broke the build mid-run; the
+  owning workstream fixed it. No action taken on another owner's in-progress code.
+

@@ -18,6 +18,7 @@ raw colors.
 | Status | `--ok`, `--warn`, `--danger`, `--danger-soft`, `--danger-border`, `--danger-solid` |
 | Focus | `--focus-ring` (= `--accent`) |
 | Shape | `--radius-xs` 6 · `--radius-sm` 9 · `--radius-control` 8 · `--radius-md` 10 · `--radius-bubble` 12 · `--radius-card` 14 · `--radius-pill` 999 · `--radius-round` 50% |
+| Type | `--text-4xs` 10 · `--text-3xs` 10.5 · `--text-2xs` 11 · `--text-xs` 11.5 · `--text-sm` 12 · `--text-md` 12.5 · `--text-lg` 13 · `--text-xl` 13.5 · `--text-2xl` 14 · `--text-3xl` 15 · `--text-4xl` 16 · `--text-5xl` 18 |
 
 Tints (`--accent-soft`, `--danger-soft`, `--accent-glow`, …) are derived with
 `color-mix(in srgb, <base> N%, transparent)` so they follow the base color into
@@ -28,10 +29,13 @@ the light theme automatically.
 one-offs (`2/3/4/5/7/11/16/22/24px`) remain and are scheduled for normalisation
 onto the scale.
 
-**Type scale (observed convention).** Body 13.5px / 1.55 · small 12.5px ·
-caption 11.5px · micro 10.5px · title 15–16px/700 · section label 12px/700
-uppercase. Truncation: `overflow:hidden; text-overflow:ellipsis; white-space:nowrap`
-(single line) or `-webkit-line-clamp` (multi-line).
+**Type scale.** All common font sizes now use `--text-*` tokens (411 + 22
+declarations). Feed body `--text-xl` 13.5px/1.55 · author name `--text-xl` ·
+labels/actions `--text-md` 12.5px · tags `--text-sm` 12px · captions `--text-xs`
+11.5px · micro `--text-3xs` 10.5px · titles `--text-3xl`/`--text-4xl` 15–16px.
+Display sizes (20/22/24/26/28/30/36/40px) remain literal. Truncation:
+`overflow:hidden; text-overflow:ellipsis; white-space:nowrap` (single line) or
+`-webkit-line-clamp` (multi-line).
 
 **Spacing (observed convention).** 4-pt base with an 8-pt rhythm for layout:
 content padding `12–16px`, gaps `8/10/12px`, section spacing `16–22px`.
@@ -100,13 +104,32 @@ Requirements: real `<button type="button">`; ≥32px hit target; visible
   it into `Icons.tsx` if more consumers appear. Icon-only buttons need an
   `aria-label`; pair text with the icon where possible.
 
-## 3. Shared across the app
+## 3. Responsive & theme conventions
+
+Breakpoints (`max-width`, from `styles.css`):
+
+| Width | Effect |
+| --- | --- |
+| 1200px | 3-column shell collapses (right rail hidden) |
+| 1100px | Feed grid tightens |
+| 1040px | secondary columns drop |
+| **820px** | **mobile drawer breakpoint**: shell nav becomes a drawer, the Feed topbar wraps, cards drop to `--radius-bubble`/12px padding |
+| 640px / 520px | narrow cards; composer and action bar stack |
+
+Rules:
+- The Feed content column is capped at **620px** and centred; the action bar
+  wraps with `row-gap`.
+- Touch targets stay ≥32px; hit areas don't shrink below the control.
+- Both themes are driven entirely by tokens — components must not hardcode
+  colors (enforced by `designSystem.test.ts`).
+
+## 4. Shared across the app
 - `BotLogo`, `BrandIcons`, `AppIcons` — brand/app glyphs (not Feed-specific).
 - `Markdown`, `ErrorBoundary` — shared rendering/error primitives.
 - **One UI, two hosts:** `BotifyrApp` is the only interface; desktop/portal are
   thin bridges (`parity.test.ts` enforces this).
 
-## 4. Guardrails
+## 5. Guardrails
 - `designSystem.test.ts` — tokens exist, light theme overrides all five semantic
   colors, and WCAG AA contrast holds for text/muted/accent/danger in both themes;
   the Feed region contains no raw accent/danger literals.

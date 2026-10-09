@@ -6,11 +6,12 @@
 
 ## Current status
 
-**Complete and fully green.** Pages tests 8/8; cloud Pages tests 9/9; E2E 4/4;
+**Complete and fully green.** Pages tests 9/9; cloud Pages tests 10/10; E2E 4/4;
 visual E2E captured; whole-repo gate green (`typecheck` 0, `lint` 0,
-`npm test` 436/436). Three live-only bugs fixed (PG-18 Postgres post-as-Page,
-PG-19 mobile clipping, PG-20 role-inaccurate controls), plus a coordination fix
-for media consumers after another manager's `listPostMedia` interface change.
+`npm test` 451/451). Delivered: three live-only bugs (PG-18 Postgres
+post-as-Page, PG-19 mobile clipping, PG-20 role-inaccurate controls), the
+`listPostMedia` consumer coordination fix, and **`pages.cta_url` end-to-end**
+(label + destination, schema → API → UI → tests).
 
 ## Problem statement
 
@@ -40,14 +41,15 @@ supported sections — not core functionality. See the audit for the ranked list
 - `packages/ui/src/FeedView.tsx` — `PageView`.
 - `packages/ui/src/styles.css` — additive `.page-*`, plus two fixes:
   `flex: none` on `.page-head` (PG-19) and a higher-specificity mobile rule.
-- `packages/ui/src/FeedView.dom.test.tsx` — 8 Pages tests.
+- `packages/ui/src/FeedView.dom.test.tsx` — 9 Pages tests.
 - `apps/cloud/src/store/schema.ts` — drop the legacy `posts.author_id` users FK
-  (PG-18, post-as-Page 500 on Postgres).
-- `apps/cloud/src/server.pages.test.ts` — schema regression guard.
-- `apps/cloud/src/server.ts` — coordination fix: `feedPostOf` and the reels
-  filter now map `listPostMedia`'s `PostMediaRecord[]` to `mediaId` (the Media/
-  Post manager changed the store interface and left these consumers; media posts
-  — including Page media — would otherwise render with no image).
+  (PG-18); add the `pages.cta_url` column.
+- `apps/cloud/src/server.pages.test.ts` — schema regression guard + cta_url test.
+- `apps/cloud/src/store/types.ts`, `apps/cloud/src/store/postgres.ts` —
+  `PageRecord.ctaUrl` + persistence.
+- `packages/client/src/index.ts` — `Page.ctaUrl` + create/update inputs.
+- `apps/cloud/src/server.ts` — coordination fix (media consumers) + `ctaUrl` on
+  the Page DTO and create/patch routes.
 - `scripts/feed-screenshots.mjs` — seeds a Page and captures
   `page-desktop.png` / `page-about.png` / `page-mobile.png`.
 - `e2e/pages.spec.ts` (new) — Playwright E2E: discover/open a Page, identity +
@@ -83,7 +85,7 @@ supported sections — not core functionality. See the audit for the ranked list
 
 ### Final full gate (actual)
 
-- `npm test` → **436 passed / 436** (62 files). ✅
+- `npm test` → **451 passed / 451** (64 files). ✅
 - `npm run typecheck` (all workspaces) → **exit 0**. ✅
 - `npm run lint` → **exit 0**, 0 errors. ✅
 - `npx vitest run apps/cloud/src/server.pages.test.ts` → **9 passed / 9**. ✅
@@ -151,7 +153,7 @@ correct. No other Composer/Story/token regions were changed by me.
 
 ## Dependencies & blockers
 
-- `pages.cta` is a label only (no `cta_url`) → CTA cannot always link.
+- ~~`pages.cta` is a label only (no `cta_url`)~~ → **resolved**: `cta_url` shipped.
 - No Page-scoped media/story endpoints → no Photos/Reels/Stories tabs.
 - Timeline capped at 20 with no cursor → no "load more".
 - App has no URL router → no deep-link/refresh for a Page.
@@ -160,11 +162,13 @@ correct. No other Composer/Story/token regions were changed by me.
 
 ## Next concrete action
 
-Pages workstream is complete and verified (unit + component + visual E2E). The
-`schema.ts` fix needs the cloud image rebuilt wherever it runs
-(`docker compose up -d --build cloud`) — done locally. Optional follow-ups: a
-Page-navigation Playwright spec in `e2e/`; a `pages.cta_url` field. If the repo
-gate goes red again, re-run `npm run typecheck && npm run lint && npm test`.
+Pages workstream is complete and verified (unit + component + backend + visual
+E2E), including `pages.cta_url`. The schema/API changes need the cloud image
+rebuilt wherever it runs (`docker compose up -d --build cloud`) — done locally
+and confirmed live. Remaining items are backend/product decisions (Page-scoped
+media/story endpoints, timeline pagination, URL routing) — see
+`docs/pages-ux-audit.md` "out of scope". If the repo gate goes red again, re-run
+`npm run typecheck && npm run lint && npm test`.
 
 ## Handoff notes
 
@@ -176,7 +180,8 @@ gate goes red again, re-run `npm run typecheck && npm run lint && npm test`.
   Page screenshots in `scripts/feed-screenshots.mjs`; Playwright spec
   `e2e/pages.spec.ts` (set `E2E_PAGES_TOKEN`).
 - **Cloud/backend:** `posts.author_id` is a generic author id (user or Page);
-  do **not** re-add a `REFERENCES users(id)` FK (guarded by a test).
+  do **not** re-add a `REFERENCES users(id)` FK (guarded by a test). Page CTA is
+  now `cta` (label) + `cta_url` (destination).
 - **Feed Experience Lead:** see PG-18 — the MemoryStore hides FK violations;
   run Pages flows against Postgres (the screenshot harness now does).
 
