@@ -16,6 +16,7 @@ import type {
 import { ROLE_CATALOG } from "@botifyr/shared";
 import type { BotifyrClient } from "@botifyr/client";
 import { CheckIcon, CloseIcon, CubeIcon, PlayIcon, RefreshIcon, SendIcon, SparkIcon } from "./Icons";
+import { Select } from "./Select";
 
 const ROLE_BY_ID = new Map(ROLE_CATALOG.map((role) => [role.id, role]));
 const DEFAULT_EMOJI = "🤖";
@@ -898,18 +899,13 @@ export function CompanyWorkspace({
       <div className="cws-topbar">
         <span className="cws-emoji">{view.avatarEmoji ?? "🏢"}</span>
         {companies.length > 1 ? (
-          <select
+          <Select
             className="cws-select"
             value={selectedId}
-            onChange={(event) => setSelectedId(event.target.value)}
-            aria-label="Select company"
-          >
-            {companies.map((entry) => (
-              <option key={entry.id} value={entry.id}>
-                {entry.name}
-              </option>
-            ))}
-          </select>
+            onChange={setSelectedId}
+            ariaLabel="Select company"
+            options={companies.map((entry) => ({ value: entry.id, label: entry.name }))}
+          />
         ) : (
           <span className="cws-title">{view.name}</span>
         )}
@@ -945,19 +941,20 @@ export function CompanyWorkspace({
             <PlayIcon size={14} /> Run
           </button>
           <label className="cws-autonomy" title="How much the company may do on its own">
-            <select
+            <Select
               className="cws-select"
               value={autonomy}
               disabled={busy}
-              onChange={(event) =>
-                void setAutonomy(event.target.value as "manual" | "supervised" | "autonomous")
+              onChange={(next) =>
+                void setAutonomy(next as "manual" | "supervised" | "autonomous")
               }
-              aria-label="Autonomy level"
-            >
-              <option value="manual">Assisted</option>
-              <option value="supervised">Delegated (recommended)</option>
-              <option value="autonomous">Autonomous</option>
-            </select>
+              ariaLabel="Autonomy level"
+              options={[
+                { value: "manual", label: "Assisted" },
+                { value: "supervised", label: "Delegated (recommended)" },
+                { value: "autonomous", label: "Autonomous" },
+              ]}
+            />
           </label>
         </div>
       </div>
@@ -1074,19 +1071,20 @@ export function CompanyWorkspace({
                   <div className="cws-quest-controls">
                     <label className="cws-quest-field">
                       <span className="cws-muted">Trust</span>
-                      <select
+                      <Select
                         className="cws-select"
                         value={activeQuest.trust}
                         disabled={busy}
-                        onChange={(event) =>
-                          void setQuestTrust(event.target.value as Quest["trust"])
+                        onChange={(next) =>
+                          void setQuestTrust(next as Quest["trust"])
                         }
-                        aria-label="Quest trust"
-                      >
-                        <option value="manual">Assisted</option>
-                        <option value="supervised">Delegated</option>
-                        <option value="autonomous">Autonomous</option>
-                      </select>
+                        ariaLabel="Quest trust"
+                        options={[
+                          { value: "manual", label: "Assisted" },
+                          { value: "supervised", label: "Delegated" },
+                          { value: "autonomous", label: "Autonomous" },
+                        ]}
+                      />
                     </label>
                     <label className="cws-quest-field">
                       <span className="cws-muted">Budget</span>
@@ -1295,23 +1293,24 @@ export function CompanyWorkspace({
                                 {capability}
                               </button>
                               {granted && (
-                                <select
+                                <Select
                                   className="cws-chip-state"
                                   value={grant?.state ?? "gated"}
                                   disabled={busy}
-                                  onChange={(event) =>
+                                  onChange={(next) =>
                                     void setGrantState(
                                       subject,
                                       capability,
-                                      event.target.value as CapabilityGrant["state"],
+                                      next as CapabilityGrant["state"],
                                     )
                                   }
-                                  aria-label={`Trust for ${capability}`}
-                                >
-                                  <option value="gated">gated</option>
-                                  <option value="probation">probation</option>
-                                  <option value="trusted">trusted</option>
-                                </select>
+                                  ariaLabel={`Trust for ${capability}`}
+                                  options={[
+                                    { value: "gated", label: "gated" },
+                                    { value: "probation", label: "probation" },
+                                    { value: "trusted", label: "trusted" },
+                                  ]}
+                                />
                               )}
                             </span>
                           );
@@ -1364,21 +1363,18 @@ export function CompanyWorkspace({
             <ul className="cws-list">
               {items.map((item) => (
                 <li key={item.id} className="cws-work">
-                  <select
+                  <Select
                     className={`cws-status cws-status-${item.status}`}
                     value={item.status}
                     disabled={busy}
-                    onChange={(event) =>
-                      void setWorkStatus(item.id, event.target.value as WorkItem["status"])
+                    onChange={(next) =>
+                      void setWorkStatus(item.id, next as WorkItem["status"])
                     }
-                    aria-label="Status"
-                  >
-                    {(["todo", "in_progress", "blocked", "review", "done"] as const).map((status) => (
-                      <option key={status} value={status}>
-                        {status.replace("_", " ")}
-                      </option>
-                    ))}
-                  </select>
+                    ariaLabel="Status"
+                    options={(["todo", "in_progress", "blocked", "review", "done"] as const).map(
+                      (status) => ({ value: status, label: status.replace("_", " ") }),
+                    )}
+                  />
                   <span className="cws-work-title">{item.title}</span>
                   <span className="cws-muted">{item.phase}</span>
                   {item.result && <span className="cws-muted cws-work-result">{item.result}</span>}

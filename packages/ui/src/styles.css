@@ -169,6 +169,161 @@ select option {
   color: var(--text);
 }
 
+/* Custom dropdown (Radix Select) — the open list is fully themed. */
+.select-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-width: 0;
+  background-color: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  color: var(--text);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
+  font: inherit;
+  font-size: var(--text-lg);
+  line-height: 1.4;
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.select-trigger:hover {
+  border-color: var(--accent-border);
+}
+
+.select-trigger:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.select-trigger [data-placeholder],
+.select-trigger[data-placeholder] {
+  color: var(--muted);
+}
+
+.select-trigger:disabled,
+.select-trigger[data-disabled] {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.select-chevron {
+  flex: none;
+  display: inline-flex;
+  color: var(--muted);
+}
+
+.select-content {
+  z-index: 400;
+  overflow: hidden;
+  min-width: var(--radix-select-trigger-width);
+  max-height: var(--radix-select-content-available-height);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  color: var(--text);
+}
+
+.select-viewport {
+  padding: var(--space-1);
+}
+
+.select-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-6);
+  border-radius: var(--radius-control);
+  color: var(--text);
+  font-size: var(--text-lg);
+  cursor: pointer;
+  outline: none;
+  user-select: none;
+}
+
+.select-item[data-highlighted] {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.select-item[data-state="checked"] {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.select-item[data-disabled] {
+  color: var(--muted);
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.select-item-indicator {
+  position: absolute;
+  left: var(--space-2);
+  display: inline-flex;
+  align-items: center;
+  color: var(--accent);
+}
+
+.select-scroll {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--space-6);
+  color: var(--muted);
+}
+
+/* Form controls — text inputs, textareas and checks share the dropdown's look.
+   Bespoke classes (higher specificity) still win where a control is special. */
+input[type="text"],
+input[type="search"],
+input[type="email"],
+input[type="password"],
+input[type="url"],
+input[type="tel"],
+input[type="number"],
+input:not([type]),
+textarea {
+  background-color: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  color: var(--text);
+  padding: var(--space-2) var(--space-3);
+  font: inherit;
+  font-size: var(--text-lg);
+  line-height: 1.4;
+  outline: none;
+}
+
+input[type="text"]::placeholder,
+input[type="search"]::placeholder,
+input[type="email"]::placeholder,
+input[type="password"]::placeholder,
+input[type="url"]::placeholder,
+input[type="tel"]::placeholder,
+input[type="number"]::placeholder,
+input:not([type])::placeholder,
+textarea::placeholder {
+  color: var(--muted);
+}
+
+input:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  width: var(--space-4);
+  height: var(--space-4);
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
 html,
 body,
 #root {
