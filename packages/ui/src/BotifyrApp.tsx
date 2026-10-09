@@ -24,6 +24,7 @@ import type {
   Session,
   Skill,
   Task,
+  TaskStep,
   User,
   WorkItem,
   WorkspaceBudget,
@@ -5182,6 +5183,17 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                                   </div>
                                 )}
                                 <Markdown text={parsed.body} onFileRef={openFileRef} />
+                                {message.goal && (
+                                  <div className="msg-task">
+                                    <div className="msg-task-head">
+                                      <span className="msg-task-label">Task</span>
+                                      <span className="msg-task-goal">{message.goal}</span>
+                                    </div>
+                                    {message.steps && message.steps.length > 0 && (
+                                      <TaskStepList steps={message.steps} />
+                                    )}
+                                  </div>
+                                )}
                                 {parsed.options.length > 0 && (
                                   <div className="quick-replies">
                                     {parsed.options.map((option, index) => (
@@ -5330,39 +5342,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                         />
                       ) : null}
 
-                      <ol className="steps">
-                        {liveTask.steps.map((step) => {
-                          const progress = step.title === "Downloads" ? downloadProgress(step.detail) : null;
-                          if (progress) {
-                            const pct = Math.round((progress.done / progress.total) * 100);
-                            return (
-                              <li key={step.id} className="step step-download">
-                                <div className="step-progress-wrap">
-                                  <div className="step-progress-head">
-                                    <span className="step-title">Downloading</span>
-                                    <span className="step-progress-count">
-                                      {progress.done} / {progress.total}
-                                    </span>
-                                  </div>
-                                  <div className="step-progress-bar">
-                                    <span style={{ width: `${pct}%` }} />
-                                  </div>
-                                </div>
-                              </li>
-                            );
-                          }
-                          const detail = stepDetail(step.title, step.detail);
-                          return (
-                            <li key={step.id} className={`step step-${step.status}`}>
-                              <span className="step-icon">{iconFor(step.status)}</span>
-                              <div>
-                                <div className="step-title">{stepLabel(step.title)}</div>
-                                {detail && <div className="step-detail">{detail}</div>}
-                              </div>
-                            </li>
-                          );
-                        })}
-                      </ol>
+                      <TaskStepList steps={liveTask.steps} />
                     </div>
                   )}
 
@@ -8377,6 +8357,48 @@ function downloadProgress(detail: string | undefined): { done: number; total: nu
   const done = Number(match[1]);
   const total = Number(match[2]);
   return total > 0 ? { done, total } : null;
+}
+
+/**
+ * The checklist of steps a task ran. Shared by the live activity panel and the
+ * finished assistant message, so both read the same way.
+ */
+function TaskStepList({ steps }: { steps: TaskStep[] }): ReactNode {
+  return (
+    <ol className="steps">
+      {steps.map((step) => {
+        const progress = step.title === "Downloads" ? downloadProgress(step.detail) : null;
+        if (progress) {
+          const pct = Math.round((progress.done / progress.total) * 100);
+          return (
+            <li key={step.id} className="step step-download">
+              <div className="step-progress-wrap">
+                <div className="step-progress-head">
+                  <span className="step-title">Downloading</span>
+                  <span className="step-progress-count">
+                    {progress.done} / {progress.total}
+                  </span>
+                </div>
+                <div className="step-progress-bar">
+                  <span style={{ width: `${pct}%` }} />
+                </div>
+              </div>
+            </li>
+          );
+        }
+        const detail = stepDetail(step.title, step.detail);
+        return (
+          <li key={step.id} className={`step step-${step.status}`}>
+            <span className="step-icon">{iconFor(step.status)}</span>
+            <div>
+              <div className="step-title">{stepLabel(step.title)}</div>
+              {detail && <div className="step-detail">{detail}</div>}
+            </div>
+          </li>
+        );
+      })}
+    </ol>
+  );
 }
 
 /** Files the built-in player can handle. */

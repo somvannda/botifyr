@@ -4484,6 +4484,46 @@ body {
   white-space: nowrap;
 }
 
+/* Finished-task checklist carried on the assistant message. */
+.msg-task {
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+
+.msg-task-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+  min-width: 0;
+}
+
+.msg-task-label {
+  flex: none;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.msg-task-goal {
+  font-size: var(--text-sm);
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.msg-task .step {
+  padding: var(--space-2);
+}
+
+.msg-task .step-title {
+  font-size: var(--text-sm);
+}
+
 .dm-file-wrap,
 .dm-media-wrap {
   display: flex;

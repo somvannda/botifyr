@@ -869,6 +869,14 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
 
   // Append the assistant's reply to the conversation transcript. A per-session
   // lock keeps concurrent group members from clobbering each other's writes.
+  // Snapshot the task's goal and steps onto the message too, so the thread can
+  // say *what* ran and show the checklist after the live task is gone (and
+  // across reloads). Long tool output is trimmed here — the full detail still
+  // lives on the task record.
+  const stepSnapshot = task.steps.map((step) => ({
+    ...step,
+    detail: step.detail && step.detail.length > 400 ? `${step.detail.slice(0, 400)}…` : step.detail,
+  }));
   try {
     await withSessionLock(task.sessionId, async () => {
       const session = await store.getSession(task.sessionId);
@@ -880,6 +888,8 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
           createdAt: new Date().toISOString(),
           taskId: task.id,
           botId: deps.author?.id,
+          goal: task.goal,
+          steps: stepSnapshot,
         });
         await store.updateSession(session);
         emit({ type: "session.updated", session });
