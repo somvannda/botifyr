@@ -220,6 +220,8 @@ describe("Composer publish lifecycle", () => {
     await screen.findByText("existing post");
 
     fireEvent.change(screen.getByLabelText("Post text"), { target: { value: "later" } });
+    fireEvent.click(screen.getByRole("button", { name: "Options" }));
+    fireEvent.click(screen.getByRole("button", { name: "Schedule for later" }));
     const when = container.querySelector<HTMLInputElement>('input[type="datetime-local"]');
     expect(when).toBeTruthy();
     fireEvent.change(when!, { target: { value: "2020-01-01T10:00" } });
@@ -237,6 +239,7 @@ describe("Composer publish lifecycle", () => {
     await screen.findByText("existing post");
 
     fireEvent.change(screen.getByLabelText("Post text"), { target: { value: "from the brand" } });
+    fireEvent.click(screen.getByRole("button", { name: "Options" }));
     fireEvent.change(screen.getByRole("combobox", { name: "Post as" }), {
       target: { value: page.id },
     });

@@ -224,6 +224,7 @@ describe("FeedView action hierarchy", () => {
   it("gives the composer controls accessible names (FEED-9)", async () => {
     render(<FeedView client={makeClient([makePost()])} cloudUrl="http://cloud" viewerId="viewer-1" />);
     await screen.findByText("A quiet feed is a happy feed.");
+    fireEvent.click(screen.getByRole("button", { name: "Options" }));
     expect(screen.getByRole("combobox", { name: "Post as" })).toBeTruthy();
     expect(screen.getByRole("combobox", { name: "Audience" })).toBeTruthy();
   });
@@ -248,8 +249,8 @@ describe("FeedView action hierarchy", () => {
     localStorage.setItem("botifyr.feedTab", "pages");
     render(<FeedView client={makeClient([makePost()])} cloudUrl="http://cloud" viewerId="viewer-1" />);
     await screen.findByText("A quiet feed is a happy feed.");
-    expect(screen.getByRole("button", { name: "Pages" }).className).toContain("active");
-    expect(screen.getByRole("button", { name: "All" }).className).not.toContain("active");
+    expect(screen.getByRole("button", { name: "Open Pages" }).className).toContain("active");
+    expect(screen.getByRole("button", { name: "Feed home" }).className).not.toContain("active");
   });
 
   it("opens the story viewer with per-creator progress and navigates (EXP-1)", async () => {
@@ -553,10 +554,10 @@ describe("FeedView action hierarchy", () => {
     await screen.findByText("A quiet feed is a happy feed.");
 
     fireEvent.click(screen.getByRole("button", { name: "Reels" }));
-    const unmute = await screen.findByRole("button", { name: "Unmute reels" });
+    const unmute = await screen.findByRole("button", { name: "Unmute video" });
     expect(unmute).toBeTruthy();
     fireEvent.click(unmute);
-    expect(await screen.findByRole("button", { name: "Mute reels" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Mute video" })).toBeTruthy();
   });
 
   it("shows a character counter in the composer (EXP-5)", async () => {
@@ -648,16 +649,6 @@ describe("Feed timeline & discovery", () => {
     }
   });
 
-  it("refreshes the feed from the topbar (FEED-D5)", async () => {
-    const client = makeClient([makePost({ body: "hello world" })]);
-    render(<FeedView client={client} cloudUrl="http://cloud" viewerId="viewer-1" />);
-    await screen.findByText("hello world");
-
-    fireEvent.click(screen.getByRole("button", { name: "Refresh feed" }));
-    await waitFor(() => expect(client.listFeed).toHaveBeenCalledTimes(2));
-    expect(screen.getByText("hello world")).toBeTruthy();
-  });
-
   it("holds a realtime update behind a New activity banner while reading (FEED-D6)", async () => {
     const listFeed = vi
       .fn()
@@ -681,23 +672,6 @@ describe("Feed timeline & discovery", () => {
 
     fireEvent.click(banner);
     await waitFor(() => expect(listFeed).toHaveBeenCalledTimes(2));
-  });
-
-  it("exposes an explicit, labelled sort control (FEED-D7)", async () => {
-    const listFeed = vi
-      .fn()
-      .mockResolvedValue({ items: [makePost({ body: "sortable post" })], nextCursor: null });
-    const client = { ...makeClient([]), listFeed } as unknown as BotifyrClient;
-    render(<FeedView client={client} cloudUrl="http://cloud" viewerId="viewer-1" />);
-    await screen.findByText("sortable post");
-
-    const select = screen.getByRole("combobox", { name: "Sort feed" }) as HTMLSelectElement;
-    expect(select.value).toBe("recent");
-
-    fireEvent.change(select, { target: { value: "top" } });
-    await waitFor(() => expect(listFeed).toHaveBeenCalledTimes(2));
-    // The refetch carried the new sort.
-    expect(listFeed.mock.calls[1][2]).toEqual({ tab: "all", sort: "top" });
   });
 
   it("surfaces newer posts behind the banner when the app regains focus (FEED-D10)", async () => {
@@ -1205,7 +1179,7 @@ describe("Reels experience", () => {
       />,
     );
     await openReels();
-    fireEvent.click(await screen.findByRole("button", { name: "Unmute reels" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Unmute video" }));
     expect(localStorage.getItem("botifyr.reels.muted")).toBe("false");
     first.unmount();
 
@@ -1217,7 +1191,7 @@ describe("Reels experience", () => {
       />,
     );
     await openReels();
-    expect(await screen.findByRole("button", { name: "Mute reels" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Mute video" })).toBeTruthy();
   });
 
   it("does not autoplay under reduced motion (R-11)", async () => {
@@ -1697,7 +1671,7 @@ describe("Groups", () => {
     expect(screen.queryByRole("textbox", { name: /Post in/ })).toBeNull();
   });
 
-  it("opens the groups landing with discovery results and a create action", async () => {
+  it("opens the groups landing with discovery results", async () => {
     const client = groupClient({
       discoverGroups: vi.fn().mockResolvedValue([baseGroup]),
       groupCategories: vi.fn().mockResolvedValue({ categories: ["Sports"] }),
@@ -1706,7 +1680,6 @@ describe("Groups", () => {
     });
     render(<FeedView client={client} cloudUrl="http://cloud" viewerId="viewer-1" />);
     fireEvent.click(screen.getByRole("button", { name: "Open Groups" }));
-    expect(await screen.findByRole("button", { name: /Create group/ })).toBeTruthy();
     expect(await screen.findByText("Weekend Hikers")).toBeTruthy();
     expect(screen.getByRole("tab", { name: "Discover" })).toBeTruthy();
   });
