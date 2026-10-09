@@ -102,6 +102,13 @@ const after = await probeBodies();
 const unique = new Set(after).size;
 results.push(`after auto-load probe posts: ${after.length} (expect 25)`);
 results.push(`unique probe posts: ${unique} (expect 25 — no duplicates)`);
+const liveText =
+  (await page
+    .locator('.visually-hidden[aria-live="polite"]')
+    .first()
+    .textContent()
+    .catch(() => "")) || "";
+results.push(`pagination live-region: "${liveText.trim()}"`);
 results.push(`end-of-feed state shown: ${sawEnd}`);
 results.push(
   `end-of-feed text: "${

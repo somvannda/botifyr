@@ -81,6 +81,14 @@ function makeClient(
     unfollowPage: vi.fn().mockResolvedValue(undefined),
     listComments: vi.fn().mockResolvedValue([]),
     listCommentsPage: vi.fn().mockResolvedValue({ items: [], nextCursor: null }),
+    getPost: vi.fn().mockImplementation((id: string) => Promise.resolve(makePost({ id }))),
+    editPost: vi
+      .fn()
+      .mockImplementation((id: string, body: string) => Promise.resolve(makePost({ id, body }))),
+    getPersonByHandle: vi.fn().mockResolvedValue({
+      person: { id: "author-1", handle: "alice", displayName: "Alice", online: false },
+      posts: [],
+    }),
     addComment: vi.fn().mockImplementation((_id: string, body: string) =>
       Promise.resolve({
         id: `comment-${body}`,
@@ -676,6 +684,22 @@ describe("Feed timeline & discovery", () => {
     expect(banner).toBeTruthy();
     // The list was NOT silently replaced — the old top is still rendered.
     expect(screen.getByText("old top post")).toBeTruthy();
+  });
+
+  it("announces newly loaded posts to screen readers (FEED-D11)", async () => {
+    const p1 = makePost({ id: "a1", body: "first page post" });
+    const p2 = makePost({ id: "a2", body: "second page post" });
+    const listFeed = vi
+      .fn()
+      .mockResolvedValueOnce({ items: [p1], nextCursor: "c1" })
+      .mockResolvedValueOnce({ items: [p2], nextCursor: null });
+    const client = { ...makeClient([]), listFeed } as unknown as BotifyrClient;
+    render(<FeedView client={client} cloudUrl="http://cloud" viewerId="viewer-1" />);
+    await screen.findByText("first page post");
+
+    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+    await screen.findByText("second page post");
+    expect(screen.getByText("1 more post loaded")).toBeTruthy();
   });
 });
 
@@ -1397,6 +1421,65 @@ describe("Post interactions", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Load more comments" }));
     expect(await screen.findByText("comment 3")).toBeTruthy();
     expect(listCommentsPage).toHaveBeenLastCalledWith("post-1", "2", 20);
+  });
+
+  it("copies a permalink from the post menu (POST-13)", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    render(<FeedView client={makeClient([makePost()])} cloudUrl="http://cloud" viewerId="viewer-1" />);
+    await screen.findByText("A quiet feed is a happy feed.");
+
+    fireEvent.click(screen.getByRole("button", { name: "More options" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Copy link" }));
+    await waitFor(() => expect(writeText).toHaveBeenCalled());
+    expect(writeText.mock.calls[0][0] as string).toContain("#post=post-1");
+    expect(await screen.findByText(/Link copied/)).toBeTruthy();
+  });
+
+  it("edits an owned post inline (POST-edit)", async () => {
+    const own = makePost({ author: { id: "viewer-1", handle: "me", displayName: "Me", online: true } });
+    const editPost = vi.fn().mockResolvedValue({ ...own, body: "Edited body" });
+    const client = { ...makeClient([own]), editPost } as unknown as BotifyrClient;
+    render(<FeedView client={client} cloudUrl="http://cloud" viewerId="viewer-1" />);
+    await screen.findByText("A quiet feed is a happy feed.");
+
+    fireEvent.click(screen.getByRole("button", { name: "More options" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Edit post" }));
+    const input = await screen.findByRole("textbox", { name: "Edit post" });
+    fireEvent.change(input, { target: { value: "Edited body" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(editPost).toHaveBeenCalledWith("post-1", "Edited body"));
+    expect(await screen.findByText("Edited body")).toBeTruthy();
+  });
+
+  it("highlights the permalink-focused post (POST-13)", async () => {
+    const { container } = render(
+      <FeedView
+        client={makeClient([makePost()])}
+        cloudUrl="http://cloud"
+        viewerId="viewer-1"
+        focusPostId="post-1"
+      />,
+    );
+    await screen.findByText("A quiet feed is a happy feed.");
+    expect(container.querySelector("article.feed-post.feed-post-focus")).toBeTruthy();
+  });
+
+  it("opens a person profile from an @mention (POST-14)", async () => {
+    const getPersonByHandle = vi.fn().mockResolvedValue({
+      person: { id: "author-1", handle: "alice", displayName: "Alice", online: false },
+      posts: [],
+    });
+    const client = {
+      ...makeClient([makePost({ body: "say hi to @alice" })]),
+      getPersonByHandle,
+    } as unknown as BotifyrClient;
+    render(<FeedView client={client} cloudUrl="http://cloud" viewerId="viewer-1" />);
+    await screen.findByText(/say hi to/);
+
+    fireEvent.click(screen.getByRole("button", { name: "@alice" }));
+    expect(await screen.findByRole("dialog", { name: "Profile for alice" })).toBeTruthy();
+    expect(getPersonByHandle).toHaveBeenCalledWith("alice");
   });
 });
 

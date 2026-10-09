@@ -202,6 +202,72 @@ describe("feed", () => {
     await app.close();
   });
 
+  it("fetches a single post and lets only the author edit it (POST detail/edit)", async () => {
+    const { app, store, signUp, auth, createPost } = await setup();
+    const alice = await signUp("alice-edit@example.com");
+    const bob = await signUp("bob-edit@example.com");
+    await store.createFriendship(alice.user.id, bob.user.id);
+    const post = await createPost(alice.token, "original text");
+
+    // GET single post (a friend may view it).
+    const got = await app.inject({
+      method: "GET",
+      url: `/v1/posts/${post.id}`,
+      headers: auth(bob.token),
+    });
+    expect(got.statusCode).toBe(200);
+    expect((got.json() as FeedPostDto).body).toBe("original text");
+
+    // Only the author may edit.
+    const denied = await app.inject({
+      method: "PATCH",
+      url: `/v1/posts/${post.id}`,
+      headers: auth(bob.token),
+      payload: { body: "hacked" },
+    });
+    expect(denied.statusCode).toBe(403);
+
+    const edited = await app.inject({
+      method: "PATCH",
+      url: `/v1/posts/${post.id}`,
+      headers: auth(alice.token),
+      payload: { body: "edited text" },
+    });
+    expect(edited.statusCode).toBe(200);
+    expect((edited.json() as FeedPostDto).body).toBe("edited text");
+    expect((await store.getPost(post.id))?.body).toBe("edited text");
+
+    await app.close();
+  });
+
+  it("resolves an @handle to a person and their posts (POST-14)", async () => {
+    const { app, store, signUp, auth, createPost } = await setup();
+    const alice = await signUp("alice-mention@example.com");
+    const bob = await signUp("bob-mention@example.com");
+    await store.createFriendship(alice.user.id, bob.user.id);
+    await store.updateUserProfile(alice.user.id, { handle: "foundalice" });
+    await createPost(alice.token, "alice post");
+
+    const found = await app.inject({
+      method: "GET",
+      url: "/v1/people/by-handle/foundalice",
+      headers: auth(bob.token),
+    });
+    expect(found.statusCode).toBe(200);
+    const body = found.json() as { person: { handle?: string }; posts: Array<{ body: string }> };
+    expect(body.person.handle).toBe("foundalice");
+    expect(body.posts.some((post) => post.body === "alice post")).toBe(true);
+
+    const missing = await app.inject({
+      method: "GET",
+      url: "/v1/people/by-handle/nobody-here",
+      headers: auth(bob.token),
+    });
+    expect(missing.statusCode).toBe(404);
+
+    await app.close();
+  });
+
   it("toggles shares and only lets the author delete a post", async () => {
     const { app, store, signUp, auth, createPost } = await setup();
     const alice = await signUp("alice-share@example.com");
