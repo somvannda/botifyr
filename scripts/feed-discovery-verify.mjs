@@ -155,13 +155,13 @@ const scrollAfter = await page.locator(".feed-scroll").evaluate((el) => el.scrol
 results.push(`scroll restoration: before=${scrollBefore}, after=${scrollAfter}`);
 await page.screenshot({ path: `${OUT}/discovery-restored.png` });
 
-// Timeline order: composer → Stories → posts (Agent 3 Phase 2).
+// Timeline order: Stories → composer → posts (tray-first).
 const order = await page.evaluate(() => {
   const composer = document.querySelector(".feed-composer");
   const stories = document.querySelector(".stories-strip");
   const post = document.querySelector(".feed-post");
   const following = (a, b) => !!a && !!b && (a.compareDocumentPosition(b) & 4) !== 0;
-  return `composer<stories=${following(composer, stories)}, stories<post=${following(stories, post)}`;
+  return `stories<composer=${following(stories, composer)}, composer<post=${following(composer, post)}`;
 });
 results.push(`timeline order: ${order}`);
 

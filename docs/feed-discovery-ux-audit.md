@@ -39,7 +39,7 @@
 
 | # | Finding | Type | Evidence | Status |
 | --- | --- | --- | --- | --- |
-| 1 | **Timeline order was Stories → Composer → posts**; the target is Composer → Stories → posts | Confirmed | source (`FeedView` render) + screenshot | **Fixed** (FEED-ORDER) |
+| 1 | **Timeline order is Stories → Composer → posts** (MediaFacebook-style story tray first) | Confirmed | source (`FeedView` render) + screenshot | **Supersedes FEED-ORDER** |
 | 2 | Pagination was a manual **Load more** button only; no end state | Confirmed | source | Fixed (FEED-D1/D2) |
 | 3 | No **de-duplication** or stale-response guard on append | Confirmed bug | source | Fixed (FEED-D3) |
 | 4 | **Scroll position lost** when returning from Page/Group/Tag/Reels | Confirmed bug | source | Fixed (FEED-D4) |
@@ -56,7 +56,8 @@ no horizontal overflow at 390/900/1680px; media now reserves space (Agent 4).
 
 ## 3. Gap analysis (ranked by impact × frequency × severity)
 
-1. **Timeline order** (Composer/Stories) — structural, every session. *Fixed.*
+1. **Timeline order** (Stories/Composer) — structural, every session. The story
+   tray is the first row, above the composer, followed by posts.
 2. **Pagination integrity** (dupes/skips/stale) — data correctness. *Fixed.*
 3. **Scroll continuity** across sub-views — every post/page visit. *Fixed.*
 4. **Freshness** (realtime + fallback) — new-content discovery. *Fixed.*
