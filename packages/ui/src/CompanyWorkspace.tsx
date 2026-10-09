@@ -160,6 +160,8 @@ export function CompanyWorkspace({
   busyRef.current = busy;
   const [tab, setTab] = useState<Section>("home");
   const [draft, setDraft] = useState("");
+  const [assignTo, setAssignTo] = useState("");
+  const [assignTask, setAssignTask] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [openFile, setOpenFile] = useState<string | null>(null);
   const [lastVisitAt, setLastVisitAt] = useState<string | null>(null);
@@ -395,6 +397,27 @@ export function CompanyWorkspace({
         .catch(() => null);
       setDraft("");
       setNotice("Sent to your CEO.");
+      setItems(await client.listWorkItems(selectedId).catch(() => items));
+    });
+  }
+
+  /** Assign a task directly to a chosen employee from the Team tab. */
+  async function assignTaskToMember() {
+    const title = assignTask.trim();
+    const role = members.find((entry) => entry.botId === assignTo) ?? members[0];
+    if (!title || !role || busy) return;
+    await withBusy(async () => {
+      await client
+        .createWorkItem(selectedId, {
+          title,
+          detail: "Directive from the founder.",
+          phase: "ongoing",
+          department: role.department,
+          assigneeBotId: role.botId,
+        })
+        .catch(() => null);
+      setAssignTask("");
+      setNotice(`Assigned to ${botName(role.botId)}.`);
       setItems(await client.listWorkItems(selectedId).catch(() => items));
     });
   }
@@ -1371,6 +1394,39 @@ export function CompanyWorkspace({
           </div>
         )}
 
+        {tab === "team" && members.length > 0 && (
+          <div className="cws-card">
+            <div className="cws-card-head">
+              <h3>Assign a task</h3>
+            </div>
+            <Select
+              className="cws-onboard-url"
+              value={assignTo || members[0]?.botId || ""}
+              onChange={(value) => setAssignTo(value)}
+              ariaLabel="Assignee"
+              options={members.map((role) => ({
+                value: role.botId,
+                label: `${botName(role.botId)} — ${role.title}`,
+              }))}
+            />
+            <input
+              className="cws-onboard-url"
+              placeholder="What should they do?"
+              value={assignTask}
+              onChange={(event) => setAssignTask(event.target.value)}
+              aria-label="Task for the employee"
+            />
+            <button
+              className="btn primary small cws-onboard-btn"
+              type="button"
+              disabled={busy || !assignTask.trim()}
+              onClick={() => void assignTaskToMember()}
+            >
+              Assign
+            </button>
+          </div>
+        )}
+
         {tab === "team" && (
           <div className="cws-card">
             <div className="cws-card-head">
@@ -1491,6 +1547,9 @@ export function CompanyWorkspace({
                   />
                   <span className="cws-work-title">{item.title}</span>
                   <span className="cws-muted">{item.phase}</span>
+                  {item.assigneeBotId && (
+                    <span className="cws-muted">{botName(item.assigneeBotId)}</span>
+                  )}
                   {item.status === "done" && (
                     <button
                       className={`cws-verify${item.verified ? " verified" : ""}`}
