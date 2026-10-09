@@ -1,0 +1,23 @@
+#!/bin/sh
+# Repo-tracked pre-push guard (AGENTS.md §9).
+#
+# `main` is the single integration point and must only move through a reviewed,
+# CI-gated PR. Blocking direct pushes here means a local `git merge` + `git push`
+# can never silently overwrite another workstream's work.
+#
+# Installed by `npm install` (package.json "prepare") or `npm run hooks:install`.
+# Intentional bypass: `git push --no-verify` (use only for an explicit, reviewed
+# reconciliation — never to land feature work).
+
+blocked="refs/heads/main"
+status=0
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  if [ "$remote_ref" = "$blocked" ]; then
+    echo "✗ pre-push: direct pushes to 'main' are blocked (AGENTS.md §9)." >&2
+    echo "  Open a PR instead:  npm run wt -- finish <slug> --message \"type: summary\"" >&2
+    status=1
+  fi
+done
+
+exit $status

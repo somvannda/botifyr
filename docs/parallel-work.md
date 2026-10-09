@@ -43,6 +43,13 @@ branches, PR + CI gate, rebase before finising, and a named owner per hot file.*
 The rules only hold if the platform enforces them. Turning this on takes a
 minute and is the difference between "protocol" and "cannot happen".
 
+> **Plan requirement.** Rulesets and classic branch protection are **not
+> available on GitHub Free for private repositories** — the API returns
+> `403 Upgrade to GitHub Pro or make this repository public`. This repo is
+> currently private on Free, so the server-side steps below are unavailable.
+> Until it is upgraded (or made public), use the free local guard in **§1b**,
+> which is already wired into `npm install`.
+
 ### 1. Branch protection / ruleset for `main`
 
 Via the GitHub UI: **Settings → Rules → Rulesets → New branch ruleset**, target
@@ -73,6 +80,22 @@ gh api --method POST repos/{owner}/{repo}/rulesets \
 
 (Add the `required_status_checks` rule with the CI job names in the UI; the exact
 JSON shape varies by GitHub version.)
+
+### 1b. Free fallback — the local `pre-push` guard
+
+When server-side protection is unavailable, a repo-tracked hook stops the single
+most damaging local mistake: pushing `main` directly (which is how one
+workstream's local merge silently replaces another's work).
+
+- `.githooks/pre-push` rejects any push that updates `refs/heads/main`.
+- `scripts/install-hooks.mjs` points Git at it (`core.hooksPath`). Every
+  `npm run wt -- new` installs it for the whole repo; run it once by hand with
+  `npm run hooks:install`.
+
+This is a guardrail, not a wall: `git push --no-verify` bypasses it, so keep it
+in place *and* upgrade to Pro for real enforcement. The hook is intentionally
+narrow — it blocks `main` only, so `wt sync` can still force-with-lease a feature
+branch.
 
 ### 2. Add the owners
 

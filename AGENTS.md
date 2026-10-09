@@ -95,11 +95,12 @@ complements §1–§3, it does not replace them.
   concurrently** — sequence the work or split ownership.
 - Prefer isolated **git worktrees** and branches for parallel work, and integrate
   through review rather than shared live edits.
-- **Enforced, not advisory.** `origin/main` is the only integration point and is
-  protected: no direct pushes, and every change needs a PR + green CI + the
-  integration owner's review. `.github/CODEOWNERS` names the owner of the hot
-  shared files, so a change there cannot merge without that review. See
-  [`docs/parallel-work.md`](docs/parallel-work.md).
+- **Enforced, not just advisory.** `origin/main` is the only integration point,
+  and the only way it moves is a PR with green CI and the integration owner's
+  review. `.github/CODEOWNERS` names the owner of the hot shared files, and a
+  repo-tracked `pre-push` hook blocks direct pushes to `main`. (Server-side branch
+  protection requires GitHub Pro on a private repo — see
+  [`docs/parallel-work.md`](docs/parallel-work.md).)
 
 **Shared contracts**
 - Verify a shared interface or export before importing it, and coordinate before

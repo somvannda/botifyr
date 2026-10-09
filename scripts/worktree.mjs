@@ -110,6 +110,10 @@ function cmdNew(root, slug, flags) {
     run(NPM, [hasLock ? "ci" : "install"], { cwd: dir });
   }
 
+  // Point Git at the repo-tracked pre-push guard (AGENTS.md §9). core.hooksPath
+  // lives in the shared git config, so this installs it for the whole repo.
+  run("node", ["scripts/install-hooks.mjs"], { cwd: dir, capture: true, allowFail: true });
+
   console.log(`\n✓ worktree ready\n  dir:    ${dir}\n  branch: ${branch} (from ${base})`);
   console.log(`  sync:   npm run wt -- sync ${slug}`);
   console.log(`  finish: npm run wt -- finish ${slug} --message "feat: …"`);
