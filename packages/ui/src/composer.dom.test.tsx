@@ -239,16 +239,17 @@ describe("Composer publish lifecycle", () => {
 
     fireEvent.change(screen.getByLabelText("Post text"), { target: { value: "from the brand" } });
     fireEvent.click(screen.getByRole("button", { name: "Options" }));
-    fireEvent.change(screen.getByRole("combobox", { name: "Post as" }), {
-      target: { value: page.id },
-    });
+    const postAs = screen.getByRole("combobox", { name: "Post as" });
+    fireEvent.pointerDown(postAs, { pointerType: "mouse" });
+    fireEvent.pointerUp(postAs, { pointerType: "mouse" });
+    fireEvent.click(await screen.findByRole("option", { name: page.name }));
     expect(await screen.findByText(/Posting as Acme/)).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Post" }));
 
     expect(await screen.findByText("Posted as Acme")).toBeTruthy();
     await waitFor(() =>
-      expect((screen.getByRole("combobox", { name: "Post as" }) as HTMLSelectElement).value).toBe(""),
+      expect(screen.getByRole("combobox", { name: "Post as" }).textContent).toContain("You"),
     );
   });
 });

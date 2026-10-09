@@ -42,6 +42,7 @@ import {
 } from "./Icons";
 import { authorEmoji, authorName, Avatar, relativeTime, resolveAvatar } from "./feedKit";
 import { StoriesStrip } from "./Stories";
+import { Select } from "./Select";
 
 /**
  * Feed — the social wall / timeline (see docs/feed.md).
@@ -2053,20 +2054,19 @@ function PageView({
                   <div className="page-head-actions">
                     <span className="feed-bot-badge">{page.role}</span>
                     {canManage && (
-                      <select
+                      <Select
                         className="page-pin-select"
-                        aria-label="Pin a post to the top"
+                        ariaLabel="Pin a post to the top"
                         value={page.pinnedPostId ?? ""}
-                        onChange={(event) => void pinPost(event.target.value || null)}
-                        title="Pin a post to the top"
-                      >
-                        <option value="">📌 Pin…</option>
-                        {posts.map((post) => (
-                          <option key={post.id} value={post.id}>
-                            {(post.body || "(photo)").slice(0, 40)}
-                          </option>
-                        ))}
-                      </select>
+                        onChange={(next) => void pinPost(next || null)}
+                        options={[
+                          { value: "", label: "📌 Pin…" },
+                          ...posts.map((post) => ({
+                            value: post.id,
+                            label: (post.body || "(photo)").slice(0, 40),
+                          })),
+                        ]}
+                      />
                     )}
                     {canModerate && (
                       <button type="button" className="feed-follow-btn" onClick={() => void openInbox()}>
@@ -2257,18 +2257,19 @@ function PageView({
                 {roleResults.map((person) => (
                   <div key={person.id} className="page-role-row">
                     <span>{person.displayName || (person.handle ? `@${person.handle}` : person.id)}</span>
-                    <select
-                      aria-label="Assign role"
+                    <Select
+                      ariaLabel="Assign role"
                       defaultValue=""
-                      onChange={(event) => {
-                        if (event.target.value) void addRole(person, event.target.value);
+                      onChange={(next) => {
+                        if (next) void addRole(person, next);
                       }}
-                    >
-                      <option value="">Add as…</option>
-                      <option value="editor">Editor</option>
-                      <option value="moderator">Moderator</option>
-                      <option value="analyst">Analyst</option>
-                    </select>
+                      options={[
+                        { value: "", label: "Add as…" },
+                        { value: "editor", label: "Editor" },
+                        { value: "moderator", label: "Moderator" },
+                        { value: "analyst", label: "Analyst" },
+                      ]}
+                    />
                   </div>
                 ))}
               </div>
@@ -4145,13 +4146,14 @@ function GroupView({
             </label>
             <label>
               Privacy
-              <select
+              <Select
                 value={form.privacy}
-                onChange={(e) => setForm({ ...form, privacy: e.target.value as "public" | "private" })}
-              >
-                <option value="public">Public — anyone can join</option>
-                <option value="private">Private — approval required</option>
-              </select>
+                onChange={(next) => setForm({ ...form, privacy: next as "public" | "private" })}
+                options={[
+                  { value: "public", label: "Public — anyone can join" },
+                  { value: "private", label: "Private — approval required" },
+                ]}
+              />
             </label>
             <label>
               Avatar emoji
@@ -4316,19 +4318,20 @@ function GroupView({
                   </span>
                   {isAdmin && !member.owner && (
                     <>
-                      <select
+                      <Select
                         className="page-pin-select"
-                        aria-label={`Role for ${member.userId}`}
+                        ariaLabel={`Role for ${member.userId}`}
                         value={member.role}
                         disabled={busyMemberId === member.userId}
-                        onChange={(e) =>
-                          void setRole(member.userId, e.target.value as "admin" | "moderator" | "member")
+                        onChange={(next) =>
+                          void setRole(member.userId, next as "admin" | "moderator" | "member")
                         }
-                      >
-                        <option value="member">Member</option>
-                        <option value="moderator">Moderator</option>
-                        <option value="admin">Admin</option>
-                      </select>
+                        options={[
+                          { value: "member", label: "Member" },
+                          { value: "moderator", label: "Moderator" },
+                          { value: "admin", label: "Admin" },
+                        ]}
+                      />
                       <button
                         type="button"
                         className="ghost small danger"
@@ -4739,13 +4742,14 @@ function GroupsView({
             </datalist>
             <label>
               Privacy
-              <select
+              <Select
                 value={form.privacy}
-                onChange={(e) => setForm({ ...form, privacy: e.target.value as "public" | "private" })}
-              >
-                <option value="public">Public — anyone can join</option>
-                <option value="private">Private — approval required</option>
-              </select>
+                onChange={(next) => setForm({ ...form, privacy: next as "public" | "private" })}
+                options={[
+                  { value: "public", label: "Public — anyone can join" },
+                  { value: "private", label: "Private — approval required" },
+                ]}
+              />
             </label>
             <div className="group-image-row">
               <div className="group-image-field">
@@ -4854,18 +4858,15 @@ function GroupsView({
                   onChange={(e) => setSearchInput(e.target.value)}
                 />
               </span>
-              <select
-                aria-label="Filter by category"
+              <Select
+                ariaLabel="Filter by category"
                 value={category}
-                onChange={(e) => setCategory(e.target.value)}
-              >
-                <option value="">All categories</option>
-                {categories.map((name) => (
-                  <option key={name} value={name}>
-                    {name}
-                  </option>
-                ))}
-              </select>
+                onChange={setCategory}
+                options={[
+                  { value: "", label: "All categories" },
+                  ...categories.map((name) => ({ value: name, label: name })),
+                ]}
+              />
             </div>
           )}
         </div>
@@ -5727,16 +5728,16 @@ export function FeedView({
           </button>
         </div>
         <span className="feed-stats-spacer" />
-        <select
+        <Select
           className="feed-sort"
-          aria-label="Sort feed"
-          title="Sort feed"
+          ariaLabel="Sort feed"
           value={sort}
-          onChange={(event) => setSort(event.target.value as "recent" | "top")}
-        >
-          <option value="recent">Most recent</option>
-          <option value="top">Top</option>
-        </select>
+          onChange={(next) => setSort(next as "recent" | "top")}
+          options={[
+            { value: "recent", label: "Most recent" },
+            { value: "top", label: "Top" },
+          ]}
+        />
         <button
           type="button"
           className="feed-composer-tool"
@@ -5864,18 +5865,15 @@ export function FeedView({
             <div id="feed-composer-options" className="feed-composer-options">
               <div className="feed-composer-as">
                 <span>Post as</span>
-                <select
-                  aria-label="Post as"
+                <Select
+                  ariaLabel="Post as"
                   value={postAs}
-                  onChange={(event) => setPostAs(event.target.value)}
-                >
-                  <option value="">You</option>
-                  {pages.map((page) => (
-                    <option key={page.id} value={page.id}>
-                      {page.name}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setPostAs}
+                  options={[
+                    { value: "", label: "You" },
+                    ...pages.map((page) => ({ value: page.id, label: page.name })),
+                  ]}
+                />
                 {creatingPage ? (
                   <>
                     <input
@@ -5903,15 +5901,16 @@ export function FeedView({
               </div>
               <div className="feed-composer-as">
                 <span>Audience</span>
-                <select
-                  aria-label="Audience"
+                <Select
+                  ariaLabel="Audience"
                   value={audience}
-                  onChange={(event) => setAudience(event.target.value as "public" | "friends" | "only_me")}
-                >
-                  <option value="public">Public</option>
-                  <option value="friends">Friends</option>
-                  <option value="only_me">Only me</option>
-                </select>
+                  onChange={(next) => setAudience(next as "public" | "friends" | "only_me")}
+                  options={[
+                    { value: "public", label: "Public" },
+                    { value: "friends", label: "Friends" },
+                    { value: "only_me", label: "Only me" },
+                  ]}
+                />
               </div>
               <div className="feed-composer-as">
                 <span>Schedule</span>

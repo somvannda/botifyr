@@ -86,6 +86,7 @@ import {
 } from "./Icons";
 import { Markdown } from "./Markdown";
 import { FeedRail, FeedView } from "./FeedView";
+import { Select } from "./Select";
 import { CompanyWorkspace } from "./CompanyWorkspace";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { P2P, deviceId, saveBlob, setIceServers } from "./p2p";
@@ -5771,11 +5772,10 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
               {activeSession.kind === "dm" && (
                 <div className="contact-row">
                   <span className="contact-row-label">Translate to</span>
-                  <select
+                  <Select
                     className="contact-select"
                     value={translateLangs[activeSession.id] ?? ""}
-                    onChange={(event) => {
-                      const value = event.target.value;
+                    onChange={(value) => {
                       setTranslateLangs((prev) => {
                         const next = { ...prev };
                         if (value) next[activeSession.id] = value;
@@ -5783,18 +5783,19 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                         return next;
                       });
                     }}
-                  >
-                    <option value="">Off</option>
-                    <option value="Khmer">Khmer</option>
-                    <option value="English">English</option>
-                    <option value="Thai">Thai</option>
-                    <option value="Vietnamese">Vietnamese</option>
-                    <option value="Chinese">Chinese</option>
-                    <option value="Japanese">Japanese</option>
-                    <option value="Korean">Korean</option>
-                    <option value="Spanish">Spanish</option>
-                    <option value="French">French</option>
-                  </select>
+                    options={[
+                      { value: "", label: "Off" },
+                      { value: "Khmer", label: "Khmer" },
+                      { value: "English", label: "English" },
+                      { value: "Thai", label: "Thai" },
+                      { value: "Vietnamese", label: "Vietnamese" },
+                      { value: "Chinese", label: "Chinese" },
+                      { value: "Japanese", label: "Japanese" },
+                      { value: "Korean", label: "Korean" },
+                      { value: "Spanish", label: "Spanish" },
+                      { value: "French", label: "French" },
+                    ]}
+                  />
                 </div>
               )}
             </div>
@@ -5839,18 +5840,18 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                 </ul>
                 {addableFriends.length > 0 && (
                   <div className="group-row">
-                    <select
+                    <Select
                       className="contact-select"
                       value={addMemberId}
-                      onChange={(event) => setAddMemberId(event.target.value)}
-                    >
-                      <option value="">Add a friend…</option>
-                      {addableFriends.map((person) => (
-                        <option key={person.id} value={person.id}>
-                          {person.displayName || person.handle || "Friend"}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={setAddMemberId}
+                      options={[
+                        { value: "", label: "Add a friend…" },
+                        ...addableFriends.map((person) => ({
+                          value: person.id,
+                          label: person.displayName || person.handle || "Friend",
+                        })),
+                      ]}
+                    />
                     <button
                       className="ghost small"
                       type="button"
@@ -7506,30 +7507,32 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                   <div className="settings-list">
                     <label className="settings-line">
                       <span>Theme</span>
-                      <select
+                      <Select
                         value={theme}
-                        onChange={(event) => {
-                          setTheme(event.target.value);
-                          localStorage.setItem("botifyr.theme", event.target.value);
+                        onChange={(next) => {
+                          setTheme(next);
+                          localStorage.setItem("botifyr.theme", next);
                         }}
-                      >
-                        <option value="system">Follow System</option>
-                        <option value="light">Light</option>
-                        <option value="dark">Dark</option>
-                      </select>
+                        options={[
+                          { value: "system", label: "Follow System" },
+                          { value: "light", label: "Light" },
+                          { value: "dark", label: "Dark" },
+                        ]}
+                      />
                     </label>
                     <label className="settings-line">
                       <span>Language</span>
-                      <select
+                      <Select
                         value={language}
-                        onChange={(event) => {
-                          setLanguage(event.target.value);
-                          localStorage.setItem("botifyr.language", event.target.value);
+                        onChange={(next) => {
+                          setLanguage(next);
+                          localStorage.setItem("botifyr.language", next);
                         }}
-                      >
-                        <option value="system">Follow System</option>
-                        <option value="en">English</option>
-                      </select>
+                        options={[
+                          { value: "system", label: "Follow System" },
+                          { value: "en", label: "English" },
+                        ]}
+                      />
                     </label>
                     <label className="settings-line">
                       <span>Check Spelling While Typing</span>
@@ -7548,9 +7551,10 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                   <div className="settings-list">
                     <label className="settings-line">
                       <span>Microphone</span>
-                      <select defaultValue="default">
-                        <option value="default">System Default</option>
-                      </select>
+                      <Select
+                        defaultValue="default"
+                        options={[{ value: "default", label: "System Default" }]}
+                      />
                     </label>
                     <label className="settings-line">
                       <span>Use hardware acceleration</span>
@@ -7642,15 +7646,16 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                   <div className="settings-section-title">Approvals</div>
                   <label className="settings-line">
                     <span>Approvals</span>
-                    <select
+                    <Select
                       value={executionMode}
-                      onChange={(event) => {
-                        void applyExecutionMode(event.target.value as "ask" | "always_allow");
+                      onChange={(next) => {
+                        void applyExecutionMode(next as "ask" | "always_allow");
                       }}
-                    >
-                      <option value="ask">Ask first</option>
-                      <option value="always_allow">Always allow</option>
-                    </select>
+                      options={[
+                        { value: "ask", label: "Ask first" },
+                        { value: "always_allow", label: "Always allow" },
+                      ]}
+                    />
                   </label>
 
                   <div className="settings-section-title">My computer</div>
@@ -7960,16 +7965,17 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                   <div className="settings-section-title">Botifyr Updates</div>
                   <label className="settings-line">
                     <span>Update Track</span>
-                    <select
+                    <Select
                       value={updateTrack}
-                      onChange={(event) => {
-                        setUpdateTrack(event.target.value);
-                        localStorage.setItem("botifyr.updateTrack", event.target.value);
+                      onChange={(next) => {
+                        setUpdateTrack(next);
+                        localStorage.setItem("botifyr.updateTrack", next);
                       }}
-                    >
-                      <option value="stable">Stable</option>
-                      <option value="beta">Beta</option>
-                    </select>
+                      options={[
+                        { value: "stable", label: "Stable" },
+                        { value: "beta", label: "Beta" },
+                      ]}
+                    />
                   </label>
                   <label className="settings-line">
                     <span>Automatic Updates</span>

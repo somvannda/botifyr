@@ -692,10 +692,12 @@ describe("Feed timeline & discovery", () => {
     render(<FeedView client={client} cloudUrl="http://cloud" viewerId="viewer-1" />);
     await screen.findByText("sortable post");
 
-    const select = screen.getByRole("combobox", { name: "Sort feed" }) as HTMLSelectElement;
-    expect(select.value).toBe("recent");
+    const trigger = screen.getByRole("combobox", { name: "Sort feed" });
+    expect(trigger.textContent).toContain("Most recent");
 
-    fireEvent.change(select, { target: { value: "top" } });
+    fireEvent.pointerDown(trigger, { pointerType: "mouse" });
+    fireEvent.pointerUp(trigger, { pointerType: "mouse" });
+    fireEvent.click(await screen.findByRole("option", { name: "Top" }));
     await waitFor(() => expect(listFeed).toHaveBeenCalledTimes(2));
     // The refetch carried the new sort.
     expect(listFeed.mock.calls[1][2]).toEqual({ tab: "all", sort: "top" });
