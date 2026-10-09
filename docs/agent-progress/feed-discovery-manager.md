@@ -69,6 +69,10 @@ and E2E checks passing.
   - 300 posts → 8,144 DOM nodes, **1 long task (73ms)**, 15 `/v1/feed` calls.
   No scroll jank at current scale, so introducing virtualization would add
   complexity without evidence.
+- **Concurrent WIP (not ours):** at the time of writing, another workstream had
+  **uncommitted** edits in `packages/ui/src/{FeedView.tsx,BotifyrApp.tsx,styles.css}`
+  that left the repo gate red (`setNonce` unused; `designSystem.test.ts`). These
+  are not part of this workstream and were left untouched per AGENTS.md §8.
 - **Known flaky test (not ours):** `FeedView.dom.test.tsx > Post interactions >
   highlights the permalink-focused post (POST-13)` fails only under a loaded
   full-suite run (it asserts on a class removed by a 2.5s timer); it passes when
