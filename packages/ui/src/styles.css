@@ -627,6 +627,27 @@ body {
   color: var(--muted);
 }
 
+/* Share sheet audience selector (Agent 1). */
+.feed-share-audience {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  font-size: var(--text-md);
+  color: var(--muted);
+}
+
+.feed-share-audience select {
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  border-radius: var(--radius-control);
+  padding: var(--space-1) var(--space-2);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
 .bottom-nav-badge {
   position: absolute;
   top: 6px;

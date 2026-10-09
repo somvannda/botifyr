@@ -667,6 +667,7 @@ function PostCard({
   const [confirm, setConfirm] = useState<null | "delete" | "block">(null);
   const [shareOpen, setShareOpen] = useState(false);
   const [shareCaption, setShareCaption] = useState("");
+  const [shareAudience, setShareAudience] = useState<"public" | "friends" | "only_me">("friends");
   const [commentError, setCommentError] = useState<string | null>(null);
   const [allCommentsShown, setAllCommentsShown] = useState(false);
   const [highlight, setHighlight] = useState(Boolean(focus));
@@ -749,7 +750,7 @@ function PostCard({
     void guard("share", async () => {
       try {
         const caption = shareCaption.trim();
-        const repost = await client.repost(post.id, caption || undefined);
+        const repost = await client.repost(post.id, caption || undefined, shareAudience);
         onRepost(repost);
         onChange({ ...post, shares: post.shares + 1, sharedByMe: true });
         setShareOpen(false);
@@ -1494,7 +1495,18 @@ function PostCard({
               aria-label="Share caption"
               autoFocus
             />
-            <p className="feed-share-note">Shared to your friends. Per-share privacy isn’t available yet.</p>
+            <div className="feed-share-audience">
+              <span>Share to</span>
+              <select
+                aria-label="Share audience"
+                value={shareAudience}
+                onChange={(event) => setShareAudience(event.target.value as "public" | "friends" | "only_me")}
+              >
+                <option value="public">Public</option>
+                <option value="friends">Friends</option>
+                <option value="only_me">Only me</option>
+              </select>
+            </div>
             <div className="feed-confirm-actions">
               <button type="button" className="feed-confirm-cancel" onClick={() => setShareOpen(false)}>
                 Cancel
@@ -1642,7 +1654,11 @@ function PageView({
   const [roleQuery, setRoleQuery] = useState("");
   const [roleResults, setRoleResults] = useState<Person[]>([]);
   const [botRoles, setBotRoles] = useState<
-    Array<{ botId: string; role: string; bot: { id: string; name: string; emoji: string; scheme: number } | null }>
+    Array<{
+      botId: string;
+      role: string;
+      bot: { id: string; name: string; emoji: string; scheme: number } | null;
+    }>
   >([]);
   const [bots, setBots] = useState<Bot[]>([]);
   const [botToAdd, setBotToAdd] = useState("");
@@ -1974,7 +1990,11 @@ function PageView({
       const bot = bots.find((entry) => entry.id === botId);
       setBotRoles((prev) => [
         ...prev.filter((entry) => entry.botId !== botId),
-        { botId, role, bot: bot ? { id: bot.id, name: bot.name, emoji: bot.emoji, scheme: bot.scheme } : null },
+        {
+          botId,
+          role,
+          bot: bot ? { id: bot.id, name: bot.name, emoji: bot.emoji, scheme: bot.scheme } : null,
+        },
       ]);
       setBotToAdd("");
     } catch {
@@ -2310,7 +2330,11 @@ function PageView({
                   <div key={entry.botId} className="page-role-row">
                     <span>{entry.bot ? `${entry.bot.emoji} ${entry.bot.name}` : entry.botId}</span>
                     <span className="feed-bot-badge">{entry.role}</span>
-                    <button type="button" className="ghost small" onClick={() => void removeBotRole(entry.botId)}>
+                    <button
+                      type="button"
+                      className="ghost small"
+                      onClick={() => void removeBotRole(entry.botId)}
+                    >
                       Remove
                     </button>
                   </div>
@@ -5750,10 +5774,7 @@ export function FeedView({
           viewerId={viewerId}
           onReplySent={onStoryReplySent}
         />
-        <form
-          className={`feed-composer${composerExpanded ? " expanded" : " collapsed"}`}
-          onSubmit={publish}
-        >
+        <form className={`feed-composer${composerExpanded ? " expanded" : " collapsed"}`} onSubmit={publish}>
           <div className="feed-composer-head">
             <span className="feed-composer-title">Create post</span>
             <button
@@ -5869,11 +5890,7 @@ export function FeedView({
               onChange={(event) => setAlbum(event.target.value)}
             />
           )}
-          <button
-            type="button"
-            className="feed-composer-drop"
-            onClick={() => fileRef.current?.click()}
-          >
+          <button type="button" className="feed-composer-drop" onClick={() => fileRef.current?.click()}>
             <CameraIcon size={22} />
             <span className="feed-composer-drop-title">Add photos or videos</span>
           </button>

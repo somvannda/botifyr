@@ -708,6 +708,38 @@ describe("feed", () => {
     await app.close();
   });
 
+  it("honours the audience on a repost (only_me stays private)", async () => {
+    const { app, store, signUp, auth, createPost, feed } = await setup();
+    const alice = await signUp("share-aud-alice@example.com");
+    const bob = await signUp("share-aud-bob@example.com");
+    await store.createFriendship(alice.user.id, bob.user.id);
+    const post = await createPost(alice.token, "original");
+
+    const shared = await app.inject({
+      method: "POST",
+      url: `/v1/posts/${post.id}/repost`,
+      headers: auth(bob.token),
+      payload: { caption: "friends only", audience: "friends" },
+    });
+    expect(shared.statusCode).toBe(201);
+    const sharedDto = shared.json() as { id: string; audience?: string };
+    expect(sharedDto.audience).toBe("friends");
+    expect((await feed(alice.token)).items.map((p) => p.id)).toContain(sharedDto.id);
+
+    const priv = await app.inject({
+      method: "POST",
+      url: `/v1/posts/${post.id}/repost`,
+      headers: auth(bob.token),
+      payload: { caption: "just me", audience: "only_me" },
+    });
+    const privDto = priv.json() as { id: string; audience?: string };
+    expect(privDto.audience).toBe("only_me");
+    expect((await feed(alice.token)).items.map((p) => p.id)).not.toContain(privDto.id);
+    expect((await feed(bob.token)).items.map((p) => p.id)).toContain(privDto.id);
+
+    await app.close();
+  });
+
   it("attaches a video and serves it with a video content-type", async () => {
     const previous = process.env.BOTIFYR_DOWNLOADS_DIR;
     const dir = join(tmpdir(), `botifyr-feed-${randomUUID()}`);
