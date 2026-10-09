@@ -1285,6 +1285,14 @@ export class PostgresStore implements Store {
     return rows[0] ? toPost(rows[0]) : null;
   }
 
+  async updatePostBody(authorId: string, id: string, body: string, updatedAt: string): Promise<boolean> {
+    const { rowCount } = await this.pool.query(
+      "UPDATE posts SET body = $1, updated_at = $2 WHERE id = $3 AND author_id = $4",
+      [body, updatedAt, id, authorId],
+    );
+    return (rowCount ?? 0) > 0;
+  }
+
   async addPostMedia(postId: string, mediaId: string, position: number, alt?: string): Promise<void> {
     await this.pool.query(
       "INSERT INTO post_media (post_id, media_id, position, alt) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING",

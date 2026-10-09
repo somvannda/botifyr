@@ -97,11 +97,11 @@ screenshots captured this session.
 | 9 | Timestamps not semantic (no `<time>`, no full date) | Low | All posts | Low | High *(code)* | Low |
 | 10 | Report gives no confirmation | Low | Reporting | Low | Medium *(code)* | Low |
 
-Backend-dependent (documented): **comment pagination is now implemented**
-(POST-12 — server `limit`/`cursor` + `listCommentsPage` + "Load more comments").
-Still blocked on **host routing / other surfaces**: copy-post-link/permalinks
-(`BotifyrApp` has no URL handling) and `@mention` profile routing (no
-person-profile surface).
+Backend-dependent items are now **implemented** (backward-compatible additions):
+comment pagination (POST-12), copy-link/permalink via `#post=<id>` host routing +
+`GET /v1/posts/:id` (POST-13), edit owned post via `PATCH /v1/posts/:id`
+(POST-16), and `@mention` mini-profiles via `GET /v1/people/by-handle/:handle`
+(POST-14).
 
 ## E. Target experience
 
@@ -138,8 +138,8 @@ person-profile surface).
 - **P2:** POST-6 repost fidelity; POST-7 broken-media fallback + video label;
   POST-8 reaction summary focusability; POST-9 semantic timestamps; POST-10
   report confirmation.
-- **P3:** comment pagination (backend), copy-link (backend), mention routing
-  (backend).
+- **P3:** comment pagination (POST-12), copy-link/permalink (POST-13), `@mention`
+  profiles (POST-14), and edit-post (POST-16) — **all done**.
 
 ## G. Engineering backlog
 
