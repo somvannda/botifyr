@@ -190,4 +190,56 @@ describe("CompanyWorkspace (DOM)", () => {
     expect(await screen.findByText(/1 run failed/i)).toBeTruthy();
     expect(screen.getByText(/model request failed \(402\)/i)).toBeTruthy();
   });
+
+  it("retries a single failed run from the failure card", async () => {
+    const retryTask = vi.fn().mockResolvedValue({ task: {} });
+    const client = fakeClient({
+      listWorkspaceActivity: vi.fn().mockResolvedValue([
+        {
+          id: "t1",
+          goal: "Draft the launch plan",
+          status: "failed",
+          error: "model request failed (400)",
+          updatedAt: "2026-01-01T00:00:00Z",
+        },
+      ]),
+      retryTask,
+    });
+    render(
+      <CompanyWorkspace
+        client={client}
+        companies={[company]}
+        bots={[]}
+        onOpenOffice={() => {}}
+        onCreated={() => {}}
+      />,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(retryTask).toHaveBeenCalledWith("t1"));
+  });
+
+  it("retries every failed run at once", async () => {
+    const retryTask = vi.fn().mockResolvedValue({ task: {} });
+    const client = fakeClient({
+      listWorkspaceActivity: vi.fn().mockResolvedValue([
+        { id: "t1", goal: "One", status: "failed", error: "boom", updatedAt: "2026-01-01T00:00:00Z" },
+        { id: "t2", goal: "Two", status: "failed", error: "boom", updatedAt: "2026-01-01T00:00:00Z" },
+      ]),
+      retryTask,
+    });
+    render(
+      <CompanyWorkspace
+        client={client}
+        companies={[company]}
+        bots={[]}
+        onOpenOffice={() => {}}
+        onCreated={() => {}}
+      />,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Retry all failed" }));
+    await waitFor(() => {
+      expect(retryTask).toHaveBeenCalledWith("t1");
+      expect(retryTask).toHaveBeenCalledWith("t2");
+    });
+  });
 });

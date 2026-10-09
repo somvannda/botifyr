@@ -428,6 +428,26 @@ export function CompanyWorkspace({
     });
   }
 
+  /** Retry: re-queue a failed run and pick its work back up. */
+  async function retryRun(runId: string) {
+    await withBusy(async () => {
+      await client.retryTask(runId).catch(() => {});
+      setActivity(await client.listWorkspaceActivity(selectedId).catch(() => activity));
+    });
+  }
+
+  /** Retry every failed run at once (e.g. after fixing the model/provider). */
+  async function retryAllFailed() {
+    await withBusy(async () => {
+      for (const run of failedRuns) {
+        await client.retryTask(run.id).catch(() => {});
+      }
+      setNotice(`Re-queued ${failedRuns.length} failed run${failedRuns.length === 1 ? "" : "s"}.`);
+      setActivity(await client.listWorkspaceActivity(selectedId).catch(() => activity));
+      setItems(await client.listWorkItems(selectedId).catch(() => items));
+    });
+  }
+
   async function saveBudget() {
     const limit = Math.max(0, Math.floor(Number(budgetInput) || 0));
     await withBusy(async () => {
@@ -1092,16 +1112,37 @@ export function CompanyWorkspace({
                   <h3>
                     ⚠ {failedRuns.length} run{failedRuns.length === 1 ? "" : "s"} failed
                   </h3>
-                  <span className="cws-muted">Check the model/provider, then retry.</span>
+                  <div className="cws-need-actions">
+                    <span className="cws-muted">Check the model/provider, then retry.</span>
+                    <button
+                      className="ghost small"
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void retryAllFailed()}
+                    >
+                      Retry all failed
+                    </button>
+                  </div>
                 </div>
                 <ul className="cws-list">
                   {failedRuns.slice(0, 3).map((run) => (
                     <li key={run.id} className="cws-need">
                       <span className="cws-need-text">{run.goal}</span>
                       {run.error && <span className="cws-error-inline">{run.error}</span>}
+                      <button
+                        className="ghost small"
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void retryRun(run.id)}
+                      >
+                        Retry
+                      </button>
                     </li>
                   ))}
                 </ul>
+                {failedRuns.length > 3 && (
+                  <span className="cws-muted">…and {failedRuns.length - 3} more</span>
+                )}
               </div>
             )}
 

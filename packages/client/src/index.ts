@@ -1181,6 +1181,15 @@ export class BotifyrClient {
     });
   }
 
+  /** Re-run a failed task in place (a company run, or a chat task). */
+  retryTask(taskId: string, local = false): Promise<{ task: Task; warning?: string }> {
+    return this.request(`/v1/tasks/${encodeURIComponent(taskId)}/retry`, {
+      method: "POST",
+      json: true,
+      body: JSON.stringify({ local }),
+    });
+  }
+
   resolveApproval(taskId: string, approvalId: string, decision: "allow" | "deny"): Promise<void> {
     return this.request(`/v1/tasks/${taskId}/approvals/${approvalId}`, {
       method: "POST",
