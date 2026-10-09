@@ -1,0 +1,23 @@
+# CODEOWNERS — who must review a change before it can merge (AGENTS.md §8).
+#
+# `main` is protected: every change lands through a PR with green CI and the
+# owner's review. The default owner is the integration owner. Add finer-grained
+# owners per workstream as the team grows; keep the hot shared files below owned
+# so a parallel workstream cannot silently overwrite another's edit.
+#
+# Syntax: <pattern>  <@user-or-team> …
+
+# Default: the integration owner reviews everything.
+*                          @somvannda
+
+# Hot shared files — the ones parallel workstreams collide on most.
+/packages/ui/src/styles.css        @somvannda
+/packages/ui/src/BotifyrApp.tsx    @somvannda
+/packages/ui/src/FeedView.tsx      @somvannda
+/apps/cloud/src/server.ts          @somvannda
+/apps/cloud/src/store/             @somvannda
+
+# Process + shared contracts: changes here affect everyone's workflow.
+/AGENTS.md                 @somvannda
+/scripts/worktree.mjs      @somvannda
+/.github/                  @somvannda
