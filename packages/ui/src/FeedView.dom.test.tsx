@@ -1708,6 +1708,43 @@ describe("Groups", () => {
     expect(await screen.findByText("Weekend Hikers")).toBeTruthy();
     expect(screen.getByRole("tab", { name: "Discover" })).toBeTruthy();
   });
+
+  it("shows a retry when the groups service fails, then recovers", async () => {
+    let fail = true;
+    const discover = vi.fn().mockImplementation(() =>
+      fail ? Promise.reject(new Error("offline")) : Promise.resolve([baseGroup]),
+    );
+    const client = groupClient({
+      discoverGroups: discover,
+      groupCategories: vi.fn().mockResolvedValue({ categories: [] }),
+      listGroups: vi.fn().mockResolvedValue([]),
+      listManagedGroups: vi.fn().mockResolvedValue([]),
+    });
+    render(<FeedView client={client} cloudUrl="http://cloud" viewerId="viewer-1" />);
+    fireEvent.click(screen.getByRole("button", { name: "Open Groups" }));
+
+    expect(await screen.findByText("Couldn't load groups")).toBeTruthy();
+    fail = false;
+    fireEvent.click(screen.getByRole("button", { name: /Try again/ }));
+    expect(await screen.findByText("Weekend Hikers")).toBeTruthy();
+  });
+
+  it("shows privacy and role chips on a group card", async () => {
+    const client = groupClient({
+      discoverGroups: vi
+        .fn()
+        .mockResolvedValue([{ ...baseGroup, privacy: "private", joined: true, role: "admin" }]),
+      groupCategories: vi.fn().mockResolvedValue({ categories: ["Sports"] }),
+      listGroups: vi.fn().mockResolvedValue([]),
+      listManagedGroups: vi.fn().mockResolvedValue([]),
+    });
+    render(<FeedView client={client} cloudUrl="http://cloud" viewerId="viewer-1" />);
+    fireEvent.click(screen.getByRole("button", { name: "Open Groups" }));
+
+    expect(await screen.findByText("Weekend Hikers")).toBeTruthy();
+    expect(screen.getByText("Private")).toBeTruthy();
+    expect(screen.getByText("admin")).toBeTruthy();
+  });
 });
 
 describe("Feed sidebar — friend requests (Agent 1)", () => {
