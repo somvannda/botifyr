@@ -300,4 +300,34 @@ describe("CompanyWorkspace (DOM)", () => {
       }),
     );
   });
+
+  it("renders wiki files as readable markdown, not raw source", async () => {
+    const client = fakeClient({
+      listWorkspaceFiles: vi.fn().mockResolvedValue([
+        {
+          id: "f1",
+          workspaceId: "ws1",
+          name: "PLAN.md",
+          content: "## Goal\nProve demand for **local** services.",
+          createdAt: "",
+          updatedAt: "",
+        },
+      ]),
+    });
+    render(
+      <CompanyWorkspace
+        client={client}
+        companies={[company]}
+        bots={[]}
+        onOpenOffice={() => {}}
+        onCreated={() => {}}
+      />,
+    );
+    fireEvent.click(await screen.findByRole("tab", { name: "Wiki" }));
+    fireEvent.click(await screen.findByRole("button", { name: /PLAN\.md/ }));
+    // The heading is rendered as a heading, and the `##` source is gone.
+    expect(await screen.findByRole("heading", { name: "Goal" })).toBeTruthy();
+    expect(screen.queryByText("## Goal")).toBeNull();
+    expect(screen.getByText("local").tagName).toBe("STRONG");
+  });
 });

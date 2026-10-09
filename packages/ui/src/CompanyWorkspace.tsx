@@ -25,6 +25,7 @@ import {
   SparkIcon,
   StopIcon,
 } from "./Icons";
+import { Markdown } from "./Markdown";
 import { Select } from "./Select";
 
 const ROLE_BY_ID = new Map(ROLE_CATALOG.map((role) => [role.id, role]));
@@ -1744,7 +1745,23 @@ export function CompanyWorkspace({
                     <span className="cws-caret">{openFile === file.name ? "▾" : "▸"}</span>
                     {file.name}
                   </button>
-                  {openFile === file.name && <pre className="cws-pre">{file.content || "(empty)"}</pre>}
+                  {openFile === file.name && (
+                    <div className="cws-wiki-body">
+                      {file.content ? (
+                        <Markdown
+                          text={file.content}
+                          onFileRef={(name) => {
+                            const target = wiki.find(
+                              (entry) => entry.name.toLowerCase() === name.toLowerCase(),
+                            );
+                            if (target) setOpenFile(target.name);
+                          }}
+                        />
+                      ) : (
+                        <p className="cws-muted">(empty)</p>
+                      )}
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>

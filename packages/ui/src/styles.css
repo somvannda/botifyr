@@ -12021,6 +12021,38 @@ a.feed-follow-btn {
   overflow: auto;
 }
 
+.cws-wiki-body {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  max-height: 420px;
+  overflow: auto;
+}
+
+.cws-wiki-body .md {
+  font-size: var(--text-lg);
+  line-height: 1.6;
+}
+
+.cws-wiki-body .md h3 {
+  font-size: var(--text-3xl);
+}
+
+.cws-wiki-body .md h4 {
+  font-size: var(--text-2xl);
+}
+
+.cws-wiki-body .md h5 {
+  font-size: var(--text-lg);
+}
+
+.cws-wiki-body .md h3:first-child,
+.cws-wiki-body .md h4:first-child,
+.cws-wiki-body .md h5:first-child {
+  margin-top: 0;
+}
+
 .cws-need {
   display: flex;
   align-items: center;
