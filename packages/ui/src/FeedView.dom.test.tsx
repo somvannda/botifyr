@@ -284,6 +284,37 @@ describe("FeedView action hierarchy", () => {
     expect(screen.getAllByRole("button", { name: /Bob/ })).toHaveLength(1);
   });
 
+  it("prefetches only the next story's image (EXP-1)", async () => {
+    const stories = [
+      makeStory("a1", "Alice", "author-alice", new Date(Date.now() - 2000).toISOString()),
+      makeStory("a2", "Alice", "author-alice", new Date(Date.now() - 1000).toISOString()),
+    ];
+    // The second story carries an image, so it is prefetchable while the first plays.
+    stories[1] = { ...stories[1], imageUrl: "/v1/feed/image?t=next" };
+
+    const requested: string[] = [];
+    class MockImage {
+      decoding = "";
+      #src = "";
+      set src(value: string) {
+        requested.push(value);
+        this.#src = value;
+      }
+      get src() {
+        return this.#src;
+      }
+    }
+    vi.stubGlobal("Image", MockImage);
+    try {
+      render(<FeedView client={makeClient([], { stories })} cloudUrl="http://cloud" viewerId="viewer-1" />);
+      fireEvent.click(await screen.findByRole("button", { name: /Alice/ }));
+      await screen.findByRole("dialog", { name: /Story by Alice/ });
+      await waitFor(() => expect(requested).toContain("http://cloud/v1/feed/image?t=next"));
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("dims a story tile once viewed (EXP-2)", async () => {
     const stories = [makeStory("s1", "Alice")];
     const { container } = render(
