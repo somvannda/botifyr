@@ -446,6 +446,26 @@ CREATE TABLE IF NOT EXISTS group_members (
 );
 CREATE INDEX IF NOT EXISTS group_members_user_idx ON group_members (user_id);
 
+/* Group discovery: privacy, category and images. */
+ALTER TABLE groups ADD COLUMN IF NOT EXISTS category TEXT;
+ALTER TABLE groups ADD COLUMN IF NOT EXISTS privacy TEXT NOT NULL DEFAULT 'public';
+ALTER TABLE groups ADD COLUMN IF NOT EXISTS cover_url TEXT;
+ALTER TABLE groups ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+CREATE INDEX IF NOT EXISTS groups_privacy_idx ON groups (privacy, created_at DESC);
+CREATE INDEX IF NOT EXISTS groups_category_idx ON groups (category);
+
+/* Join requests for private groups (approve/reject before becoming a member). */
+CREATE TABLE IF NOT EXISTS group_join_requests (
+  group_id   TEXT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+  user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  status     TEXT NOT NULL DEFAULT 'pending',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (group_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS group_join_requests_group_idx ON group_join_requests (group_id, status);
+CREATE INDEX IF NOT EXISTS group_join_requests_user_idx ON group_join_requests (user_id, status);
+
 ALTER TABLE posts ADD COLUMN IF NOT EXISTS group_id TEXT REFERENCES groups(id) ON DELETE SET NULL;
 
 /* Stories: 24-hour ephemeral posts (docs/feed-next.md §FR-13). */

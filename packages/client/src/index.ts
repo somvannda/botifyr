@@ -172,10 +172,40 @@ export interface Group {
   name: string;
   about?: string;
   avatarEmoji?: string;
+  /** Uploaded profile photo (data URL or signed media path). */
+  avatarUrl?: string;
+  /** Cover/banner image. */
+  coverUrl?: string;
+  category?: string;
+  /** Public groups anyone may join; private groups require approval. */
+  privacy: "public" | "private";
   ownerId: string;
   members: number;
   joined: boolean;
+  /** The viewer's role, or null when not a member. */
+  role: "admin" | "moderator" | "member" | null;
+  /** True when the viewer owns the group. */
+  owner: boolean;
+  /** True when the viewer has a pending request to join. */
+  requestPending: boolean;
   createdAt: string;
+  updatedAt: string;
+}
+
+/** A group member with their role and (best-effort) profile. */
+export interface GroupMember {
+  userId: string;
+  role: "admin" | "moderator" | "member";
+  owner: boolean;
+  person: Person | null;
+}
+
+/** A pending request to join a private group. */
+export interface GroupJoinRequest {
+  userId: string;
+  status: "pending" | "approved" | "rejected";
+  createdAt: string;
+  person: Person | null;
 }
 
 /** A 24-hour ephemeral story. */
@@ -1513,8 +1543,62 @@ export class BotifyrClient {
     return this.request("/v1/groups");
   }
 
-  createGroup(input: { name: string; about?: string; avatarEmoji?: string }): Promise<Group> {
+  /** Groups the viewer owns (the ones they administer). */
+  listManagedGroups(): Promise<Group[]> {
+    return this.request("/v1/groups/managed");
+  }
+
+  /** Public-group discovery with optional search + category filter. */
+  discoverGroups(opts?: { query?: string; category?: string; limit?: number; offset?: number }): Promise<Group[]> {
+    const params = new URLSearchParams();
+    if (opts?.query) params.set("q", opts.query);
+    if (opts?.category) params.set("category", opts.category);
+    if (opts?.limit) params.set("limit", String(opts.limit));
+    if (opts?.offset) params.set("offset", String(opts.offset));
+    const qs = params.toString();
+    return this.request(`/v1/groups/discover${qs ? `?${qs}` : ""}`);
+  }
+
+  /** Categories present across public groups. */
+  groupCategories(): Promise<{ categories: string[] }> {
+    return this.request("/v1/groups/categories");
+  }
+
+  createGroup(input: {
+    name: string;
+    handle?: string;
+    about?: string;
+    avatarEmoji?: string;
+    avatarUrl?: string;
+    coverUrl?: string;
+    category?: string;
+    privacy?: "public" | "private";
+  }): Promise<Group> {
     return this.request("/v1/groups", { method: "POST", json: true, body: JSON.stringify(input) });
+  }
+
+  updateGroup(
+    id: string,
+    input: {
+      name?: string;
+      handle?: string;
+      about?: string;
+      avatarEmoji?: string;
+      avatarUrl?: string;
+      coverUrl?: string;
+      category?: string;
+      privacy?: "public" | "private";
+    },
+  ): Promise<Group> {
+    return this.request(`/v1/groups/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      json: true,
+      body: JSON.stringify(input),
+    });
+  }
+
+  deleteGroup(id: string): Promise<void> {
+    return this.request(`/v1/groups/${encodeURIComponent(id)}`, { method: "DELETE" });
   }
 
   getGroup(handle: string): Promise<Group> {
@@ -1525,12 +1609,53 @@ export class BotifyrClient {
     return this.request(`/v1/groups/${encodeURIComponent(handle)}/posts`);
   }
 
-  joinGroup(id: string): Promise<{ ok: boolean }> {
+  /** Join a public group, or request to join a private one. */
+  joinGroup(id: string): Promise<{ ok: boolean; status: "joined" | "pending" }> {
     return this.request(`/v1/groups/${id}/join`, { method: "POST", json: true, body: "{}" });
   }
 
   leaveGroup(id: string): Promise<void> {
     return this.request(`/v1/groups/${id}/join`, { method: "DELETE" });
+  }
+
+  groupMembers(id: string): Promise<GroupMember[]> {
+    return this.request(`/v1/groups/${id}/members`);
+  }
+
+  /** Assign a member's role (owner/admin only). */
+  setGroupMemberRole(id: string, userId: string, role: "admin" | "moderator" | "member"): Promise<{ ok: boolean }> {
+    return this.request(`/v1/groups/${id}/members/${encodeURIComponent(userId)}`, {
+      method: "PUT",
+      json: true,
+      body: JSON.stringify({ role }),
+    });
+  }
+
+  removeGroupMember(id: string, userId: string): Promise<void> {
+    return this.request(`/v1/groups/${id}/members/${encodeURIComponent(userId)}`, { method: "DELETE" });
+  }
+
+  /** Pending join requests (owner/admin only). */
+  groupRequests(id: string): Promise<GroupJoinRequest[]> {
+    return this.request(`/v1/groups/${id}/requests`);
+  }
+
+  /** Approve or reject a join request (owner/admin only). */
+  resolveGroupRequest(id: string, userId: string, action: "approve" | "reject"): Promise<{ ok: boolean }> {
+    return this.request(`/v1/groups/${id}/requests/${encodeURIComponent(userId)}`, {
+      method: "POST",
+      json: true,
+      body: JSON.stringify({ action }),
+    });
+  }
+
+  /** Add someone to a group directly (owner/admin only). */
+  inviteToGroup(id: string, userId: string): Promise<{ ok: boolean }> {
+    return this.request(`/v1/groups/${id}/invite`, {
+      method: "POST",
+      json: true,
+      body: JSON.stringify({ userId }),
+    });
   }
 
   /* Post controls (FR-10). */

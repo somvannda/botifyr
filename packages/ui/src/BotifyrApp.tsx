@@ -1252,6 +1252,27 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
         pushToast({ kind: "message", title, body: `${who} ${verb} your post.`, feed: true });
         break;
       }
+      case "group.request": {
+        if (event.toUserId !== user?.id) break;
+        const who = event.fromName?.trim() || "Someone";
+        pushToast({
+          kind: "message",
+          title: "Join request",
+          body: `${who} wants to join ${event.groupName}.`,
+          feed: true,
+        });
+        break;
+      }
+      case "group.joined": {
+        if (event.toUserId !== user?.id) break;
+        pushToast({
+          kind: "message",
+          title: "You're in",
+          body: `You've been added to ${event.groupName}.`,
+          feed: true,
+        });
+        break;
+      }
     }
   }
 
@@ -4569,6 +4590,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
             onOpenMarketplace={() => setShowConnectApps(true)}
             onStoryReplySent={openStoryConversation}
             focusPostId={feedFocusPost}
+            onChanged={() => setFeedRefresh((prev) => prev + 1)}
           />
         )}
         {startupsActive && (
@@ -5927,6 +5949,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
           <div className="feed-rail-title">Discover</div>
           <FeedRail
             client={client}
+            refreshKey={feedRefresh}
             onOpenPage={openFeedPage}
             onOpenGroup={setFeedGroup}
             onOpenAlbum={setFeedAlbum}

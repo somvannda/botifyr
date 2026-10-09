@@ -670,11 +670,13 @@ export type ServerEvent =
   | { type: "presence"; userId: string; online: boolean; toUserId: string }
   | { type: "typing"; sessionId: string; userId: string; toUserId: string }
   | { type: "friend.request"; requestId: string; fromUserId: string; toUserId: string }
-  | { type: "feed.post"; postId: string; authorId: string }
+  | { type: "feed.post"; postId: string; authorId: string; toUserIds?: string[] }
   | { type: "feed.like"; postId: string; fromUserId: string; fromName?: string; toUserId: string }
   | { type: "feed.comment"; postId: string; fromUserId: string; fromName?: string; toUserId: string }
   | { type: "feed.share"; postId: string; fromUserId: string; fromName?: string; toUserId: string }
   | { type: "feed.mention"; postId: string; fromUserId: string; fromName?: string; toUserId: string }
+  | { type: "group.request"; groupId: string; groupName: string; fromUserId: string; fromName?: string; toUserId: string }
+  | { type: "group.joined"; groupId: string; groupName: string; toUserId: string }
   | { type: "p2p.signal"; toUserId: string; to: string; from: string; data: unknown }
   | { type: "task.completed"; task: Task }
   | { type: "task.failed"; task: Task };

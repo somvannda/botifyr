@@ -326,7 +326,12 @@ describe("Newly published posts render through the shared card", () => {
       ownerId: "o1",
       members: 3,
       joined: true,
+      privacy: "public",
+      role: "member",
+      owner: false,
+      requestPending: false,
       createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     };
     const client = makeClient({
       getGroup: vi.fn().mockResolvedValue(group),
