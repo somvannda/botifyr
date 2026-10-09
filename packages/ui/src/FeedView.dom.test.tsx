@@ -66,6 +66,7 @@ function makeClient(
     muteAuthor: vi.fn().mockResolvedValue(undefined),
     hidePost: vi.fn().mockResolvedValue(undefined),
     savePost: vi.fn().mockResolvedValue(undefined),
+    viewPost: vi.fn().mockResolvedValue(undefined),
     deletePost: vi.fn().mockResolvedValue(undefined),
     likePost: vi.fn().mockResolvedValue(undefined),
     repost: vi.fn().mockResolvedValue(makePost()),

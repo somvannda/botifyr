@@ -694,6 +694,8 @@ function PostCard({
   const reactionCloseTimer = useRef<number | null>(null);
   const likeBtnRef = useRef<HTMLButtonElement>(null);
   const articleRef = useRef<HTMLElement>(null);
+  /** One impression per mount, so scrolling past a card doesn't spam the API. */
+  const impressionRef = useRef(false);
 
   // Permalink focus: when this card is the URL target, scroll to it and flash.
   useEffect(() => {
@@ -703,6 +705,27 @@ function PostCard({
     const timer = window.setTimeout(() => setHighlight(false), 2500);
     return () => window.clearTimeout(timer);
   }, [focus]);
+
+  // Record an impression once the card is actually seen (Dashboard ▸ Reach).
+  // A viewer's own posts are skipped so reach reflects other people.
+  useEffect(() => {
+    if (impressionRef.current) return;
+    if (!viewerId || post.author.id === viewerId) return;
+    const node = articleRef.current;
+    if (!node || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          impressionRef.current = true;
+          void client.viewPost(post.id).catch(() => {});
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.5 },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [client, post.id, post.author.id, viewerId]);
 
   /** Run an optimistic action once; roll back + surface failures in the UI. */
   async function guard(key: string, task: () => Promise<void>): Promise<void> {

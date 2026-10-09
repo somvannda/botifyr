@@ -54,6 +54,7 @@ function makeClient(overrides: Record<string, unknown> = {}): BotifyrClient {
     savePostDraft: vi.fn().mockResolvedValue({ ok: true }),
     deletePostDraft: vi.fn().mockResolvedValue({ ok: true }),
     listSaved: vi.fn().mockResolvedValue([]),
+    viewPost: vi.fn().mockResolvedValue(undefined),
     listMemories: vi.fn().mockResolvedValue([]),
     listBirthdays: vi.fn().mockResolvedValue([]),
     listUserPosts: vi.fn().mockResolvedValue([]),
