@@ -102,7 +102,11 @@ excluded from public reads. The Page view has a **Community** panel.
 `POST /v1/posts/:id/vote`, a composer poll editor (2–4 options), and result bars
 with percentages + the viewer's vote.
 
-**Everything else** in this document (stories, groups, live, …) is **not started**.
+**Stories (FR-13) — done.** A `stories` table (24-hour expiry), `createStory` /
+`listActiveStories`, `POST`/`GET /v1/stories`, and a feed **stories strip** with a
+viewer overlay. Image/text stories; expiration is enforced on read.
+
+**Everything else** in this document (groups, live, …) is **not started**.
 
 > **Reconciled with the product as of Oct 2026.** Facebook's reference section
 > (§1) reflects its 2026 behaviour; §2 and §5 note where Botifyr has already moved

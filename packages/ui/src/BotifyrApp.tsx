@@ -3508,15 +3508,30 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
         text={text}
         onOpenImage={openLightbox}
         onOpenFile={(url) => void openExternal(url)}
-        onTranscribe={(tok) =>
-          client
+        onTranscribe={(tok) => {
+          // Cache transcripts per media token so reloads don't recompute them.
+          const cacheKey = `botifyr.transcript.${tok}`;
+          try {
+            const cached = localStorage.getItem(cacheKey);
+            if (cached) return Promise.resolve(cached);
+          } catch {
+            // ignore storage errors
+          }
+          return client
             .transcribe(tok)
-            .then((result) => result.text)
+            .then((result) => {
+              try {
+                localStorage.setItem(cacheKey, result.text);
+              } catch {
+                // ignore quota errors
+              }
+              return result.text;
+            })
             .catch((err: unknown) => {
               noteModelError(err);
               throw err;
-            })
-        }
+            });
+        }}
       />
     ) : null;
   }

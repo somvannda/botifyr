@@ -81,6 +81,8 @@ export interface PostRecord {
   pageId?: string;
   /** Set when this post is a repost (share) of another post. */
   repostOf?: string;
+  /** Set when the post belongs to a group. */
+  groupId?: string;
   /** Who can see the post (docs/feed-next.md §FR-7). Defaults to friends. */
   audience?: "public" | "friends" | "only_me";
   /** Future publish time; hidden from others until then (docs/feed-next.md §FR-19). */
@@ -128,6 +130,24 @@ export interface PollRecord {
   myVote: string | null;
   closesAt?: string;
   closed: boolean;
+}
+
+/** A group: a community with members and its own post stream. */
+export interface GroupRecord {
+  id: string;
+  ownerId: string;
+  name: string;
+  handle: string;
+  about?: string;
+  avatarEmoji?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GroupMemberRecord {
+  groupId: string;
+  userId: string;
+  role: "admin" | "member";
 }
 
 /** A 24-hour ephemeral story (docs/feed-next.md §FR-13). */
@@ -438,6 +458,19 @@ export interface Store {
   /** Set/replace the viewer's reaction, or clear it with `null`. */
   setPostReaction(postId: string, userId: string, reaction: ReactionType | null): Promise<void>;
   setCommentReaction(commentId: string, userId: string, reaction: ReactionType | null): Promise<void>;
+  /* Groups */
+  createGroup(record: GroupRecord): Promise<void>;
+  getGroup(id: string): Promise<GroupRecord | null>;
+  getGroupByHandle(handle: string): Promise<GroupRecord | null>;
+  /** Groups this user belongs to. */
+  listGroupsForUser(userId: string): Promise<GroupRecord[]>;
+  updateGroup(record: GroupRecord): Promise<void>;
+  deleteGroup(ownerId: string, id: string): Promise<boolean>;
+  setGroupMember(record: GroupMemberRecord): Promise<void>;
+  deleteGroupMember(groupId: string, userId: string): Promise<boolean>;
+  isGroupMember(groupId: string, userId: string): Promise<boolean>;
+  listGroupMembers(groupId: string): Promise<GroupMemberRecord[]>;
+
   /* Stories (docs/feed-next.md §FR-13) */
   createStory(record: StoryRecord): Promise<void>;
   /** Unexpired stories by any of `authorIds`, newest first. */

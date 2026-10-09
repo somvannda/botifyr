@@ -14,7 +14,7 @@ Status legend: ✅ done · 🚧 in progress · ⬜ not started
 | 3 | Group management (rename, add/remove, leave) | Feature | ✅ |
 | 4 | Read receipts + message reactions | Feature | 🚧 |
 | 5 | Light-theme audit of the new chat surfaces | Improvement | ✅ |
-| 6 | Cached transcripts (persist transcription on the message) | Improvement | ⬜ |
+| 6 | Cached transcripts (persist transcription on the message) | Improvement | ✅ |
 
 ---
 
@@ -67,10 +67,13 @@ Audited the new surfaces (`.contact-panel`, `.contact-*`, `.group-*`,
 intentional cases: white text on the accent play button / recording state, and
 the lightbox's dark scrim (kept dark in both themes). No changes required.
 
-## 6. Cached transcripts
+## 6. Cached transcripts (done)
 
-`/v1/transcribe` computes a transcript each time. Persist it on the message (or
-a side table keyed by media token) so it survives reloads and isn't recomputed.
+Transcripts are cached per media token in `localStorage["botifyr.transcript.<token>"]`
+by the `onTranscribe` wrapper, so a reload shows the cached text instead of
+calling `/v1/transcribe` again. (Server-side persistence keyed by media id is a
+larger change — the `media` table has explicit columns and no JSON blob — so this
+is the client-side cache.)
 
 ---
 

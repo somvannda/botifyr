@@ -676,6 +676,38 @@ describe("feed", () => {
     await app.close();
   });
 
+  it("creates a story that expires after 24 hours", async () => {
+    const { app, store, signUp, auth } = await setup();
+    const alice = await signUp("alice-story@example.com");
+    const bob = await signUp("bob-story@example.com");
+    await store.createFriendship(alice.user.id, bob.user.id);
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/v1/stories",
+      headers: auth(alice.token),
+      payload: { caption: "hello story" },
+    });
+    expect(created.statusCode).toBe(201);
+
+    const list = await app.inject({ method: "GET", url: "/v1/stories", headers: auth(bob.token) });
+    expect(list.statusCode).toBe(200);
+    expect((list.json() as Array<{ caption: string }>).some((story) => story.caption === "hello story")).toBe(true);
+
+    // An expired story is not shown.
+    await store.createStory({
+      id: "expired-story",
+      authorId: alice.user.id,
+      caption: "old story",
+      createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+      expiresAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+    });
+    const after = await app.inject({ method: "GET", url: "/v1/stories", headers: auth(bob.token) });
+    expect((after.json() as Array<{ caption: string }>).some((story) => story.caption === "old story")).toBe(false);
+
+    await app.close();
+  });
+
   it("supports reactions on comments", async () => {
     const { app, store, signUp, auth, createPost } = await setup();
     const alice = await signUp("alice-creact@example.com");

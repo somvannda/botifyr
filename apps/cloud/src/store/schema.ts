@@ -400,6 +400,30 @@ CREATE TABLE IF NOT EXISTS post_shares (
   PRIMARY KEY (post_id, user_id)
 );
 
+/* Groups: communities with their own post stream. */
+CREATE TABLE IF NOT EXISTS groups (
+  id           TEXT PRIMARY KEY,
+  owner_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name         TEXT NOT NULL,
+  handle       TEXT NOT NULL,
+  about        TEXT,
+  avatar_emoji TEXT,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS groups_handle_idx ON groups (lower(handle));
+
+CREATE TABLE IF NOT EXISTS group_members (
+  group_id   TEXT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+  user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  role       TEXT NOT NULL DEFAULT 'member',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (group_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS group_members_user_idx ON group_members (user_id);
+
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS group_id TEXT REFERENCES groups(id) ON DELETE SET NULL;
+
 /* Stories: 24-hour ephemeral posts (docs/feed-next.md §FR-13). */
 CREATE TABLE IF NOT EXISTS stories (
   id         TEXT PRIMARY KEY,
