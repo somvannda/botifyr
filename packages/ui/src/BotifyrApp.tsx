@@ -344,6 +344,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const seenRequestsRef = useRef<Set<string>>(new Set());
   const requestsSeededRef = useRef(false);
   const notifWrapRef = useRef<HTMLDivElement | null>(null);
+  const accountMenuRef = useRef<HTMLDivElement | null>(null);
+  const accountBtnRef = useRef<HTMLButtonElement | null>(null);
   const dmKeysRef = useRef<Map<string, CryptoKey>>(new Map());
   const myKeysRef = useRef<DeviceKeyPair | null>(null);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
@@ -1144,6 +1146,19 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
   }, [notifOpen]);
+
+  // Close the account menu when clicking anywhere outside it (or its trigger).
+  useEffect(() => {
+    if (!showAccountMenu) return;
+    const onDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (accountMenuRef.current?.contains(target)) return;
+      if (accountBtnRef.current?.contains(target)) return;
+      setShowAccountMenu(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [showAccountMenu]);
 
   const getDmKey = useCallback(
     async (session: { id: string; participants?: string[] }): Promise<CryptoKey | null> => {
@@ -4104,6 +4119,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
         <footer className="sidebar-footer">
           <button
             className="sidebar-account"
+            ref={accountBtnRef}
             type="button"
             title={`${user.email} · ${connection === "online" ? "Connected" : connection === "connecting" ? "Connecting…" : "Offline"}`}
             onClick={() => setShowAccountMenu((value) => !value)}
@@ -4143,7 +4159,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
         </footer>
 
         {showAccountMenu && (
-          <div className="account-menu">
+          <div className="account-menu" ref={accountMenuRef}>
             <button
               className="account-item"
               type="button"
