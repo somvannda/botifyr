@@ -710,7 +710,7 @@ describe("Feed timeline & discovery", () => {
     expect(screen.getByText("1 more post loaded")).toBeTruthy();
   });
 
-  it("orders the timeline as composer → Stories → posts (FEED-ORDER)", async () => {
+  it("orders the timeline as Stories → composer → posts (FEED-ORDER)", async () => {
     const client = makeClient([makePost({ body: "order post" })], {
       stories: [makeStory("s1", "Alice")],
     });
@@ -722,9 +722,9 @@ describe("Feed timeline & discovery", () => {
     const stories = container.querySelector(".stories-strip") as HTMLElement;
     const post = container.querySelector(".feed-post") as HTMLElement;
     const FOLLOWING = 4; // Node.DOCUMENT_POSITION_FOLLOWING
-    // Composer first, then Stories, then the post.
-    expect(composer.compareDocumentPosition(stories) & FOLLOWING).toBeTruthy();
-    expect(stories.compareDocumentPosition(post) & FOLLOWING).toBeTruthy();
+    // Stories first, then the composer, then the posts.
+    expect(stories.compareDocumentPosition(composer) & FOLLOWING).toBeTruthy();
+    expect(composer.compareDocumentPosition(post) & FOLLOWING).toBeTruthy();
   });
 });
 
