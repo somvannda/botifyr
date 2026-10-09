@@ -1200,6 +1200,75 @@ function ReelsView({
   );
 }
 
+function AlbumView({
+  client,
+  cloudUrl,
+  viewerId,
+  name,
+  onBack,
+}: {
+  client: BotifyrClient;
+  cloudUrl: string;
+  viewerId?: string;
+  name: string;
+  onBack: () => void;
+}) {
+  const [posts, setPosts] = useState<FeedPost[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    client
+      .listAlbumPosts(name)
+      .then((list) => {
+        if (active) setPosts(list);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [client, name]);
+
+  const updatePost = (next: FeedPost) => setPosts((prev) => prev.map((p) => (p.id === next.id ? next : p)));
+  const removePost = (id: string) => setPosts((prev) => prev.filter((p) => p.id !== id));
+
+  return (
+    <div className="feed">
+      <div className="feed-topbar">
+        <button type="button" className="ghost small" onClick={onBack}>
+          ← Back
+        </button>
+        <span className="feed-topbar-title">📷 {name}</span>
+      </div>
+      <div className="feed-scroll">
+        {loading ? (
+          <div className="feed-state">Loading…</div>
+        ) : posts.length === 0 ? (
+          <div className="feed-state">No photos in this album.</div>
+        ) : (
+          posts.map((post) => (
+            <PostCard
+              key={post.id}
+              post={post}
+              client={client}
+              cloudUrl={cloudUrl}
+              canDelete={!post.pageId && post.author.id === viewerId}
+              onChange={updatePost}
+              onDelete={removePost}
+              onBlock={(authorId) => setPosts((prev) => prev.filter((p) => p.author.id !== authorId))}
+              onRepost={(next) => setPosts((prev) => [next, ...prev])}
+            />
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
 function GroupView({
   client,
   cloudUrl,
@@ -1351,6 +1420,8 @@ export function FeedView({
   onOpenPage,
   groupHandle,
   onOpenGroup,
+  albumName,
+  onOpenAlbum,
 }: {
   client: BotifyrClient;
   viewerId?: string;
@@ -1363,6 +1434,9 @@ export function FeedView({
   /** When set, show this Group's stream instead of the feed. */
   groupHandle?: string | null;
   onOpenGroup?: (handle: string | null) => void;
+  /** When set, show this album instead of the feed. */
+  albumName?: string | null;
+  onOpenAlbum?: (name: string | null) => void;
 }) {
   const [posts, setPosts] = useState<FeedPost[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1374,6 +1448,7 @@ export function FeedView({
   const [attachments, setAttachments] = useState<Array<{ name: string; mime: string; data: string }>>([]);
   const [audience, setAudience] = useState<"public" | "friends" | "only_me">("friends");
   const [scheduledAt, setScheduledAt] = useState("");
+  const [album, setAlbum] = useState("");
   const [pollOpen, setPollOpen] = useState(false);
   const [pollOptions, setPollOptions] = useState<string[]>(["", ""]);
   const [tab, setTab] = useState<"all" | "friends" | "pages">("all");
@@ -1550,12 +1625,14 @@ export function FeedView({
         pageId: postAs || undefined,
         audience,
         scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : undefined,
+        album: attachments.length > 0 && album.trim() ? album.trim() : undefined,
         poll: pollOpen && poll.length >= 2 ? poll : undefined,
       });
       setPosts((prev) => [post, ...prev]);
       setDraft("");
       setAttachments([]);
       setScheduledAt("");
+      setAlbum("");
       setPollOpen(false);
       setPollOptions(["", ""]);
     } catch (err) {
@@ -1582,6 +1659,18 @@ export function FeedView({
         tag={openTag}
         onBack={() => setOpenTag(null)}
         onOpenTag={(next) => setOpenTag(next)}
+      />
+    );
+  }
+
+  if (albumName) {
+    return (
+      <AlbumView
+        client={client}
+        cloudUrl={cloudUrl}
+        viewerId={viewerId}
+        name={albumName}
+        onBack={() => onOpenAlbum?.(null)}
       />
     );
   }
@@ -1721,6 +1810,14 @@ export function FeedView({
                 </div>
               ))}
             </div>
+          )}
+          {attachments.length > 0 && (
+            <input
+              className="feed-composer-as-input"
+              placeholder="Album name (optional)"
+              value={album}
+              onChange={(event) => setAlbum(event.target.value)}
+            />
           )}
           <div className="feed-composer-as">
             <span>Post as</span>
@@ -1888,10 +1985,12 @@ export function FeedRail({
   client,
   onOpenPage,
   onOpenGroup,
+  onOpenAlbum,
 }: {
   client: BotifyrClient;
   onOpenPage?: (handle: string) => void;
   onOpenGroup?: (handle: string) => void;
+  onOpenAlbum?: (name: string) => void;
 }) {
   const [people, setPeople] = useState<Person[] | null>(null);
   const [blocked, setBlocked] = useState<Person[]>([]);
@@ -1899,6 +1998,7 @@ export function FeedRail({
   const [pages, setPages] = useState<Page[]>([]);
   const [pageSuggestions, setPageSuggestions] = useState<Page[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
+  const [albums, setAlbums] = useState<Array<{ name: string; count: number }>>([]);
   const [requested, setRequested] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -2003,6 +2103,19 @@ export function FeedRail({
     };
   }, [client]);
 
+  useEffect(() => {
+    let active = true;
+    client
+      .listAlbums()
+      .then((list) => {
+        if (active) setAlbums(list);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [client]);
+
   async function followSuggestedPage(page: Page) {
     try {
       await client.followPage(page.id);
@@ -2031,6 +2144,29 @@ export function FeedRail({
                 </div>
                 {onOpenGroup && (
                   <button type="button" className="feed-follow-btn" onClick={() => onOpenGroup(group.handle)}>
+                    View
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {albums.length > 0 && (
+        <div className="feed-rail-section">
+          <div className="feed-rail-head">📷 Your Albums</div>
+          <ul className="feed-rail-people">
+            {albums.map((entry) => (
+              <li key={entry.name} className="feed-rail-person">
+                <div className="feed-rail-person-meta">
+                  <span className="feed-rail-person-name">{entry.name}</span>
+                  <span className="feed-rail-person-sub">
+                    {entry.count} photo{entry.count === 1 ? "" : "s"}
+                  </span>
+                </div>
+                {onOpenAlbum && (
+                  <button type="button" className="feed-follow-btn" onClick={() => onOpenAlbum(entry.name)}>
                     View
                   </button>
                 )}

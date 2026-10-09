@@ -557,6 +557,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [feedPage, setFeedPage] = useState<string | null>(null);
   /** When set, the Feed area shows this Group's stream instead of the feed. */
   const [feedGroup, setFeedGroup] = useState<string | null>(null);
+  /** When set, the Feed area shows this album instead of the feed. */
+  const [feedAlbum, setFeedAlbum] = useState<string | null>(null);
   const [groupMembers, setGroupMembers] = useState<string[]>([]);
   const [autonomous, setAutonomous] = useState(false);
   const [autoApprove, setAutoApprove] = useState(false);
@@ -4828,6 +4830,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
             onOpenPage={setFeedPage}
             groupHandle={feedGroup}
             onOpenGroup={setFeedGroup}
+            albumName={feedAlbum}
+            onOpenAlbum={setFeedAlbum}
           />
         )}
         {startupsActive && (
@@ -6022,7 +6026,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       {feedActive && (
         <aside className="bot-panel feed-rail">
           <div className="feed-rail-title">Discover</div>
-          <FeedRail client={client} onOpenPage={setFeedPage} onOpenGroup={setFeedGroup} />
+          <FeedRail client={client} onOpenPage={setFeedPage} onOpenGroup={setFeedGroup} onOpenAlbum={setFeedAlbum} />
         </aside>
       )}
 

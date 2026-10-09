@@ -15,7 +15,7 @@ import type {
 } from "@botifyr/shared";
 import { ROLE_CATALOG } from "@botifyr/shared";
 import type { BotifyrClient } from "@botifyr/client";
-import { CheckIcon, CloseIcon, CubeIcon, PlayIcon, PowerIcon, SendIcon, SparkIcon } from "./Icons";
+import { CheckIcon, CloseIcon, CubeIcon, PlayIcon, SendIcon, SparkIcon } from "./Icons";
 
 const ROLE_BY_ID = new Map(ROLE_CATALOG.map((role) => [role.id, role]));
 const DEFAULT_EMOJI = "🤖";
@@ -230,7 +230,6 @@ export function CompanyWorkspace({
       resetOnboarding();
       setCreating(true);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [createNonce]);
 
   const company = useMemo(
@@ -241,7 +240,10 @@ export function CompanyWorkspace({
 
   const activeQuest = quests.find((quest) => quest.status === "active") ?? null;
   const proposedQuests = quests.filter((quest) => quest.status === "proposed");
-  const questItems = activeQuest ? items.filter((item) => item.questId === activeQuest.id) : [];
+  const questItems = useMemo(
+    () => (activeQuest ? items.filter((item) => item.questId === activeQuest.id) : []),
+    [activeQuest, items],
+  );
   const questDone = questItems.filter((item) => item.status === "done").length;
 
   const promotions = useMemo(
@@ -858,27 +860,21 @@ export function CompanyWorkspace({
           >
             <PlayIcon size={14} /> Run
           </button>
-          {autonomy === "manual" ? (
-            <button
-              className="btn primary small"
-              type="button"
+          <label className="cws-autonomy" title="How much the company may do on its own">
+            <select
+              className="cws-select"
+              value={autonomy}
               disabled={busy}
-              title="Activate at the recommended Delegated level"
-              onClick={() => void setAutonomy("supervised")}
+              onChange={(event) =>
+                void setAutonomy(event.target.value as "manual" | "supervised" | "autonomous")
+              }
+              aria-label="Autonomy level"
             >
-              <PowerIcon size={14} /> Activate
-            </button>
-          ) : (
-            <button
-              className="ghost small"
-              type="button"
-              disabled={busy}
-              title={`Level: ${autonomy}. Click to deactivate.`}
-              onClick={() => void setAutonomy("manual")}
-            >
-              <PowerIcon size={14} /> {autonomy}
-            </button>
-          )}
+              <option value="manual">Assisted</option>
+              <option value="supervised">Delegated (recommended)</option>
+              <option value="autonomous">Autonomous</option>
+            </select>
+          </label>
         </div>
       </div>
 

@@ -8220,6 +8220,11 @@ body {
   gap: 8px;
 }
 
+.cws-autonomy {
+  display: inline-flex;
+  align-items: center;
+}
+
 .cws-tabs {
   display: flex;
   gap: 4px;

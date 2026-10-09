@@ -123,7 +123,7 @@ describe("CompanyWorkspace (DOM)", () => {
     expect(screen.getByRole("button", { name: /tell the ai ceo what to do/i })).toBeTruthy();
   });
 
-  it("defaults an un-activated company to Delegated (supervised)", () => {
+  it("shows the three autonomy levels, defaulting an un-activated company to Assisted", () => {
     const manual = { ...company, autonomy: "manual" } as WorkspaceWithRoles;
     render(
       <CompanyWorkspace
@@ -134,7 +134,10 @@ describe("CompanyWorkspace (DOM)", () => {
         onCreated={() => {}}
       />,
     );
-    expect(screen.getByRole("button", { name: /activate/i })).toBeTruthy();
+    const select = screen.getByLabelText(/autonomy level/i) as HTMLSelectElement;
+    expect(select.value).toBe("manual");
+    expect(screen.getByRole("option", { name: /delegated/i })).toBeTruthy();
+    expect(screen.getByRole("option", { name: /autonomous/i })).toBeTruthy();
   });
 
   it("rewrites the idea with AI before planning", async () => {
