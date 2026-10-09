@@ -460,10 +460,12 @@ function AuthorLine({
   author,
   when,
   cloudUrl,
+  trailing,
 }: {
   author: FeedPost["author"];
   when: string;
   cloudUrl?: string;
+  trailing?: ReactNode;
 }) {
   return (
     <div className="feed-author">
@@ -473,7 +475,10 @@ function AuthorLine({
         url={resolveAvatar(author.avatarUrl, cloudUrl)}
       />
       <div className="feed-author-meta">
-        <span className="feed-author-name">{authorName(author)}</span>
+        <span className="feed-author-name">
+          {authorName(author)}
+          {trailing}
+        </span>
         <span className="feed-author-sub">
           {author.handle ? `@${author.handle} · ` : ""}
           <time dateTime={when} title={fullDate(when)}>
@@ -644,6 +649,8 @@ function PostCard({
   const [viewer, setViewer] = useState<number | null>(null);
   const [feedback, setFeedback] = useState<{ kind: "error" | "info"; text: string } | null>(null);
   const [confirm, setConfirm] = useState<null | "delete" | "block">(null);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareCaption, setShareCaption] = useState("");
   const [commentError, setCommentError] = useState<string | null>(null);
   const [allCommentsShown, setAllCommentsShown] = useState(false);
   const [highlight, setHighlight] = useState(false);
@@ -653,6 +660,7 @@ function PostCard({
   const moreBtnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
+  const reactionCloseTimer = useRef<number | null>(null);
   const likeBtnRef = useRef<HTMLButtonElement>(null);
   const articleRef = useRef<HTMLElement>(null);
 
@@ -721,16 +729,35 @@ function PostCard({
     });
   }
 
-  function share() {
+  function submitShare() {
     void guard("share", async () => {
       try {
-        const repost = await client.repost(post.id);
+        const caption = shareCaption.trim();
+        const repost = await client.repost(post.id, caption || undefined);
         onRepost(repost);
         onChange({ ...post, shares: post.shares + 1, sharedByMe: true });
+        setShareOpen(false);
+        setShareCaption("");
       } catch {
         setFeedback({ kind: "error", text: "Couldn't share this post. Please try again." });
       }
     });
+  }
+
+  function openPicker() {
+    if (reactionCloseTimer.current) {
+      window.clearTimeout(reactionCloseTimer.current);
+      reactionCloseTimer.current = null;
+    }
+    setPickOpen(true);
+  }
+
+  function schedulePickerClose() {
+    if (reactionCloseTimer.current) window.clearTimeout(reactionCloseTimer.current);
+    reactionCloseTimer.current = window.setTimeout(() => {
+      reactionCloseTimer.current = null;
+      setPickOpen(false);
+    }, 160);
   }
 
   function save() {
@@ -960,13 +987,17 @@ function PostCard({
       className={`feed-post${highlight ? " feed-post-focus" : ""}`}
       data-post-id={post.id}
     >
-      <AuthorLine author={post.author} when={post.createdAt} cloudUrl={cloudUrl} />
+      <AuthorLine
+        author={post.author}
+        when={post.createdAt}
+        cloudUrl={cloudUrl}
+        trailing={post.repostOf ? <span className="feed-repost-label">🔁 Shared a post</span> : undefined}
+      />
 
       {post.audience === "only_me" && <div className="feed-audience-badge">🔒 Only me</div>}
       {post.scheduledAt && new Date(post.scheduledAt).getTime() > Date.now() && (
         <div className="feed-audience-badge">🕒 Scheduled</div>
       )}
-      {post.repostOf && <div className="feed-repost-label">🔁 Shared a post</div>}
       {editing ? (
         <div className="feed-post-edit">
           <textarea
@@ -1112,7 +1143,12 @@ function PostCard({
       </div>
 
       {pickOpen && (
-        <div className="reaction-picker" ref={pickerRef}>
+        <div
+          className="reaction-picker"
+          ref={pickerRef}
+          onMouseEnter={openPicker}
+          onMouseLeave={schedulePickerClose}
+        >
           {REACTIONS.map((reaction) => (
             <button
               key={reaction.key}
@@ -1133,7 +1169,8 @@ function PostCard({
           type="button"
           className={`feed-action${post.myReaction ? " active" : ""}`}
           onClick={() => setPickOpen(true)}
-          onMouseEnter={() => setPickOpen(true)}
+          onMouseEnter={openPicker}
+          onMouseLeave={schedulePickerClose}
           aria-pressed={post.myReaction !== null}
           aria-expanded={pickOpen}
         >
@@ -1157,7 +1194,7 @@ function PostCard({
         <button
           type="button"
           className="feed-action"
-          onClick={() => void share()}
+          onClick={() => setShareOpen(true)}
           aria-pressed={post.sharedByMe}
         >
           <ForwardIcon size={17} /> Share
@@ -1414,6 +1451,37 @@ function PostCard({
           onConfirm={() => void blockAuthor()}
           onCancel={() => setConfirm(null)}
         />
+      )}
+      {shareOpen && (
+        <div className="feed-confirm-backdrop" onClick={() => setShareOpen(false)}>
+          <div
+            className="feed-share-sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Share post"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <p className="feed-confirm-title">Share this post</p>
+            <textarea
+              className="feed-share-input"
+              placeholder="Say something about this…"
+              rows={3}
+              maxLength={4000}
+              value={shareCaption}
+              onChange={(event) => setShareCaption(event.target.value)}
+              aria-label="Share caption"
+            />
+            <p className="feed-share-note">Shared to your friends. Per-share privacy isn’t available yet.</p>
+            <div className="feed-confirm-actions">
+              <button type="button" className="feed-confirm-cancel" onClick={() => setShareOpen(false)}>
+                Cancel
+              </button>
+              <button type="button" className="feed-post-btn" onClick={() => void submitShare()}>
+                Share now
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </article>
   );

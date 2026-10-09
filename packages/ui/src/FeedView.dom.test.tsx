@@ -1543,9 +1543,7 @@ describe("Post interactions", () => {
       />,
     );
     await screen.findByText("A quiet feed is a happy feed.");
-    await waitFor(() =>
-      expect(container.querySelector("article.feed-post.feed-post-focus")).toBeTruthy(),
-    );
+    await waitFor(() => expect(container.querySelector("article.feed-post.feed-post-focus")).toBeTruthy());
   });
 
   it("opens a person profile from an @mention (POST-14)", async () => {
@@ -1662,5 +1660,42 @@ describe("Feed sidebar — online contacts (Agent 1)", () => {
     await screen.findByText("Online now");
     expect(screen.getByText("Sam")).toBeTruthy();
     expect(screen.queryByText("Lee")).toBeNull();
+  });
+});
+
+describe("Post share / reaction hover / repost layout (Agent 1)", () => {
+  it("opens a share sheet and posts the caption", async () => {
+    const repost = vi.fn().mockResolvedValue(makePost({ id: "repost-1" }));
+    const client = { ...makeClient([makePost()]), repost } as unknown as BotifyrClient;
+    render(<FeedView client={client} cloudUrl="http://cloud" viewerId="viewer-1" />);
+    await screen.findByText("A quiet feed is a happy feed.");
+
+    fireEvent.click(screen.getByRole("button", { name: "Share" }));
+    expect(await screen.findByRole("dialog", { name: "Share post" })).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("Share caption"), { target: { value: "nice one" } });
+    fireEvent.click(screen.getByRole("button", { name: "Share now" }));
+    await waitFor(() => expect(repost).toHaveBeenCalledWith("post-1", "nice one"));
+  });
+
+  it("hides the reaction picker on mouse leave", async () => {
+    render(<FeedView client={makeClient([makePost()])} cloudUrl="http://cloud" viewerId="viewer-1" />);
+    await screen.findByText("A quiet feed is a happy feed.");
+
+    const like = screen.getByRole("button", { name: "Like" });
+    fireEvent.mouseEnter(like);
+    expect(document.querySelector(".reaction-picker")).toBeTruthy();
+    fireEvent.mouseLeave(like);
+    await waitFor(() => expect(document.querySelector(".reaction-picker")).toBeNull(), { timeout: 1000 });
+  });
+
+  it("shows the 'Shared a post' label inline with the author name", async () => {
+    const original = makePost({ id: "orig-1", body: "Original body" });
+    const repost = makePost({ id: "rp-1", body: "", repostOf: "orig-1", original });
+    const { container } = render(
+      <FeedView client={makeClient([repost])} cloudUrl="http://cloud" viewerId="viewer-1" />,
+    );
+    await screen.findByText(/Shared a post/);
+    expect(container.querySelector(".feed-author-name .feed-repost-label")).toBeTruthy();
   });
 });
