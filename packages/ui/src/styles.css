@@ -124,6 +124,51 @@ textarea {
   font-family: inherit;
 }
 
+/* Dropdowns — one styled look for every <select> in the app. `appearance:none`
+   removes the OS chrome; a token-tinted chevron is drawn as the background so
+   the closed control matches our inputs. (The open list is OS-rendered.) */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-color: var(--input-bg);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238b8b92' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right var(--space-2) center;
+  background-size: 12px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  color: var(--text);
+  padding: var(--space-2) var(--space-6) var(--space-2) var(--space-3);
+  font: inherit;
+  font-size: var(--text-lg);
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+[data-theme="light"] select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23616875' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+}
+
+select:hover {
+  border-color: var(--accent-border);
+}
+
+select:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+select:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* Tint the OS-rendered option list where the platform honors it. */
+select option {
+  background-color: var(--panel);
+  color: var(--text);
+}
+
 html,
 body,
 #root {
@@ -5718,13 +5763,17 @@ body {
 
 .settings-line select,
 .settings-input {
-  background: var(--input-bg);
+  background-color: var(--input-bg);
   border: 1px solid var(--border);
   border-radius: var(--radius-control);
   padding: var(--space-2) var(--space-3);
   color: var(--text);
   font-size: var(--text-md);
   max-width: 240px;
+}
+
+.settings-line select {
+  padding-right: var(--space-6);
 }
 
 .settings-static {
@@ -6267,12 +6316,12 @@ body {
 }
 
 .contact-select {
-  background: var(--panel-2);
+  background-color: var(--panel-2);
   border: 1px solid var(--border);
   border-radius: var(--radius-control);
   color: var(--text);
   font-size: var(--text-md);
-  padding: var(--space-1) var(--space-2);
+  padding: var(--space-1) var(--space-6) var(--space-1) var(--space-2);
 }
 
 .group-admin {
@@ -9289,10 +9338,10 @@ body {
 
 .feed-composer-as select {
   border: 1px solid var(--border);
-  background: var(--panel-2);
+  background-color: var(--panel-2);
   color: var(--text);
   border-radius: var(--radius-control);
-  padding: var(--space-1) var(--space-2);
+  padding: var(--space-1) var(--space-6) var(--space-1) var(--space-2);
   font: inherit;
   font-size: var(--text-sm);
   cursor: pointer;
@@ -9451,20 +9500,20 @@ a.feed-follow-btn {
 
 .page-roles select {
   border: 1px solid var(--border);
-  background: var(--panel-2);
+  background-color: var(--panel-2);
   color: var(--text);
   border-radius: var(--radius-control);
-  padding: var(--space-1) var(--space-2);
+  padding: var(--space-1) var(--space-6) var(--space-1) var(--space-2);
   font: inherit;
   font-size: var(--text-sm);
 }
 
 .page-pin-select {
   border: 1px solid var(--border);
-  background: var(--panel-2);
+  background-color: var(--panel-2);
   color: var(--text);
   border-radius: var(--radius-control);
-  padding: var(--space-1) var(--space-2);
+  padding: var(--space-1) var(--space-6) var(--space-1) var(--space-2);
   font: inherit;
   font-size: var(--text-sm);
   max-width: 160px;
@@ -9528,10 +9577,10 @@ a.feed-follow-btn {
 .group-settings select,
 .group-create select {
   border: 1px solid var(--border);
-  background: var(--panel);
+  background-color: var(--panel);
   color: var(--text);
   border-radius: var(--radius-control);
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-2) var(--space-6) var(--space-2) var(--space-3);
   font: inherit;
   font-size: var(--text-lg);
   cursor: pointer;
@@ -11081,11 +11130,11 @@ a.feed-follow-btn {
 }
 
 .cws-select {
-  background: var(--panel);
+  background-color: var(--panel);
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: var(--radius-control);
-  padding: var(--space-1) var(--space-2);
+  padding: var(--space-1) var(--space-6) var(--space-1) var(--space-2);
   font-size: var(--text-xl);
   font-weight: 600;
 }
