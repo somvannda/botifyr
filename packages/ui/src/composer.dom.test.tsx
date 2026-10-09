@@ -220,6 +220,7 @@ describe("Composer publish lifecycle", () => {
     await screen.findByText("existing post");
 
     fireEvent.change(screen.getByLabelText("Post text"), { target: { value: "later" } });
+    fireEvent.click(screen.getByRole("button", { name: "Options" }));
     const when = container.querySelector<HTMLInputElement>('input[type="datetime-local"]');
     expect(when).toBeTruthy();
     fireEvent.change(when!, { target: { value: "2020-01-01T10:00" } });
@@ -237,6 +238,7 @@ describe("Composer publish lifecycle", () => {
     await screen.findByText("existing post");
 
     fireEvent.change(screen.getByLabelText("Post text"), { target: { value: "from the brand" } });
+    fireEvent.click(screen.getByRole("button", { name: "Options" }));
     fireEvent.change(screen.getByRole("combobox", { name: "Post as" }), {
       target: { value: page.id },
     });
@@ -251,18 +253,22 @@ describe("Composer publish lifecycle", () => {
   });
 });
 
-describe("Composer layout compaction", () => {
-  it("keeps destination and audience controls on a single horizontal row", async () => {
-    const { container } = renderFeed(makeClient());
+describe("Composer advanced options", () => {
+  it("hides destination, audience and schedule until Options is opened", async () => {
+    renderFeed(makeClient());
     await screen.findByText("existing post");
 
-    const postAs = screen.getByRole("combobox", { name: "Post as" });
-    const audience = screen.getByRole("combobox", { name: "Audience" });
-    const row = postAs.closest(".feed-composer-as");
-    expect(row).toBeTruthy();
-    // Both selects live in the same row (was two stacked rows).
-    expect(row).toBe(audience.closest(".feed-composer-as"));
-    expect(container.querySelectorAll(".feed-composer-as")).toHaveLength(1);
+    // Collapsed: the controls are gone, but the summary still shows the target.
+    expect(screen.queryByRole("combobox", { name: "Post as" })).toBeNull();
+    expect(screen.queryByRole("combobox", { name: "Audience" })).toBeNull();
+    expect(document.querySelector('input[type="datetime-local"]')).toBeNull();
+    expect(screen.getByText(/Posting to your profile/)).toBeTruthy();
+
+    // Revealed on demand.
+    fireEvent.click(screen.getByRole("button", { name: "Options" }));
+    expect(screen.getByRole("combobox", { name: "Post as" })).toBeTruthy();
+    expect(screen.getByRole("combobox", { name: "Audience" })).toBeTruthy();
+    expect(document.querySelector('input[type="datetime-local"]')).toBeTruthy();
   });
 });
 

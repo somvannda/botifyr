@@ -224,6 +224,7 @@ describe("FeedView action hierarchy", () => {
   it("gives the composer controls accessible names (FEED-9)", async () => {
     render(<FeedView client={makeClient([makePost()])} cloudUrl="http://cloud" viewerId="viewer-1" />);
     await screen.findByText("A quiet feed is a happy feed.");
+    fireEvent.click(screen.getByRole("button", { name: "Options" }));
     expect(screen.getByRole("combobox", { name: "Post as" })).toBeTruthy();
     expect(screen.getByRole("combobox", { name: "Audience" })).toBeTruthy();
   });

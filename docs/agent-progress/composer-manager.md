@@ -105,8 +105,10 @@ several accessibility gaps. See the audit for the ranked list.
 - [x] W16 Byte-accurate upload progress (XHR).
 - [x] W17 Newly published posts render through the card (dedupe + tests).
 - [x] W18 **Composer horizontal compaction** — destination, audience and schedule
-  share one row (delegated by the Feed Experience Lead in
-  `docs/feed-page-redesign-report.md`).
+  sit behind an **Options** disclosure (composer defaults to two rows), with the
+  destination summary always visible. Delegated by the Feed Experience Lead
+  (`docs/feed-page-redesign-report.md`); final design reconciled with the
+  concurrent `agent/feed-composer-ux` workstream.
 
 Previously "blocked" items are now implemented; see the second-pass notes below.
 
