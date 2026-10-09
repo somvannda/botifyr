@@ -29,7 +29,6 @@ import {
   PanelIcon,
   PauseIcon,
   PlayIcon,
-  PlusIcon,
   RefreshIcon,
   SearchIcon,
   SendIcon,
@@ -1615,14 +1614,12 @@ function PageView({
   cloudUrl,
   viewerId,
   handle,
-  onBack,
   onOpenPage,
 }: {
   client: BotifyrClient;
   cloudUrl: string;
   viewerId?: string;
   handle: string;
-  onBack: () => void;
   onOpenPage?: (handle: string) => void;
 }) {
   const [page, setPage] = useState<Page | null>(null);
@@ -1996,13 +1993,6 @@ function PageView({
 
   return (
     <div className="feed">
-      <div className="feed-topbar">
-        <button type="button" className="ghost small" onClick={onBack}>
-          ← Back
-        </button>
-        <span className="feed-topbar-title">{page?.name ?? "Page"}</span>
-      </div>
-
       <div className="feed-scroll">
         {loading && !page ? (
           <div className="page-head" aria-hidden="true">
@@ -3448,31 +3438,6 @@ function ReelsView({
 
   return (
     <div className="feed">
-      <div className="feed-topbar">
-        <button type="button" className="ghost small" onClick={onBack}>
-          ← Back
-        </button>
-        <span className="feed-topbar-title">Reels</span>
-        <span className="feed-stats-spacer" />
-        <button
-          type="button"
-          className="feed-composer-tool"
-          onClick={() => void load()}
-          aria-label="Refresh reels"
-        >
-          <RefreshIcon size={15} />
-        </button>
-        <button
-          type="button"
-          className="feed-composer-tool"
-          onClick={() => setMuted((value) => !value)}
-          aria-pressed={muted}
-          aria-label={muted ? "Unmute reels" : "Mute reels"}
-        >
-          <VolumeIcon size={15} muted={muted} /> {muted ? "Muted" : "Sound"}
-        </button>
-      </div>
-
       <div
         className="reels-scroll"
         ref={scrollerRef}
@@ -4007,12 +3972,6 @@ function GroupView({
 
   return (
     <div className="feed">
-      <div className="feed-topbar">
-        <button type="button" className="ghost small" onClick={onBack}>
-          ← Back
-        </button>
-        <span className="feed-topbar-title">{group?.name ?? "Group"}</span>
-      </div>
       <div className="feed-scroll">
         {loading && !group ? (
           <div className="feed-state">Loading…</div>
@@ -4534,13 +4493,11 @@ interface ComposerAttachment {
 function GroupsView({
   client,
   cloudUrl,
-  onBack,
   onOpenGroup,
   onChanged,
 }: {
   client: BotifyrClient;
   cloudUrl: string;
-  onBack: () => void;
   onOpenGroup?: (handle: string) => void;
   onChanged?: () => void;
 }) {
@@ -4684,23 +4641,6 @@ function GroupsView({
 
   return (
     <div className="feed">
-      <div className="feed-topbar">
-        <button type="button" className="ghost small" onClick={onBack}>
-          ← Back
-        </button>
-        <span className="feed-topbar-title">Groups</span>
-        <button
-          type="button"
-          className="feed-follow-btn"
-          onClick={() => {
-            setCreating((value) => !value);
-            setCreateError(null);
-          }}
-        >
-          {creating ? <CloseIcon size={14} /> : <PlusIcon size={14} />}
-          {creating ? "Cancel" : "Create group"}
-        </button>
-      </div>
       <div className="feed-scroll">
         {creating && (
           <form className="page-settings group-create" onSubmit={create}>
@@ -5068,6 +5008,8 @@ export function FeedView({
   const [moodOpen, setMoodOpen] = useState(false);
   /** Advanced composer options (destination, audience, schedule) are hidden until asked for. */
   const [optionsOpen, setOptionsOpen] = useState(false);
+  /** The composer rests as a single clickable row and expands in place when used. */
+  const [composerExpanded, setComposerExpanded] = useState(false);
   const [audience, setAudience] = useState<"public" | "friends" | "only_me">("friends");
   const [scheduledAt, setScheduledAt] = useState("");
   const [album, setAlbum] = useState("");
@@ -5077,7 +5019,7 @@ export function FeedView({
     const stored = localStorage.getItem(FEED_TAB_KEY);
     return stored === "friends" || stored === "pages" ? stored : "all";
   });
-  const [sort, setSort] = useState<"recent" | "top">(() =>
+  const [sort] = useState<"recent" | "top">(() =>
     localStorage.getItem(FEED_SORT_KEY) === "top" ? "top" : "recent",
   );
   const [openTag, setOpenTag] = useState<string | null>(null);
@@ -5467,6 +5409,7 @@ export function FeedView({
       return;
     }
     setPosting(true);
+    setComposerExpanded(true);
     setComposerError(null);
     setNotice(null);
     uploadedMediaRef.current.clear();
@@ -5651,7 +5594,6 @@ export function FeedView({
       <GroupsView
         client={client}
         cloudUrl={cloudUrl}
-        onBack={() => setGroupsOpen(false)}
         onOpenGroup={(handle) => {
           setGroupsOpen(false);
           onOpenGroup?.(handle);
@@ -5681,7 +5623,6 @@ export function FeedView({
         cloudUrl={cloudUrl}
         viewerId={viewerId}
         handle={pageHandle}
-        onBack={() => onOpenPage?.(null)}
         onOpenPage={(next) => onOpenPage?.(next)}
       />,
     );
@@ -5696,66 +5637,39 @@ export function FeedView({
 
   return (
     <div className="feed">
-      <div className="feed-topbar">
-        {onOpenNav && (
-          <button type="button" className="mobile-nav-btn" onClick={onOpenNav} aria-label="Show navigation">
-            <MenuIcon size={18} />
-          </button>
-        )}
-        <span className="feed-topbar-title">Feed</span>
-        <div className="feed-tabs">
-          <button
-            type="button"
-            className={`feed-tab${tab === "all" ? " active" : ""}`}
-            onClick={() => setTab("all")}
-          >
-            All
-          </button>
-          <button
-            type="button"
-            className={`feed-tab${tab === "friends" ? " active" : ""}`}
-            onClick={() => setTab("friends")}
-          >
-            Friends
-          </button>
-          <button
-            type="button"
-            className={`feed-tab${tab === "pages" ? " active" : ""}`}
-            onClick={() => setTab("pages")}
-          >
-            Pages
-          </button>
-        </div>
-        <span className="feed-stats-spacer" />
-        <select
-          className="feed-sort"
-          aria-label="Sort feed"
-          title="Sort feed"
-          value={sort}
-          onChange={(event) => setSort(event.target.value as "recent" | "top")}
-        >
-          <option value="recent">Most recent</option>
-          <option value="top">Top</option>
-        </select>
+      {/* Narrow screens keep a floating drawer toggle now that the top bar is gone. */}
+      {onOpenNav && (
         <button
           type="button"
-          className="feed-composer-tool"
-          onClick={refreshNow}
-          aria-label="Refresh feed"
-          title="Refresh feed"
+          className="mobile-nav-btn feed-mobile-nav"
+          onClick={onOpenNav}
+          aria-label="Show navigation"
         >
-          <RefreshIcon size={16} />
+          <MenuIcon size={18} />
         </button>
-      </div>
-
+      )}
       <div className="feed-scroll" ref={attachScroll} onScroll={onFeedScroll}>
         {pendingNew && (
           <button type="button" className="feed-new-banner" onClick={refreshNow}>
             <RefreshIcon size={14} /> New activity — tap to refresh
           </button>
         )}
-        <form className="feed-composer" onSubmit={publish}>
-          <div className="feed-composer-row">
+        <form
+          className={`feed-composer${composerExpanded ? " expanded" : " collapsed"}`}
+          onSubmit={publish}
+        >
+          <div className="feed-composer-head">
+            <span className="feed-composer-title">Create post</span>
+            <button
+              type="button"
+              className="feed-composer-tool feed-composer-close"
+              aria-label="Close composer"
+              onClick={() => setComposerExpanded(false)}
+            >
+              <CloseIcon size={16} />
+            </button>
+          </div>
+          <div className="feed-composer-row" onClick={() => setComposerExpanded(true)}>
             <Avatar name="You" />
             <textarea
               id="feed-composer-input"
@@ -5763,9 +5677,10 @@ export function FeedView({
               className="feed-composer-input"
               aria-label="Post text"
               aria-describedby={draft ? "feed-composer-count" : undefined}
-              placeholder="Share an update…"
-              rows={2}
+              placeholder={composerExpanded ? "What's on your mind?" : "Share an update…"}
+              rows={composerExpanded ? 3 : 1}
               value={draft}
+              onFocus={() => setComposerExpanded(true)}
               onChange={(event) => void updateMentions(event)}
               onKeyDown={(event) => {
                 if (event.key === "Escape" && mentionResults.length > 0) {
@@ -5858,6 +5773,14 @@ export function FeedView({
               onChange={(event) => setAlbum(event.target.value)}
             />
           )}
+          <button
+            type="button"
+            className="feed-composer-drop"
+            onClick={() => fileRef.current?.click()}
+          >
+            <CameraIcon size={22} />
+            <span className="feed-composer-drop-title">Add photos or videos</span>
+          </button>
           {/* Compaction: advanced options stay hidden until asked for, so the
               composer defaults to two rows. */}
           {optionsOpen && (
@@ -5998,9 +5921,6 @@ export function FeedView({
               onClick={() => setOptionsOpen((value) => !value)}
             >
               <GearIcon size={16} /> Options
-            </button>
-            <button type="button" className="feed-composer-tool" onClick={() => fileRef.current?.click()}>
-              <CameraIcon size={16} /> Photo
             </button>
             <span className="feed-mood">
               <button
