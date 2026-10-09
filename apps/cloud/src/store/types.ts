@@ -646,6 +646,8 @@ export interface Store {
   usageSince(userId: string, sinceIso: string): Promise<{ tokens: number; requests: number }>;
   /** Tokens attributed to a company quest (docs/company-quests.md §10.1). */
   usageTokensForQuest(questId: string): Promise<number>;
+  /** Tokens spent on a single task, for provenance (docs/product-plan.md §3). */
+  usageForTask(taskId: string): Promise<{ tokens: number; requests: number }>;
 
   upsertFile(record: FileRecord): Promise<void>;
   listFiles(botId: string): Promise<FileRecord[]>;

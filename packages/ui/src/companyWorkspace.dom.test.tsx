@@ -23,6 +23,7 @@ function fakeClient(overrides: Record<string, unknown> = {}): BotifyrClient {
     listQuests: vi.fn().mockResolvedValue([]),
     listWorkspaceFiles: vi.fn().mockResolvedValue([]),
     listProposals: vi.fn().mockResolvedValue([]),
+    listWorkspaceActivity: vi.fn().mockResolvedValue([]),
     getWorkspace: vi.fn().mockResolvedValue(null),
   };
   return { ...base, ...overrides } as unknown as BotifyrClient;
@@ -161,5 +162,30 @@ describe("CompanyWorkspace (DOM)", () => {
     await waitFor(() => expect(box.value).toBe(brief));
     expect(screen.getByText(/brief rewritten/i)).toBeTruthy();
     expect(client.rewriteCompanyBrief).toHaveBeenCalledTimes(1);
+  });
+
+  it("surfaces failed agent runs honestly", async () => {
+    const client = fakeClient({
+      listWorkspaceActivity: vi.fn().mockResolvedValue([
+        {
+          id: "t1",
+          goal: "Draft the launch plan",
+          status: "failed",
+          error: "model request failed (402)",
+          updatedAt: "2026-01-01T00:00:00Z",
+        },
+      ]),
+    });
+    render(
+      <CompanyWorkspace
+        client={client}
+        companies={[company]}
+        bots={[]}
+        onOpenOffice={() => {}}
+        onCreated={() => {}}
+      />,
+    );
+    expect(await screen.findByText(/1 run failed/i)).toBeTruthy();
+    expect(screen.getByText(/model request failed \(402\)/i)).toBeTruthy();
   });
 });

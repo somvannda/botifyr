@@ -136,6 +136,9 @@ export function CompanyWorkspace({
   const [proposals, setProposals] = useState<
     Array<{ repo: string; path: string; content: string; diff: string; exists: boolean }>
   >([]);
+  const [activity, setActivity] = useState<
+    Array<{ id: string; goal: string; status: string; error: string | null; updatedAt: string }>
+  >([]);
   const [budget, setBudget] = useState<WorkspaceBudget | null>(null);
   void budget; // referenced; surfaced in the UI as that work lands
   const [loading, setLoading] = useState(false);
@@ -192,7 +195,7 @@ export function CompanyWorkspace({
         setLastVisitAt(null);
       }
       try {
-        const [it, nd, bd, gr, rp, qs, wk, ws, pr] = await Promise.all([
+        const [it, nd, bd, gr, rp, qs, wk, ws, pr, ac] = await Promise.all([
           client.listWorkItems(id).catch(() => []),
           client.listWorkspaceNeeds(id).catch(() => []),
           client.getWorkspaceBudget(id).catch(() => null),
@@ -202,6 +205,7 @@ export function CompanyWorkspace({
           client.listWorkspaceFiles(id).catch(() => []),
           client.getWorkspace(id).catch(() => null),
           client.listProposals(id).catch(() => []),
+          client.listWorkspaceActivity(id).catch(() => []),
         ]);
         setItems(it);
         setNeeds(nd);
@@ -212,6 +216,7 @@ export function CompanyWorkspace({
         setQuests(qs);
         setWiki(wk);
         setProposals(pr);
+        setActivity(ac);
         if (ws) setMeta(ws);
       } finally {
         setLoading(false);
@@ -281,6 +286,8 @@ export function CompanyWorkspace({
     : [];
 
   const inboxCount = needs.length + proposedQuests.length + promotions.length;
+  const failedRuns = activity.filter((run) => run.status === "failed");
+  const runningRuns = activity.filter((run) => run.status === "running" || run.status === "queued");
   const members = view?.roles ?? [];
 
   function botName(botId?: string): string {
@@ -941,6 +948,25 @@ export function CompanyWorkspace({
                 </span>
               </div>
             </div>
+
+            {failedRuns.length > 0 && (
+              <div className="cws-card cws-warn">
+                <div className="cws-card-head">
+                  <h3>
+                    ⚠ {failedRuns.length} run{failedRuns.length === 1 ? "" : "s"} failed
+                  </h3>
+                  <span className="cws-muted">Check the model/provider, then retry.</span>
+                </div>
+                <ul className="cws-list">
+                  {failedRuns.slice(0, 3).map((run) => (
+                    <li key={run.id} className="cws-need">
+                      <span className="cws-need-text">{run.goal}</span>
+                      {run.error && <span className="cws-error-inline">{run.error}</span>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             <div className="cws-card">
               <div className="cws-card-head">

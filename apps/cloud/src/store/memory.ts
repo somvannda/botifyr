@@ -549,6 +549,14 @@ export class MemoryStore implements Store {
       .reduce((sum, record) => sum + record.promptTokens + record.completionTokens, 0);
   }
 
+  async usageForTask(taskId: string): Promise<{ tokens: number; requests: number }> {
+    const rows = this.usage.filter((record) => record.taskId === taskId);
+    return {
+      tokens: rows.reduce((sum, record) => sum + record.promptTokens + record.completionTokens, 0),
+      requests: rows.length,
+    };
+  }
+
   async upsertFile(record: FileRecord): Promise<void> {
     this.files.set(`${record.botId}:${record.name}`, record);
   }

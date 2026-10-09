@@ -73,6 +73,8 @@ export interface ChatMessage {
   botId?: string;
   /** The user who sent a message in a human (friend) conversation. */
   senderId?: string;
+  /** Reactions: one emoji per user (userId -> emoji). */
+  reactions?: Record<string, string>;
 }
 
 export interface Session {

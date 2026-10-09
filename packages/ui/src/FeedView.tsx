@@ -433,8 +433,13 @@ function PostCard({
 
       <div className="feed-stats">
         {post.likes > 0 && (
-          <span>
-            {reactionEmoji(Object.entries(post.reactions ?? {}).find(([, count]) => count > 0)?.[0])} {post.likes}
+          <span className="feed-reaction-summary" title="Reactions">
+            {Object.entries(post.reactions ?? {})
+              .filter(([, count]) => count > 0)
+              .slice(0, 3)
+              .map(([key]) => reactionEmoji(key))
+              .join(" ")}{" "}
+            {post.likes}
           </span>
         )}
         <span className="feed-stats-spacer" />
@@ -480,6 +485,7 @@ function PostCard({
           type="button"
           className={`feed-action${post.myReaction ? " active" : ""}`}
           onClick={() => setPickOpen((value) => !value)}
+          onMouseEnter={() => setPickOpen(true)}
           aria-pressed={post.myReaction !== null}
         >
           {post.myReaction ? (
@@ -854,14 +860,26 @@ function PageView({
                   </button>
                 </div>
               ) : (
-                <button
-                  type="button"
-                  className={`feed-follow-btn${page.following ? " following" : ""}`}
-                  disabled={busy}
-                  onClick={() => void toggleFollow()}
-                >
-                  {page.following ? "Following" : "Follow"}
-                </button>
+                <div className="page-head-actions">
+                  {page.cta &&
+                    (/^https?:\/\//i.test(page.cta) ? (
+                      <a className="feed-follow-btn" href={page.cta} target="_blank" rel="noreferrer">
+                        {page.cta.replace(/^https?:\/\//i, "").split("/")[0]}
+                      </a>
+                    ) : (
+                      <button type="button" className="feed-follow-btn">
+                        {page.cta}
+                      </button>
+                    ))}
+                  <button
+                    type="button"
+                    className={`feed-follow-btn${page.following ? " following" : ""}`}
+                    disabled={busy}
+                    onClick={() => void toggleFollow()}
+                  >
+                    {page.following ? "Following" : "Follow"}
+                  </button>
+                </div>
               )}
             </div>
           </div>

@@ -906,6 +906,15 @@ export class BotifyrClient {
     return this.request(`/v1/workspaces/${workspaceId}/needs`);
   }
 
+  /** Recent agent runs for a workspace — real execution, including failures. */
+  listWorkspaceActivity(
+    workspaceId: string,
+  ): Promise<
+    Array<{ id: string; goal: string; status: string; error: string | null; updatedAt: string }>
+  > {
+    return this.request(`/v1/workspaces/${workspaceId}/activity`);
+  }
+
   /* Per-workspace budget. */
   getWorkspaceBudget(workspaceId: string): Promise<WorkspaceBudget> {
     return this.request(`/v1/workspaces/${workspaceId}/budget`);
@@ -1116,6 +1125,16 @@ export class BotifyrClient {
       json: true,
       body: JSON.stringify({ userId }),
     });
+  }
+
+  /** Toggle the caller's reaction on a message (empty emoji clears it). */
+  setMessageReaction(sessionId: string, messageId: string, emoji: string): Promise<Session> {
+    return this.request(
+      `/v1/conversations/${encodeURIComponent(sessionId)}/messages/${encodeURIComponent(
+        messageId,
+      )}/reactions`,
+      { method: "POST", json: true, body: JSON.stringify({ emoji }) },
+    );
   }
 
   /** Mark a conversation read up to now (read receipts). */

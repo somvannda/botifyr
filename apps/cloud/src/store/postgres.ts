@@ -773,6 +773,15 @@ export class PostgresStore implements Store {
     return Number(rows[0]?.tokens ?? 0);
   }
 
+  async usageForTask(taskId: string): Promise<{ tokens: number; requests: number }> {
+    const { rows } = await this.pool.query(
+      "SELECT COALESCE(SUM(prompt_tokens + completion_tokens), 0) AS tokens, COUNT(*) AS requests " +
+        "FROM usage_events WHERE task_id = $1",
+      [taskId],
+    );
+    return { tokens: Number(rows[0]?.tokens ?? 0), requests: Number(rows[0]?.requests ?? 0) };
+  }
+
   async upsertFile(record: FileRecord): Promise<void> {
     await this.pool.query(
       "INSERT INTO files (id, bot_id, user_id, workspace_id, name, content, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) " +

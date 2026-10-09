@@ -443,13 +443,6 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   // When the host renders an OS title bar with a slot, the notification centre
   // is teleported there; otherwise it renders inline in the chat topbar.
   const [titlebarSlot, setTitlebarSlot] = useState<HTMLElement | null>(null);
-  const [reactions, setReactions] = useState<Record<string, string>>(() => {
-    try {
-      return JSON.parse(localStorage.getItem("botifyr.reactions") ?? "{}") as Record<string, string>;
-    } catch {
-      return {};
-    }
-  });
   const [forwardMessage, setForwardMessage] = useState<{ content: string } | null>(null);
   const [historyIndex, setHistoryIndex] = useState<number | null>(null);
   const [mentionIndex, setMentionIndex] = useState(0);
@@ -2602,13 +2595,48 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     setMentionQuery(null);
   }
 
-  function toggleReaction(id: string, emoji: string) {
-    const next = { ...reactions };
-    if (next[id] === emoji) delete next[id];
-    else next[id] = emoji;
-    setReactions(next);
-    localStorage.setItem("botifyr.reactions", JSON.stringify(next));
+  /** Aggregate a message's reactions into chips (emoji + count + whether ours). */
+  function reactionChips(message: ChatMessage): { emoji: string; count: number; mine: boolean }[] {
+    const byEmoji = new Map<string, { count: number; mine: boolean }>();
+    for (const [uid, emoji] of Object.entries(message.reactions ?? {})) {
+      const entry = byEmoji.get(emoji) ?? { count: 0, mine: false };
+      entry.count += 1;
+      if (uid === user?.id) entry.mine = true;
+      byEmoji.set(emoji, entry);
+    }
+    return [...byEmoji.entries()].map(([emoji, entry]) => ({ emoji, ...entry }));
+  }
+
+  async function toggleReaction(id: string, emoji: string) {
     setReactFor(null);
+    const session = sessions.find((entry) => entry.messages.some((message) => message.id === id));
+    if (!session || !user) return;
+    const message = session.messages.find((entry) => entry.id === id);
+    if (!message) return;
+    const next = message.reactions?.[user.id] === emoji ? "" : emoji;
+    // Optimistic update, then persist server-side so peers see it.
+    setSessions((prev) =>
+      prev.map((entry) =>
+        entry.id !== session.id
+          ? entry
+          : {
+              ...entry,
+              messages: entry.messages.map((m) => {
+                if (m.id !== id) return m;
+                const reactions = { ...(m.reactions ?? {}) };
+                if (next) reactions[user.id] = next;
+                else delete reactions[user.id];
+                return { ...m, reactions };
+              }),
+            },
+      ),
+    );
+    try {
+      const updated = await client.setMessageReaction(session.id, id, next);
+      setSessions((prev) => prev.map((entry) => (entry.id === updated.id ? updated : entry)));
+    } catch (err: unknown) {
+      setError(messageOf(err));
+    }
   }
 
   function startReply(id: string, author: string, content: string) {
@@ -5159,9 +5187,15 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                               </div>
                               {dmFileCard(displayText(decrypted, message.content, message.id)) ??
                                 displayText(decrypted, message.content, message.id)}
-                              {reactions[message.id] && (
-                                <span className="reaction">{reactions[message.id]}</span>
-                              )}
+                              {reactionChips(message).map((chip) => (
+                                <span
+                                  key={chip.emoji}
+                                  className={`reaction${chip.mine ? " mine" : ""}`}
+                                >
+                                  {chip.emoji}
+                                  {chip.count > 1 ? ` ${chip.count}` : ""}
+                                </span>
+                              ))}
                               {message.id === lastOwnMessageId &&
                                 peerReadAt &&
                                 message.createdAt <= peerReadAt && <div className="read-receipt">Seen</div>}
@@ -5197,9 +5231,15 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                             {translations[message.id] && (
                               <div className="msg-translation">{translations[message.id]}</div>
                             )}
-                            {reactions[message.id] && (
-                              <span className="reaction">{reactions[message.id]}</span>
-                            )}
+                            {reactionChips(message).map((chip) => (
+                              <span
+                                key={chip.emoji}
+                                className={`reaction${chip.mine ? " mine" : ""}`}
+                              >
+                                {chip.emoji}
+                                {chip.count > 1 ? ` ${chip.count}` : ""}
+                              </span>
+                            ))}
                             {actionsFor(message, label)}
                           </div>
                         </div>
@@ -5211,9 +5251,15 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                           {actionsFor(message, "You")}
                           <div className="msg-user-bubble">
                             {displayText(decrypted, message.content, message.id)}
-                            {reactions[message.id] && (
-                              <span className="reaction">{reactions[message.id]}</span>
-                            )}
+                            {reactionChips(message).map((chip) => (
+                              <span
+                                key={chip.emoji}
+                                className={`reaction${chip.mine ? " mine" : ""}`}
+                              >
+                                {chip.emoji}
+                                {chip.count > 1 ? ` ${chip.count}` : ""}
+                              </span>
+                            ))}
                           </div>
                           <SelfAvatar user={user} email={user.email} className="msg-user-avatar" />
                         </div>
@@ -5249,7 +5295,15 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                               ))}
                             </div>
                           )}
-                          {reactions[message.id] && <span className="reaction">{reactions[message.id]}</span>}
+                          {reactionChips(message).map((chip) => (
+                            <span
+                              key={chip.emoji}
+                              className={`reaction${chip.mine ? " mine" : ""}`}
+                            >
+                              {chip.emoji}
+                              {chip.count > 1 ? ` ${chip.count}` : ""}
+                            </span>
+                          ))}
                           {actionsFor(message, msgBot?.name ?? activeBotName, message.id === lastAssistantId)}
                         </div>
                       </div>

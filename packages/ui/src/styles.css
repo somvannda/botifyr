@@ -4582,16 +4582,21 @@ body {
 }
 
 .reaction {
-  position: absolute;
-  left: 10px;
-  bottom: -11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin: 3px 4px 0 0;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 999px;
   padding: 1px 7px;
   font-size: 12px;
   line-height: 1.4;
-  z-index: 4;
+}
+
+.reaction.mine {
+  border-color: var(--accent);
+  background: rgba(109, 139, 255, 0.14);
 }
 
 .msg-user-bubble .reaction {
@@ -7916,6 +7921,12 @@ body {
   gap: 8px;
 }
 
+a.feed-follow-btn {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+
 .page-settings {
   display: flex;
   flex-direction: column;
@@ -8717,6 +8728,25 @@ body {
   margin: 0;
   color: var(--danger);
   font-size: 12.5px;
+}
+
+.cws-warn {
+  border-color: rgba(242, 181, 68, 0.5);
+  background: rgba(242, 181, 68, 0.08);
+}
+
+.cws-warn h3 {
+  color: var(--warn);
+}
+
+.cws-error-inline {
+  color: var(--danger);
+  font-size: 12px;
+  flex: none;
+  max-width: 55%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .cws-onboard-head {

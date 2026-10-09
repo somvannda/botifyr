@@ -6,8 +6,6 @@ what Botifyr ships today and specifies the next improvements in detail.
 
 - **Status:** most of this document is built — see *Implementation status* below
   and [`docs/feed.md`](feed.md).
-  - **Open:** the **albums UI** (backend done), the reaction **summary/hover**
-    affordances, and Page **CTA-button** rendering.
   - **Deferred:** live streaming (realtime media infra).
   - **Non-goals:** ads / marketplace / events / shops.
 - **This document:** the requirements, data model, API, UI, priorities, and phases
@@ -29,13 +27,14 @@ Priority legend: **P0** = next release · **P1** = soon after · **P2** = later.
   creator, a **"Your Pages"** rail section linking to each timeline, a **View
   page** action on page-authored posts, and a **Page settings** panel (edit
   identity) with **role management** (assign Editor/Moderator/Analyst, remove).
-  Page **insights** (+ CSV export), the **community inbox**, and **pinned posts**
-  are done too — see their bullets below.
+  Page **insights** (+ CSV export), the **community inbox**, **pinned posts**, and
+  a public **CTA button** are done too — see their bullets below.
 
 **Reactions (FR-1) — done.** Likes are now a full reaction set
 (`like/love/care/haha/wow/sad/angry`): `post_reactions` table +
 `setPostReaction`, `PUT`/`DELETE /v1/posts/:id/reaction`, `reactions` +
-`myReaction` on the feed DTO, and a reaction picker in the post UI.
+`myReaction` on the feed DTO, a reaction picker in the post UI, an aggregate
+reaction **summary** (up to three emojis + total), and a **hover-to-open** picker.
 
 **Comment threads (FR-2) — done.** One level of replies: a
 `post_comments.parent_id` column, `parentId` on `POST /v1/posts/:id/comments`,
@@ -128,8 +127,8 @@ and a rail **Pages to follow** section with Follow buttons.
 
 **Albums (FR-5) — backend done.** `posts.album` + `listAlbums` / `listAlbumPosts`,
 `GET /v1/albums` and `/v1/albums/:name/posts`, `album` on the create/feed DTO, and
-`BotifyrClient.listAlbums` / `listAlbumPosts`. **UI open** (no composer album field
-or album view yet).
+`BotifyrClient.listAlbums` / `listAlbumPosts`, a composer **album name** field
+(shown with photos) and an **Albums** rail section + album view.
 
 **Everything else** in this document (ads / marketplace / events / shops, …) is
 explicitly **out of scope**.

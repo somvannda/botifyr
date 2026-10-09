@@ -2801,6 +2801,37 @@ export async function buildServer(options: ServerOptions) {
     },
   );
 
+  /** Recent agent runs for the company — real execution, including failures. */
+  app.get<{ Params: { id: string } }>(
+    "/v1/workspaces/:id/activity",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const workspace = await store.getWorkspace(request.params.id);
+      if (!workspace || workspace.ownerId !== userId) {
+        return reply.code(404).send({ error: "workspace not found" });
+      }
+      const roles = await store.listBotRoles(workspace.id);
+      const botIds = new Set(roles.map((role) => role.botId));
+      const bots = await store.listBots(userId);
+      const sessions = new Set(
+        bots.filter((bot) => botIds.has(bot.id)).map((bot) => bot.sessionId),
+      );
+      const tasks = await store.listTasksForUser(userId);
+      return tasks
+        .filter((task) => sessions.has(task.sessionId))
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+        .slice(0, 25)
+        .map((task) => ({
+          id: task.id,
+          goal: task.goal,
+          status: task.status,
+          error: task.error ?? null,
+          updatedAt: task.updatedAt,
+        }));
+    },
+  );
+
   /** The company's token budget (0 = inherit the account cap). */
   app.get<{ Params: { id: string } }>(
     "/v1/workspaces/:id/budget",
@@ -3645,6 +3676,29 @@ export async function buildServer(options: ServerOptions) {
     },
   );
 
+  // Toggle the caller's reaction on a message in a conversation.
+  app.post<{ Params: { id: string; messageId: string }; Body: { emoji?: string } }>(
+    "/v1/conversations/:id/messages/:messageId/reactions",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const session = await store.getSession(request.params.id);
+      if (!session || !(session.participants ?? []).includes(userId)) {
+        return reply.code(404).send({ error: "conversation not found" });
+      }
+      const emoji = (request.body?.emoji ?? "").trim().slice(0, 8);
+      const message = session.messages.find((entry) => entry.id === request.params.messageId);
+      if (!message) return reply.code(404).send({ error: "message not found" });
+      const reactions = { ...(message.reactions ?? {}) };
+      if (!emoji || reactions[userId] === emoji) delete reactions[userId];
+      else reactions[userId] = emoji;
+      message.reactions = reactions;
+      await store.updateSession(session);
+      emit({ type: "session.updated", session });
+      return session;
+    },
+  );
+
   app.post<{ Params: { id: string }; Body: { text?: string } }>(
     "/v1/dm/:id/messages",
     { preHandler: requireAuth },
@@ -3800,6 +3854,17 @@ export async function buildServer(options: ServerOptions) {
         createdAt: record.createdAt,
       }));
       return events;
+    },
+  );
+
+  /** Provenance: tokens spent on one task (docs/product-plan.md §3). */
+  app.get<{ Params: { id: string } }>(
+    "/v1/tasks/:id/usage",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const task = await ownedTask(request, request.params.id);
+      if (!task) return reply.code(404).send({ error: "task not found" });
+      return store.usageForTask(task.id);
     },
   );
 

@@ -11,6 +11,14 @@ they land. Keep entries short; link code paths instead of explaining them.
       moved") — the same gap we felt. **Plan:** win on the decision inbox +
       "since last visit" briefing, honest human-gating, and real hands — not on
       "most autonomous" or "most features".
+      **✅ Shipped (Phases A + B, `docs/product-plan.md`):** the HQ **Briefing**
+      landing + ranked **Inbox**; **outcomes** on work items + the agent
+      `company.report` tool; and the **per-capability autonomy ladder**
+      (`gated → probation → trusted`) with use recording, demote-on-failure, a
+      promotion review in the Inbox, and a trust `<select>` in the HQ.
+      **Remaining:** provenance (tool/source/cost per action), a real-model
+      manual run (DeepSeek is out of credit — 402), and the Phase C/D pieces
+      (auto-decompose/assign, real-hands promotion).
 - [ ] **Video translation (dub + subtitles + lip-sync)** — translate a video/movie/
       series: transcribe, translate, TTS dub (optional voice clone), optional
       lip-sync, render with correct timing — background pipeline, **no editor**.
