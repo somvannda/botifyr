@@ -1398,7 +1398,12 @@ export class PostgresStore implements Store {
     return rows.map(toPost);
   }
 
-  async listTrendingPosts(authorIds: string[], sinceIso: string, limit: number): Promise<PostRecord[]> {
+  async listTrendingPosts(
+    authorIds: string[],
+    sinceIso: string,
+    limit: number,
+    offset = 0,
+  ): Promise<PostRecord[]> {
     if (authorIds.length === 0) return [];
     const capped = Math.max(1, Math.min(50, limit));
     const { rows } = await this.pool.query(
@@ -1407,8 +1412,8 @@ export class PostgresStore implements Store {
         "(SELECT COUNT(*) FROM post_comments WHERE post_id = p.id) + " +
         "(SELECT COUNT(*) FROM post_shares WHERE post_id = p.id) AS score " +
         "FROM posts p WHERE p.author_id = ANY($1) AND p.created_at >= $2 " +
-        "ORDER BY score DESC, p.created_at DESC LIMIT $3",
-      [authorIds, sinceIso, capped],
+        "ORDER BY score DESC, p.created_at DESC LIMIT $3 OFFSET $4",
+      [authorIds, sinceIso, capped, Math.max(0, offset)],
     );
     return rows.map(toPost);
   }

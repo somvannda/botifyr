@@ -493,8 +493,13 @@ export interface Store {
     before?: { createdAt: string; id: string },
   ): Promise<PostRecord[]>;
   listPostsByAuthor(authorId: string, limit: number): Promise<PostRecord[]>;
-  /** Posts by `authorIds` since `sinceIso`, ranked by engagement. */
-  listTrendingPosts(authorIds: string[], sinceIso: string, limit: number): Promise<PostRecord[]>;
+  /** Posts by `authorIds` since `sinceIso`, ranked by engagement, paged by `offset`. */
+  listTrendingPosts(
+    authorIds: string[],
+    sinceIso: string,
+    limit: number,
+    offset?: number,
+  ): Promise<PostRecord[]>;
   /** Set/replace the viewer's reaction, or clear it with `null`. */
   setPostReaction(postId: string, userId: string, reaction: ReactionType | null): Promise<void>;
   setCommentReaction(commentId: string, userId: string, reaction: ReactionType | null): Promise<void>;

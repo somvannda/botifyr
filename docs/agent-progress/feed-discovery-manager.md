@@ -60,9 +60,13 @@ and E2E checks passing.
 
 ## Remaining limitations / next actions
 
-- **FEED-D8** — `Top`-sort pagination (needs a stable ranked cursor). Backend.
+- **Done since:** **FEED-D8** (`Top`-sort offset pagination) and the **DB-1
+  follow-up** (friends' new posts over realtime) — both implemented with tests
+  (`feed-top-pagination.test.ts`, extended `feed-realtime.test.ts`).
 - **FEED-D9** — virtualization only if profiling shows a real long-list cost.
-- **DB-1 follow-up** — friends' *new posts* over realtime (recipient resolution at
-  the emit site); the FEED-D10 fallback covers the UX today.
+- **Known flaky test (not ours):** `FeedView.dom.test.tsx > Post interactions >
+  highlights the permalink-focused post (POST-13)` fails only under a loaded
+  full-suite run (it asserts on a class removed by a 2.5s timer); it passes when
+  the file runs alone. Owner: Post Manager (Agent 4).
 - **Handoff:** completion report to Agent 1 (Feed Experience Lead); final
   independent QA by Agent 9.

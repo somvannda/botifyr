@@ -1194,8 +1194,15 @@ export class MemoryStore implements Store {
       .map((record) => ({ ...record }));
   }
 
-  async listTrendingPosts(authorIds: string[], sinceIso: string, limit: number): Promise<PostRecord[]> {
+  async listTrendingPosts(
+    authorIds: string[],
+    sinceIso: string,
+    limit: number,
+    offset = 0,
+  ): Promise<PostRecord[]> {
     const authors = new Set(authorIds);
+    const capped = Math.max(1, Math.min(50, limit));
+    const start = Math.max(0, offset);
     const score = (postId: string): number => {
       let total = 0;
       for (const key of this.postReactions.keys()) if (key.startsWith(`${postId}:`)) total += 1;
@@ -1206,7 +1213,7 @@ export class MemoryStore implements Store {
     return [...this.posts.values()]
       .filter((record) => authors.has(record.authorId) && record.createdAt >= sinceIso)
       .sort((a, b) => score(b.id) - score(a.id) || b.createdAt.localeCompare(a.createdAt))
-      .slice(0, Math.max(1, Math.min(50, limit)))
+      .slice(start, start + capped)
       .map((record) => ({ ...record }));
   }
 

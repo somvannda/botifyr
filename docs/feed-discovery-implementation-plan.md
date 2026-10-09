@@ -35,7 +35,9 @@ Constraints honoured:
 | FEED-D7 | Explicit, labelled **Sort** `<select>` | `FeedView.tsx` | unit + live |
 | FEED-D10 | Focus/visibility freshness fallback (works without realtime) | `FeedView.tsx` | unit + live |
 | FEED-D11 | Polite live region announces "N more posts loaded" | `FeedView.tsx` | unit + live |
+| FEED-D8 | Offset pagination for the `Top` (engagement-ranked) sort | `server.ts` + stores | `feed-top-pagination.test.ts` |
 | DB-1 | Deliver `feed.*` realtime events (routing filter) | `server.ts` + `events.ts` | websocket integration test |
+| DB-1b | Deliver **friends' new posts** over realtime (`toUserIds`, stripped before send) | `server.ts` + `shared` | websocket integration test |
 | DB-2 | Stable `(createdAt, id)` keyset pagination | `server.ts` + stores | pagination test |
 
 ## C. Roadmap
@@ -44,10 +46,11 @@ Constraints honoured:
 - **P1 — done:** timeline order, pagination integrity, scroll continuity.
 - **P2 — done:** end state, manual refresh, new-activity banner, labelled sort,
   pagination a11y, freshness fallback.
-- **P3 — open:** `FEED-D8` paginate the `Top` sort (needs a stable ranked
-  cursor); `FEED-D9` list virtualization only if profiling shows a real cost.
+- **P3:** `FEED-D8` paginate the `Top` sort — **done** (offset cursor; see §B);
+  `FEED-D9` list virtualization only if profiling shows a real cost.
 - **Backend follow-up:** deliver friends' *new posts* over realtime (DB-1
-  extension).
+  extension) — **done** (`feed.post.toUserIds`; the recipient list is stripped
+  before it reaches any client).
 
 ## D. Contracts & coordination
 

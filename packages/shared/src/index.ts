@@ -670,7 +670,7 @@ export type ServerEvent =
   | { type: "presence"; userId: string; online: boolean; toUserId: string }
   | { type: "typing"; sessionId: string; userId: string; toUserId: string }
   | { type: "friend.request"; requestId: string; fromUserId: string; toUserId: string }
-  | { type: "feed.post"; postId: string; authorId: string }
+  | { type: "feed.post"; postId: string; authorId: string; toUserIds?: string[] }
   | { type: "feed.like"; postId: string; fromUserId: string; fromName?: string; toUserId: string }
   | { type: "feed.comment"; postId: string; fromUserId: string; fromName?: string; toUserId: string }
   | { type: "feed.share"; postId: string; fromUserId: string; fromName?: string; toUserId: string }

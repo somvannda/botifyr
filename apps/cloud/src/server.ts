@@ -700,13 +700,15 @@ export async function buildServer(options: ServerOptions) {
       case "p2p.signal":
         return event.toUserId === userId;
       // Feed realtime (DB-1, docs/feed-discovery-plan.md). Interactions carry an
-      // explicit recipient; a new post reaches its author (other devices).
+      // explicit recipient; a new post reaches its author (other devices) and the
+      // author's friends.
       case "feed.mention":
       case "feed.like":
       case "feed.comment":
       case "feed.share":
-      case "feed.post":
         return feedEventRecipient(event) === userId;
+      case "feed.post":
+        return event.authorId === userId || (event.toUserIds?.includes(userId) ?? false);
       default:
         return false;
     }
@@ -4483,15 +4485,19 @@ export async function buildServer(options: ServerOptions) {
       const cache = new Map<string, FeedAuthorDto>();
       const items = [];
 
-      // "Top": engagement-ranked over the last 30 days (no cursor).
+      // "Top": engagement-ranked over the last 30 days, paged by an offset cursor.
       if (sort === "top") {
         const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
         const nowIso = new Date().toISOString();
-        const ranked = (await store.listTrendingPosts(authorIds, since, limit)).filter(
-          (post) => canSeePost(post, userId) && !isFutureScheduled(post, nowIso),
-        );
-        for (const record of ranked) items.push(await feedPostOf(record, userId, cache));
-        return { items, nextCursor: null };
+        const offset = cursor ? Math.max(0, Number.parseInt(cursor, 10) || 0) : 0;
+        const ranked = await store.listTrendingPosts(authorIds, since, limit + 1, offset);
+        const hasMore = ranked.length > limit;
+        const page = hasMore ? ranked.slice(0, limit) : ranked;
+        for (const record of page) {
+          if (!canSeePost(record, userId) || isFutureScheduled(record, nowIso)) continue;
+          items.push(await feedPostOf(record, userId, cache));
+        }
+        return { items, nextCursor: hasMore ? String(offset + limit) : null };
       }
 
       const nowIso = new Date().toISOString();
@@ -4635,7 +4641,13 @@ export async function buildServer(options: ServerOptions) {
           .slice(0, 4)
       : [];
     if (pollOptions.length >= 2) await store.createPoll(record.id, pollOptions);
-    emit({ type: "feed.post", postId: record.id, authorId });
+    const friendIds = await store.listFriends(authorId);
+    emit({
+      type: "feed.post",
+      postId: record.id,
+      authorId,
+      toUserIds: [authorId, ...friendIds],
+    });
     return reply.code(201).send(await feedPostOf(record, userId, new Map()));
   });
 
@@ -5100,7 +5112,13 @@ export async function buildServer(options: ServerOptions) {
       };
       await store.createPost(record);
       await store.setPostShare(original.id, userId, true);
-      emit({ type: "feed.post", postId: record.id, authorId: userId });
+      const friendIds = await store.listFriends(userId);
+      emit({
+        type: "feed.post",
+        postId: record.id,
+        authorId: userId,
+        toUserIds: [userId, ...friendIds],
+      });
       if (original.authorId !== userId) {
         const actor = await store.getUserById(userId);
         emit({
@@ -6712,7 +6730,9 @@ export async function buildServer(options: ServerOptions) {
     const unsubscribe = subscribe((event: ServerEvent) => {
       if (!canReceive(userId, event)) return;
       try {
-        ws.send(JSON.stringify(event));
+        // Never leak the recipient list to the client.
+        const payload = event.type === "feed.post" ? { ...event, toUserIds: undefined } : event;
+        ws.send(JSON.stringify(payload));
       } catch {
         // socket closed
       }

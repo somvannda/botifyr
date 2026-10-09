@@ -36,17 +36,20 @@ describe("feed realtime delivery (DB-1)", () => {
     await store.createFriendship(alice.user.id, bob.user.id);
 
     const open = (token: string) =>
-      new Promise<{ events: ServerEvent[]; close: () => void }>((resolve, reject) => {
+      new Promise<{ events: ServerEvent[]; raw: string[]; close: () => void }>((resolve, reject) => {
         const socket = new WebSocket(`ws://127.0.0.1:${port}/v1/stream?token=${encodeURIComponent(token)}`);
         const events: ServerEvent[] = [];
+        const raw: string[] = [];
         socket.addEventListener("message", (event) => {
+          const text = String((event as MessageEvent).data);
+          raw.push(text);
           try {
-            events.push(JSON.parse(String((event as MessageEvent).data)) as ServerEvent);
+            events.push(JSON.parse(text) as ServerEvent);
           } catch {
             // ignore malformed frames
           }
         });
-        socket.addEventListener("open", () => resolve({ events, close: () => socket.close() }));
+        socket.addEventListener("open", () => resolve({ events, raw, close: () => socket.close() }));
         socket.addEventListener("error", (error) => reject(error));
       });
 
@@ -74,8 +77,13 @@ describe("feed realtime delivery (DB-1)", () => {
       // The author's stream sees their own new post and the incoming like.
       expect(types(aliceStream.events)).toContain("feed.post");
       expect(types(aliceStream.events)).toContain("feed.like");
-      // A friend must not receive someone else's interaction notification.
+      // A friend's stream also receives the author's new post (DB-1 follow-up)…
+      expect(types(bobStream.events)).toContain("feed.post");
+      // …but never someone else's interaction notification.
       expect(types(bobStream.events)).not.toContain("feed.like");
+      // The recipient list must not leak to any client.
+      expect(bobStream.raw.some((frame) => frame.includes("toUserIds"))).toBe(false);
+      expect(aliceStream.raw.some((frame) => frame.includes("toUserIds"))).toBe(false);
     } finally {
       aliceStream.close();
       bobStream.close();

@@ -47,7 +47,7 @@
 | 8 | No **screen-reader announcement** when a page loads | a11y | source | Fixed (FEED-D11) |
 | 9 | Realtime `feed.*` events were **never delivered** (websocket filter) | Backend defect | source | Fixed (DB-1) |
 | 10 | Cursor pagination could **skip posts** sharing a timestamp | Backend defect | source | Fixed (DB-2) |
-| 11 | `Top` sort returns a single ranked page (no pagination) | Backend limitation | source | Documented (FEED-D8) |
+| 11 | `Top` sort returns a single ranked page (no pagination) | Backend limitation | source | Fixed (FEED-D8) |
 
 Non-issues confirmed (not defects): page reload returning to Chat is intentional;
 no horizontal overflow at 390/900/1680px; media now reserves space (Agent 4).
@@ -64,11 +64,12 @@ no horizontal overflow at 390/900/1680px; media now reserves space (Agent 4).
 ## 4. Backend dependencies
 
 - **DB-1** — `canReceive` had no `feed.*` cases, so realtime delivery was dead.
-  *Fixed* (`feedEventRecipient` + websocket test). Follow-up: friends' *new
-  posts* need recipient resolution at the emit site.
+  *Fixed* (`feedEventRecipient` + websocket test). **Follow-up done:** friends'
+  *new posts* now reach friends via `feed.post.toUserIds` (stripped before send).
 - **DB-2** — `created_at < cursor` skipped equal-timestamp posts. *Fixed* (keyset
   `(createdAt, id)`).
-- **FEED-D8** — `Top` ranking has no stable cursor; pagination deferred.
+- **FEED-D8** — `Top` ranking had no stable cursor. *Fixed* with an offset cursor
+  (`listTrendingPosts(..., offset)` + `feed-top-pagination.test.ts`).
 
 ## 5. Coordination
 
