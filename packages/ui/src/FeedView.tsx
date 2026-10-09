@@ -3495,7 +3495,12 @@ export function FeedView({
   const [draft, setDraft] = useState(() => localStorage.getItem(FEED_DRAFT_KEY) ?? "");
   const [posting, setPosting] = useState(false);
   /** Set while media uploads run, so the composer can show n / total progress. */
-  const [upload, setUpload] = useState<{ done: number; total: number } | null>(null);
+  const [upload, setUpload] = useState<{
+    done: number;
+    total: number;
+    loaded: number;
+    totalBytes: number;
+  } | null>(null);
   /** Composer-specific errors stay separate from timeline-load errors. */
   const [composerError, setComposerError] = useState<string | null>(null);
   /** Transient confirmation shown after a successful publish/schedule. */
@@ -3886,17 +3891,33 @@ export function FeedView({
     uploadedMediaRef.current.clear();
     try {
       const mediaIds: string[] = [];
-      if (attachments.length > 0) setUpload({ done: 0, total: attachments.length });
+      const totalBytes = attachments.reduce((sum, file) => sum + file.size, 0);
+      let completedBytes = 0;
+      if (attachments.length > 0) {
+        setUpload({ done: 0, total: attachments.length, loaded: 0, totalBytes });
+      }
       for (const file of attachments) {
-        // Raw bytes, so large media isn't inflated by base64 on the wire.
-        const media = await client.uploadFileRaw({
-          name: file.name,
-          mime: file.mime,
-          blob: file.file,
-        });
+        // Raw bytes, so large media isn't inflated by base64 on the wire. The
+        // callback adds byte-level progress on top of the per-file count.
+        const media = await client.uploadFileRaw(
+          { name: file.name, mime: file.mime, blob: file.file },
+          (loaded) =>
+            setUpload({
+              done: mediaIds.length,
+              total: attachments.length,
+              loaded: completedBytes + loaded,
+              totalBytes,
+            }),
+        );
         uploadedMediaRef.current.set(file.id, media.id);
         mediaIds.push(media.id);
-        setUpload({ done: mediaIds.length, total: attachments.length });
+        completedBytes += file.size;
+        setUpload({
+          done: mediaIds.length,
+          total: attachments.length,
+          loaded: completedBytes,
+          totalBytes,
+        });
       }
       const poll = pollOptions.map((option) => option.trim()).filter(Boolean);
       const post = await client.createPost({
@@ -4080,6 +4101,13 @@ export function FeedView({
       />,
     );
   }
+
+  // Byte-level progress when sizes are known, else fall back to file count.
+  const uploadPercent = upload
+    ? upload.totalBytes > 0
+      ? Math.round((upload.loaded / upload.totalBytes) * 100)
+      : Math.round((upload.done / Math.max(upload.total, 1)) * 100)
+    : 0;
 
   return (
     <div className="feed">
@@ -4341,17 +4369,14 @@ export function FeedView({
               role="progressbar"
               aria-label="Uploading media"
               aria-valuemin={0}
-              aria-valuemax={upload.total}
-              aria-valuenow={upload.done}
+              aria-valuemax={100}
+              aria-valuenow={uploadPercent}
             >
               <div className="feed-upload-track">
-                <div
-                  className="feed-upload-fill"
-                  style={{ width: `${Math.round((upload.done / upload.total) * 100)}%` }}
-                />
+                <div className="feed-upload-fill" style={{ width: `${uploadPercent}%` }} />
               </div>
               <span className="feed-upload-label">
-                Uploading {upload.done} / {upload.total}…
+                Uploading {uploadPercent}% ({upload.done}/{upload.total})
               </span>
             </div>
           )}

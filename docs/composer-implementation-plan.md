@@ -106,6 +106,13 @@
 - The "Mood" button opens a `role="listbox"` picker (reuses `.emoji-pop` /
   `.emoji-choice`) and inserts the chosen emoji at the caret.
 
+### W16 — Byte-accurate upload progress (third pass) · Done
+- `uploadFileRaw(input, onProgress?)` reports bytes via XHR (fetch has no upload
+  progress event); the fetch path is unchanged when no callback is passed.
+- The composer aggregates bytes across attachments and shows a percentage
+  (`role="progressbar"` `aria-valuenow` 0–100) with the file count alongside.
+- No CSS change: reuses the existing `.feed-upload*` classes.
+
 ### Backlog
 - Collapsed composer state; `listScheduled` management UI (Post Manager).
 - Byte-accurate upload progress (would need XHR/streams).
