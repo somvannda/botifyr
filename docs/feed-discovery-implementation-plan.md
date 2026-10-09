@@ -25,7 +25,7 @@ Constraints honoured:
 
 | ID | Change | Where | Verified |
 | --- | --- | --- | --- |
-| FEED-ORDER | Reordered the timeline to **Composer → Stories → posts** | `FeedView.tsx` | unit test + live E2E + screenshot |
+| FEED-ORDER | Timeline order: **Stories → Composer → posts** (tray first; supersedes the earlier Composer-first decision) | `FeedView.tsx` | unit test + live E2E + screenshot |
 | FEED-D1 | Infinite scroll (`IntersectionObserver`, 600px look-ahead) + Load-more fallback | `FeedView.tsx` | live (20→25 by scrolling) |
 | FEED-D2 | End-of-timeline state (`role="status"`) | `FeedView.tsx` + css | live |
 | FEED-D3 | Append de-dup + stale-response guard + identical-request de-dup | `FeedView.tsx` | unit + live (25 unique; 3 requests) |

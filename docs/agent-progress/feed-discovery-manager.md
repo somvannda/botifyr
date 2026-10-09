@@ -79,3 +79,16 @@ and E2E checks passing.
   the file runs alone. Owner: Post Manager (Agent 4).
 - **Handoff:** completion report to Agent 1 (Feed Experience Lead); final
   independent QA by Agent 9.
+
+## Update — Stories tray redesign (supersedes FEED-ORDER)
+
+- The story tray now sits **above the composer** (order: **Stories → Composer →
+  posts**), per product direction. This supersedes the earlier Composer-first
+  `FEED-ORDER` decision recorded above.
+- The tray was restyled to the cover-card design: tall (112×200) rounded photo
+  cards, a circular avatar overlay (accent ring while unseen, muted once viewed),
+  the creator's name over a bottom scrim, and a `Create story` tile with a
+  placeholder avatar + add badge.
+- Touched: `packages/ui/src/{Stories.tsx,FeedView.tsx,styles.css}`;
+  `FeedView.dom.test.tsx` (FEED-ORDER test now asserts Stories → Composer →
+  posts); `docs/feed-discovery-{implementation-plan,ux-audit}.md`.
