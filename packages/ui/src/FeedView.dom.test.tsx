@@ -36,6 +36,8 @@ function makeClient(
     listStories: vi.fn().mockResolvedValue(extras.stories ?? []),
     viewStory: vi.fn().mockResolvedValue({ ok: true }),
     reactStory: vi.fn().mockResolvedValue({ ok: true }),
+    uploadFile: vi.fn().mockResolvedValue({ id: "media-1" }),
+    createStory: vi.fn().mockResolvedValue({ ok: true }),
     listReels: vi.fn().mockResolvedValue({ items: extras.reels ?? [], nextCursor: null }),
     listMyPages: vi.fn().mockResolvedValue([]),
     getPostDraft: vi.fn().mockResolvedValue(null),
@@ -353,6 +355,24 @@ describe("FeedView action hierarchy", () => {
     const tile = await screen.findByRole("button", { name: /Alice/ });
     expect(tile.querySelector(".story-avatar.seen")).toBeTruthy();
     expect(container.querySelector(".story-viewer")).toBeNull();
+  });
+
+  it("creates a separate story for every selected image (multi-select)", async () => {
+    const client = makeClient([], { stories: [] });
+    const { container } = render(<FeedView client={client} cloudUrl="http://cloud" viewerId="viewer-1" />);
+    await waitFor(() => expect(container.querySelector(".stories-strip")).toBeTruthy());
+
+    const input = container.querySelector<HTMLInputElement>('input[type="file"][accept="image/*"]');
+    expect(input?.hasAttribute("multiple")).toBe(true);
+
+    const files = [
+      new File([new Uint8Array(8)], "one.png", { type: "image/png" }),
+      new File([new Uint8Array(8)], "two.png", { type: "image/png" }),
+    ];
+    fireEvent.change(input as HTMLInputElement, { target: { files } });
+
+    await waitFor(() => expect(asMock(client.createStory)).toHaveBeenCalledTimes(2));
+    expect(asMock(client.uploadFile)).toHaveBeenCalledTimes(2);
   });
 
   it("pauses and resumes story progression (EXP-1)", async () => {

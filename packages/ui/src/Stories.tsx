@@ -572,22 +572,25 @@ export function StoriesStrip({
   }, [storyGroups, storyOpen]);
 
   async function addStory(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
+    const files = Array.from(event.target.files ?? []).filter((file) => file.type.startsWith("image/"));
     event.target.value = "";
-    if (!file || !file.type.startsWith("image/")) return;
-    const data = await new Promise<string>((resolve) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
-      reader.readAsDataURL(file);
-    });
-    if (!data) return;
-    try {
-      const media = await client.uploadFile({ name: file.name, mime: file.type, data });
-      await client.createStory({ mediaId: media.id });
-      await loadStories();
-    } catch {
-      // Ignore a failed story.
+    if (files.length === 0) return;
+    // Upload each selected image as its own story, oldest-first (selection order).
+    for (const file of files) {
+      const data = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
+        reader.readAsDataURL(file);
+      });
+      if (!data) continue;
+      try {
+        const media = await client.uploadFile({ name: file.name, mime: file.type, data });
+        await client.createStory({ mediaId: media.id });
+      } catch {
+        // Ignore a failed story; keep uploading the rest.
+      }
     }
+    await loadStories();
   }
 
   const markStorySeen = useCallback(
@@ -736,7 +739,14 @@ export function StoriesStrip({
             </>
           );
         })()}
-        <input ref={storyRef} type="file" accept="image/*" style={{ display: "none" }} onChange={addStory} />
+        <input
+          ref={storyRef}
+          type="file"
+          accept="image/*"
+          multiple
+          style={{ display: "none" }}
+          onChange={addStory}
+        />
       </div>
 
       {storyOpen &&
