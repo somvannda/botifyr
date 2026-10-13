@@ -1132,6 +1132,17 @@ The poster is saved to the Library. Attach it to social posts.
 
 ## Phase 3: Roles needing external connectors (owned setup)
 
+> **Status: 🟡 IN PROGRESS — instructions shipped; connectors are ops-gated.**
+> The Phase 3 roles now have playbooks (`role-instructions.ts`): **Head of
+> Marketing** (plan → delegate → read insights → publish/ads on approval),
+> **Social Media Manager** (draft → read insights → reply; publishing and replies
+> approved) and **Support Agent** (answer, keep the FAQ current, reply via email or
+> social, escalate edge cases). The tool-coherence guard covers them.
+> **Remaining (needs real credentials, not code):** connect Postiz / Telegram /
+> Resend — see [`setup-channels.md`](setup-channels.md). Meta/LinkedIn app review
+> is a per-customer onboarding step (`company-workspace.md` Part V), not a code
+> change.
+
 **Timeline:** Week 5 (5 days)  
 **Roles:** Head of Marketing, Social Media Manager, Support Agent
 
