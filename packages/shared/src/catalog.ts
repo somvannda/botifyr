@@ -41,6 +41,7 @@ export const CAPABILITIES: CapabilityDef[] = [
   { id: "design.create", kind: "tool", risk: "none", description: "Create on-brand visuals / posters" },
   { id: "email.send", kind: "connector", risk: "consequential", description: "Send email" },
   { id: "crm.log", kind: "tool", risk: "none", description: "Log a CRM interaction" },
+  { id: "finance.read", kind: "tool", risk: "none", description: "Read the spend ledger" },
   { id: "ads.manage", kind: "connector", risk: "money", description: "Create / boost ads" },
   { id: "payments.charge", kind: "connector", risk: "money", description: "Charge a customer" },
 ];
@@ -373,7 +374,7 @@ export const ROLE_CATALOG: RoleDefinition[] = [
     summary: "Tracks spend, revenue and budgets.",
     jobDescription: "You track spend, revenue and the budget, and report the numbers honestly.",
     skills: ["finance-tracking", "data-analysis"],
-    capabilities: ["files.read", "files.write"],
+    capabilities: ["files.read", "files.write", "finance.read"],
     kpis: ["Budget adherence", "Accuracy"],
     reportsTo: "exec.ceo",
   },
