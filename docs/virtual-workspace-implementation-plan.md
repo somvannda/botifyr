@@ -407,6 +407,17 @@ Approvals appear in a modal, proposed quests appear in the HQ, escalations are t
 
 ### 0.4 Give managers an actual pull loop (scheduled delegation)
 
+> **Status: ✅ SHIPPED** (branch `agent/phase0-delegation`).
+> `company.review_department` (`delegation-tools.ts`) lets a department head see
+> its department's open/blocked/in-review work, who carries what, and what is
+> unassigned. `scheduledPromptFor` (`schedule-prompts.ts`) makes the scheduled runs
+> **level-aware**: the chair runs the company, a head reviews + delegates
+> (`company.delegate`) + reports, and an IC does its next task + reports. Level
+> comes from the catalog role (`catalogRoleFor`), with a title fallback only for
+> custom titles — so an IC titled "Lead Researcher" stays an IC. Both schedule
+> sites in `server.ts` use the helper. Unit-tested (`schedule-prompts.test.ts`,
+> `delegation-tools.test.ts`).
+
 **Problem:**  
 `company.delegate` creates work items, but managers don't actually *assign* work during their scheduled runs. Every bot self-polls its own board tasks. The org chart (manager→IC reporting) is decorative in execution.
 

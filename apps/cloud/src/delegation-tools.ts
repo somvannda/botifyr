@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { ToolDefinition } from "@botifyr/agent-core";
 import type { WorkItem } from "@botifyr/shared";
 import type { Store } from "./store/index.js";
+import { catalogRoleFor } from "./capability-tools.js";
 
 /**
  * Delegation: a manager assigns work to a teammate by role (docs/company-os.md
@@ -163,6 +164,80 @@ export function createDelegationTools(store: Store, userId: string, botId: strin
         item.updatedAt = new Date().toISOString();
         await store.updateWorkItem(item);
         return { ok: true, output: `Recorded "${item.title}" as ${status}: ${result}` };
+      },
+    },
+    {
+      name: "company.review_department",
+      description:
+        "Review your department's board before delegating: open, blocked and in-review tasks, who is carrying what, and what is unassigned. Use it as a department head to unblock stalled work and delegate the next priority with company.delegate.",
+      parameters: { type: "object", properties: {} },
+      run: async () => {
+        const author = await store.getBot(botId);
+        const workspaces = await store.listWorkspaces(userId);
+        const workspace = author?.workspace
+          ? workspaces.find((entry) => entry.name === author.workspace)
+          : workspaces.length === 1
+            ? workspaces[0]
+            : undefined;
+        if (!workspace) {
+          return { ok: false, output: "You don't have a company yet — create one first." };
+        }
+        const roles = await store.listBotRoles(workspace.id);
+        const myRole = roles.find((entry) => entry.botId === botId);
+        if (!myRole) return { ok: false, output: "You don't have a seat in this company." };
+        const catalog = catalogRoleFor({ title: myRole.title, department: myRole.department });
+        const isHead =
+          myRole.isChair === true ||
+          (catalog
+            ? catalog.level === "head" || catalog.level === "exec"
+            : /head|lead|chief|cto|ceo|coo|cfo|director|vp|manager/i.test(myRole.title));
+        if (!isHead) {
+          return { ok: false, output: "Only a department head can review the department." };
+        }
+        const members = roles.filter((entry) => entry.department === myRole.department);
+        const memberIds = new Set(members.map((entry) => entry.botId));
+        const titleByBot = new Map(members.map((entry) => [entry.botId, entry.title]));
+        const mine = (await store.listWorkItems(workspace.id)).filter(
+          (item) =>
+            item.department === myRole.department ||
+            (item.assigneeBotId ? memberIds.has(item.assigneeBotId) : false),
+        );
+        const open = mine.filter((item) => item.status === "todo" || item.status === "in_progress");
+        const blocked = mine.filter((item) => item.status === "blocked");
+        const review = mine.filter((item) => item.status === "review");
+        const unassigned = open.filter((item) => !item.assigneeBotId);
+        const lines = [
+          `Department: ${myRole.department} · ${members.length} member(s)`,
+          `Open ${open.length} · Blocked ${blocked.length} · In review ${review.length}`,
+        ];
+        if (open.length) {
+          lines.push("Open:");
+          for (const item of open.slice(0, 12)) {
+            const who = item.assigneeBotId ? titleByBot.get(item.assigneeBotId) : undefined;
+            lines.push(`- ${item.title}${who ? ` (${who})` : " (unassigned)"} [${item.phase}]`);
+          }
+        }
+        if (blocked.length) {
+          lines.push("Blocked:");
+          for (const item of blocked.slice(0, 8)) {
+            const who = item.assigneeBotId ? titleByBot.get(item.assigneeBotId) : undefined;
+            lines.push(`- ${item.title}${who ? ` (${who})` : ""}`);
+          }
+        }
+        const load = new Map<string, number>();
+        for (const item of open) {
+          if (item.assigneeBotId) load.set(item.assigneeBotId, (load.get(item.assigneeBotId) ?? 0) + 1);
+        }
+        if (load.size) {
+          lines.push("Load:");
+          for (const [id, count] of load) lines.push(`- ${titleByBot.get(id) ?? "?"}: ${count} open`);
+        }
+        lines.push(
+          unassigned.length
+            ? "Assign the next unassigned item to the right teammate with company.delegate."
+            : "No unassigned work — unblock a stalled item or report status to your manager.",
+        );
+        return { ok: true, output: lines.join("\n") };
       },
     },
   ];
