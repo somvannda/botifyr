@@ -10,6 +10,7 @@ import type {
   Quest,
   Task,
   WorkspaceBudget,
+  WorkspaceInbox,
   WorkspaceWithRoles,
   WorkItem,
 } from "@botifyr/shared";
@@ -143,6 +144,7 @@ export function CompanyWorkspace({
   const [meta, setMeta] = useState<WorkspaceWithRoles | null>(null);
   const [items, setItems] = useState<WorkItem[]>([]);
   const [needs, setNeeds] = useState<Task[]>([]);
+  const [inbox, setInbox] = useState<WorkspaceInbox | null>(null);
   const [quests, setQuests] = useState<Quest[]>([]);
   const [grants, setGrants] = useState<CapabilityGrant[]>([]);
   const [reports, setReports] = useState<CompanyReport[]>([]);
@@ -203,11 +205,12 @@ export function CompanyWorkspace({
         setWiki([]);
         setBudget(null);
         setMeta(null);
+        setInbox(null);
         return;
       }
       setLoading(true);
       try {
-        const [it, nd, bd, gr, rp, qs, wk, ws, pr, ac] = await Promise.all([
+        const [it, nd, bd, gr, rp, qs, wk, ws, pr, ac, ib] = await Promise.all([
           client.listWorkItems(id).catch(() => []),
           client.listWorkspaceNeeds(id).catch(() => []),
           client.getWorkspaceBudget(id).catch(() => null),
@@ -218,6 +221,7 @@ export function CompanyWorkspace({
           client.getWorkspace(id).catch(() => null),
           client.listProposals(id).catch(() => []),
           client.listWorkspaceActivity(id).catch(() => []),
+          client.getWorkspaceInbox(id).catch(() => null),
         ]);
         setItems(it);
         setNeeds(nd);
@@ -229,6 +233,7 @@ export function CompanyWorkspace({
         setWiki(wk);
         setProposals(pr);
         setActivity(ac);
+        setInbox(ib);
         if (ws) setMeta(ws);
       } finally {
         setLoading(false);
@@ -322,7 +327,10 @@ export function CompanyWorkspace({
     ? reports.filter((report) => new Date(report.createdAt).getTime() > sinceMs)
     : [];
 
-  const inboxCount = needs.length + proposedQuests.length + promotions.length;
+  // Prefer the server's ranked inbox count; fall back to the local signals when
+  // the endpoint isn't available (an older cloud).
+  const inboxCount = inbox ? inbox.urgent : needs.length + proposedQuests.length + promotions.length;
+  const blockedWork = inbox?.items.filter((item) => item.kind === "blocked_work") ?? [];
   const failedRuns = activity.filter((run) => run.status === "failed");
   const runningRuns = activity.filter((run) => run.status === "running" || run.status === "queued");
   // Runs paused on a founder decision (a consequential action needs approval).
@@ -585,9 +593,23 @@ export function CompanyWorkspace({
           </button>
         </li>
       ))}
+      {blockedWork.map((item) => (
+        <li key={item.id} className="cws-need">
+          <span className="cws-need-text">
+            Blocked: <strong>{item.title}</strong>
+          </span>
+          <span className="cws-muted">{item.detail}</span>
+          <button className="ghost small" type="button" onClick={() => setTab("board")}>
+            Open board
+          </button>
+        </li>
+      ))}
       {needs.map((task) => (
         <li key={task.id} className="cws-need">
           <span className="cws-need-text">{task.goal}</span>
+          {task.approval?.description && (
+            <span className="cws-muted">{task.approval.description}</span>
+          )}
           <div className="cws-need-actions">
             <button
               className="ghost small"
