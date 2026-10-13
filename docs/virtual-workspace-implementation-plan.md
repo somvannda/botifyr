@@ -899,8 +899,22 @@ Once verified, the role is "production-ready." Every new company that hires this
 >   routes `GET|POST /v1/workspaces/:id/triggers`, `DELETE …/triggers/:name`, and a
 >   fire endpoint `POST /v1/workspaces/:id/hooks/:name`. A fired trigger reuses
 >   **`runScheduled`**, so budget, approval and audit apply unchanged; the payload
->   is labelled untrusted and capped. v1 uses the owner's auth on the hook (a
->   per-workspace hook token is the follow-up).
+>   is labelled untrusted and capped.
+>
+> **Calling a hook from an external service.** The hook is owner-authenticated, so
+> an integration (email/ticket webhook, Zapier, a cron) calls it with the owner's
+> **developer API key** — `x-api-key: bk_…`, or `Authorization: Bearer bk_…` —
+> rather than a session token. No separate hook token is needed:
+>
+> ```bash
+> curl -X POST "$BOTIFYR/v1/workspaces/$WS/hooks/new-ticket" \
+>   -H "x-api-key: bk_…" -H "content-type: application/json" \
+>   -d '{"payload":{"subject":"Printer is down"}}'
+> # → {"ok":true,"queued":true}
+> ```
+>
+> The fired run is attributed to the trigger's employee and respects the company's
+> budget; any consequential action still needs approval.
 
 ---
 
