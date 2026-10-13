@@ -27,6 +27,7 @@ import { createTelegramSocialClient, resolveTelegramChannel } from "./social-tel
 import { createPostizSocialClient } from "./social-postiz.js";
 import { createDesignTools } from "./design-tools.js";
 import { createCrmTools } from "./crm-tools.js";
+import { createFinanceTools } from "./finance-tools.js";
 import { createFeedTools } from "./feed-tools.js";
 import { createEmailTools, resendSender } from "./email-tools.js";
 import { createEscalationTools } from "./escalation-tools.js";
@@ -576,6 +577,10 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
     // CRM hand: log interactions to the company wiki (append-only, not gated).
     if (has("crm.log")) {
       tools.push(...createCrmTools(store, userId, authorBot.id));
+    }
+    // Finance hand: read the spend ledger (read-only).
+    if (has("finance.read")) {
+      tools.push(...createFinanceTools(store, userId, authorBot.id));
     }
     // Any employee can pause and ask the owner when blocked (CAPTCHA/2FA/decision).
     tools.push(...createEscalationTools());

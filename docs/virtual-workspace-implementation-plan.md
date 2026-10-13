@@ -996,7 +996,15 @@ Check CRM files in the wiki to see past interactions before reaching out.
 
 ---
 
-### 2.2 New tool: `finance.query_ledger`
+### 2.2 New tool: `finance.ledger`
+
+> **Status: ✅ SHIPPED.** `apps/cloud/src/finance-tools.ts` + `finance-tools.test.ts`.
+> Reads the numbers the store already has — `usageSince`, `getWorkspaceBudget`,
+> `getWallet`, `listLedger` — and reports them honestly (it never estimates).
+> Gated by a new `finance.read` catalog capability (held by the Finance Analyst);
+> `tool-capabilities.ts` maps `finance.*` → `finance.read`; wired in `runner.ts`;
+> the Finance Analyst playbook uses it. (Named `finance.ledger`, not
+> `finance.query_ledger`.)
 
 **Purpose:** Finance Analyst queries wallet transactions, usage events, and invoices.
 
