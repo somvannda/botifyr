@@ -25,6 +25,7 @@ import type {
   User,
   WorkItem,
   WorkspaceBudget,
+  WorkspaceInbox,
   WorkspaceWithRoles,
 } from "@botifyr/shared";
 
@@ -1061,6 +1062,15 @@ export class BotifyrClient {
   /** Tasks across the company's employees that are waiting for CEO approval. */
   listWorkspaceNeeds(workspaceId: string): Promise<Task[]> {
     return this.request(`/v1/workspaces/${workspaceId}/needs`);
+  }
+
+  /**
+   * The ranked "Needs you" inbox across the company: approvals, trust demotions,
+   * blocked work and proposed quests in one explainable list
+   * (docs/product-plan.md §3).
+   */
+  getWorkspaceInbox(workspaceId: string): Promise<WorkspaceInbox> {
+    return this.request(`/v1/workspaces/${workspaceId}/inbox`);
   }
 
   /** Recent agent runs for a workspace — real execution, including failures. */

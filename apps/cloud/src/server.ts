@@ -49,6 +49,7 @@ import {
   withSessionLock,
 } from "./runtime.js";
 import { resolveTaskApproval } from "./approvals.js";
+import { buildInbox } from "./inbox.js";
 import { handleNodeMessage, nodeInfo, registerNode } from "./nodes.js";
 import { createToken, hashPassword, hashToken, verifyPassword } from "./auth.js";
 import { encryptSecret, decryptSecret } from "./vault.js";
@@ -3026,6 +3027,40 @@ export async function buildServer(options: ServerOptions) {
         .filter((task) => sessions.has(task.sessionId) && task.status === "awaiting_approval")
         .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
         .slice(0, 50);
+    },
+  );
+
+  /**
+   * The ranked "Needs you" inbox: approvals, trust demotions, blocked work and
+   * proposed quests in one explainable list (docs/product-plan.md §3).
+   */
+  app.get<{ Params: { id: string } }>(
+    "/v1/workspaces/:id/inbox",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const workspace = await store.getWorkspace(request.params.id);
+      if (!workspace || workspace.ownerId !== userId) {
+        return reply.code(404).send({ error: "workspace not found" });
+      }
+      const roles = await store.listBotRoles(workspace.id);
+      const bots = await store.listBots(userId);
+      const botById = new Map(bots.map((bot) => [bot.id, bot]));
+      const sessions = new Set<string>();
+      const roleTitleByBot = new Map<string, string>();
+      for (const role of roles) {
+        const bot = botById.get(role.botId);
+        if (bot) sessions.add(bot.sessionId);
+        roleTitleByBot.set(role.botId, role.title);
+      }
+      const [allTasks, quests, workItems, grants] = await Promise.all([
+        store.listTasksForUser(userId),
+        store.listQuests(workspace.id),
+        store.listWorkItems(workspace.id),
+        store.listCapabilityGrants(workspace.id),
+      ]);
+      const tasks = allTasks.filter((task) => sessions.has(task.sessionId));
+      return buildInbox({ tasks, quests, workItems, grants, roleTitleByBot });
     },
   );
 
