@@ -430,10 +430,12 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
     ? (await store.listWorkspaces(userId).catch(() => [])).find((entry) => entry.name === authorBot.workspace)
     : undefined;
   if (company?.dna) companyBrief = companyContext(company.dna);
-  // Feed hands: opt-in via the "feed" skill, so an operator teaches the bot
-  // about Botifyr's social surface before it can act on it. Reads are free;
-  // publish/thread/join/moderate are approval-gated (docs/feed.md).
-  if (authorBot?.skills?.includes("feed")) {
+  // Feed hands: opt-in via the "feed" skill for personal / founder bots, so an
+  // operator teaches the bot about Botifyr's social surface before it can act on
+  // it. Company employees get the Feed automatically from their social
+  // capabilities (see the company block below) — it is an *owned channel* with no
+  // external setup. Reads are free; publish/thread/join/moderate are approval-gated.
+  if (!company && authorBot?.skills?.includes("feed")) {
     tools.push(...createFeedTools(store, { userId, botId: authorBot.id }));
   }
   if (company) {
@@ -497,9 +499,12 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
       : { allowed: new Set<string>(), blocked: new Set<string>(), added: new Set<string>() };
     const has = (capability: string): boolean => resolved.allowed.has(capability);
 
-    // Social hands: read/publish/reply on the connected page. Publishing and
-    // replying are approval-gated; reads are free.
-    if (has("social.read_insights") || has("social.publish") || has("social.reply")) {
+    // Social hands: the connected page + Botifyr's own Feed (an owned channel,
+    // no external setup). Publishing and replying are approval-gated; reads are
+    // free. Only the capabilities the role actually holds are exposed.
+    const socialCapable =
+      has("social.read_insights") || has("social.publish") || has("social.reply");
+    if (socialCapable) {
       const record = await store.getUserById(userId).catch(() => null);
       const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
       const postizKey = process.env.POSTIZ_API_KEY;
@@ -517,6 +522,13 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
             : notConnectedSocial();
       tools.push(
         ...createSocialTools(client).filter((tool) => has(capabilityForTool(tool.name) ?? "")),
+      );
+      // Botifyr's Feed — the company's own social surface. Because it needs no
+      // external account, this is the channel a brand-new company can use today.
+      tools.push(
+        ...createFeedTools(store, { userId, botId: authorBot.id }).filter((tool) =>
+          has(capabilityForTool(tool.name) ?? ""),
+        ),
       );
     }
     // Ads hand: campaigns + spend (money → approval-gated).
