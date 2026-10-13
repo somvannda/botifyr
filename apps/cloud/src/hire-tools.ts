@@ -5,6 +5,7 @@ import type { Store } from "./store/index.js";
 import { rememberSession } from "./runtime.js";
 import { emit } from "./events.js";
 import { toDepartment } from "./company.js";
+import { withRoleInstructions } from "./role-instructions.js";
 
 /**
  * Hiring: let the CEO (or a company's exec) add an employee by chatting —
@@ -99,7 +100,7 @@ export function createHireTools(store: Store, userId: string, botId: string): To
           name,
           emoji: "🤖",
           scheme: 0,
-          instructions,
+          instructions: withRoleInstructions(title, instructions),
           workspace: workspace.name,
           sessionId: session.id,
           createdAt: now,
