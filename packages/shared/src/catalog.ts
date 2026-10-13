@@ -38,6 +38,7 @@ export const CAPABILITIES: CapabilityDef[] = [
   { id: "social.read_insights", kind: "connector", risk: "none", description: "Read social analytics" },
   { id: "social.publish", kind: "connector", risk: "consequential", description: "Publish social posts" },
   { id: "social.reply", kind: "connector", risk: "consequential", description: "Reply to comments / DMs" },
+  { id: "design.create", kind: "tool", risk: "none", description: "Create on-brand visuals / posters" },
   { id: "email.send", kind: "connector", risk: "consequential", description: "Send email" },
   { id: "ads.manage", kind: "connector", risk: "money", description: "Create / boost ads" },
   { id: "payments.charge", kind: "connector", risk: "money", description: "Charge a customer" },
@@ -209,7 +210,7 @@ export const ROLE_CATALOG: RoleDefinition[] = [
     jobDescription:
       "You produce on-brand visuals (posters, covers) using the brand kit, saved as artifacts.",
     skills: ["visual-design", "copywriting"],
-    capabilities: ["files.read", "files.write", "code.run"],
+    capabilities: ["files.read", "files.write", "code.run", "design.create"],
     kpis: ["Assets delivered", "Brand consistency"],
     reportsTo: "exec.ceo",
   },
@@ -247,7 +248,7 @@ export const ROLE_CATALOG: RoleDefinition[] = [
     jobDescription:
       "You own marketing: positioning, content, channels and campaigns. Draft everything; publishing and spend need approval.",
     skills: ["copywriting", "seo", "social-media"],
-    capabilities: ["research.web", "files.read", "files.write", "social.read_insights", "social.publish", "email.send"],
+    capabilities: ["research.web", "files.read", "files.write", "social.read_insights", "social.publish", "ads.manage", "design.create", "email.send"],
     kpis: ["Reach", "Content shipped", "Pipeline influenced"],
     reportsTo: "exec.ceo",
   },
