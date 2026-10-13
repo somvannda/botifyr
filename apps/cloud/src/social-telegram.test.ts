@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createTelegramSocialClient } from "./social-telegram.js";
+import { createTelegramSocialClient, resolveTelegramChannel } from "./social-telegram.js";
 
 describe("telegram social client", () => {
   function recorder() {
@@ -33,5 +33,29 @@ describe("telegram social client", () => {
     })) as unknown as typeof fetch;
     const client = createTelegramSocialClient({ token: "T", chatId: 1, fetchImpl });
     await expect(client.publish("x")).rejects.toThrow("chat not found");
+  });
+
+  it("prefers a company's workspace channel over env + the owner's personal chat", () => {
+    expect(
+      resolveTelegramChannel({
+        workspaceToken: "WS_TOKEN",
+        workspaceChatId: "-100999",
+        envToken: "ENV_TOKEN",
+        personalChatId: "4242",
+      }),
+    ).toEqual({ token: "WS_TOKEN", chatId: "-100999" });
+  });
+
+  it("falls back to the env token + the owner's personal chat", () => {
+    expect(resolveTelegramChannel({ envToken: "ENV_TOKEN", personalChatId: 4242 })).toEqual({
+      token: "ENV_TOKEN",
+      chatId: "4242",
+    });
+  });
+
+  it("returns null when the channel isn't configured", () => {
+    expect(resolveTelegramChannel({ envToken: "ENV_TOKEN" })).toBeNull();
+    expect(resolveTelegramChannel({ personalChatId: "4242" })).toBeNull();
+    expect(resolveTelegramChannel({ workspaceToken: "  ", workspaceChatId: "-100" })).toBeNull();
   });
 });

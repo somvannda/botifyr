@@ -23,7 +23,7 @@ import { createAdsTools, notConnectedAds } from "./ads-tools.js";
 import { createMetaAdsClient } from "./ads-meta.js";
 import { createDelegationTools } from "./delegation-tools.js";
 import { createSocialTools, notConnectedSocial } from "./social-tools.js";
-import { createTelegramSocialClient } from "./social-telegram.js";
+import { createTelegramSocialClient, resolveTelegramChannel } from "./social-telegram.js";
 import { createPostizSocialClient } from "./social-postiz.js";
 import { createDesignTools } from "./design-tools.js";
 import { createFeedTools } from "./feed-tools.js";
@@ -506,7 +506,25 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
       has("social.read_insights") || has("social.publish") || has("social.reply");
     if (socialCapable) {
       const record = await store.getUserById(userId).catch(() => null);
-      const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
+      // Company-owned channel first: a workspace secret holds this company's own
+      // Telegram bot token + channel id, so each company posts to its own channel.
+      // Falls back to the process env token + the owner's personal Telegram link.
+      const readChannelSecret = async (name: string): Promise<string | null> => {
+        if (!deps.vaultKey) return null;
+        const stored = await store.getWorkspaceSecret(company.id, name).catch(() => null);
+        if (!stored) return null;
+        try {
+          return decryptSecret(deps.vaultKey, stored);
+        } catch {
+          return null;
+        }
+      };
+      const telegram = resolveTelegramChannel({
+        workspaceToken: await readChannelSecret("TELEGRAM_BOT_TOKEN"),
+        workspaceChatId: await readChannelSecret("TELEGRAM_CHAT_ID"),
+        envToken: process.env.TELEGRAM_BOT_TOKEN,
+        personalChatId: record?.telegramChatId,
+      });
       const postizKey = process.env.POSTIZ_API_KEY;
       const postizIntegration = process.env.POSTIZ_INTEGRATION_ID;
       const postizPlatform = process.env.POSTIZ_PLATFORM;
@@ -517,8 +535,8 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
               integrationId: postizIntegration,
               platform: postizPlatform,
             })
-          : telegramToken && record?.telegramChatId
-            ? createTelegramSocialClient({ token: telegramToken, chatId: record.telegramChatId })
+          : telegram
+            ? createTelegramSocialClient(telegram)
             : notConnectedSocial();
       tools.push(
         ...createSocialTools(client).filter((tool) => has(capabilityForTool(tool.name) ?? "")),
