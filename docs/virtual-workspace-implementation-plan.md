@@ -876,6 +876,14 @@ Once verified, the role is "production-ready." Every new company that hires this
 
 **Why these next:** They need 1–2 new tools each, but **no external API credentials**. Tools are self-contained and owned-channel.
 
+> **Added from a JARVIS review** (see
+> [`ai-company-platforms.md`](ai-company-platforms.md) §3.7):
+> - **`company.board`** (shipped) — a read tool so ICs pick their next item *from*
+>   the board; the board is the coordination medium.
+> - **Event triggers** (candidate) — a new email / support ticket / webhook creates
+>   a task in an employee's session, gated by the same budget + approval spine.
+>   Botifyr runs on a **schedule** today; triggers are the missing reactive half.
+
 ---
 
 ### 2.1 New tool: `crm.log_activity`
