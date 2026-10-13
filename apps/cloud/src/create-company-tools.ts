@@ -6,6 +6,7 @@ import { analyzeSource, planCompany, uniqueWorkspaceName, type CompleteFn } from
 import { seedCompany } from "./company-seed.js";
 import { rememberSession } from "./runtime.js";
 import { emit } from "./events.js";
+import { withRoleInstructions } from "./role-instructions.js";
 
 /**
  * "Build a company" from chat: understand a site/idea, design the team, hire
@@ -86,7 +87,7 @@ export function createCompanyMakerTools(
             name: member.name.slice(0, 40) || title,
             emoji: member.emoji ?? "🤖",
             scheme: member.scheme ?? 0,
-            instructions: member.instructions ?? "",
+            instructions: withRoleInstructions(title, member.instructions),
             workspace: workspace.name,
             sessionId: session.id,
             createdAt: now,

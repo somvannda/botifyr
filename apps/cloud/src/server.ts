@@ -51,6 +51,7 @@ import {
 import { resolveTaskApproval } from "./approvals.js";
 import { buildInbox } from "./inbox.js";
 import { scheduledPromptFor } from "./schedule-prompts.js";
+import { withRoleInstructions } from "./role-instructions.js";
 import { handleNodeMessage, nodeInfo, registerNode } from "./nodes.js";
 import { createToken, hashPassword, hashToken, verifyPassword } from "./auth.js";
 import { encryptSecret, decryptSecret } from "./vault.js";
@@ -2546,7 +2547,10 @@ export async function buildServer(options: ServerOptions) {
           name: botName,
           emoji: (member.emoji ?? "🤖").trim().slice(0, 8) || "🤖",
           scheme: Number.isInteger(member.scheme) ? Number(member.scheme) : 0,
-          instructions: (member.instructions ?? "").slice(0, 4000),
+          instructions: withRoleInstructions((member.title ?? "Member").trim(), member.instructions).slice(
+            0,
+            4000,
+          ),
           workspace: name,
         });
         await store.setBotRole({
