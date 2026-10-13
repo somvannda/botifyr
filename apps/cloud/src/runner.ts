@@ -35,6 +35,7 @@ import { createPlanTools } from "./plan-tools.js";
 import { createQuestTools } from "./quest-tools.js";
 import { createCodeTools } from "./code-tools.js";
 import { capabilityForTool, removeDeniedTools } from "./tool-capabilities.js";
+import { resolveCapabilities } from "./capability-tools.js";
 import { applyCapabilityUse } from "./capability-ladder.js";
 import {
   clearComputerSandbox,
@@ -477,12 +478,28 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
       }
     }
   }
-  // Social + design hands for the right departments.
+  // Role-driven authorization (docs/virtual-workspace-implementation-plan.md §0.1):
+  // the catalog declares what a role may do; workspace grants add/remove per
+  // employee, so the *catalog* — not the department label — is the source of truth.
+  // Consequential tools are still approval-gated, so a granted capability is never
+  // executed silently.
   if (company && authorBot) {
     const roles = await store.listBotRoles(company.id).catch(() => []);
     const role = roles.find((entry) => entry.botId === authorBot.id);
     const department = role?.department;
-    if (department === "marketing" || department === "sales") {
+    const grants = await store.listCapabilityGrants(company.id).catch(() => []);
+    const subjects = new Set([`bot:${authorBot.id}`, ...(role ? [`role:${role.title}`] : [])]);
+    ladderWorkspaceId = company.id;
+    ladderSubjects = subjects;
+    ladderGrants = grants;
+    const resolved = role
+      ? resolveCapabilities(role, grants, subjects)
+      : { allowed: new Set<string>(), blocked: new Set<string>(), added: new Set<string>() };
+    const has = (capability: string): boolean => resolved.allowed.has(capability);
+
+    // Social hands: read/publish/reply on the connected page. Publishing and
+    // replying are approval-gated; reads are free.
+    if (has("social.read_insights") || has("social.publish") || has("social.reply")) {
       const record = await store.getUserById(userId).catch(() => null);
       const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
       const postizKey = process.env.POSTIZ_API_KEY;
@@ -498,9 +515,12 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
           : telegramToken && record?.telegramChatId
             ? createTelegramSocialClient({ token: telegramToken, chatId: record.telegramChatId })
             : notConnectedSocial();
-      tools.push(...createSocialTools(client));
+      tools.push(
+        ...createSocialTools(client).filter((tool) => has(capabilityForTool(tool.name) ?? "")),
+      );
     }
-    if (department === "marketing" || department === "sales") {
+    // Ads hand: campaigns + spend (money → approval-gated).
+    if (has("ads.manage")) {
       const metaToken = process.env.META_ADS_TOKEN;
       const metaAccount = process.env.META_AD_ACCOUNT_ID;
       tools.push(
@@ -511,11 +531,12 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
         ),
       );
     }
-    if (department === "design" || department === "marketing") {
+    // Design hand: on-brand posters saved to the Library.
+    if (has("design.create")) {
       tools.push(...createDesignTools(store, userId, authorBot.id));
     }
     // Email hand: outreach/support (owned channel). Approval-gated.
-    if (department === "marketing" || department === "sales" || department === "support") {
+    if (has("email.send")) {
       const resendKey = process.env.RESEND_API_KEY;
       const mailFrom = process.env.MAIL_FROM;
       tools.push(...createEmailTools(resendKey && mailFrom ? resendSender(resendKey, mailFrom) : null));
@@ -525,7 +546,7 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
     // Any employee can write down a plan so the whole team shares one strategy.
     tools.push(...createPlanTools(store, userId, authorBot.id));
     // Engineering can read the connected repos (read-only, path-jailed).
-    if (department === "engineering" && company.repos && company.repos.length > 0) {
+    if (has("repo.write") && company.repos && company.repos.length > 0) {
       tools.push(
         ...createCodeTools(company.repos, {
           workDir: process.env.BOTIFYR_WORK_DIR ?? "/work",
@@ -570,17 +591,6 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
       tools.push(...createQuestTools(store, userId, authorBot.id));
     }
 
-    // Authorization: revoked capabilities block their tools (docs/company-os.md §8).
-    const grants = await store.listCapabilityGrants(company.id).catch(() => []);
-    const subjects = new Set([`bot:${authorBot.id}`, ...(role ? [`role:${role.title}`] : [])]);
-    ladderWorkspaceId = company.id;
-    ladderSubjects = subjects;
-    ladderGrants = grants;
-    const denied = new Set(
-      grants
-        .filter((grant) => subjects.has(grant.subject) && !grant.granted)
-        .map((grant) => grant.capability),
-    );
     // Trust ladder (docs/product-plan.md §3): when the company isn't `manual`, a
     // capability at `probation` or `trusted` auto-approves its tools. `manual`
     // forces everything gated, regardless of stored state.
@@ -598,10 +608,13 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
         return state === "trusted" || state === "probation";
       };
     }
-    const kept = removeDeniedTools(tools, denied);
-    if (kept.length !== tools.length) {
-      tools.length = 0;
-      tools.push(...kept);
+    // Safety net: drop any remaining gated tool whose capability the owner blocked.
+    if (resolved.blocked.size > 0) {
+      const kept = removeDeniedTools(tools, resolved.blocked);
+      if (kept.length !== tools.length) {
+        tools.length = 0;
+        tools.push(...kept);
+      }
     }
   }
   // A Founder bot (not yet in a company) can build a whole company from chat.
