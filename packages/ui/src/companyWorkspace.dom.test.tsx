@@ -24,6 +24,7 @@ function fakeClient(overrides: Record<string, unknown> = {}): BotifyrClient {
     listWorkspaceFiles: vi.fn().mockResolvedValue([]),
     listProposals: vi.fn().mockResolvedValue([]),
     listWorkspaceActivity: vi.fn().mockResolvedValue([]),
+    getWorkspaceInbox: vi.fn().mockResolvedValue(null),
     getWorkspace: vi.fn().mockResolvedValue(null),
   };
   return { ...base, ...overrides } as unknown as BotifyrClient;
@@ -122,6 +123,38 @@ describe("CompanyWorkspace (DOM)", () => {
     expect(screen.getByText(/since you were last here/i)).toBeTruthy();
     expect(screen.getByText(/what would you like to do\?/i)).toBeTruthy();
     expect(screen.getByRole("button", { name: /tell the ai ceo what to do/i })).toBeTruthy();
+  });
+
+  it("surfaces blocked work from the ranked inbox, with an action", async () => {
+    const client = fakeClient({
+      getWorkspaceInbox: vi.fn().mockResolvedValue({
+        urgent: 1,
+        items: [
+          {
+            id: "work:w1",
+            kind: "blocked_work",
+            urgency: 2,
+            title: "Research the market",
+            detail: "A task on the board is blocked.",
+            at: "",
+            ref: { workItemId: "w1" },
+          },
+        ],
+        counts: { approval: 0, trust_review: 0, blocked_work: 1, quest_proposed: 0 },
+      }),
+    });
+    render(
+      <CompanyWorkspace
+        client={client}
+        companies={[company]}
+        bots={[]}
+        onOpenOffice={() => {}}
+        onCreated={() => {}}
+      />,
+    );
+    expect(await screen.findByText(/blocked:/i)).toBeTruthy();
+    expect(screen.getByText("A task on the board is blocked.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /open board/i })).toBeTruthy();
   });
 
   it("shows the three autonomy levels, defaulting an un-activated company to Assisted", async () => {

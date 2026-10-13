@@ -249,17 +249,21 @@ A default company activated to "supervised" can:
 
 ### 0.3 Turn "Needs you" into the real inbox
 
-> **Status: 🟡 IN PROGRESS — 0.3a shipped** (branch `agent/phase0-inbox`).
+> **Status: ✅ SHIPPED (0.3a + 0.3b).**
 > **0.3a:** a **pure `buildInbox()`** (`apps/cloud/src/inbox.ts`) ranks approvals
 > (by risk), trust demotions (`state: "probation"` grants), blocked work items and
 > proposed quests into one explainable list; exposed at
 > `GET /v1/workspaces/:id/inbox` and via the client `getWorkspaceInbox(id)`.
 > Types `InboxItem` / `WorkspaceInbox` live in `@botifyr/shared`. Unit-tested
-> (`inbox.test.ts`, 7 tests, no store/HTTP needed).
-> **0.3b (remaining):** wire the HQ **Needs you** panel
-> (`packages/ui/src/CompanyWorkspace.tsx`) to render this ranked list with
-> per-item actions. The existing `/v1/workspaces/:id/needs` route is untouched, so
-> the current UI keeps working until then.
+> (`inbox.test.ts`).
+> **0.3b:** the HQ **Needs you** panel consumes the inbox — the badge uses the
+> server's `urgent` count (falling back to the local signals on an older cloud), it
+> now surfaces **blocked work** with an "Open board" action, and each approval
+> shows its *why* (`approval.description`). Approval/trust/quest actions are
+> unchanged. DOM-tested (`companyWorkspace.dom.test.tsx`).
+> Files: `apps/cloud/src/inbox.ts`, `apps/cloud/src/server.ts`,
+> `packages/client/src/index.ts`, `packages/shared/src/index.ts`,
+> `packages/ui/src/CompanyWorkspace.tsx`.
 
 **Problem:**  
 Approvals appear in a modal, proposed quests appear in the HQ, escalations are tasks, trust demotions are events, blocked work items are on the board. No unified, ranked "here's what needs you, prioritized by urgency."
