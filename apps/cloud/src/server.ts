@@ -52,6 +52,7 @@ import { resolveTaskApproval } from "./approvals.js";
 import { buildInbox } from "./inbox.js";
 import { scheduledPromptFor } from "./schedule-prompts.js";
 import { withRoleInstructions } from "./role-instructions.js";
+import { buildTriggerGoal, findTrigger, normalizeTriggerName } from "./triggers.js";
 import { handleNodeMessage, nodeInfo, registerNode } from "./nodes.js";
 import { createToken, hashPassword, hashToken, verifyPassword } from "./auth.js";
 import { encryptSecret, decryptSecret } from "./vault.js";
@@ -3066,6 +3067,105 @@ export async function buildServer(options: ServerOptions) {
       ]);
       const tasks = allTasks.filter((task) => sessions.has(task.sessionId));
       return buildInbox({ tasks, quests, workItems, grants, roleTitleByBot });
+    },
+  );
+
+  /* Event triggers (plan §2.4): an inbound webhook runs a prompt for an employee. */
+
+  /** List a workspace's saved triggers. */
+  app.get<{ Params: { id: string } }>(
+    "/v1/workspaces/:id/triggers",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const workspace = await store.getWorkspace(request.params.id);
+      if (!workspace || workspace.ownerId !== userId) {
+        return reply.code(404).send({ error: "workspace not found" });
+      }
+      return workspace.triggers ?? [];
+    },
+  );
+
+  /** Save (create or update) a trigger for an employee in the company. */
+  app.post<{
+    Params: { id: string };
+    Body: { name?: string; botId?: string; prompt?: string; enabled?: boolean };
+  }>("/v1/workspaces/:id/triggers", { preHandler: requireAuth }, async (request, reply) => {
+    const userId = request.userId as string;
+    const workspace = await store.getWorkspace(request.params.id);
+    if (!workspace || workspace.ownerId !== userId) {
+      return reply.code(404).send({ error: "workspace not found" });
+    }
+    const name = normalizeTriggerName(request.body?.name);
+    if (!name) return reply.code(400).send({ error: "a name is required" });
+    const botId = String(request.body?.botId ?? "").trim();
+    const roles = await store.listBotRoles(workspace.id);
+    if (!roles.some((role) => role.botId === botId)) {
+      return reply.code(400).send({ error: "botId must be an employee in this company" });
+    }
+    const prompt = String(request.body?.prompt ?? "")
+      .trim()
+      .slice(0, 1_000);
+    if (!prompt) return reply.code(400).send({ error: "a prompt is required" });
+    const existing = (workspace.triggers ?? []).find((entry) => entry.name === name);
+    const trigger = {
+      name,
+      botId,
+      prompt,
+      enabled: request.body?.enabled !== false,
+      createdAt: existing?.createdAt ?? new Date().toISOString(),
+    };
+    workspace.triggers = [...(workspace.triggers ?? []).filter((entry) => entry.name !== name), trigger];
+    workspace.updatedAt = new Date().toISOString();
+    await store.updateWorkspace(workspace);
+    return trigger;
+  });
+
+  /** Delete a trigger by name. */
+  app.delete<{ Params: { id: string; name: string } }>(
+    "/v1/workspaces/:id/triggers/:name",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const workspace = await store.getWorkspace(request.params.id);
+      if (!workspace || workspace.ownerId !== userId) {
+        return reply.code(404).send({ error: "workspace not found" });
+      }
+      const name = normalizeTriggerName(request.params.name);
+      const before = (workspace.triggers ?? []).length;
+      workspace.triggers = (workspace.triggers ?? []).filter((entry) => entry.name !== name);
+      if (workspace.triggers.length === before) return reply.code(404).send({ error: "no such trigger" });
+      workspace.updatedAt = new Date().toISOString();
+      await store.updateWorkspace(workspace);
+      return reply.code(204).send();
+    },
+  );
+
+  /**
+   * Fire a trigger: an inbound event runs the trigger's prompt for its employee.
+   * v1 requires the owner's auth; a per-workspace hook token is a follow-up.
+   */
+  app.post<{ Params: { id: string; name: string }; Body: { payload?: unknown } }>(
+    "/v1/workspaces/:id/hooks/:name",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const workspace = await store.getWorkspace(request.params.id);
+      if (!workspace || workspace.ownerId !== userId) {
+        return reply.code(404).send({ error: "workspace not found" });
+      }
+      if (workspace.status === "paused" || workspace.status === "archived") {
+        return reply.code(409).send({ error: "the company is paused" });
+      }
+      const trigger = findTrigger(workspace.triggers, request.params.name);
+      if (!trigger) return reply.code(404).send({ error: "no such trigger" });
+      const bot = await store.getBot(trigger.botId);
+      if (!bot) return reply.code(404).send({ error: "the trigger's employee is gone" });
+      const session = await store.getSession(bot.sessionId);
+      if (!session) return reply.code(404).send({ error: "the trigger's session is gone" });
+      const goal = buildTriggerGoal(trigger, request.body?.payload);
+      void runScheduled(session, bot, goal).catch(() => {});
+      return { ok: true, queued: true };
     },
   );
 

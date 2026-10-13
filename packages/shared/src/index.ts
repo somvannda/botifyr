@@ -215,6 +215,19 @@ export interface CodeRepo {
   createdAt: string;
 }
 
+/** A saved event trigger: an inbound webhook that runs a prompt for one employee. */
+export interface Trigger {
+  /** URL-safe name, unique per workspace. */
+  name: string;
+  /** The employee (bot) that runs when it fires. */
+  botId: string;
+  /** What to do when it fires. */
+  prompt: string;
+  /** Disabled triggers are kept but never fire. */
+  enabled?: boolean;
+  createdAt: string;
+}
+
 export interface Workspace {
   id: string;
   /** The CEO (a real user). */
@@ -242,6 +255,8 @@ export interface Workspace {
   scheme?: number;
   /** Code repositories the engineering team may read (docs/codebase-access.md). */
   repos?: CodeRepo[];
+  /** Inbound event triggers that run a prompt for an employee (plan §2.4). */
+  triggers?: Trigger[];
   createdAt: string;
   updatedAt: string;
 }

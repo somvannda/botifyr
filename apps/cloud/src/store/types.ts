@@ -15,6 +15,7 @@ import type {
   ProviderRoleConfig,
   Quest,
   Task,
+  Trigger,
   WorkItem,
   WorkspaceBudget,
 } from "@botifyr/shared";
@@ -346,6 +347,8 @@ export interface WorkspaceRecord {
   scheme?: number;
   /** Code repositories the engineering team may read (docs/codebase-access.md). */
   repos?: CodeRepo[];
+  /** Inbound event triggers that run a prompt for an employee (plan §2.4). */
+  triggers?: Trigger[];
   createdAt: string;
   updatedAt: string;
 }
