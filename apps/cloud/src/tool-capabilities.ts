@@ -15,6 +15,7 @@ const TOOL_CAPABILITIES: Array<[RegExp, string]> = [
   [/^feed\.(post|reel|engage|moderate)$/, "social.publish"],
   [/^(group|page)\./, "social.publish"],
   [/^email\./, "email.send"],
+  [/^crm\./, "crm.log"],
   [/^ads\.manage$/, "ads.manage"],
   [/^library\.(read|list)$/, "files.read"],
   [/^library\.write$/, "files.write"],

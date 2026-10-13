@@ -902,6 +902,12 @@ Once verified, the role is "production-ready." Every new company that hires this
 
 ### 2.1 New tool: `crm.log_activity`
 
+> **Status: ✅ SHIPPED.** `apps/cloud/src/crm-tools.ts` + `crm-tools.test.ts`.
+> Gated by a new `crm.log` catalog capability (held by Head of Sales, Sales Rep
+> and Customer Success Manager); wired in `runner.ts`; `tool-capabilities.ts` maps
+> `crm.*` → `crm.log`. The sales/success playbooks (`role-instructions.ts`) tell
+> those roles to use it, and the coherence guard covers them.
+
 **Purpose:** Sales/Success bots log interactions (calls, emails, meetings) to a CRM file in the wiki.
 
 **Tool definition** (`apps/cloud/src/crm-tools.ts`, new file):

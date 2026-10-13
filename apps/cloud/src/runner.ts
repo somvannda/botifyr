@@ -26,6 +26,7 @@ import { createSocialTools, notConnectedSocial } from "./social-tools.js";
 import { createTelegramSocialClient, resolveTelegramChannel } from "./social-telegram.js";
 import { createPostizSocialClient } from "./social-postiz.js";
 import { createDesignTools } from "./design-tools.js";
+import { createCrmTools } from "./crm-tools.js";
 import { createFeedTools } from "./feed-tools.js";
 import { createEmailTools, resendSender } from "./email-tools.js";
 import { createEscalationTools } from "./escalation-tools.js";
@@ -571,6 +572,10 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
       const resendKey = process.env.RESEND_API_KEY;
       const mailFrom = process.env.MAIL_FROM;
       tools.push(...createEmailTools(resendKey && mailFrom ? resendSender(resendKey, mailFrom) : null));
+    }
+    // CRM hand: log interactions to the company wiki (append-only, not gated).
+    if (has("crm.log")) {
+      tools.push(...createCrmTools(store, userId, authorBot.id));
     }
     // Any employee can pause and ask the owner when blocked (CAPTCHA/2FA/decision).
     tools.push(...createEscalationTools());
