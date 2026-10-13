@@ -626,15 +626,19 @@ Long-lived companies make choices (hire X, switch direction Y, pause quest Z), b
 
 ## Phase 1: Roles that work today (instructions only)
 
-> **Status: 🟡 IN PROGRESS — the mechanism + all 11 role playbooks are shipped.**
+> **Status: ✅ SHIPPED — mechanism + the 11 playbooks + verification.**
 > `apps/cloud/src/role-instructions.ts` maps each catalog role to a short playbook
 > (workflow + quality bar, naming the tools to use), resolved by title and
 > composed into `Bot.instructions` at every creation point (`server.ts` workspace
-> members, `hire-tools.ts`, `create-company-tools.ts`) — guidance first, the
-> model's JD after. Unit-tested, including a coverage test that all 11 Phase 1
-> roles have guidance (`role-instructions.test.ts`).
-> **Remaining:** the per-role **mock-model verification** (step 1.3 below), and
-> extending guidance to the Phase 2–4 roles.
+> members, `hire-tools.ts`, `create-company-tools.ts`) — guidance first, JD after.
+> `role-instructions.test.ts` covers it and adds a **coherence guard**: every tool
+> a playbook names must be a tool the role actually holds (structural `company.*`
+> tools excepted), so a playbook can never tell a role to use something it lacks.
+> **Note on step 1.3's runtime mock run:** the repo's mock provider is a *scripted
+> browser demo*, not a general echo provider, so a runtime role test would first
+> need a scripted-tool-call provider — tracked as a follow-up. The coherence guard
+> is the verification that runs today.
+> **Remaining:** guidance for the Phase 2–4 roles.
 
 **Timeline:** Week 3 (5 days)  
 **Roles:** CEO, Head of Product, Business Analyst, Product Researcher, Content Manager, SEO Specialist, Lead Researcher, Data Analyst, Head of Operations, Compliance Officer, Recruiter
