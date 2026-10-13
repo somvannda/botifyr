@@ -50,6 +50,7 @@ import {
 } from "./runtime.js";
 import { resolveTaskApproval } from "./approvals.js";
 import { buildInbox } from "./inbox.js";
+import { scheduledPromptFor } from "./schedule-prompts.js";
 import { handleNodeMessage, nodeInfo, registerNode } from "./nodes.js";
 import { createToken, hashPassword, hashToken, verifyPassword } from "./auth.js";
 import { encryptSecret, decryptSecret } from "./vault.js";
@@ -3388,9 +3389,7 @@ export async function buildServer(options: ServerOptions) {
           bot.autoApprove = level === "autonomous" ? true : undefined;
           const everyMinutes = role.isChair ? 1440 : 240;
           bot.schedule = {
-            prompt: role.isChair
-              ? "Run the daily standup. If the company has no PLAN.md yet, write one now with company.plan (goal, approach, who, channels, metrics); if the team lacks the roles or capacity to execute it, hire them with company.hire. If no quest is active, propose the next one with company.propose (title + objective + acceptance). Otherwise summarise the board, flag blockers, and delegate the next steps."
-              : "Review your board tasks and do the next one. When you finish one, record the outcome with company.report (what it produced). If you're blocked, escalate; if the plan is unclear, ask the CEO.",
+            prompt: scheduledPromptFor(role),
             everyMinutes,
             enabled: true,
             nextRunAt: new Date(now.getTime() + everyMinutes * 60_000).toISOString(),
@@ -3447,11 +3446,7 @@ export async function buildServer(options: ServerOptions) {
         if (!bot) continue;
         const session = await store.getSession(bot.sessionId);
         if (!session) continue;
-        const prompt =
-          bot.schedule?.prompt ??
-          (role.isChair
-            ? "Run the daily standup: summarise the board and flag blockers."
-            : "Review your board tasks and do the next one.");
+        const prompt = bot.schedule?.prompt ?? scheduledPromptFor(role);
         await runScheduled(session, bot, prompt);
         started += 1;
       }

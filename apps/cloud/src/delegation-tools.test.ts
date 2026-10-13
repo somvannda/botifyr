@@ -150,3 +150,100 @@ describe("company.report", () => {
     expect((await reportTool(store).run({ task: "Deploy to Mars", result: "x" }, ctx)).ok).toBe(false);
   });
 });
+
+describe("company.review_department", () => {
+  const now = new Date().toISOString();
+  const ctx = { workspaceDir: ".", log: () => {} };
+
+  async function seeded() {
+    const store = new MemoryStore();
+    for (const [id, name] of [
+      ["cto", "Dev"],
+      ["be", "Kim"],
+    ] as const) {
+      await store.createBot({
+        id,
+        userId: "u1",
+        name,
+        emoji: "💻",
+        scheme: 1,
+        instructions: "",
+        workspace: "Acme",
+        sessionId: `s-${id}`,
+        createdAt: now,
+      });
+    }
+    await store.createWorkspace({
+      id: "ws1",
+      ownerId: "u1",
+      name: "Acme",
+      source: { kind: "idea", value: "" },
+      mission: "",
+      status: "active",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await store.setBotRole({ workspaceId: "ws1", botId: "cto", title: "CTO", department: "engineering", hiredAt: now });
+    await store.setBotRole({
+      workspaceId: "ws1",
+      botId: "be",
+      title: "Backend Engineer",
+      department: "engineering",
+      hiredAt: now,
+    });
+    await store.createWorkItem({
+      id: "w1",
+      workspaceId: "ws1",
+      title: "Build the API",
+      phase: "mvp",
+      status: "todo",
+      assigneeBotId: "be",
+      department: "engineering",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await store.createWorkItem({
+      id: "w2",
+      workspaceId: "ws1",
+      title: "Pick a database",
+      phase: "mvp",
+      status: "todo",
+      department: "engineering",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await store.createWorkItem({
+      id: "w3",
+      workspaceId: "ws1",
+      title: "Write the launch post",
+      phase: "mvp",
+      status: "blocked",
+      assigneeBotId: "be",
+      department: "marketing",
+      createdAt: now,
+      updatedAt: now,
+    });
+    return store;
+  }
+
+  const tool = (store: MemoryStore, botId: string) =>
+    createDelegationTools(store, "u1", botId).find((entry) => entry.name === "company.review_department")!;
+
+  it("summarises the department for a head — open, unassigned and blocked", async () => {
+    const store = await seeded();
+    const result = await tool(store, "cto").run({}, ctx);
+    expect(result.ok).toBe(true);
+    expect(result.output).toContain("engineering");
+    expect(result.output).toContain("Build the API");
+    expect(result.output).toContain("Pick a database");
+    expect(result.output).toMatch(/unassigned/i);
+    expect(result.output).toContain("company.delegate");
+  });
+
+  it("refuses an IC", async () => {
+    const store = await seeded();
+    const result = await tool(store, "be").run({}, ctx);
+    expect(result.ok).toBe(false);
+    expect(result.output).toMatch(/head/i);
+  });
+});
