@@ -153,6 +153,16 @@ The Virtual Workspace foundation is well-architected but under-executed. We have
 
 ### 0.2 Make Hands real for owned channels (Telegram + Email + Feed)
 
+> **Status: 🟡 IN PROGRESS — 0.2a shipped** (branch `agent/phase0-hands`).
+> **0.2a (done):** Botifyr's **Feed** is now an owned channel gated by social
+> *capabilities* (`runner.ts`) instead of the `"feed"` skill that no company
+> employee ever received — so a brand-new company can publish to the Feed with
+> zero external setup. Personal/founder bots keep the opt-in `"feed"` skill path.
+> Files: `apps/cloud/src/runner.ts`, `apps/cloud/src/capability-tools.test.ts`.
+> **Remaining (0.2b):** a per-workspace Telegram channel (today the client falls
+> back to the owner's personal `telegramChatId`), and setup docs for
+> Telegram/email. Email already works once `RESEND_API_KEY` + `MAIL_FROM` are set.
+
 **Problem:**  
 Tools exist (`social-tools.ts`, `email-tools.ts`, `feed-tools.ts`), but default companies have no credentials wired. A Marketing bot can draft a post but can't publish it. Scheduled runs produce plans, not shipped artifacts.
 

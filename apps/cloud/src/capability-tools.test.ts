@@ -94,4 +94,18 @@ describe("capability-tools", () => {
     expect(defaultCapabilitiesFor({ title: "Visual Designer", department: "design" }).has("design.create")).toBe(true);
     expect(defaultCapabilitiesFor({ title: "Support Agent", department: "support" }).has("social.reply")).toBe(true);
   });
+
+  it("reaches Botifyr's Feed (an owned channel) from social capabilities", () => {
+    // 0.2: the Feed is gated by social capabilities, so a brand-new company can
+    // publish with no external account. Roles with a social capability get the
+    // matching feed tools; roles without one don't.
+    const social = (title: string, department: string): boolean =>
+      ["social.read_insights", "social.publish", "social.reply"].some((capability) =>
+        defaultCapabilitiesFor({ title, department }).has(capability),
+      );
+    expect(social("Head of Marketing", "marketing")).toBe(true);
+    expect(social("Social Media Manager", "marketing")).toBe(true);
+    expect(social("Support Agent", "support")).toBe(true);
+    expect(social("Finance Analyst", "finance")).toBe(false);
+  });
 });
