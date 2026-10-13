@@ -58,3 +58,25 @@ export function createTelegramSocialClient(options: TelegramSocialOptions): Soci
     },
   };
 }
+
+/**
+ * Pick the Telegram channel a company employee should post to. A workspace
+ * secret (the *company's own* channel) wins over the process env token + the
+ * owner's personal Telegram link, so every company can have its own channel.
+ * Returns null when there isn't enough configuration to post.
+ */
+export function resolveTelegramChannel(input: {
+  /** Bot token stored as a workspace secret (`TELEGRAM_BOT_TOKEN`). */
+  workspaceToken?: string | null;
+  /** Channel/chat id stored as a workspace secret (`TELEGRAM_CHAT_ID`). */
+  workspaceChatId?: string | null;
+  /** Process-wide fallback token (`TELEGRAM_BOT_TOKEN`). */
+  envToken?: string;
+  /** The owner's personal Telegram chat, set when they linked their account. */
+  personalChatId?: string | number | null;
+}): { token: string; chatId: string } | null {
+  const token = input.workspaceToken?.trim() || input.envToken?.trim() || "";
+  const chat = input.workspaceChatId?.trim() || (input.personalChatId != null ? String(input.personalChatId).trim() : "");
+  if (!token || !chat) return null;
+  return { token, chatId: chat };
+}
