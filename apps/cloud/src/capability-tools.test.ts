@@ -3,6 +3,7 @@ import type { CapabilityGrant } from "@botifyr/shared";
 import {
   catalogRoleFor,
   defaultCapabilitiesFor,
+  handAllowed,
   resolveCapabilities,
 } from "./capability-tools.js";
 
@@ -107,5 +108,27 @@ describe("capability-tools", () => {
     expect(social("Social Media Manager", "marketing")).toBe(true);
     expect(social("Support Agent", "support")).toBe(true);
     expect(social("Finance Analyst", "finance")).toBe(false);
+  });
+
+  it("gates the low-level hands by capability, with research implying browsing (0.1b)", () => {
+    const marketing = defaultCapabilitiesFor({ title: "Head of Marketing", department: "marketing" });
+    expect(handAllowed("browser.use", marketing)).toBe(true); // via research.web
+    expect(handAllowed("code.run", marketing)).toBe(false); // marketers don't run code
+    expect(handAllowed("files.write", marketing)).toBe(true);
+
+    const engineer = defaultCapabilitiesFor({ title: "Backend Engineer", department: "engineering" });
+    expect(handAllowed("code.run", engineer)).toBe(true);
+    expect(handAllowed("files.read", engineer)).toBe(true);
+
+    // Tools with no mapped capability are never gated (structural tools).
+    expect(handAllowed(null, new Set())).toBe(true);
+
+    // A revoked capability removes the hand, even though the catalog grants it.
+    const revoked = resolveCapabilities(
+      { title: "Backend Engineer", department: "engineering" },
+      [grant("files.write", { granted: false })],
+      new Set(["bot:b1"]),
+    );
+    expect(handAllowed("files.write", revoked.allowed)).toBe(false);
   });
 });

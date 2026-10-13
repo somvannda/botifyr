@@ -94,3 +94,22 @@ export function resolveCapabilities(
   }
   return { allowed, blocked, added };
 }
+
+/**
+ * The low-level "hands" the catalog can gate per role (plan §0.1b): the browser,
+ * the code sandbox, and the Library. Higher-level capabilities (social, ads,
+ * email, …) are gated by the caller wiring their tools.
+ */
+const HAND_CAPABILITIES = new Set(["browser.use", "code.run", "files.read", "files.write"]);
+
+/**
+ * Whether a tool exercising `capability` should stay in a company employee's tool
+ * set, given the capabilities it holds. Tools with no mapped capability are left
+ * alone (structural tools like `company.delegate`). `research.web` implies
+ * browsing, so a research role keeps the browser even without `browser.use`.
+ */
+export function handAllowed(capability: string | null, allowed: Set<string>): boolean {
+  if (!capability || !HAND_CAPABILITIES.has(capability)) return true;
+  if (allowed.has(capability)) return true;
+  return capability === "browser.use" && allowed.has("research.web");
+}

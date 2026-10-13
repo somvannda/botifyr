@@ -50,6 +50,10 @@ The Virtual Workspace foundation is well-architected but under-executed. We have
 > `packages/shared/src/catalog.ts`, `apps/cloud/src/capability-tools.test.ts` (new).
 > See "Design decision" below — the implemented model differs slightly from the
 > first sketch (grants are the override, not merely a subtract-only set).
+> **0.1b (low-level hands): ✅** `handAllowed` (`capability-tools.ts`) now also
+> gates `browser.use` / `code.run` / `files.read` / `files.write` per role in
+> `runner.ts`; `research.web` implies browsing, so a research role keeps the
+> browser. A revoked capability removes the hand too.
 
 **Problem:**  
 `apps/cloud/src/runner.ts` `buildTools` decides tools by `bot.department` string. Capability grants (in `capability_grants` table) only *remove* tools; they never add them. A bot's `BotRole.capabilities` from the catalog is decorative — it's not the enforcement point.

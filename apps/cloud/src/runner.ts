@@ -35,8 +35,8 @@ import { createPlanTools } from "./plan-tools.js";
 import { createQuestTools } from "./quest-tools.js";
 import { createDecisionTools } from "./decision-tools.js";
 import { createCodeTools } from "./code-tools.js";
-import { capabilityForTool, removeDeniedTools } from "./tool-capabilities.js";
-import { resolveCapabilities } from "./capability-tools.js";
+import { capabilityForTool } from "./tool-capabilities.js";
+import { handAllowed, resolveCapabilities } from "./capability-tools.js";
 import { applyCapabilityUse } from "./capability-ladder.js";
 import {
   clearComputerSandbox,
@@ -641,13 +641,16 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
         return state === "trusted" || state === "probation";
       };
     }
-    // Safety net: drop any remaining gated tool whose capability the owner blocked.
-    if (resolved.blocked.size > 0) {
-      const kept = removeDeniedTools(tools, resolved.blocked);
-      if (kept.length !== tools.length) {
-        tools.length = 0;
-        tools.push(...kept);
-      }
+    // Capability gate (plan §0.1b): drop the low-level hands this role doesn't
+    // hold (browser / code / library), and anything the owner explicitly blocked.
+    const kept = tools.filter((tool) => {
+      const capability = capabilityForTool(tool.name);
+      if (capability && resolved.blocked.has(capability)) return false;
+      return handAllowed(capability, resolved.allowed);
+    });
+    if (kept.length !== tools.length) {
+      tools.length = 0;
+      tools.push(...kept);
     }
   }
   // A Founder bot (not yet in a company) can build a whole company from chat.
