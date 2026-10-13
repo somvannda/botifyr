@@ -240,5 +240,47 @@ export function createDelegationTools(store: Store, userId: string, botId: strin
         return { ok: true, output: lines.join("\n") };
       },
     },
+    {
+      name: "company.board",
+      description:
+        "Read your company's work board: your assigned items plus anything open in your department, with status and phase. Use it to pick your next task, then do it and record the outcome with company.report.",
+      parameters: {
+        type: "object",
+        properties: {
+          mine: {
+            type: "boolean",
+            description: "Only items assigned to you (default false = your whole department).",
+          },
+        },
+      },
+      run: async (args) => {
+        const author = await store.getBot(botId);
+        const workspaces = await store.listWorkspaces(userId);
+        const workspace = author?.workspace
+          ? workspaces.find((entry) => entry.name === author.workspace)
+          : workspaces.length === 1
+            ? workspaces[0]
+            : undefined;
+        if (!workspace) {
+          return { ok: false, output: "You don't have a company yet — create one first." };
+        }
+        const roles = await store.listBotRoles(workspace.id);
+        const myRole = roles.find((entry) => entry.botId === botId);
+        const titleByBot = new Map(roles.map((entry) => [entry.botId, entry.title]));
+        const mineOnly = args.mine === true;
+        const items = (await store.listWorkItems(workspace.id)).filter((item) => {
+          if (item.status === "done") return false;
+          if (mineOnly) return item.assigneeBotId === botId;
+          return item.assigneeBotId === botId || item.department === myRole?.department;
+        });
+        if (items.length === 0) return { ok: true, output: "Nothing on your board right now." };
+        const lines = items.slice(0, 20).map((item) => {
+          const who = item.assigneeBotId ? titleByBot.get(item.assigneeBotId) : undefined;
+          const tag = item.assigneeBotId === botId ? "you" : (who ?? "unassigned");
+          return `- ${item.title} [${item.status}, ${item.phase}] (${tag})`;
+        });
+        return { ok: true, output: `Board (${items.length}):\n${lines.join("\n")}` };
+      },
+    },
   ];
 }

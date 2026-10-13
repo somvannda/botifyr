@@ -256,7 +256,32 @@ CTA is **“Want to build your own? Get in touch.”** [site](https://orgzero.ai
 - **O:** Convert the narrative into a platform or a high-end service.
 - **T:** Naming collisions (Agent Zero, ZHC); hype without a product.
 
-### 3.7 Could-not-verify
+### 3.7 JARVIS (jarvis.mk) — orchestration pitch (code not yet public)
+
+- **What it is.** An "AI agent orchestration platform": named agents you chat with
+  via Slack/WhatsApp/web, each with its own workspace and a **custom toolset**,
+  coordinating through a **Kanban board**; "10,000+ actions across 1,000+ apps";
+  **trigger-based** actions; a marketplace of agent teams; and a built-in "dev
+  agent" that can rewrite agents and self-heal.
+- **Honesty note.** The site says "open source, self-host in minutes" and links
+  `github.com/dimovdaniel/supersaas`, but that repo **404s** (private or not
+  published) and the page is a **waitlist**. This is positioning, not verified
+  code — re-audit if the source becomes public.
+- **Overlap with Botifyr.** The org model, per-agent toolsets, board coordination
+  and a chat front door are things Botifyr already has (`Workspace`/`BotRole`, the
+  catalog + capability grants, the work board, the chair thread).
+- **Adopt:** **event triggers** (a new email/ticket/webhook → a task) — Botifyr
+  only runs on a *schedule* today; and keep the board as the coordination medium
+  (a `company.board` read tool for ICs). See the workspace plan, Phase 2.
+- **Avoid:** "self-healing with no human intervention" and a dev agent that
+  rewrites running agents — that contradicts Botifyr's approval-gate + audit wedge.
+  `skills.learn` (global, approval-gated) is the safe analogue. Chasing "1,000+
+  apps" is the breadth trap [`botifyr-blueprint.md`](botifyr-blueprint.md) §7 warns
+  about.
+- **S/W:** strong org + board UX and a clear "team" story. **T:** unverifiable
+  claims; "does anything" reliability risk.
+
+### 3.8 Could-not-verify
 
 - **Summon** — `summon.ai` is **for sale**; the visible “Summon” is a
   vibe-code-then-summon-a-human-dev marketplace. **Not the described product.**

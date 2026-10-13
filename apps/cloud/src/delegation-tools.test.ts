@@ -247,3 +247,74 @@ describe("company.review_department", () => {
     expect(result.output).toMatch(/head/i);
   });
 });
+
+describe("company.board", () => {
+  const now = new Date().toISOString();
+  const ctx = { workspaceDir: ".", log: () => {} };
+
+  async function seeded() {
+    const store = new MemoryStore();
+    await store.createBot({
+      id: "be",
+      userId: "u1",
+      name: "Kim",
+      emoji: "💻",
+      scheme: 1,
+      instructions: "",
+      workspace: "Acme",
+      sessionId: "s-be",
+      createdAt: now,
+    });
+    await store.createWorkspace({
+      id: "ws1",
+      ownerId: "u1",
+      name: "Acme",
+      source: { kind: "idea", value: "" },
+      mission: "",
+      status: "active",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await store.setBotRole({
+      workspaceId: "ws1",
+      botId: "be",
+      title: "Backend Engineer",
+      department: "engineering",
+      hiredAt: now,
+    });
+    await store.createWorkItem({
+      id: "w1",
+      workspaceId: "ws1",
+      title: "Build the API",
+      phase: "mvp",
+      status: "todo",
+      assigneeBotId: "be",
+      department: "engineering",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await store.createWorkItem({
+      id: "w2",
+      workspaceId: "ws1",
+      title: "Old task",
+      phase: "mvp",
+      status: "done",
+      department: "engineering",
+      createdAt: now,
+      updatedAt: now,
+    });
+    return store;
+  }
+
+  const board = (store: MemoryStore) =>
+    createDelegationTools(store, "u1", "be").find((entry) => entry.name === "company.board")!;
+
+  it("lists non-done board items for the employee, marked with their owner", async () => {
+    const store = await seeded();
+    const result = await board(store).run({}, ctx);
+    expect(result.ok).toBe(true);
+    expect(result.output).toContain("Build the API");
+    expect(result.output).not.toContain("Old task");
+    expect(result.output).toContain("you");
+  });
+});
