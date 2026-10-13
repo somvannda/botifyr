@@ -22,6 +22,7 @@ import type {
   Session,
   Skill,
   Task,
+  Trigger,
   User,
   WorkItem,
   WorkspaceBudget,
@@ -1071,6 +1072,28 @@ export class BotifyrClient {
    */
   getWorkspaceInbox(workspaceId: string): Promise<WorkspaceInbox> {
     return this.request(`/v1/workspaces/${workspaceId}/inbox`);
+  }
+
+  /* Event triggers (plan §2.4). */
+  listTriggers(workspaceId: string): Promise<Trigger[]> {
+    return this.request(`/v1/workspaces/${workspaceId}/triggers`);
+  }
+
+  saveTrigger(
+    workspaceId: string,
+    input: { name: string; botId: string; prompt: string; enabled?: boolean },
+  ): Promise<Trigger> {
+    return this.request(`/v1/workspaces/${workspaceId}/triggers`, {
+      method: "POST",
+      json: true,
+      body: JSON.stringify(input),
+    });
+  }
+
+  deleteTrigger(workspaceId: string, name: string): Promise<void> {
+    return this.request(`/v1/workspaces/${workspaceId}/triggers/${encodeURIComponent(name)}`, {
+      method: "DELETE",
+    });
   }
 
   /** Recent agent runs for a workspace — real execution, including failures. */

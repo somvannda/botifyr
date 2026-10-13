@@ -894,9 +894,13 @@ Once verified, the role is "production-ready." Every new company that hires this
 > [`ai-company-platforms.md`](ai-company-platforms.md) §3.7):
 > - **`company.board`** (shipped) — a read tool so ICs pick their next item *from*
 >   the board; the board is the coordination medium.
-> - **Event triggers** (candidate) — a new email / support ticket / webhook creates
->   a task in an employee's session, gated by the same budget + approval spine.
->   Botifyr runs on a **schedule** today; triggers are the missing reactive half.
+> - **Event triggers** (shipped, v1) — `apps/cloud/src/triggers.ts` (pure core:
+>   `normalizeTriggerName` / `findTrigger` / `buildTriggerGoal`) plus the owner
+>   routes `GET|POST /v1/workspaces/:id/triggers`, `DELETE …/triggers/:name`, and a
+>   fire endpoint `POST /v1/workspaces/:id/hooks/:name`. A fired trigger reuses
+>   **`runScheduled`**, so budget, approval and audit apply unchanged; the payload
+>   is labelled untrusted and capped. v1 uses the owner's auth on the hook (a
+>   per-workspace hook token is the follow-up).
 
 ---
 
