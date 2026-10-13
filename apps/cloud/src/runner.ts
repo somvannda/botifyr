@@ -33,6 +33,7 @@ import { createHireTools } from "./hire-tools.js";
 import { createFireTools } from "./fire-tools.js";
 import { createPlanTools } from "./plan-tools.js";
 import { createQuestTools } from "./quest-tools.js";
+import { createDecisionTools } from "./decision-tools.js";
 import { createCodeTools } from "./code-tools.js";
 import { capabilityForTool, removeDeniedTools } from "./tool-capabilities.js";
 import { resolveCapabilities } from "./capability-tools.js";
@@ -619,6 +620,8 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
     // (docs/company-quests.md §6 — agents propose, the CEO disposes).
     if (role?.isChair) {
       tools.push(...createQuestTools(store, userId, authorBot.id));
+      // The chair also keeps the company's decision log (docs/…-plan.md §0.5).
+      tools.push(...createDecisionTools(store, userId, authorBot.id));
     }
 
     // Trust ladder (docs/product-plan.md §3): when the company isn't `manual`, a

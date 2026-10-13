@@ -497,6 +497,13 @@ Approvals appear in a modal, proposed quests appear in the HQ, escalations are t
 
 ### 0.5 Add a decision log (DECISIONS.md)
 
+> **Status: ✅ SHIPPED** (branch `agent/phase0-decisions`). `company.decide`
+> (`apps/cloud/src/decision-tools.ts`) appends `{what, why, who}` to a
+> `DECISIONS.md` in the company wiki (append-only, not approval-gated); wired to
+> the chair in `runner.ts`; unit-tested (`decision-tools.test.ts`). Deferred:
+> instructing the chair to call it on every pivot (the tool description already
+> says when to use it) and giving it to department heads.
+
 **Problem:**  
 Long-lived companies make choices (hire X, switch direction Y, pause quest Z), but there's no durable record of *why*. The wiki has plans and backlogs, but not a decision trail.
 
