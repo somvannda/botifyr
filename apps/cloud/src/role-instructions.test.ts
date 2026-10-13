@@ -28,6 +28,9 @@ describe("role instructions (Phase 1)", () => {
       "Sales Representative",
       "Customer Success Manager",
       "Finance Analyst",
+      "Head of Marketing",
+      "Social Media Manager",
+      "Support Agent",
     ];
     expect(titles.filter((title) => !roleInstructionsFor(title))).toEqual([]);
   });
@@ -65,6 +68,9 @@ describe("role instructions (Phase 1)", () => {
       "Sales Representative",
       "Customer Success Manager",
       "Finance Analyst",
+      "Head of Marketing",
+      "Social Media Manager",
+      "Support Agent",
     ];
     // Only match real tool names (company.*, library.*, browser.*, …), not "e.g.".
     const toolPattern =
