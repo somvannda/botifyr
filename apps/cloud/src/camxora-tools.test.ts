@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CAMXORA_TOOL_NAMES, createCamxoraTools } from "./camxora-tools.js";
+import {
+  CAMXORA_TOOL_NAMES,
+  camxoraTaskIdsFromAudit,
+  createCamxoraTools,
+  rewriteMediaStreams,
+  unplayableMediaStream,
+} from "./camxora-tools.js";
 import { capabilityForTool } from "./tool-capabilities.js";
 import { MemoryStore } from "./store/memory.js";
 import { encryptSecret } from "./vault.js";
@@ -226,5 +232,32 @@ describe("camxora music tools", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1); // only the rooted path hits the API
     expect(result.output).toContain("/v1/music/extend");
     expect(result.output).toContain("skipped");
+  });
+});
+
+describe("old-track refresh helpers", () => {
+  it("flags the legacy unplayable URLs only", () => {
+    expect(unplayableMediaStream("https://d2lwuy8qc234o3.cloudfront.net/1/clip/x.m4a")).toBe(true);
+    expect(unplayableMediaStream("https://studio-api.prod.suno.com/api/forbidden")).toBe(true);
+    expect(unplayableMediaStream("https://s3.example/clips/x.mp3?sig=1")).toBe(false);
+  });
+
+  it("rewrites only unplayable media blocks, in order, leaving good ones alone", () => {
+    const content =
+      'A\n```media\n{"stream":"https://d2lwuy8qc234o3.cloudfront.net/1/clip/a.m4a","title":"x"}\n```\n' +
+      'B\n```media\n{"stream":"https://s3.example/ok.mp3"}\n```';
+    const out = rewriteMediaStreams(content, [{ stream: "https://s3.example/new.mp3" }]);
+    expect(out).toContain("https://s3.example/new.mp3");
+    expect(out).not.toContain("cloudfront.net");
+    expect(out).toContain("https://s3.example/ok.mp3");
+  });
+
+  it("extracts Camxora task ids from audit details (old and new formats)", () => {
+    const ids = camxoraTaskIdsFromAudit([
+      '- 5c948dfe-4c5b-463e-bee1-38b1f9b9cc83: {"job_id":"5c948dfe-4c5b-463e-bee1-38b1f9b9cc83"}',
+      '{"job_id":"62969a2d-109f-4d73-a9e4-921bb804c2a3","status":"running"}',
+    ]);
+    expect(ids).toContain("5c948dfe-4c5b-463e-bee1-38b1f9b9cc83");
+    expect(ids).toContain("62969a2d-109f-4d73-a9e4-921bb804c2a3");
   });
 });

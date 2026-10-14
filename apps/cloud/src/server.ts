@@ -66,6 +66,11 @@ import {
   userProvider,
   validateAiInput,
 } from "./ai-keys.js";
+import {
+  camxoraTaskIdsFromAudit,
+  resolveCamxoraTracks,
+  rewriteMediaStreams,
+} from "./camxora-tools.js";
 import { parseResendInbound, verifyResendSignature } from "./email-inbound.js";
 import {
   noteModelFailure,
@@ -8086,6 +8091,43 @@ export async function buildServer(options: ServerOptions) {
         console.error("[botifyr] AI key test failed:", error);
         return { ok: false, message: friendlyModelError(error) };
       }
+    },
+  );
+
+  /**
+   * Re-resolve a task's Camxora tracks to their playable MP3s and rewrite any
+   * unplayable `media` blocks in the task's assistant message. Lets tracks
+   * generated before the MP3 fix (encrypted CDN links) become playable.
+   */
+  app.post<{ Params: { id: string } }>(
+    "/v1/tasks/:id/refresh-media",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const task = await store.getTask(request.params.id);
+      if (!task) return reply.code(404).send({ error: "task not found" });
+      const session = await store.getSession(task.sessionId);
+      if (!session || session.userId !== userId) return reply.code(404).send({ error: "task not found" });
+      const audit = await store.listAudit(task.id).catch(() => []);
+      const taskIds = camxoraTaskIdsFromAudit(audit.map((event) => event.detail));
+      const tracks = await resolveCamxoraTracks(store, vaultKey, userId, taskIds);
+      if (tracks.length === 0) {
+        return reply.code(409).send({ error: "No playable tracks found for this task." });
+      }
+      let changed = false;
+      for (const message of session.messages) {
+        if (message.role !== "assistant" || message.taskId !== task.id) continue;
+        const next = rewriteMediaStreams(message.content, tracks);
+        if (next !== message.content) {
+          message.content = next;
+          changed = true;
+        }
+      }
+      if (changed) {
+        await store.updateSession(session);
+        emit({ type: "session.updated", session });
+      }
+      return { ok: changed, tracks: tracks.length };
     },
   );
 

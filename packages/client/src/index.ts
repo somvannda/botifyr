@@ -2117,6 +2117,11 @@ export class BotifyrClient {
     return this.request(`/v1/tasks/${taskId}/cancel`, { method: "POST", json: true, body: "{}" });
   }
 
+  /** Re-resolve a task's Camxora tracks to playable MP3s (fixes older messages). */
+  refreshTaskMedia(taskId: string): Promise<{ ok: boolean; tracks: number }> {
+    return this.request(`/v1/tasks/${taskId}/refresh-media`, { method: "POST", json: true, body: "{}" });
+  }
+
   listSecrets(): Promise<SecretSummary[]> {
     return this.request("/v1/secrets");
   }

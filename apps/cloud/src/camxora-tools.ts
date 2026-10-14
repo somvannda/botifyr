@@ -175,6 +175,74 @@ function clipsReady(data: unknown): boolean {
   return clips.length > 0 && clips.every((clip) => clip.audio);
 }
 
+/**
+ * True for a media URL that a browser can't play: Suno's encrypted CloudFront
+ * `.m4a` or the auth-gated `/api/forbidden` placeholder. Old messages (written
+ * before the tool surfaced the MP3) contain these.
+ */
+export function unplayableMediaStream(url: string): boolean {
+  return /\/forbidden\b/.test(url) || /cloudfront\.net\/\d+\/clip\//i.test(url);
+}
+
+/**
+ * Replace unplayable `media` block streams in a message with resolved tracks,
+ * matched in order. Non-media text is left untouched; already-playable blocks
+ * are kept as-is.
+ */
+export function rewriteMediaStreams(content: string, tracks: Array<{ stream: string }>): string {
+  if (tracks.length === 0) return content;
+  let index = 0;
+  return content.replace(/```media[^\n]*\n([\s\S]*?)```/g, (whole, body: string) => {
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(body.trim()) as Record<string, unknown>;
+    } catch {
+      return whole;
+    }
+    const stream = typeof parsed.stream === "string" ? parsed.stream : "";
+    if (!unplayableMediaStream(stream)) return whole;
+    const track = tracks[index] ?? tracks[tracks.length - 1];
+    index += 1;
+    return `\`\`\`media\n${JSON.stringify({ ...parsed, stream: track.stream })}\n\`\`\``;
+  });
+}
+
+/** Camxora task ("job") ids referenced by a task's audit details. */
+export function camxoraTaskIdsFromAudit(details: string[]): string[] {
+  const ids = new Set<string>();
+  for (const detail of details) {
+    for (const match of detail.matchAll(/"job_id"\s*:\s*"([0-9a-fA-F-]{36})"/g)) ids.add(match[1]);
+    for (const match of detail.matchAll(/(?:^|\n)-\s*([0-9a-fA-F-]{36})\s*:/g)) ids.add(match[1]);
+  }
+  return [...ids];
+}
+
+export interface ResolvedTrack {
+  title: string;
+  stream: string;
+  cover?: string;
+}
+
+/** Resolve the playable MP3s for a set of Camxora task ids (for refreshing old messages). */
+export async function resolveCamxoraTracks(
+  store: Store,
+  vaultKey: Buffer,
+  userId: string,
+  taskIds: string[],
+): Promise<ResolvedTrack[]> {
+  const key = await camxoraKey(store, vaultKey, userId);
+  if (!key) return [];
+  const out: ResolvedTrack[] = [];
+  for (const id of [...new Set(taskIds)].slice(0, MAX_BATCH)) {
+    const res = await camxoraRaw(key, "GET", `/v1/task/${encodeURIComponent(id)}`);
+    if (!res.ok) continue;
+    for (const clip of summarizeMusicTask(res.data).clips) {
+      if (clip.audio) out.push({ title: clip.title, stream: clip.audio, cover: clip.image });
+    }
+  }
+  return out;
+}
+
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** Read the poll window lazily so tests can shrink it. */
