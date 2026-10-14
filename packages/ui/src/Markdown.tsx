@@ -75,13 +75,10 @@ function MediaPlayer({
     setTime(next);
   };
 
-  const head = (cover || title || badge) && (
+  const head = (cover || title) && (
     <span className="md-media-head">
       {cover && <img className="md-media-cover" src={cover} alt="" loading="lazy" />}
-      <span className="md-media-labels">
-        {badge && <span className="md-badge md-badge-version">{badge}</span>}
-        {title && <span className="md-media-title">{title}</span>}
-      </span>
+      <span className="md-media-labels">{title && <span className="md-media-title">{title}</span>}</span>
     </span>
   );
   const downloadLink = (
@@ -90,13 +87,20 @@ function MediaPlayer({
       {failed && !download ? "Couldn't play — download from Camxora" : "Download"}
     </a>
   );
+  // Version badge sits just before the download pill.
+  const foot = (
+    <span className="md-media-foot">
+      {badge && <span className="md-badge md-badge-version">{badge}</span>}
+      {downloadLink}
+    </span>
+  );
 
   if (kind === "video") {
     return (
       <span className="md-media">
         {head}
         <video className="md-video" src={src} controls preload="metadata" onError={() => setFailed(true)} />
-        {downloadLink}
+        {foot}
       </span>
     );
   }
@@ -139,7 +143,7 @@ function MediaPlayer({
           {clock(time)} <span className="md-player-sep">/</span> {clock(duration)}
         </span>
       </span>
-      {downloadLink}
+      {foot}
     </span>
   );
 }
