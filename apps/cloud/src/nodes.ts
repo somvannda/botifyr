@@ -25,6 +25,8 @@ interface NodeResult {
 interface Pending {
   resolve: (result: NodeResult) => void;
   timer: ReturnType<typeof setTimeout>;
+  /** For streamed actions: forwarded deltas as they arrive. */
+  onDelta?: (text: string) => void;
 }
 
 interface Connection {
@@ -105,6 +107,12 @@ export function handleNodeMessage(connectionId: string, message: unknown): void 
     return;
   }
 
+  if (msg.type === "node.stream" && typeof msg.id === "string") {
+    const entry = connection.pending.get(msg.id);
+    if (entry?.onDelta && typeof msg.delta === "string") entry.onDelta(msg.delta);
+    return;
+  }
+
   if (msg.type === "node.result" && typeof msg.id === "string") {
     const entry = connection.pending.get(msg.id);
     if (!entry) return;
@@ -124,6 +132,21 @@ export function invokeNode(
   args: Record<string, unknown>,
   timeoutMs = 60_000,
 ): Promise<NodeResult> {
+  return invokeNodeStream(userId, action, args, undefined, timeoutMs);
+}
+
+/**
+ * Like `invokeNode`, but the node may stream partial output: each
+ * `{type:"node.stream", id, delta}` is forwarded to `onDelta` while the final
+ * `node.result` still resolves the promise.
+ */
+export function invokeNodeStream(
+  userId: string,
+  action: string,
+  args: Record<string, unknown>,
+  onDelta: ((text: string) => void) | undefined,
+  timeoutMs = 60_000,
+): Promise<NodeResult> {
   const connection = latestFor(userId);
   if (!connection) return Promise.reject(new Error("no local node is connected"));
 
@@ -133,7 +156,7 @@ export function invokeNode(
       connection.pending.delete(id);
       reject(new Error(`local node timed out on "${action}"`));
     }, timeoutMs);
-    connection.pending.set(id, { resolve, timer });
+    connection.pending.set(id, { resolve, timer, onDelta });
     try {
       connection.socket.send(JSON.stringify({ type: "node.request", id, action, args }));
     } catch (error) {

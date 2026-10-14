@@ -1,5 +1,5 @@
 import type { ModelProvider, ModelResponse } from "@botifyr/agent-core";
-import { invokeNode } from "./nodes.js";
+import { invokeNode, invokeNodeStream } from "./nodes.js";
 
 export interface DeviceModelConfig {
   /** The provider preset id (informational; the node treats it as OpenAI-compatible). */
@@ -18,13 +18,30 @@ export interface DeviceModelConfig {
  * device-mode runs are non-streaming.
  */
 export function createNodeProvider(userId: string, config: DeviceModelConfig): ModelProvider {
+  const input = (args: Record<string, unknown>) => ({
+    ...args,
+    provider: config.provider,
+    model: config.model,
+    baseUrl: config.baseUrl,
+  });
   return {
     name: `device:${config.model || config.provider}`,
     async complete({ messages, tools, maxTokens, toolChoice }): Promise<ModelResponse> {
       const result = await invokeNode(
         userId,
         "model.complete",
-        { messages, tools, maxTokens, toolChoice, ...config },
+        input({ messages, tools, maxTokens, toolChoice }),
+        180_000,
+      );
+      if (!result.ok) throw new Error(result.output || "device model call failed");
+      return JSON.parse(result.output) as ModelResponse;
+    },
+    async completeStream({ messages, tools, maxTokens, toolChoice }, onDelta): Promise<ModelResponse> {
+      const result = await invokeNodeStream(
+        userId,
+        "model.complete",
+        input({ messages, tools, maxTokens, toolChoice, stream: true }),
+        onDelta,
         180_000,
       );
       if (!result.ok) throw new Error(result.output || "device model call failed");
