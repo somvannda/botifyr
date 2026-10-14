@@ -228,6 +228,14 @@ export interface Trigger {
   createdAt: string;
 }
 
+/** The company's own messaging bot (BYO): which employee it answers as. */
+export interface WorkspaceTelegram {
+  /** The employee (bot) the Telegram bot answers as. */
+  botId: string;
+  /** The bot's Telegram @username (set at connect; display name follows the employee). */
+  handle?: string;
+}
+
 export interface Workspace {
   id: string;
   /** The CEO (a real user). */
@@ -257,6 +265,8 @@ export interface Workspace {
   repos?: CodeRepo[];
   /** Inbound event triggers that run a prompt for an employee (plan §2.4). */
   triggers?: Trigger[];
+  /** The company's own Telegram bot (BYO) and the employee it answers as. */
+  telegram?: WorkspaceTelegram;
   createdAt: string;
   updatedAt: string;
 }

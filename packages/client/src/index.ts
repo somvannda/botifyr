@@ -27,6 +27,7 @@ import type {
   WorkItem,
   WorkspaceBudget,
   WorkspaceInbox,
+  WorkspaceTelegram,
   WorkspaceWithRoles,
 } from "@botifyr/shared";
 
@@ -1093,6 +1094,21 @@ export class BotifyrClient {
   deleteTrigger(workspaceId: string, name: string): Promise<void> {
     return this.request(`/v1/workspaces/${workspaceId}/triggers/${encodeURIComponent(name)}`, {
       method: "DELETE",
+    });
+  }
+
+  /**
+   * Connect the company's own Telegram bot and pick the employee it answers as
+   * (docs/external-communications.md §8). Pass `botId: null` to disconnect.
+   */
+  setWorkspaceTelegram(
+    workspaceId: string,
+    input: { botId: string | null; handle?: string | null },
+  ): Promise<{ telegram: WorkspaceTelegram | null }> {
+    return this.request(`/v1/workspaces/${workspaceId}/telegram`, {
+      method: "PATCH",
+      json: true,
+      body: JSON.stringify(input),
     });
   }
 

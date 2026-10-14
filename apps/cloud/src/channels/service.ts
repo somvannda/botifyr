@@ -5,14 +5,20 @@ import { emit, subscribe } from "../events.js";
 import { rememberSession, rememberTask } from "../runtime.js";
 import { hashPassword, newId } from "../auth.js";
 import { resolveTaskApproval } from "../approvals.js";
-import { runTask } from "../runner.js";
+import { runTask, type RunnerDeps } from "../runner.js";
 import type { Store } from "../store/index.js";
+import { scopedChannelIdentity, type ChannelScope } from "../channel-routing.js";
 
 interface Conversation {
   userId: string;
   sessionId: string;
+  /** The employee this thread runs as, when the channel is company-scoped. */
+  authorId?: string;
   pending?: { taskId: string; approvalId: string };
 }
+
+/** Runs one agent task; injectable so channel routing is testable. */
+export type RunTaskFn = (deps: RunnerDeps, task: Task) => Promise<void>;
 
 const DECISIONS: Record<string, "allow" | "deny"> = {
   allow: "allow",
@@ -32,19 +38,34 @@ export class ChannelService {
   private readonly adapters = new Map<string, ChannelAdapter>();
   private readonly conversations = new Map<string, Conversation>();
   private readonly taskConversation = new Map<string, string>();
+  private readonly scopes = new Map<string, ChannelScope>();
+  private started = false;
 
-  constructor(private readonly store: Store) {
+  constructor(
+    private readonly store: Store,
+    private readonly run: RunTaskFn = runTask,
+  ) {
     subscribe((event) => this.onEvent(event));
   }
 
-  register(adapter: ChannelAdapter): void {
-    this.adapters.set(adapter.name, adapter);
+  /**
+   * Register an adapter. `key` isolates bots that share an adapter name (one bot
+   * per company); `scope` binds the channel to the employee it answers as
+   * (docs/external-communications.md §8).
+   */
+  register(adapter: ChannelAdapter, opts: { key?: string; scope?: ChannelScope } = {}): void {
+    const key = opts.key ?? adapter.name;
+    this.adapters.set(key, adapter);
+    if (opts.scope) this.scopes.set(key, opts.scope);
     adapter.onMessage((message) => {
-      void this.handle(adapter.name, message);
+      void this.handle(key, message);
     });
+    // A company bot is registered asynchronously after startup, so start it here.
+    if (this.started) void adapter.start();
   }
 
   async start(): Promise<void> {
+    this.started = true;
     for (const adapter of this.adapters.values()) {
       await adapter.start();
     }
@@ -77,7 +98,14 @@ export class ChannelService {
     let conversation = this.conversations.get(conversationKey);
 
     if (!conversation) {
-      const userId = message.userId ?? (await this.ensureChannelUser(channel, message.conversationId));
+      // A company-scoped channel runs as the employee it answers for, so it
+      // inherits that role's instructions, tools and permissions.
+      const scope = this.scopes.get(channel);
+      const identity = scope
+        ? scopedChannelIdentity(scope, await this.store.getWorkspace(scope.workspaceId).catch(() => null))
+        : null;
+      const userId =
+        identity?.userId ?? message.userId ?? (await this.ensureChannelUser(channel, message.conversationId));
       const sessionId = randomUUID();
       await this.store.createSession({
         id: sessionId,
@@ -85,9 +113,10 @@ export class ChannelService {
         title: message.text.slice(0, 60) || "New chat",
         messages: [],
         createdAt: new Date().toISOString(),
+        botId: identity?.authorId,
       });
       rememberSession(sessionId, userId);
-      conversation = { userId, sessionId };
+      conversation = { userId, sessionId, authorId: identity?.authorId };
       this.conversations.set(conversationKey, conversation);
     }
 
@@ -135,7 +164,17 @@ export class ChannelService {
     emit({ type: "task.created", task });
 
     await adapter.send(message.conversationId, "On it — I'll report back here.");
-    void runTask({ store: this.store, userId: conversation.userId, history }, task).catch(() => {});
+    void this
+      .run(
+        {
+          store: this.store,
+          userId: conversation.userId,
+          author: conversation.authorId ? { id: conversation.authorId } : undefined,
+          history,
+        },
+        task,
+      )
+      .catch(() => {});
   }
 
   private onEvent(event: ServerEvent): void {
