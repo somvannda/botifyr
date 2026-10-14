@@ -15,6 +15,7 @@ Status legend: ✅ done · 🚧 in progress · ⬜ not started
 | 4 | Read receipts + message reactions | Feature | ✅ |
 | 5 | Light-theme audit of the new chat surfaces | Improvement | ✅ |
 | 6 | Cached transcripts (persist transcription on the message) | Improvement | ✅ |
+| 7 | Bring your own AI key (fallback + per-user provider) | Feature | ✅ |
 
 ---
 

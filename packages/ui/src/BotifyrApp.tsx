@@ -10,6 +10,8 @@ import type {
   WheelEvent as ReactWheelEvent,
 } from "react";
 import type {
+  AiKeyConfig,
+  AiKeyInput,
   AuditEvent,
   Bot,
   BotFile,
@@ -33,7 +35,7 @@ import type {
   WorkspaceBudget,
   WorkspaceWithRoles,
 } from "@botifyr/shared";
-import { CAPABILITIES, connectorById } from "@botifyr/shared";
+import { AI_PROVIDER_PRESETS, CAPABILITIES, findAiProviderPreset, connectorById } from "@botifyr/shared";
 import {
   AuthError,
   BotifyrClient,
@@ -252,6 +254,7 @@ const SETTINGS_TABS = [
   { id: "general", label: "General", icon: <GearIcon size={16} /> },
   { id: "computer", label: "Computer", icon: <MonitorIcon size={16} /> },
   { id: "usage", label: "Usage & Billing", icon: <ChartIcon size={16} /> },
+  { id: "ai", label: "AI provider", icon: <SparkIcon size={16} /> },
   { id: "skills", label: "Learned skills", icon: <SparkIcon size={16} /> },
   { id: "media", label: "Downloads", icon: <PanelIcon size={16} /> },
   { id: "updates", label: "Updates", icon: <DownloadIcon size={16} /> },
@@ -668,6 +671,14 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [libContent, setLibContent] = useState("");
   const [secretName, setSecretName] = useState("");
   const [secretValue, setSecretValue] = useState("");
+  const [aiConfig, setAiConfig] = useState<AiKeyConfig | null>(null);
+  const [aiProvider, setAiProvider] = useState<string>("openai");
+  const [aiModel, setAiModel] = useState("");
+  const [aiApiKey, setAiApiKey] = useState("");
+  const [aiBaseUrl, setAiBaseUrl] = useState("");
+  const [aiEnabled, setAiEnabled] = useState(true);
+  const [aiNote, setAiNote] = useState<string | null>(null);
+  const [aiBusy, setAiBusy] = useState(false);
 
   const [audit, setAudit] = useState<AuditEvent[]>([]);
   /** Provenance: tokens spent on the shown task. */
@@ -1032,6 +1043,18 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     client
       .listSecrets()
       .then((list) => mounted && setSecrets(list))
+      .catch(() => {});
+
+    client
+      .getAiProvider()
+      .then((config) => {
+        if (!mounted || !config) return;
+        setAiConfig(config);
+        setAiProvider(config.provider);
+        setAiModel(config.model);
+        setAiBaseUrl(config.baseUrl ?? "");
+        setAiEnabled(config.enabled);
+      })
       .catch(() => {});
 
     // Publish this device's public E2E key so peers can encrypt DMs to us.
@@ -2732,6 +2755,61 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     }
   }
 
+  /** The draft AI-provider config the form is editing. */
+  function aiDraft(): AiKeyInput {
+    return {
+      provider: aiProvider,
+      model: aiModel.trim(),
+      baseUrl: aiBaseUrl.trim() || undefined,
+      apiKey: aiApiKey.trim() || undefined,
+      enabled: aiEnabled,
+    };
+  }
+
+  async function saveAiKey(event: FormEvent) {
+    event.preventDefault();
+    setAiBusy(true);
+    setAiNote(null);
+    try {
+      const config = await client.saveAiProvider(aiDraft());
+      setAiConfig(config);
+      setAiApiKey("");
+      setAiNote("Saved. Your key is encrypted and used only for your own tasks.");
+    } catch (err: unknown) {
+      setAiNote(messageOf(err));
+    } finally {
+      setAiBusy(false);
+    }
+  }
+
+  async function removeAiKey() {
+    setAiBusy(true);
+    setAiNote(null);
+    try {
+      await client.deleteAiProvider();
+      setAiConfig(null);
+      setAiApiKey("");
+      setAiNote("Your key was removed. Botifyr will use the platform account again.");
+    } catch (err: unknown) {
+      setAiNote(messageOf(err));
+    } finally {
+      setAiBusy(false);
+    }
+  }
+
+  async function testAiKey() {
+    setAiBusy(true);
+    setAiNote("Testing…");
+    try {
+      const result = await client.testAiProvider(aiDraft());
+      setAiNote(result.message);
+    } catch (err: unknown) {
+      setAiNote(messageOf(err));
+    } finally {
+      setAiBusy(false);
+    }
+  }
+
   async function saveDownloadCookies() {
     if (!ytCookies.trim()) {
       setError("Paste your cookies.txt contents first.");
@@ -4290,6 +4368,17 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       {modelNotice && (
         <div className="model-banner" role="status">
           <span>{modelNotice}</span>
+          <button
+            className="ghost small"
+            type="button"
+            onClick={() => {
+              setSettingsTab("ai");
+              setShowSettings(true);
+              setModelNotice(null);
+            }}
+          >
+            Add your own AI key
+          </button>
           <button
             className="model-banner-close"
             type="button"
@@ -8458,6 +8547,107 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                     </button>
                   </div>
                   {checkNote && <p className="settings-note">{checkNote}</p>}
+                </div>
+              )}
+
+              {settingsTab === "ai" && (
+                <div className="settings-sections">
+                  <div className="settings-section-title">Your own AI key</div>
+                  <p className="settings-note">
+                    By default Botifyr runs on your plan's included tokens. When those run out — or any
+                    time you prefer — add your own key. It's encrypted at rest and used only for your
+                    own tasks; your key is never shown again or shared.
+                  </p>
+
+                  {aiConfig?.hasKey && (
+                    <div className="settings-row">
+                      <span className="settings-row-main">
+                        <span className="settings-row-name">
+                          Using your own key ·{" "}
+                          {findAiProviderPreset(aiConfig.provider)?.name ?? aiConfig.provider}
+                        </span>
+                        <span className="settings-row-sub">
+                          {aiConfig.model}
+                          {aiConfig.enabled ? "" : " · disabled"}
+                        </span>
+                      </span>
+                      <button className="link" type="button" onClick={() => void removeAiKey()} disabled={aiBusy}>
+                        remove
+                      </button>
+                    </div>
+                  )}
+
+                  <form className="ai-form" onSubmit={saveAiKey}>
+                    <label className="ai-field">
+                      <span>Provider</span>
+                      <Select
+                        value={aiProvider}
+                        onChange={(value) => {
+                          setAiProvider(value);
+                          const preset = findAiProviderPreset(value);
+                          if (preset) {
+                            setAiModel(preset.defaultModel);
+                            setAiBaseUrl("");
+                          }
+                        }}
+                        options={AI_PROVIDER_PRESETS.map((preset) => ({
+                          value: preset.id,
+                          label: preset.name,
+                        }))}
+                        ariaLabel="AI provider"
+                      />
+                    </label>
+
+                    <label className="ai-field">
+                      <span>Model</span>
+                      <input
+                        placeholder={findAiProviderPreset(aiProvider)?.defaultModel || "model id"}
+                        value={aiModel}
+                        onChange={(event) => setAiModel(event.target.value)}
+                      />
+                    </label>
+
+                    {!findAiProviderPreset(aiProvider)?.keyless && (
+                      <label className="ai-field">
+                        <span>API key</span>
+                        <input
+                          type="password"
+                          autoComplete="off"
+                          placeholder={aiConfig?.hasKey ? "•••••••• saved — leave blank to keep" : "paste your key"}
+                          value={aiApiKey}
+                          onChange={(event) => setAiApiKey(event.target.value)}
+                        />
+                      </label>
+                    )}
+
+                    <label className="ai-field">
+                      <span>Base URL</span>
+                      <input
+                        placeholder={findAiProviderPreset(aiProvider)?.baseUrl || "https://…"}
+                        value={aiBaseUrl}
+                        onChange={(event) => setAiBaseUrl(event.target.value)}
+                      />
+                    </label>
+
+                    <label className="ai-check">
+                      <input
+                        type="checkbox"
+                        checked={aiEnabled}
+                        onChange={(event) => setAiEnabled(event.target.checked)}
+                      />
+                      <span>Use my own key for my tasks</span>
+                    </label>
+
+                    <div className="ai-actions">
+                      <button className="btn primary" type="submit" disabled={aiBusy}>
+                        Save
+                      </button>
+                      <button className="ghost small" type="button" onClick={() => void testAiKey()} disabled={aiBusy}>
+                        Test connection
+                      </button>
+                    </div>
+                  </form>
+                  {aiNote && <p className="settings-note">{aiNote}</p>}
                 </div>
               )}
 

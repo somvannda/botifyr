@@ -651,7 +651,10 @@ export class MemoryStore implements Store {
   async usageSince(userId: string, sinceIso: string): Promise<{ tokens: number; requests: number }> {
     const since = new Date(sinceIso).getTime();
     const rows = this.usage.filter(
-      (record) => record.userId === userId && new Date(record.createdAt).getTime() >= since,
+      (record) =>
+        record.userId === userId &&
+        record.source !== "byo" &&
+        new Date(record.createdAt).getTime() >= since,
     );
     return {
       tokens: rows.reduce((sum, record) => sum + record.promptTokens + record.completionTokens, 0),
@@ -661,7 +664,7 @@ export class MemoryStore implements Store {
 
   async usageTokensForQuest(questId: string): Promise<number> {
     return this.usage
-      .filter((record) => record.questId === questId)
+      .filter((record) => record.questId === questId && record.source !== "byo")
       .reduce((sum, record) => sum + record.promptTokens + record.completionTokens, 0);
   }
 
@@ -1779,6 +1782,7 @@ function DEFAULT_SETTINGS(): PlatformSettings {
     reminderDays: [7, 3, 1],
     reminderChannels: { os: true, email: true, telegram: true },
     onDemand: { enabled: true, markupPercent: 15, minTopUpCents: 100, allowPro: false, onEmpty: "block" },
+    byoKey: { billing: "free" },
     fallbackPlan: "free",
   };
 }

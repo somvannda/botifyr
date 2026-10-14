@@ -439,6 +439,12 @@ export interface UsageRecord {
   model?: string;
   /** The quest this usage is attributed to, when the task ran under one (docs/company-quests.md §10.1). */
   questId?: string;
+  /**
+   * Where the tokens were billed. `platform` (default) counts against the
+   * user's plan quota; `byo` used the user's own AI key and is excluded from
+   * quota and company-budget accounting.
+   */
+  source?: "platform" | "byo";
   createdAt: string;
 }
 

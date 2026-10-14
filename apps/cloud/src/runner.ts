@@ -64,6 +64,7 @@ import { createNotionTools, createSlackTools, createTelegramTools } from "./toke
 import { decryptSecret } from "./vault.js";
 import { createLocalTools, nodeInfo } from "./nodes.js";
 import { priceFor } from "./billing.js";
+import { userProvider } from "./ai-keys.js";
 import type { Store } from "./store/index.js";
 
 export interface RunnerDeps {
@@ -354,6 +355,20 @@ function buildTools(
 
 export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
   const { store, userId, history } = deps;
+
+  // Bring-your-own key: use the user's own provider when they've enabled one,
+  // otherwise the platform provider. `chargeByo` decides whether a BYO run is
+  // still metered against plan credits (admin policy — see PlatformSettings).
+  const demoUrl =
+    process.env.BOTIFYR_DEMO_URL ??
+    `http://${sandboxMode() === "docker" ? "host.docker.internal" : "localhost"}:${process.env.PORT ?? 8787}/demo`;
+  const ownProvider = deps.vaultKey
+    ? await userProvider(store, deps.vaultKey, userId, demoUrl).catch(() => null)
+    : null;
+  const usingOwnKey = ownProvider !== null;
+  const activeProvider = ownProvider ?? getProvider();
+  const byoBilling = (await store.getPlatformSettings().catch(() => null))?.byoKey?.billing ?? "free";
+  const chargeByo = !usingOwnKey || byoBilling === "charge";
 
   task.status = "running";
   task.steps = [];
@@ -754,7 +769,7 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
       history,
       instructions,
       summary: deps.summary,
-      provider: getProvider(),
+      provider: activeProvider,
       tools,
       workspaceDir: process.cwd(),
       maxSteps: Number(process.env.BOTIFYR_MAX_STEPS ?? 30),
@@ -870,7 +885,9 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
     // Best-effort cost accounting: never let a failed write break the task.
     try {
       if (result.usage && (result.usage.promptTokens > 0 || result.usage.completionTokens > 0)) {
-        const model = process.env.BOTIFYR_MODEL;
+        const model = usingOwnKey
+          ? activeProvider.name.replace(/^openai-compatible:/, "")
+          : process.env.BOTIFYR_MODEL;
         const now = new Date().toISOString();
         await store.addUsage({
           id: randomUUID(),
@@ -880,55 +897,62 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
           completionTokens: result.usage.completionTokens,
           model,
           questId: task.questId,
+          // BYO tokens use the user's own key, so they aren't metered against
+          // plan quota or company budgets (see Store.usageSince).
+          source: usingOwnKey ? "byo" : "platform",
           createdAt: now,
         });
-        // Per-workspace budget accounting (docs/company-os.md §15).
-        if (authorBot?.workspace) {
-          const space = (await store.listWorkspaces(userId).catch(() => [])).find(
-            (entry) => entry.name === authorBot.workspace,
-          );
-          if (space) {
-            const spent = result.usage.promptTokens + result.usage.completionTokens;
-            const budget = (await store.getWorkspaceBudget(space.id)) ?? {
-              workspaceId: space.id,
-              limitTokens: 0,
-              usedTokens: 0,
-              updatedAt: now,
-            };
-            await store.saveWorkspaceBudget({
-              workspaceId: space.id,
-              limitTokens: budget.limitTokens,
-              usedTokens: budget.usedTokens + spent,
-              updatedAt: now,
-            });
+        // Charging (company budget + prepaid credits) only applies when the run
+        // is metered — a free BYO run spends the user's provider account, not ours.
+        if (chargeByo) {
+          // Per-workspace budget accounting (docs/company-os.md §15).
+          if (authorBot?.workspace) {
+            const space = (await store.listWorkspaces(userId).catch(() => [])).find(
+              (entry) => entry.name === authorBot.workspace,
+            );
+            if (space) {
+              const spent = result.usage.promptTokens + result.usage.completionTokens;
+              const budget = (await store.getWorkspaceBudget(space.id)) ?? {
+                workspaceId: space.id,
+                limitTokens: 0,
+                usedTokens: 0,
+                updatedAt: now,
+              };
+              await store.saveWorkspaceBudget({
+                workspaceId: space.id,
+                limitTokens: budget.limitTokens,
+                usedTokens: budget.usedTokens + spent,
+                updatedAt: now,
+              });
+            }
           }
-        }
-        // On-demand / overage: debit the prepaid credit wallet at the per-model rate.
-        const settings = await store.getPlatformSettings();
-        const record = await store.getUserById(userId);
-        if (record && settings.onDemand.enabled) {
-          const charge = priceFor(
-            await store.listModelPricing(),
-            model,
-            result.usage.promptTokens,
-            result.usage.completionTokens,
-            settings.onDemand.markupPercent,
-          );
-          const wallet = await store.getWallet(userId);
-          const drawsCredits =
-            record.billingMode === "payg" || (settings.onDemand.allowPro && wallet.balanceCents > 0);
-          if (charge > 0 && drawsCredits) {
-            await store.addWalletCents(userId, -charge);
-            await store.addLedger({
-              id: randomUUID(),
-              userId,
-              kind: "usage",
-              amountCents: -charge,
-              tokens: result.usage.promptTokens + result.usage.completionTokens,
+          // On-demand / overage: debit the prepaid credit wallet at the per-model rate.
+          const settings = await store.getPlatformSettings();
+          const record = await store.getUserById(userId);
+          if (record && settings.onDemand.enabled) {
+            const charge = priceFor(
+              await store.listModelPricing(),
               model,
-              note: task.id,
-              createdAt: now,
-            });
+              result.usage.promptTokens,
+              result.usage.completionTokens,
+              settings.onDemand.markupPercent,
+            );
+            const wallet = await store.getWallet(userId);
+            const drawsCredits =
+              record.billingMode === "payg" || (settings.onDemand.allowPro && wallet.balanceCents > 0);
+            if (charge > 0 && drawsCredits) {
+              await store.addWalletCents(userId, -charge);
+              await store.addLedger({
+                id: randomUUID(),
+                userId,
+                kind: "usage",
+                amountCents: -charge,
+                tokens: result.usage.promptTokens + result.usage.completionTokens,
+                model,
+                note: task.id,
+                createdAt: now,
+              });
+            }
           }
         }
       }
@@ -972,7 +996,13 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
         session.messages.push({
           id: randomUUID(),
           role: "assistant",
-          content: ok || reply === "Stopped by you." ? reply : `Something went wrong: ${reply}`,
+          // Failures already carry a complete, user-safe sentence from the agent
+          // (e.g. the provider credit/auth message). Only add a generic fallback
+          // when the run ended without one — never the raw provider payload.
+          content:
+            ok || reply === "Stopped by you."
+              ? reply
+              : reply || "Something went wrong. Please try again.",
           createdAt: new Date().toISOString(),
           taskId: task.id,
           botId: deps.author?.id,

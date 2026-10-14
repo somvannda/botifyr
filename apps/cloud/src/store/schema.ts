@@ -223,6 +223,9 @@ CREATE TABLE IF NOT EXISTS usage_events (
 CREATE INDEX IF NOT EXISTS usage_user_idx ON usage_events (user_id, created_at);
 ALTER TABLE usage_events ADD COLUMN IF NOT EXISTS quest_id TEXT;
 CREATE INDEX IF NOT EXISTS usage_quest_idx ON usage_events (quest_id);
+-- Origin of the tokens: NULL/'platform' counts against plan quota; 'byo' is the
+-- user's own AI key and is excluded from quota/budget accounting.
+ALTER TABLE usage_events ADD COLUMN IF NOT EXISTS source TEXT;
 
 CREATE TABLE IF NOT EXISTS files (
   id         TEXT PRIMARY KEY,
@@ -676,7 +679,7 @@ CREATE TABLE IF NOT EXISTS post_views (
 CREATE INDEX IF NOT EXISTS post_views_post_idx ON post_views (post_id);
 
 -- Seed the default policy and a starter model price (editable in admin).
-INSERT INTO platform_settings (id, data) VALUES ('global', '{"plans":{"proPriceCents":500,"businessPriceCents":1900,"proPeriodDays":30,"includedTokens":{"pro":5000000,"business":50000000},"currency":"USD"},"freeMonthlyTokens":500000,"lowBalanceCents":100,"graceDays":7,"reminderDays":[7,3,1],"reminderChannels":{"os":true,"email":true,"telegram":true},"onDemand":{"enabled":true,"markupPercent":15,"minTopUpCents":100,"allowPro":false,"onEmpty":"block"},"fallbackPlan":"free"}')
+INSERT INTO platform_settings (id, data) VALUES ('global', '{"plans":{"proPriceCents":500,"businessPriceCents":1900,"proPeriodDays":30,"includedTokens":{"pro":5000000,"business":50000000},"currency":"USD"},"freeMonthlyTokens":500000,"lowBalanceCents":100,"graceDays":7,"reminderDays":[7,3,1],"reminderChannels":{"os":true,"email":true,"telegram":true},"onDemand":{"enabled":true,"markupPercent":15,"minTopUpCents":100,"allowPro":false,"onEmpty":"block"},"byoKey":{"billing":"free"},"fallbackPlan":"free"}')
   ON CONFLICT (id) DO NOTHING;
 INSERT INTO model_pricing (model, provider, input_cents_per_m, output_cents_per_m) VALUES
   ('deepseek-chat', 'deepseek', 27, 110)

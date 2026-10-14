@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { friendlyModelError } from "./errors.js";
 import type {
   AgentMessage,
   ModelProvider,
@@ -254,10 +255,13 @@ export async function runAgent(options: RunAgentOptions): Promise<AgentResult> {
                 toolChoice: forceToolCall ? "required" : undefined,
               });
       } catch (error) {
-        options.onStep({ id: thinkId, title: "Thinking", detail: messageOf(error), status: "failed" });
+        // Surface a user-safe sentence; keep the raw provider detail for operators.
+        console.error("[botifyr] model request failed:", error);
+        const friendly = friendlyModelError(error);
+        options.onStep({ id: thinkId, title: "Thinking", detail: friendly, status: "failed" });
         return {
           ok: false,
-          summary: `Model error: ${messageOf(error)}`,
+          summary: friendly,
           steps: stepCount,
           provider: provider.name,
           usage,

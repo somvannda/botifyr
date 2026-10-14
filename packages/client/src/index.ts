@@ -1,4 +1,7 @@
 import type {
+  AiKeyConfig,
+  AiKeyInput,
+  AiKeyTestResult,
   AuditEvent,
   AuthResponse,
   Bot,
@@ -2107,6 +2110,29 @@ export class BotifyrClient {
 
   deleteSecret(id: string): Promise<void> {
     return this.request(`/v1/secrets/${id}`, { method: "DELETE" });
+  }
+
+  /** The user's own AI provider config (key-free), or null when none is set. */
+  getAiProvider(): Promise<AiKeyConfig | null> {
+    return this.request<{ config: AiKeyConfig | null }>("/v1/ai/provider").then((result) => result.config);
+  }
+
+  /** Store/replace the user's own AI key. Omit `apiKey` to keep the existing one. */
+  saveAiProvider(input: AiKeyInput): Promise<AiKeyConfig> {
+    return this.request("/v1/ai/provider", { method: "PUT", json: true, body: JSON.stringify(input) });
+  }
+
+  deleteAiProvider(): Promise<void> {
+    return this.request("/v1/ai/provider", { method: "DELETE" });
+  }
+
+  /** Test a provider config (unsaved values when `input` is given, else the stored one). */
+  testAiProvider(input?: AiKeyInput): Promise<AiKeyTestResult> {
+    return this.request("/v1/ai/provider/test", {
+      method: "POST",
+      json: true,
+      body: JSON.stringify(input ?? {}),
+    });
   }
 
   listConnections(): Promise<ConnectionInfo[]> {

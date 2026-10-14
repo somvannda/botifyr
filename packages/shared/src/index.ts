@@ -715,6 +715,14 @@ export interface PlatformSettings {
     allowPro: boolean;
     onEmpty: "block" | "free";
   };
+  /**
+   * What happens when a user runs a task with their own AI key: `free` skips
+   * platform credits/quota entirely (their key, their provider bill); `charge`
+   * still bills credits and counts the tokens against their plan.
+   */
+  byoKey?: {
+    billing: "free" | "charge";
+  };
   fallbackPlan: BillingPlan;
 }
 
@@ -827,3 +835,6 @@ export * from "./catalog.js";
 
 /* Installable social connectors and the capabilities they provide. */
 export * from "./connectors.js";
+
+/* Bring-your-own AI key: provider registry + user key contracts. */
+export * from "./aiProviders.js";

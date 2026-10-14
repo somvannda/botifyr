@@ -864,8 +864,8 @@ export class PostgresStore implements Store {
 
   async addUsage(record: UsageRecord): Promise<void> {
     await this.pool.query(
-      "INSERT INTO usage_events (id, user_id, task_id, prompt_tokens, completion_tokens, model, quest_id, created_at) " +
-        "VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+      "INSERT INTO usage_events (id, user_id, task_id, prompt_tokens, completion_tokens, model, quest_id, source, created_at) " +
+        "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
       [
         record.id,
         record.userId,
@@ -874,6 +874,7 @@ export class PostgresStore implements Store {
         record.completionTokens,
         record.model ?? null,
         record.questId ?? null,
+        record.source ?? "platform",
         record.createdAt,
       ],
     );
@@ -882,7 +883,7 @@ export class PostgresStore implements Store {
   async usageSince(userId: string, sinceIso: string): Promise<{ tokens: number; requests: number }> {
     const { rows } = await this.pool.query(
       "SELECT COALESCE(SUM(prompt_tokens + completion_tokens), 0) AS tokens, COUNT(*) AS requests " +
-        "FROM usage_events WHERE user_id = $1 AND created_at >= $2",
+        "FROM usage_events WHERE user_id = $1 AND created_at >= $2 AND (source IS NULL OR source <> 'byo')",
       [userId, sinceIso],
     );
     return { tokens: Number(rows[0]?.tokens ?? 0), requests: Number(rows[0]?.requests ?? 0) };
@@ -890,7 +891,8 @@ export class PostgresStore implements Store {
 
   async usageTokensForQuest(questId: string): Promise<number> {
     const { rows } = await this.pool.query(
-      "SELECT COALESCE(SUM(prompt_tokens + completion_tokens), 0) AS tokens FROM usage_events WHERE quest_id = $1",
+      "SELECT COALESCE(SUM(prompt_tokens + completion_tokens), 0) AS tokens FROM usage_events " +
+        "WHERE quest_id = $1 AND (source IS NULL OR source <> 'byo')",
       [questId],
     );
     return Number(rows[0]?.tokens ?? 0);
@@ -2682,6 +2684,7 @@ function DEFAULT_SETTINGS(): PlatformSettings {
     reminderDays: [7, 3, 1],
     reminderChannels: { os: true, email: true, telegram: true },
     onDemand: { enabled: true, markupPercent: 15, minTopUpCents: 100, allowPro: false, onEmpty: "block" },
+    byoKey: { billing: "free" },
     fallbackPlan: "free",
   };
 }
