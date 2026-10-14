@@ -49,6 +49,19 @@ describe("Markdown media URLs", () => {
     expect(badges).toEqual(["Version 1", "Version 2"]);
   });
 
+  it("puts both badges under the player, version before download", () => {
+    const { container } = render(<Markdown text={"- ▶️ https://cdn.example/a.mp3"} />);
+    const media = container.querySelector(".md-media") as HTMLElement;
+    const player = media.querySelector(".md-player") as HTMLElement;
+    const foot = media.querySelector(".md-media-foot") as HTMLElement;
+    expect(foot).toBeTruthy();
+    // The foot (badges) comes after the player, not above it.
+    expect(player.compareDocumentPosition(foot) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const kids = [...foot.children];
+    expect(kids[0]?.className).toContain("md-badge-version");
+    expect(kids[1]?.className).toContain("md-badge-download");
+  });
+
   it("keeps a bullet that has extra text as a list item", () => {
     const { container } = render(<Markdown text={"- Listen: https://cdn.example/a.mp3"} />);
     expect(container.querySelector("li")).toBeTruthy();

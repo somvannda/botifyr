@@ -5440,6 +5440,14 @@ body {
   min-width: 0;
 }
 
+/* Version badge + download pill, both under the player. */
+.md-media-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
 .md-media-title {
   font-size: var(--text-md);
   font-weight: 600;
