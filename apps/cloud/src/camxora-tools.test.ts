@@ -266,6 +266,26 @@ describe("old-track refresh helpers", () => {
     expect(out).toContain("https://s3.example/ok.mp3");
   });
 
+  it("matches each link to its own clip id when a job returns extra variations", () => {
+    const A = "11111111-1111-1111-1111-111111111111";
+    const B = "22222222-2222-2222-2222-222222222222";
+    const ALT = "33333333-3333-3333-3333-333333333333";
+    const content =
+      `1) Song A\n- ▶️ https://d2lwuy8qc234o3.cloudfront.net/1/clip/${A}.m4a\n\n` +
+      `2) Song B\n- ▶️ https://d2lwuy8qc234o3.cloudfront.net/1/clip/${B}.m4a`;
+    // Camxora returns two clips for job A, so the resolved list interleaves:
+    // A, A-alt, B. Matching by id must keep track 1 as A and track 2 as B.
+    const out = rewriteMediaStreams(content, [
+      { id: A, stream: `https://b2.example/clips/${A}.mp3` },
+      { id: ALT, stream: `https://b2.example/clips/${ALT}.mp3` },
+      { id: B, stream: `https://b2.example/clips/${B}.mp3` },
+    ]);
+    expect(out).toContain(`https://b2.example/clips/${A}.mp3`);
+    expect(out).toContain(`https://b2.example/clips/${B}.mp3`);
+    expect(out).not.toContain(ALT);
+    expect(out).not.toContain("cloudfront.net");
+  });
+
   it("extracts Camxora task ids from audit details (old and new formats)", () => {
     const ids = camxoraTaskIdsFromAudit([
       '- 5c948dfe-4c5b-463e-bee1-38b1f9b9cc83: {"job_id":"5c948dfe-4c5b-463e-bee1-38b1f9b9cc83"}',
