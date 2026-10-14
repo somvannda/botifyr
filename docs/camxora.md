@@ -50,6 +50,7 @@ blocking the connection.
 | `music.lyrics` | `POST /v1/lyrics` | — (free) |
 | `music.stems` | `POST /v1/music/stems` | ✅ |
 | `music.wav` | `POST /v1/music/wav` | — |
+| `music.wav_status` | `GET /v1/music/wav/:id` | — |
 | `music.video` | `POST /v1/mp4/generate` | ✅ |
 | `music.task` | `GET /v1/task/:id` | — |
 | `music.get` | any `GET` path | — |
@@ -69,6 +70,13 @@ use well, with a generic escape hatch.
 **Async by design.** Generation returns a task id; the bot polls with
 `music.task` until the result carries playback URLs. Callbacks
 (`callback_url`) are supported by the API but not required.
+
+**Durability — nothing stored on our side.** Playback and download go **directly
+from Camxora's CDN**; Botifyr stores nothing. A streaming URL can be
+signed/expiring, so to keep a track the bot runs `music.wav` and polls
+`music.wav_status` for a durable URL served from Camxora's own storage, then
+shares it. Either URL renders as an inline player + a direct **Download** link in
+the chat.
 
 ## Config
 
