@@ -5508,7 +5508,6 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                                     {msgBot.name}
                                   </div>
                                 )}
-                                <Markdown text={parsed.body} onFileRef={openFileRef} />
                                 {message.goal && (
                                   <div className="msg-task">
                                     <div className="msg-task-head">
@@ -5520,6 +5519,10 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                                     )}
                                   </div>
                                 )}
+                                {/* The result (text + media players) reads after what
+                                    the agent did, so generated songs sit below the
+                                    activity list rather than above it. */}
+                                <Markdown text={parsed.body} onFileRef={openFileRef} />
                                 {parsed.options.length > 0 && (
                                   <div className="quick-replies">
                                     {parsed.options.map((option, index) => (
