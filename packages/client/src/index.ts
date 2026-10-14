@@ -18,6 +18,8 @@ import type {
   MediaRecipe,
   ModelPricingRecord,
   PlatformSettings,
+  ProviderRole,
+  ProviderRoleConfig,
   Quest,
   RuntimeConfig,
   SecretSummary,
@@ -610,6 +612,19 @@ export class BotifyrClient {
 
   adminDeleteModelPricing(model: string): Promise<void> {
     return this.request(`/admin/model-pricing/${encodeURIComponent(model)}`, { method: "DELETE" });
+  }
+
+  /* Media-pipeline provider roles (video translation, admin). */
+  adminProviderRoles(): Promise<ProviderRoleConfig[]> {
+    return this.request("/admin/provider-roles");
+  }
+
+  adminSaveProviderRole(role: ProviderRole, body: Partial<ProviderRoleConfig>): Promise<ProviderRoleConfig> {
+    return this.request(`/admin/provider-roles/${encodeURIComponent(role)}`, {
+      method: "PUT",
+      json: true,
+      body: JSON.stringify(body),
+    });
   }
 
   /* Self-learned extraction recipes (admin). */
