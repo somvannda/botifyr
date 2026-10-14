@@ -682,6 +682,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [aiBaseUrl, setAiBaseUrl] = useState("");
   const [aiEnabled, setAiEnabled] = useState(true);
   const [aiMode, setAiMode] = useState<AiKeyMode>("server");
+  /** Device-mode key: kept in the app and handed to the local node, never sent. */
+  const [aiDeviceKey, setAiDeviceKey] = useState("");
   const [aiNote, setAiNote] = useState<string | null>(null);
   const [aiBusy, setAiBusy] = useState(false);
 
@@ -2784,7 +2786,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       provider: aiProvider,
       model: aiModel.trim(),
       baseUrl: aiBaseUrl.trim() || undefined,
-      apiKey: aiApiKey.trim() || undefined,
+      apiKey: aiMode === "server" ? aiApiKey.trim() || undefined : undefined,
       enabled: aiEnabled,
       mode: aiMode,
     };
@@ -2798,7 +2800,13 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       const config = await client.saveAiProvider(aiDraft());
       setAiConfig(config);
       setAiApiKey("");
-      setAiNote("Saved. Your key is encrypted and used only for your own tasks.");
+      if (aiMode === "device") {
+        // Hand the key to the node (restarts it) so device mode is ready now.
+        await startLocalNode();
+        setAiNote("Saved — your key lives on this device.");
+      } else {
+        setAiNote("Saved. Your key is encrypted and used only for your own tasks.");
+      }
     } catch (err: unknown) {
       setAiNote(messageOf(err));
     } finally {
@@ -2951,7 +2959,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   async function startLocalNode() {
     try {
       const { token } = await client.nodeToken();
-      await bridge.startLocalNode?.(token);
+      await bridge.startLocalNode?.(token, aiDeviceKey.trim() || undefined);
     } catch {
       // Not running inside the desktop app (e.g. browser preview).
     }
@@ -8702,18 +8710,29 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                     </label>
 
                     {aiMode === "device" ? (
-                      <p className="settings-note">
-                        Your key stays on this computer — the local node makes the model calls. Set
-                        <code> BOTIFYR_AI_KEY </code> in the node environment (once per machine). Prompts still
-                        pass through the cloud on their way to your device.
-                        {!config?.nodeOnline && (
-                          <>
-                            {" "}
-                            <strong>The node is offline right now — tasks fall back to the platform account
-                            until it connects.</strong>
-                          </>
-                        )}
-                      </p>
+                      <>
+                        <label className="ai-field">
+                          <span>Device key (stays on this computer)</span>
+                          <input
+                            type="password"
+                            autoComplete="off"
+                            placeholder="paste your key"
+                            value={aiDeviceKey}
+                            onChange={(event) => setAiDeviceKey(event.target.value)}
+                          />
+                        </label>
+                        <p className="settings-note">
+                          Handed to your local node only — it is never sent to the server. Prompts still pass
+                          through the cloud on their way to your device.
+                          {!config?.nodeOnline && (
+                            <>
+                              {" "}
+                              <strong>The node is offline right now — tasks fall back to the platform account
+                              until it connects.</strong>
+                            </>
+                          )}
+                        </p>
+                      </>
                     ) : (
                       !findAiProviderPreset(aiProvider)?.keyless && (
                         <label className="ai-field">
