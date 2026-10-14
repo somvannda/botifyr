@@ -2650,6 +2650,45 @@ body {
   font-size: var(--text-sm);
 }
 
+/* Bring-your-own AI key form */
+.ai-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.ai-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+
+.ai-field input {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  padding: var(--space-2) var(--space-2);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+  outline: none;
+}
+
+.ai-check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+
+.ai-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
 /* Grok-style layout ------------------------------------------------------ */
 .sidebar-top {
   display: flex;

@@ -720,6 +720,21 @@ export function Admin() {
                     <option value="free">fall back to free</option>
                   </select>
                 </label>
+                <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12 }}>
+                  User's own AI key
+                  <select
+                    value={settings.byoKey?.billing ?? "free"}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        byoKey: { billing: e.target.value as "free" | "charge" },
+                      })
+                    }
+                  >
+                    <option value="free">free (their provider bill)</option>
+                    <option value="charge">still charge credits</option>
+                  </select>
+                </label>
               </div>
               <div className="admin-actions" style={{ marginTop: 12, gap: 16 }}>
                 <label style={{ fontSize: 12 }}>

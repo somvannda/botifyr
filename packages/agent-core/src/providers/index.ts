@@ -64,9 +64,23 @@ export function createProvider(selection: ProviderSelection): ModelProvider {
     return createMockProvider(selection.demoUrl);
   }
 
-  const preset = PRESETS[name];
+  const preset = PRESETS[name as Exclude<ProviderName, "mock">];
   if (!preset) {
-    throw new Error(`unknown provider "${selection.provider}"`);
+    // Any non-preset provider that supplies a base URL is treated as a generic
+    // OpenAI-compatible endpoint (this is how a user's own key is routed).
+    if (!selection.baseUrl) {
+      throw new Error(`unknown provider "${selection.provider}"`);
+    }
+    const masked = selection.apiKey ? `…${selection.apiKey.slice(-4)}` : "(none)";
+    console.log(
+      `[botifyr] model provider "openai-compatible" model "${selection.model ?? ""}" key ${masked}`,
+    );
+    return createOpenAIProvider({
+      baseUrl: selection.baseUrl,
+      model: selection.model ?? "",
+      apiKey: selection.apiKey,
+      echoReasoning: false,
+    });
   }
 
   const apiKey = selection.apiKey ?? (preset.keyEnv ? process.env[preset.keyEnv] : undefined);

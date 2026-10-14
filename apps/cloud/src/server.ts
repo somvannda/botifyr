@@ -9,6 +9,7 @@ import { createReadStream, existsSync, readFileSync } from "node:fs";
 import { mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import type {
+  AiKeyInput,
   AuditEvent,
   AuthResponse,
   Bot,
@@ -56,6 +57,15 @@ import { buildTriggerGoal, findTrigger, normalizeTriggerName } from "./triggers.
 import { handleNodeMessage, nodeInfo, registerNode } from "./nodes.js";
 import { createToken, hashPassword, hashToken, verifyPassword } from "./auth.js";
 import { encryptSecret, decryptSecret } from "./vault.js";
+import {
+  clearAiKey,
+  hasUsableOwnKey,
+  loadAiKey,
+  providerForInput,
+  saveAiKey,
+  userProvider,
+  validateAiInput,
+} from "./ai-keys.js";
 import { parseResendInbound, verifyResendSignature } from "./email-inbound.js";
 import { oneShot, runTask, runtimeInfo, summarizeConversation } from "./runner.js";
 import {
@@ -73,7 +83,7 @@ import {
 } from "./company.js";
 import { seedCompany, seedQuest } from "./company-seed.js";
 import { unifiedLineDiff } from "./diff.js";
-import { createDockerComputerBackend } from "@botifyr/agent-core";
+import { createDockerComputerBackend, friendlyModelError } from "@botifyr/agent-core";
 import {
   chmabaConfigFromEnv,
   createPayment,
@@ -522,12 +532,24 @@ export async function buildServer(options: ServerOptions) {
   // (HTTP 429) instead of merely warned. Off by default so it can't surprise you.
   const enforceBudget = (process.env.BOTIFYR_ENFORCE_BUDGET ?? "0") === "1";
 
+  /**
+   * Whether the user can bypass the plan quota because they run on their own
+   * key and the admin policy makes BYO runs free. In that case there is no
+   * platform spend to protect.
+   */
+  async function ownKeyBypassesQuota(userId: string): Promise<boolean> {
+    const settings = await store.getPlatformSettings();
+    if ((settings.byoKey?.billing ?? "free") !== "free") return false;
+    return hasUsableOwnKey(store, vaultKey, userId).catch(() => false);
+  }
+
   /** Whether new work should be refused because the daily budget is spent. */
   async function budgetBlocked(userId: string): Promise<boolean> {
     if (!enforceBudget || dailyTokenBudget <= 0) return false;
     // The operator account is never budget-capped.
     const record = await store.getUserById(userId);
     if (record?.role === "admin") return false;
+    if (await ownKeyBypassesQuota(userId)) return false;
     const { tokens } = await store.usageSince(userId, startOfToday());
     return tokens >= dailyTokenBudget;
   }
@@ -543,6 +565,8 @@ export async function buildServer(options: ServerOptions) {
     if (!record) return null;
     // The platform operator's own account is never billing-locked.
     if (record.role === "admin") return null;
+    // A user on their own key (free BYO policy) spends their provider, not ours.
+    if (await ownKeyBypassesQuota(userId)) return null;
     const settings = await store.getPlatformSettings();
     const plan = record.plan ?? "free";
     const paidPlan = plan === "pro" || plan === "business";
@@ -7957,6 +7981,57 @@ export async function buildServer(options: ServerOptions) {
       const removed = await store.deleteSecret(request.userId as string, request.params.id);
       if (!removed) return reply.code(404).send({ error: "secret not found" });
       return reply.code(204).send();
+    },
+  );
+
+  /* Bring-your-own AI key (per-user, encrypted). The key is never returned. */
+  app.get("/v1/ai/provider", { preHandler: requireAuth }, async (request) => ({
+    config: await loadAiKey(store, vaultKey, request.userId as string),
+  }));
+
+  app.put<{ Body: AiKeyInput }>(
+    "/v1/ai/provider",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const input = request.body ?? ({} as AiKeyInput);
+      const existing = await loadAiKey(store, vaultKey, userId);
+      const invalid = validateAiInput(input, Boolean(existing?.hasKey));
+      if (invalid) return reply.code(400).send({ error: invalid });
+      return saveAiKey(store, vaultKey, userId, input);
+    },
+  );
+
+  app.delete("/v1/ai/provider", { preHandler: requireAuth }, async (request, reply) => {
+    await clearAiKey(store, request.userId as string);
+    return reply.code(204).send();
+  });
+
+  app.post<{ Body: AiKeyInput | undefined }>(
+    "/v1/ai/provider/test",
+    { preHandler: requireAuth },
+    async (request) => {
+      const userId = request.userId as string;
+      // demoUrl only matters for the keyless mock provider, which a BYO config
+      // never selects — a placeholder is fine here.
+      const demoUrl = "http://localhost:8787/demo";
+      try {
+        const provider = request.body?.provider
+          ? await providerForInput(store, vaultKey, userId, request.body, demoUrl)
+          : await userProvider(store, vaultKey, userId, demoUrl);
+        if (!provider) {
+          return { ok: false, message: "Add a key and enable it first, then test again." };
+        }
+        await provider.complete({
+          messages: [{ role: "user", content: "Reply with the single word: ok" }],
+          tools: [],
+          maxTokens: 8,
+        });
+        return { ok: true, message: `Connected to ${provider.name}.` };
+      } catch (error) {
+        console.error("[botifyr] AI key test failed:", error);
+        return { ok: false, message: friendlyModelError(error) };
+      }
     },
   );
 

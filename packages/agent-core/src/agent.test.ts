@@ -114,7 +114,9 @@ describe("runAgent", () => {
     });
 
     expect(result.ok).toBe(false);
-    expect(result.summary).toContain("Model error");
+    // The raw provider error is never shown to the user.
+    expect(result.summary).not.toContain("nope");
+    expect(result.summary).toMatch(/couldn't be completed|try again/i);
   });
 
   it("includes the rolling summary in the system prompt", async () => {

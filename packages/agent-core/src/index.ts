@@ -15,6 +15,9 @@ export type {
 export { runAgent } from "./agent.js";
 export type { AgentResult, RunAgentOptions } from "./agent.js";
 
+export { classifyModelError, describeModelError, friendlyModelError } from "./errors.js";
+export type { ModelErrorInfo, ModelErrorKind } from "./errors.js";
+
 export {
   createBrowserTools,
   createBrowserBackend,
