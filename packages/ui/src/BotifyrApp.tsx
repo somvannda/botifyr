@@ -288,7 +288,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [modelNotice, setModelNotice] = useState<string | null>(null);
-  void modelNotice; // referenced; surfaced in the UI as that work lands
+  /** A model-health notice from /v1/config that the user has dismissed. */
+  const [dismissedAiNotice, setDismissedAiNotice] = useState<string | null>(null);
   const [limitWarning, setLimitWarning] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [useComputer, setUseComputer] = useState(() => localStorage.getItem("botifyr.useComputer") === "1");
@@ -4237,6 +4238,14 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       window.matchMedia("(prefers-color-scheme: dark)").matches);
 
   /** Light/dark switch shown in the header, immediately before the bell. */
+  // Platform model health from /v1/config — prompt early (before the next call
+  // fails), and stay dismissed until a *new* message arrives.
+  const aiNotice =
+    config?.ai && config.ai.ok === false && config.ai.message && config.ai.message !== dismissedAiNotice
+      ? config.ai.message
+      : null;
+  const bannerText = modelNotice ?? aiNotice;
+
   const themeToggle = (
     <button
       className="bot-menu-btn"
@@ -4365,15 +4374,16 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
           </>,
           titlebarSlot,
         )}
-      {modelNotice && (
+      {bannerText && (
         <div className="model-banner" role="status">
-          <span>{modelNotice}</span>
+          <span>{bannerText}</span>
           <button
             className="ghost small"
             type="button"
             onClick={() => {
               setSettingsTab("ai");
               setShowSettings(true);
+              setDismissedAiNotice(aiNotice);
               setModelNotice(null);
             }}
           >
@@ -4383,7 +4393,10 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
             className="model-banner-close"
             type="button"
             aria-label="Dismiss"
-            onClick={() => setModelNotice(null)}
+            onClick={() => {
+              setDismissedAiNotice(aiNotice);
+              setModelNotice(null);
+            }}
           >
             <CloseIcon size={14} />
           </button>

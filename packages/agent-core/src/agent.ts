@@ -82,6 +82,8 @@ export interface RunAgentOptions {
   onLog?: (message: string) => void;
   /** Called when the streamed reply so far is discarded (e.g. a refusal retry). */
   onStreamReset?: () => void;
+  /** Called when a model/provider call fails, so the host can track health. */
+  onModelError?: (error: unknown) => void;
 }
 
 export interface AgentResult {
@@ -257,6 +259,7 @@ export async function runAgent(options: RunAgentOptions): Promise<AgentResult> {
       } catch (error) {
         // Surface a user-safe sentence; keep the raw provider detail for operators.
         console.error("[botifyr] model request failed:", error);
+        options.onModelError?.(error);
         const friendly = friendlyModelError(error);
         options.onStep({ id: thinkId, title: "Thinking", detail: friendly, status: "failed" });
         return {

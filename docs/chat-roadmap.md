@@ -16,6 +16,7 @@ Status legend: ✅ done · 🚧 in progress · ⬜ not started
 | 5 | Light-theme audit of the new chat surfaces | Improvement | ✅ |
 | 6 | Cached transcripts (persist transcription on the message) | Improvement | ✅ |
 | 7 | Bring your own AI key (fallback + per-user provider) | Feature | ✅ |
+| 8 | Friendlier, collapsible task steps | Improvement | ✅ |
 
 ---
 
@@ -33,7 +34,21 @@ and send-message paths and the voice-transcription call. Verified against the
 live 402.
 
 **Follow-up:** also drive it from `/v1/config` model health so it appears before
-the first failure.
+the first failure. ✅ `/v1/config` now returns `ai: { ok, message, at }` from the
+runner's last observed model failure, and the banner shows it (dismissible) until
+a fresh message arrives.
+
+## 7. Bring your own AI key (done)
+
+Per-user, encrypted AI keys from a curated provider list (plus a custom
+OpenAI-compatible endpoint) with plan-quota fallback. See
+[`docs/ai-keys.md`](ai-keys.md).
+
+## 8. Friendlier, collapsible task steps (done)
+
+The activity checklist collapses the repeated "Thinking" heartbeat to the single
+running row, is collapsible by hand (never auto-collapses), hides raw tool
+output, and renders failures as a plain sentence instead of a raw payload.
 
 ## 2. Chat search
 
