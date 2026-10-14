@@ -817,3 +817,6 @@ export interface ResolveApprovalRequest {
 
 /* The capability catalog (departments, roles, skills, capabilities). */
 export * from "./catalog.js";
+
+/* Installable social connectors and the capabilities they provide. */
+export * from "./connectors.js";
