@@ -89,7 +89,7 @@ describe("camxora music tools", () => {
     expect(result.output).toContain("task-1");
   });
 
-  it("polls several tasks and surfaces only the playable CDN url", async () => {
+  it("polls several tasks and surfaces only the playable MP3", async () => {
     const store = new MemoryStore();
     await connect(store, "k");
     const payload = (id: string) => ({
@@ -101,7 +101,10 @@ describe("camxora music tools", () => {
             id,
             title: "Test Song",
             status: "complete",
-            // The auth-gated placeholder the model must NOT use for playback.
+            // The playable file Camxora hosts on its own storage.
+            stream_audio_url: `https://b2.example/${id}.mp3?sig=1`,
+            // Values the model must NOT use for playback: an auth-gated
+            // placeholder and an encrypted CloudFront m4a.
             audio_url: "https://studio-api.prod.suno.com/api/forbidden",
             media_urls: [{ url: `https://cdn.example/${id}.m4a` }],
           },
@@ -115,12 +118,40 @@ describe("camxora music tools", () => {
     const result = await tool("music.tasks", store).run({ taskIds: ["a", "b"] }, ctx);
     expect(result.ok).toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(result.output).toContain("https://cdn.example/a.m4a");
-    expect(result.output).toContain("https://cdn.example/b.m4a");
-    // The auth-gated audio_url is never surfaced as the play link.
+    expect(result.output).toContain("https://b2.example/a.mp3");
+    expect(result.output).toContain("https://b2.example/b.mp3");
+    // Never the encrypted m4a or the auth-gated placeholder.
+    expect(result.output).not.toContain(".m4a");
     expect(result.output).not.toContain("/api/forbidden");
-    // Ready clips tell the model to reply with a media block.
+    // Ready clips tell the model to reply with a media block per track.
     expect(result.output).toContain("media");
+  });
+
+  it("keeps polling while a clip is complete but its MP3 copy isn't ready", async () => {
+    const store = new MemoryStore();
+    await connect(store, "k");
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      async () =>
+        new Response(
+          JSON.stringify({
+            status: "running",
+            result: {
+              clips: [
+                {
+                  id: "a",
+                  status: "complete",
+                  audio_url: "https://studio-api.prod.suno.com/api/forbidden",
+                  media_urls: [{ url: "https://cdn.example/a.m4a" }],
+                },
+              ],
+            },
+          }),
+          { status: 200 },
+        ),
+    );
+    const result = await tool("music.task", store).run({ taskId: "a" }, ctx);
+    expect(result.output).toContain("preparing");
+    expect(result.output).toContain("do not reply");
   });
 
   it("maps the spend tools to a money capability, leaving reads unmapped", () => {
