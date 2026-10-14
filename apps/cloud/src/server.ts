@@ -3074,14 +3074,15 @@ export async function buildServer(options: ServerOptions) {
         if (bot) sessions.add(bot.sessionId);
         roleTitleByBot.set(role.botId, role.title);
       }
-      const [allTasks, quests, workItems, grants] = await Promise.all([
+      const [allTasks, quests, workItems, grants, conversations] = await Promise.all([
         store.listTasksForUser(userId),
         store.listQuests(workspace.id),
         store.listWorkItems(workspace.id),
         store.listCapabilityGrants(workspace.id),
+        store.listExternalConversations(workspace.id),
       ]);
       const tasks = allTasks.filter((task) => sessions.has(task.sessionId));
-      return buildInbox({ tasks, quests, workItems, grants, roleTitleByBot });
+      return buildInbox({ tasks, quests, workItems, grants, roleTitleByBot, conversations });
     },
   );
 

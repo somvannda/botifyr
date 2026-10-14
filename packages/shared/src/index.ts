@@ -336,7 +336,7 @@ export interface WorkspaceWithRoles extends Workspace {
  * The kinds of thing that can need the CEO, ranked into one inbox
  * (docs/product-plan.md §3 — "the decision inbox"). Listed loudest first.
  */
-export type InboxKind = "approval" | "trust_review" | "blocked_work" | "quest_proposed";
+export type InboxKind = "approval" | "trust_review" | "blocked_work" | "quest_proposed" | "reply_pending";
 
 /** One explainable item in the company's "Needs you" inbox. */
 export interface InboxItem {
@@ -350,7 +350,7 @@ export interface InboxItem {
   /** ISO timestamp, used to order items within an urgency band. */
   at: string;
   /** The object to act on, so the client can deep-link. */
-  ref: { taskId?: string; questId?: string; workItemId?: string; capability?: string };
+  ref: { taskId?: string; questId?: string; workItemId?: string; capability?: string; conversationId?: string };
 }
 
 /** The ranked "Needs you" inbox for a workspace. */
