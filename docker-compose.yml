@@ -52,6 +52,9 @@ services:
       BOTIFYR_MANAGED_DIR: /managed
       # Host path behind the /repos mount, so code.test can hand it to a sandbox.
       BOTIFYR_REPOS_HOST: ${BOTIFYR_REPOS_HOST:-}
+      # Launch cut (docs/launch-cut.md): set to "off" to stop serving the deferred
+      # Feed product. Default is on; chat, friends and the agent are unaffected.
+      BOTIFYR_SOCIAL: ${BOTIFYR_SOCIAL:-1}
     ports:
       - "8787:8787"
     volumes:

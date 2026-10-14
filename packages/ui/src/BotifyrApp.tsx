@@ -3544,8 +3544,15 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     ]),
   ];
   // Guard against a stale filter (e.g. an old company id left in state).
+  // When the Feed product is disabled server-side (docs/launch-cut.md), a stored
+  // "feed" filter falls back to the Chat tab.
+  const socialEnabled = config?.social !== false;
   const activeWorkspaceFilter =
-    workspaceFilter === "feed" || workspaceFilter === "startups" ? workspaceFilter : "personal";
+    workspaceFilter === "feed" && !socialEnabled
+      ? "personal"
+      : workspaceFilter === "feed" || workspaceFilter === "startups"
+        ? workspaceFilter
+        : "personal";
   // Feed is a view, not a workspace filter: the left list keeps showing the
   // chats while the main area swaps to the social timeline.
   const feedActive = activeWorkspaceFilter === "feed";
@@ -4387,19 +4394,21 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
           >
             Chat
           </button>
-          <button
-            className={`ws-tab${feedActive ? " active" : ""}`}
-            type="button"
-            role="tab"
-            aria-selected={feedActive}
-            onClick={() => {
-              setWorkspaceFilter("feed");
-              setFeedSection("feed");
-              setMobileNavOpen(false);
-            }}
-          >
-            Feed
-          </button>
+          {socialEnabled && (
+            <button
+              className={`ws-tab${feedActive ? " active" : ""}`}
+              type="button"
+              role="tab"
+              aria-selected={feedActive}
+              onClick={() => {
+                setWorkspaceFilter("feed");
+                setFeedSection("feed");
+                setMobileNavOpen(false);
+              }}
+            >
+              Feed
+            </button>
+          )}
           <button
             className={`ws-tab${activeWorkspaceFilter === "startups" ? " active" : ""}`}
             type="button"

@@ -366,6 +366,13 @@ export async function buildServer(options: ServerOptions) {
   const summarizeEnabled = (process.env.BOTIFYR_SUMMARY ?? "1") !== "0";
   const rateWindows = new Map<string, number[]>();
 
+  // Social Feed product kill-switch (see docs/launch-cut.md, docs/social-roadmap.md).
+  // The Feed + its features are the deferred consumer product; the launch ships
+  // without them. Default ON so existing/dev/test builds are unchanged; set
+  // BOTIFYR_SOCIAL=off in a launch deployment to stop serving the Feed routes.
+  const socialFlag = (process.env.BOTIFYR_SOCIAL ?? "1").trim().toLowerCase();
+  const socialEnabled = socialFlag !== "0" && socialFlag !== "off" && socialFlag !== "false";
+
   /** Sliding-window per-user rate limit. 0 disables it. */
   function rateLimitOk(userId: string): boolean {
     if (rateLimitPerHour <= 0) return true;
@@ -550,6 +557,34 @@ export async function buildServer(options: ServerOptions) {
       : "You've used this month's free tokens — upgrade or top up credits to continue.";
   }
   const app = Fastify({ logger: true });
+
+  // Social Feed product kill-switch (see docs/launch-cut.md): when disabled the
+  // Feed routes are not served at all — a launch build is one product. Chat,
+  // friends, media and the agent are untouched.
+  if (!socialEnabled) {
+    const socialPrefixes = [
+      "/v1/feed",
+      "/v1/posts",
+      "/v1/comments",
+      "/v1/saved",
+      "/v1/dashboard",
+      "/v1/memories",
+      "/v1/birthdays",
+      "/v1/albums",
+      "/v1/authors",
+      "/v1/pages",
+      "/v1/groups",
+      "/v1/stories",
+      "/v1/reels",
+      "/v1/tags",
+    ];
+    app.addHook("onRequest", async (request, reply) => {
+      const path = (request.raw.url ?? "").split("?")[0];
+      if (socialPrefixes.some((prefix) => path === prefix || path.startsWith(prefix + "/"))) {
+        await reply.code(404).send({ error: "not found" });
+      }
+    });
+  }
 
   // Keep the raw body as well as the parsed JSON, so webhook handlers (Stripe)
   // can verify their HMAC signature over the exact bytes.
@@ -1330,6 +1365,7 @@ export async function buildServer(options: ServerOptions) {
       ...runtimeInfo(),
       store: (process.env.BOTIFYR_STORE ?? "memory").toLowerCase(),
       nodeOnline: nodeInfo(request.userId as string).online,
+      social: socialEnabled,
       limits: {
         rateLimitPerHour,
         maxOutputTokens,
