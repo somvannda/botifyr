@@ -258,6 +258,18 @@ export interface ServerOptions {
   store: Store;
   vaultKey: Buffer;
   localChannel: LocalChannel;
+  /**
+   * The live channel service, when this process runs one. It lets the chair's
+   * approval actually deliver a reply to a customer (§5).
+   */
+  channels?: {
+    sendExternalReply(
+      workspaceId: string,
+      platform: string,
+      externalChatId: string,
+      text: string,
+    ): Promise<boolean>;
+  };
 }
 
 /**
@@ -3281,6 +3293,59 @@ export async function buildServer(options: ServerOptions) {
         return reply.code(404).send({ error: "conversation not found" });
       }
       conversation.trust = request.body?.trust === "trusted" ? "trusted" : "gated";
+      await store.saveConversation(conversation);
+      return conversation;
+    },
+  );
+
+  /** Approve (or edit) a gated draft — send it to the customer and trust them (§5). */
+  app.post<{ Params: { id: string; cid: string }; Body: { text?: string } }>(
+    "/v1/workspaces/:id/conversations/:cid/reply",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const workspace = await store.getWorkspace(request.params.id);
+      if (!workspace || workspace.ownerId !== userId) {
+        return reply.code(404).send({ error: "workspace not found" });
+      }
+      const conversation = await store.getConversation(request.params.cid);
+      if (!conversation || conversation.workspaceId !== workspace.id) {
+        return reply.code(404).send({ error: "conversation not found" });
+      }
+      const text = (request.body?.text ?? conversation.pendingReply ?? "").trim();
+      if (!text) return reply.code(400).send({ error: "nothing to send" });
+      if (!options.channels) return reply.code(503).send({ error: "channel service unavailable" });
+      const delivered = await options.channels.sendExternalReply(
+        workspace.id,
+        conversation.platform,
+        conversation.externalChatId,
+        text,
+      );
+      if (!delivered) return reply.code(503).send({ error: "bot is offline" });
+      conversation.pendingReply = undefined;
+      // The chair approved this customer, so later replies need no approval (§5).
+      conversation.trust = "trusted";
+      conversation.lastMessageAt = new Date().toISOString();
+      await store.saveConversation(conversation);
+      return conversation;
+    },
+  );
+
+  /** Discard a gated draft without answering the customer (§5). */
+  app.post<{ Params: { id: string; cid: string } }>(
+    "/v1/workspaces/:id/conversations/:cid/deny",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const workspace = await store.getWorkspace(request.params.id);
+      if (!workspace || workspace.ownerId !== userId) {
+        return reply.code(404).send({ error: "workspace not found" });
+      }
+      const conversation = await store.getConversation(request.params.cid);
+      if (!conversation || conversation.workspaceId !== workspace.id) {
+        return reply.code(404).send({ error: "conversation not found" });
+      }
+      conversation.pendingReply = undefined;
       await store.saveConversation(conversation);
       return conversation;
     },

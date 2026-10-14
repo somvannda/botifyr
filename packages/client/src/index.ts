@@ -1145,6 +1145,28 @@ export class BotifyrClient {
     });
   }
 
+  /** Approve (or edit) a gated draft: send it to the customer and trust them (§5). */
+  approveExternalReply(
+    workspaceId: string,
+    conversationId: string,
+    text?: string,
+  ): Promise<ExternalConversation> {
+    return this.request(`/v1/workspaces/${workspaceId}/conversations/${conversationId}/reply`, {
+      method: "POST",
+      json: true,
+      body: JSON.stringify(text === undefined ? {} : { text }),
+    });
+  }
+
+  /** Discard a gated draft without answering the customer (§5). */
+  denyExternalReply(workspaceId: string, conversationId: string): Promise<ExternalConversation> {
+    return this.request(`/v1/workspaces/${workspaceId}/conversations/${conversationId}/deny`, {
+      method: "POST",
+      json: true,
+      body: JSON.stringify({}),
+    });
+  }
+
   /** Recent agent runs for a workspace — real execution, including failures. */
   listWorkspaceActivity(
     workspaceId: string,

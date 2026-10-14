@@ -246,10 +246,13 @@ campaign → employee drafts → approvals (batch where safe) → schedule/publi
    `listExternalConversations` / `getConversation`, and the routes
    `GET /v1/workspaces/:id/conversations`, `GET /v1/workspaces/:id/conversations/:cid/messages`
    (transcript) and `PATCH /v1/workspaces/:id/conversations/:cid` (the
-   per-customer **trust** toggle) + client methods. **3b (UI) SHIPPED**: an
-   **External** tab in the company HQ listing conversations (contact · platform ·
-   employee · last message) with a **Trust replies / Untrust** control per
-   customer. Three-pane transcript + approve/edit/deny lands next.
+   per-customer **trust** toggle) + client methods. **3b (UI)**: an **External**
+   tab in the company HQ listing conversations (contact · platform · employee ·
+   last message) with a **Trust replies / Untrust** control per customer.
+   **3c (gate) SHIPPED**: a gated thread's reply is drafted for the chair
+   (`Conversation.pendingReply`) and **nothing is sent to the customer**;
+   approving from the tab delivers it and trusts that customer from then on.
+   The three-pane transcript pane lands next.
 4. **Attention kinds** in `inbox.ts` (rules + `company.escalate`) surfaced in HQ.
 5. **Contacts/Pipeline view** (the CRM answer).
 6. **Campaigns** (marketing) + email as a second platform.

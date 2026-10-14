@@ -262,6 +262,8 @@ export interface Conversation {
   sessionId?: string;
   /** Once trusted, replies in this customer's thread skip approval (§5). */
   trust: "gated" | "trusted";
+  /** A drafted reply awaiting the chair's approval, while the thread is gated (§5). */
+  pendingReply?: string;
   lastMessageAt: string;
   createdAt: string;
 }

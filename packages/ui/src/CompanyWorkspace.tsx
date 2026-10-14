@@ -151,6 +151,7 @@ export function CompanyWorkspace({
   const [threads, setThreads] = useState<
     Array<{ conversation: ExternalConversation; contact: Contact | null }>
   >([]);
+  const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
   const [quests, setQuests] = useState<Quest[]>([]);
   const [grants, setGrants] = useState<CapabilityGrant[]>([]);
   const [reports, setReports] = useState<CompanyReport[]>([]);
@@ -375,6 +376,23 @@ export function CompanyWorkspace({
   async function setThreadTrust(conversationId: string, trust: "gated" | "trusted") {
     await withBusy(async () => {
       await client.setExternalConversationTrust(selectedId, conversationId, trust).catch(() => {});
+      setThreads(await client.listExternalConversations(selectedId).catch(() => threads));
+    });
+  }
+
+  async function sendThreadReply(conversation: ExternalConversation) {
+    const text = (replyDrafts[conversation.id] ?? conversation.pendingReply ?? "").trim();
+    if (!text) return;
+    await withBusy(async () => {
+      await client.approveExternalReply(selectedId, conversation.id, text).catch(() => {});
+      setThreads(await client.listExternalConversations(selectedId).catch(() => threads));
+      setReplyDrafts((prev) => ({ ...prev, [conversation.id]: "" }));
+    });
+  }
+
+  async function discardThreadReply(conversationId: string) {
+    await withBusy(async () => {
+      await client.denyExternalReply(selectedId, conversationId).catch(() => {});
       setThreads(await client.listExternalConversations(selectedId).catch(() => threads));
     });
   }
@@ -1462,7 +1480,9 @@ export function CompanyWorkspace({
                       </span>
                     </span>
                     <div className="cws-need-actions">
-                      <span className="cws-muted">{trusted ? "Trusted" : "Gated"}</span>
+                      <span className="cws-muted">
+                        {trusted ? "Trusted" : conversation.pendingReply ? "Draft waiting" : "Gated"}
+                      </span>
                       <button
                         className={trusted ? "ghost small" : "btn primary small"}
                         type="button"
@@ -1472,6 +1492,34 @@ export function CompanyWorkspace({
                         {trusted ? "Untrust" : "Trust replies"}
                       </button>
                     </div>
+                    {conversation.pendingReply && (
+                      <div className="cws-need-actions">
+                        <input
+                          className="cws-onboard-url"
+                          value={replyDrafts[conversation.id] ?? conversation.pendingReply}
+                          onChange={(event) =>
+                            setReplyDrafts((prev) => ({ ...prev, [conversation.id]: event.target.value }))
+                          }
+                          aria-label={`Draft reply to ${contact?.name || conversation.externalChatId}`}
+                        />
+                        <button
+                          className="btn primary small"
+                          type="button"
+                          disabled={busy}
+                          onClick={() => void sendThreadReply(conversation)}
+                        >
+                          Send reply
+                        </button>
+                        <button
+                          className="ghost small"
+                          type="button"
+                          disabled={busy}
+                          onClick={() => void discardThreadReply(conversation.id)}
+                        >
+                          Discard
+                        </button>
+                      </div>
+                    )}
                   </li>
                 );
               })}

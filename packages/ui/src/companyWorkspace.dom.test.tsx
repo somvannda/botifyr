@@ -26,6 +26,8 @@ function fakeClient(overrides: Record<string, unknown> = {}): BotifyrClient {
     listWorkspaceActivity: vi.fn().mockResolvedValue([]),
     getWorkspaceInbox: vi.fn().mockResolvedValue(null),
     listExternalConversations: vi.fn().mockResolvedValue([]),
+    approveExternalReply: vi.fn().mockResolvedValue({}),
+    denyExternalReply: vi.fn().mockResolvedValue({}),
     getWorkspace: vi.fn().mockResolvedValue(null),
   };
   return { ...base, ...overrides } as unknown as BotifyrClient;
@@ -203,6 +205,58 @@ describe("CompanyWorkspace (DOM)", () => {
     fireEvent.click(screen.getByRole("button", { name: /trust replies/i }));
     await waitFor(() =>
       expect(setExternalConversationTrust).toHaveBeenCalledWith("ws1", "conv1", "trusted"),
+    );
+  });
+
+  it("holds a gated draft for approval and sends it on Send reply", async () => {
+    const threads = [
+      {
+        conversation: {
+          id: "conv1",
+          workspaceId: "ws1",
+          contactId: "ct1",
+          platform: "telegram",
+          externalChatId: "555",
+          kind: "dm",
+          assignedBotId: "bot1",
+          trust: "gated",
+          pendingReply: "Yes — next-day.",
+          lastMessageAt: "2026-01-02T03:04:05.000Z",
+          createdAt: "",
+        },
+        contact: {
+          id: "ct1",
+          workspaceId: "ws1",
+          platform: "telegram",
+          externalId: "555",
+          name: "Sokha",
+          tags: [],
+          status: "new",
+          firstSeenAt: "",
+          lastMessageAt: "",
+        },
+      },
+    ];
+    const approveExternalReply = vi.fn().mockResolvedValue({});
+    const client = fakeClient({
+      listExternalConversations: vi.fn().mockResolvedValue(threads),
+      approveExternalReply,
+    });
+    render(
+      <CompanyWorkspace
+        client={client}
+        companies={[company]}
+        bots={[]}
+        onOpenOffice={() => {}}
+        onCreated={() => {}}
+      />,
+    );
+    fireEvent.click(await screen.findByRole("tab", { name: /external/i }));
+    const draft = (await screen.findByLabelText(/draft reply to sokha/i)) as HTMLInputElement;
+    expect(draft.value).toBe("Yes — next-day.");
+    fireEvent.click(screen.getByRole("button", { name: /send reply/i }));
+    await waitFor(() =>
+      expect(approveExternalReply).toHaveBeenCalledWith("ws1", "conv1", "Yes — next-day."),
     );
   });
 
