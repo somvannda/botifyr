@@ -17,7 +17,7 @@ import type {
   WorkspaceWithRoles,
   WorkItem,
 } from "@botifyr/shared";
-import { ROLE_CATALOG } from "@botifyr/shared";
+import { CONNECTORS, ROLE_CATALOG, type ConnectorPreference } from "@botifyr/shared";
 import type { BotifyrClient } from "@botifyr/client";
 import {
   CheckIcon,
@@ -158,6 +158,8 @@ export function CompanyWorkspace({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [quests, setQuests] = useState<Quest[]>([]);
   const [grants, setGrants] = useState<CapabilityGrant[]>([]);
+  const [preferences, setPreferences] = useState<ConnectorPreference[]>([]);
+  const [connectedProviders, setConnectedProviders] = useState<string[]>([]);
   const [reports, setReports] = useState<CompanyReport[]>([]);
   const [wiki, setWiki] = useState<WorkspaceFile[]>([]);
   const [proposals, setProposals] = useState<
@@ -222,7 +224,7 @@ export function CompanyWorkspace({
       }
       setLoading(true);
       try {
-        const [it, nd, bd, gr, rp, qs, wk, ws, pr, ac, ib, th] = await Promise.all([
+        const [it, nd, bd, gr, rp, qs, wk, ws, pr, ac, ib, th, cp, cn] = await Promise.all([
           client.listWorkItems(id).catch(() => []),
           client.listWorkspaceNeeds(id).catch(() => []),
           client.getWorkspaceBudget(id).catch(() => null),
@@ -235,6 +237,8 @@ export function CompanyWorkspace({
           client.listWorkspaceActivity(id).catch(() => []),
           client.getWorkspaceInbox(id).catch(() => null),
           client.listExternalConversations(id).catch(() => []),
+          client.listConnectorPreferences(id).catch(() => []),
+          client.listConnections().catch(() => []),
         ]);
         setItems(it);
         setNeeds(nd);
@@ -248,6 +252,8 @@ export function CompanyWorkspace({
         setActivity(ac);
         setInbox(ib);
         setThreads(th);
+        setPreferences(cp);
+        setConnectedProviders(cn.map((entry) => entry.provider));
         if (ws) setMeta(ws);
       } finally {
         setLoading(false);
@@ -426,6 +432,15 @@ export function CompanyWorkspace({
     await withBusy(async () => {
       await client.setCapabilityGrant(selectedId, { subject, capability, granted }).catch(() => {});
       setGrants(await client.listCapabilityGrants(selectedId).catch(() => grants));
+    });
+  }
+
+  async function setConnectorFor(subject: string, capability: string, connectorId: string) {
+    await withBusy(async () => {
+      await client
+        .setConnectorPreference(selectedId, { subject, capability, connectorId })
+        .catch(() => {});
+      setPreferences(await client.listConnectorPreferences(selectedId).catch(() => preferences));
     });
   }
 
@@ -1653,6 +1668,15 @@ export function CompanyWorkspace({
                             (entry) => entry.subject === subject && entry.capability === capability,
                           );
                           const granted = Boolean(grant?.granted);
+                          // Which connected apps can actually serve this capability.
+                          const eligible = CONNECTORS.filter(
+                            (connector) =>
+                              connector.provides.includes(capability) &&
+                              connectedProviders.includes(connector.id),
+                          );
+                          const preferred = preferences.find(
+                            (entry) => entry.subject === subject && entry.capability === capability,
+                          )?.connectorId;
                           return (
                             <span key={capability} className="cws-chip-wrap">
                               <button
@@ -1682,6 +1706,22 @@ export function CompanyWorkspace({
                                     { value: "probation", label: "probation" },
                                     { value: "trusted", label: "trusted" },
                                   ]}
+                                />
+                              )}
+                              {granted && eligible.length === 1 && (
+                                <span className="cws-chip-app static">{eligible[0]?.name}</span>
+                              )}
+                              {granted && eligible.length > 1 && (
+                                <Select
+                                  className="cws-chip-app"
+                                  value={preferred ?? eligible[0]?.id ?? ""}
+                                  disabled={busy}
+                                  onChange={(next) => void setConnectorFor(subject, capability, next)}
+                                  ariaLabel={`App for ${capability}`}
+                                  options={eligible.map((connector) => ({
+                                    value: connector.id,
+                                    label: connector.name,
+                                  }))}
                                 />
                               )}
                             </span>

@@ -12,6 +12,7 @@ import type {
   CompanyDirection,
   CompanyReport,
   ConnectionInfo,
+  ConnectorPreference,
   ConnectionValidation,
   Contact,
   Conversation as ExternalConversation,
@@ -1233,6 +1234,22 @@ export class BotifyrClient {
     input: { subject: string; capability: string; granted?: boolean; state?: CapabilityGrant["state"] },
   ): Promise<CapabilityGrant> {
     return this.request(`/v1/workspaces/${workspaceId}/grants`, {
+      method: "PUT",
+      json: true,
+      body: JSON.stringify(input),
+    });
+  }
+
+  /* Which connected app an employee (or role) uses for a capability. */
+  listConnectorPreferences(workspaceId: string): Promise<ConnectorPreference[]> {
+    return this.request(`/v1/workspaces/${workspaceId}/connector-preferences`);
+  }
+
+  setConnectorPreference(
+    workspaceId: string,
+    input: { subject: string; capability: string; connectorId: string },
+  ): Promise<ConnectorPreference> {
+    return this.request(`/v1/workspaces/${workspaceId}/connector-preferences`, {
       method: "PUT",
       json: true,
       body: JSON.stringify(input),

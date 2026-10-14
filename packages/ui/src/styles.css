@@ -12107,6 +12107,21 @@ a.feed-follow-btn {
   background: var(--ok-soft);
 }
 
+/* Which connected app serves a capability (docs/company-workspace.md §44). */
+.cws-chip-app {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--muted);
+  font-size: var(--text-2xs);
+  border-radius: var(--radius-xs);
+  padding: var(--space-1) var(--space-1);
+}
+
+.cws-chip-app.static {
+  display: inline-flex;
+  align-items: center;
+}
+
 .cws-chip-state {
   border: 1px solid var(--border);
   background: var(--panel);
