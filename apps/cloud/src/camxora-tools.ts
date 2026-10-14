@@ -185,25 +185,37 @@ export function unplayableMediaStream(url: string): boolean {
 }
 
 /**
- * Replace unplayable `media` block streams in a message with resolved tracks,
- * matched in order. Non-media text is left untouched; already-playable blocks
- * are kept as-is.
+ * Replace unplayable media URLs in a message with resolved tracks, matched in
+ * order. Handles both fenced `media` blocks and bare URLs (older messages wrote
+ * the Suno CloudFront `.m4a` link straight into a bullet — see
+ * `unplayableMediaStream`). Non-media text is left untouched; already-playable
+ * links are kept as-is.
  */
 export function rewriteMediaStreams(content: string, tracks: Array<{ stream: string }>): string {
   if (tracks.length === 0) return content;
   let index = 0;
-  return content.replace(/```media[^\n]*\n([\s\S]*?)```/g, (whole, body: string) => {
-    let parsed: Record<string, unknown>;
-    try {
-      parsed = JSON.parse(body.trim()) as Record<string, unknown>;
-    } catch {
-      return whole;
-    }
-    const stream = typeof parsed.stream === "string" ? parsed.stream : "";
-    if (!unplayableMediaStream(stream)) return whole;
+  const nextStream = (): string => {
     const track = tracks[index] ?? tracks[tracks.length - 1];
     index += 1;
-    return `\`\`\`media\n${JSON.stringify({ ...parsed, stream: track.stream })}\n\`\`\``;
+    return track.stream;
+  };
+  const MEDIA_BLOCK_OR_URL = /```media[^\n]*\n([\s\S]*?)```|https?:\/\/[^\s<>()[\]]+/g;
+  return content.replace(MEDIA_BLOCK_OR_URL, (whole: string, body?: string) => {
+    // Fenced `media` block: rewrite its `stream` field.
+    if (body !== undefined) {
+      let parsed: Record<string, unknown>;
+      try {
+        parsed = JSON.parse(body.trim()) as Record<string, unknown>;
+      } catch {
+        return whole;
+      }
+      const stream = typeof parsed.stream === "string" ? parsed.stream : "";
+      if (!unplayableMediaStream(stream)) return whole;
+      return `\`\`\`media\n${JSON.stringify({ ...parsed, stream: nextStream() })}\n\`\`\``;
+    }
+    // Bare URL: swap an unplayable one for the next playable track.
+    if (!unplayableMediaStream(whole)) return whole;
+    return nextStream();
   });
 }
 

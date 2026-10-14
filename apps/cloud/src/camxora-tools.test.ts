@@ -252,6 +252,20 @@ describe("old-track refresh helpers", () => {
     expect(out).toContain("https://s3.example/ok.mp3");
   });
 
+  it("rewrites bare legacy track links, in order, leaving good ones alone", () => {
+    const content =
+      'Both tracks are done.\n\n' +
+      '1) Song A\n- ▶️ https://d2lwuy8qc234o3.cloudfront.net/1/clip/a.m4a\n\n' +
+      '2) Song B\n- ▶️ https://d2lwuy8qc234o3.cloudfront.net/1/clip/b.m4a\n\n' +
+      'Extra: https://s3.example/ok.mp3';
+    const out = rewriteMediaStreams(content, [{ stream: "https://b2.example/a.mp3" }, { stream: "https://b2.example/b.mp3" }]);
+    expect(out).toContain("https://b2.example/a.mp3");
+    expect(out).toContain("https://b2.example/b.mp3");
+    expect(out).not.toContain("cloudfront.net");
+    // An already-playable bare link is left untouched.
+    expect(out).toContain("https://s3.example/ok.mp3");
+  });
+
   it("extracts Camxora task ids from audit details (old and new formats)", () => {
     const ids = camxoraTaskIdsFromAudit([
       '- 5c948dfe-4c5b-463e-bee1-38b1f9b9cc83: {"job_id":"5c948dfe-4c5b-463e-bee1-38b1f9b9cc83"}',
