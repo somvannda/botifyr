@@ -350,6 +350,13 @@ export class MemoryStore implements Store {
       .map((workspace) => structuredClone(workspace));
   }
 
+  async listWorkspacesWithTelegram(): Promise<WorkspaceRecord[]> {
+    return [...this.workspaces.values()]
+      .filter((workspace) => Boolean(workspace.telegram?.botId))
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      .map((workspace) => structuredClone(workspace));
+  }
+
   async updateWorkspace(record: WorkspaceRecord): Promise<void> {
     this.workspaces.set(record.id, structuredClone(record));
   }

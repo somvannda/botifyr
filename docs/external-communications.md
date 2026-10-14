@@ -231,9 +231,12 @@ campaign → employee drafts → approvals (batch where safe) → schedule/publi
 
 ## 11. Phased slices
 
-1. **Per-workspace bot + route to employee** (shared type, workspace config,
-   enumeration, per-workspace adapter, `ChannelService` author routing, tests).
-   *This is the slice described in the chat thread 1a/2b.*
+1. ✅ **Per-workspace bot + route to employee** (SHIPPED): `Workspace.telegram`,
+   `listWorkspacesWithTelegram`, `channel-routing.ts`, `ChannelService` scope +
+   injectable runner, `createChannels` registering a bot per company, and
+   `PATCH /v1/workspaces/:id/telegram` (+ client). An inbound message on a
+   company bot now runs **as the employee** (its role, tools, session). Config
+   changes take effect on the next cloud start.
 2. **Contact + Conversation records** on inbound; `crm.log_activity` writes to them.
 3. **External Inbox UI** (Telegram only) with approve/edit/deny + **Trust this
    customer**.

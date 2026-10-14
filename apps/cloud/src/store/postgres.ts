@@ -402,6 +402,13 @@ export class PostgresStore implements Store {
     return rows.map((row) => row.data as WorkspaceRecord);
   }
 
+  async listWorkspacesWithTelegram(): Promise<WorkspaceRecord[]> {
+    const { rows } = await this.pool.query(
+      "SELECT data FROM workspaces WHERE data -> 'telegram' ->> 'botId' IS NOT NULL ORDER BY created_at ASC",
+    );
+    return rows.map((row) => row.data as WorkspaceRecord);
+  }
+
   async updateWorkspace(record: WorkspaceRecord): Promise<void> {
     await this.pool.query("UPDATE workspaces SET data = $1, updated_at = $2 WHERE id = $3", [
       record,

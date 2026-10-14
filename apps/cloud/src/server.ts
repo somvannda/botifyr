@@ -3169,6 +3169,45 @@ export async function buildServer(options: ServerOptions) {
     },
   );
 
+  /* Company-owned messaging bot (docs/external-communications.md §8). */
+
+  /**
+   * Connect (or disconnect) the company's own Telegram bot and choose the employee
+   * it answers as. The bot token is a workspace secret (`TELEGRAM_BOT_TOKEN`).
+   * Takes effect on the next cloud start.
+   */
+  app.patch<{ Params: { id: string }; Body: { botId?: string | null; handle?: string | null } }>(
+    "/v1/workspaces/:id/telegram",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const workspace = await store.getWorkspace(request.params.id);
+      if (!workspace || workspace.ownerId !== userId) {
+        return reply.code(404).send({ error: "workspace not found" });
+      }
+      const botId = String(request.body?.botId ?? "").trim();
+      if (!botId) {
+        workspace.telegram = undefined;
+        workspace.updatedAt = new Date().toISOString();
+        await store.updateWorkspace(workspace);
+        return { telegram: null };
+      }
+      const roles = await store.listBotRoles(workspace.id);
+      if (!roles.some((role) => role.botId === botId)) {
+        return reply.code(400).send({ error: "botId must be an employee in this company" });
+      }
+      const handle =
+        String(request.body?.handle ?? "")
+          .trim()
+          .replace(/^@/, "")
+          .slice(0, 64) || undefined;
+      workspace.telegram = { botId, handle };
+      workspace.updatedAt = new Date().toISOString();
+      await store.updateWorkspace(workspace);
+      return { telegram: workspace.telegram };
+    },
+  );
+
   /** Recent agent runs for the company — real execution, including failures. */
   app.get<{ Params: { id: string } }>(
     "/v1/workspaces/:id/activity",

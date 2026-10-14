@@ -47,7 +47,7 @@ if (ephemeral) {
   );
 }
 
-const { service: channelService, local } = createChannels(store);
+const { service: channelService, local } = createChannels(store, { vaultKey: key });
 const app = await buildServer({ store, vaultKey: key, localChannel: local });
 
 try {

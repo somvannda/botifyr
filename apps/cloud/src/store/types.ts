@@ -18,6 +18,7 @@ import type {
   Trigger,
   WorkItem,
   WorkspaceBudget,
+  WorkspaceTelegram,
 } from "@botifyr/shared";
 
 export type {
@@ -349,6 +350,8 @@ export interface WorkspaceRecord {
   repos?: CodeRepo[];
   /** Inbound event triggers that run a prompt for an employee (plan §2.4). */
   triggers?: Trigger[];
+  /** The company's own Telegram bot (BYO) and the employee it answers as. */
+  telegram?: WorkspaceTelegram;
   createdAt: string;
   updatedAt: string;
 }
@@ -730,6 +733,8 @@ export interface Store {
   getWorkspace(id: string): Promise<WorkspaceRecord | null>;
   listWorkspaces(ownerId: string): Promise<WorkspaceRecord[]>;
   updateWorkspace(record: WorkspaceRecord): Promise<void>;
+  /** Workspaces whose own Telegram bot is configured (for inbound routing). */
+  listWorkspacesWithTelegram(): Promise<WorkspaceRecord[]>;
   deleteWorkspace(ownerId: string, id: string): Promise<boolean>;
 
   setBotRole(record: BotRoleRecord): Promise<void>;
