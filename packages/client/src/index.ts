@@ -2152,8 +2152,10 @@ export class BotifyrClient {
     });
   }
 
-  listConnections(): Promise<ConnectionInfo[]> {
-    return this.request("/v1/connections");
+  /** Connections for the user, or for a workspace the user owns. */
+  listConnections(workspaceId?: string): Promise<ConnectionInfo[]> {
+    const query = workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : "";
+    return this.request(`/v1/connections${query}`);
   }
 
   listFiles(botId: string): Promise<BotFile[]> {
@@ -2220,11 +2222,15 @@ export class BotifyrClient {
     return this.request(`/v1/connections/${provider}/start`, { method: "POST", json: true, body: "{}" });
   }
 
-  connectToken(provider: string, token: string): Promise<{ provider: string; connectedAt: string }> {
+  connectToken(
+    provider: string,
+    token: string,
+    workspaceId?: string,
+  ): Promise<{ provider: string; connectedAt: string }> {
     return this.request(`/v1/connections/${provider}/token`, {
       method: "POST",
       json: true,
-      body: JSON.stringify({ token }),
+      body: JSON.stringify(workspaceId ? { token, workspaceId } : { token }),
     });
   }
 

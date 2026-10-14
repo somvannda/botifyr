@@ -7360,6 +7360,18 @@ body {
   max-width: 400px;
 }
 
+.connect-workspace {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.connect-workspace-label {
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+
 .connect-actions {
   display: flex;
   justify-content: flex-end;
@@ -12120,6 +12132,11 @@ a.feed-follow-btn {
 .cws-chip-app.static {
   display: inline-flex;
   align-items: center;
+}
+
+.cws-chip-app.none {
+  border-style: dashed;
+  color: var(--warn);
 }
 
 .cws-chip-state {
