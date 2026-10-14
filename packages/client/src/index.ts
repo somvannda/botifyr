@@ -9,6 +9,7 @@ import type {
   CompanyDirection,
   CompanyReport,
   ConnectionInfo,
+  ConnectionValidation,
   Contact,
   Conversation as ExternalConversation,
   CreateWorkspaceRequest,
@@ -2181,6 +2182,15 @@ export class BotifyrClient {
       method: "POST",
       json: true,
       body: JSON.stringify({ token }),
+    });
+  }
+
+  /** Probe a token app's key (candidate or stored) — docs/camxora.md. */
+  validateConnection(provider: string, token?: string): Promise<ConnectionValidation> {
+    return this.request(`/v1/connections/${encodeURIComponent(provider)}/validate`, {
+      method: "POST",
+      json: true,
+      body: JSON.stringify(token ? { token } : {}),
     });
   }
 

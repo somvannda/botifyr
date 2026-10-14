@@ -624,6 +624,13 @@ export interface ConnectionInfo {
   connectedAt: string;
 }
 
+/** Result of probing a token app's credential (a cheap whoami call). */
+export interface ConnectionValidation {
+  ok: boolean;
+  /** Human-readable detail, e.g. "Valid — 512 credits" or "Invalid API key.". */
+  message: string;
+}
+
 /** A file saved to a bot's Library (text artifacts the agent can write/read). */
 export interface BotFile {
   id: string;
