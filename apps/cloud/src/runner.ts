@@ -30,6 +30,7 @@ import { createCrmTools } from "./crm-tools.js";
 import { createFinanceTools } from "./finance-tools.js";
 import { createFeedTools } from "./feed-tools.js";
 import { createEmailTools, resendSender } from "./email-tools.js";
+import { createCamxoraTools } from "./camxora-tools.js";
 import { createEscalationTools } from "./escalation-tools.js";
 import { createHireTools } from "./hire-tools.js";
 import { createFireTools } from "./fire-tools.js";
@@ -388,6 +389,7 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
     if (providers.has("slack")) tools.push(...createSlackTools(store, deps.vaultKey, userId));
     if (providers.has("notion")) tools.push(...createNotionTools(store, deps.vaultKey, userId));
     if (providers.has("telegram")) tools.push(...createTelegramTools(store, deps.vaultKey, userId));
+    if (providers.has("camxora")) tools.push(...createCamxoraTools(store, deps.vaultKey, userId));
   }
   // Self-learning tools: available everywhere (list/get/save learned skills).
   tools.push(...createLearnedSkillTools(store, userId));

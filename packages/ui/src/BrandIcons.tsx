@@ -5,6 +5,20 @@ interface IconProps {
   className?: string;
 }
 
+/** Camxora Music — AI music generation (marketplace app). */
+export function CamxoraBrand({ size = 24, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden className={className}>
+      <g fill="#8b5cf6">
+        <rect x="3" y="11" width="3.2" height="9" rx="1.4" />
+        <rect x="8.4" y="6" width="3.2" height="14" rx="1.4" />
+        <rect x="13.8" y="3" width="3.2" height="17" rx="1.4" />
+        <rect x="19.2" y="8.5" width="3.2" height="11.5" rx="1.4" />
+      </g>
+    </svg>
+  );
+}
+
 export function GithubBrand({ size = 24, className }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden className={className}>
