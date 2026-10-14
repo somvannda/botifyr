@@ -258,10 +258,13 @@ campaign → employee drafts → approvals (batch where safe) → schedule/publi
    person rather than a chat id. **Open** on a thread reads its full transcript
    back from the channel session, so the chair can see the whole conversation
    before replying.
-4. **Attention kinds** in `inbox.ts` (rules + `company.escalate`) surfaced in HQ.
+4. 🟡 **Attention kinds** in `inbox.ts` — `reply_pending` (a waiting customer
+   draft) SHIPPED; surfacing them in HQ with a Review-reply shortcut too.
 5. **Contacts/Pipeline view** (the CRM answer).
-6. **Campaigns** (marketing) + email as a second platform.
-7. **Webhook option** + more platforms (Bluesky/Mastodon/Discord/Slack) per
+6. **Email (Resend) as a second platform** — per-workspace BYO key, **both
+   directions**; see §13. Next.
+7. **Campaigns** (marketing) on top of email (§7.4).
+8. **Webhook option** + more platforms (Bluesky/Mastodon/Discord/Slack) per
    `company-workspace.md` Part V ordering.
 
 ## 12. Open questions (need a decision)
@@ -272,6 +275,69 @@ campaign → employee drafts → approvals (batch where safe) → schedule/publi
    if the contact goes quiet)? (Proposed: no expiry for v1, but a visible toggle.)
 3. **Group chats** — is the bot a passive listener (mentions only) or does it
    answer every message? (Proposed: mentions only, v1.)
-4. **Email as a platform** — is the first non-Telegram channel IMAP/SMTP (real
-   inbound) or outbound-only + manual paste? (Proposed: defer; Telegram proves the
-   model.)
+4. ✅ **Email as a platform** — **decided** (§13): **Resend**, a
+   **per-workspace BYO** key (mirrors the Telegram bot), **both directions** —
+   outbound sends and inbound replies via a Resend webhook.
+5. **Email compliance** — do we need an unsubscribe link + postal address in v1?
+   (Proposed: no for transactional/support; **required** before bulk campaigns.)
+
+## 13. Email (Resend) — the second channel
+
+**Decisions.** Provider **Resend**; the key is **per workspace** (a company
+brings its own account, like its own Telegram bot), stored as a workspace secret
+and encrypted with the vault key; **both directions**.
+
+**What already exists (do not rebuild).** `email.send` is a real, approval-gated
+tool (`apps/cloud/src/email-tools.ts`) with a Resend transport
+(`resendSender` → `POST https://api.resend.com/emails`), wired in `runner.ts`
+from `RESEND_API_KEY` + `MAIL_FROM`, declared in the catalog (consequential) and
+granted to Sales / Support / Success. `billing.ts` already uses Resend too.
+**Today's deployment-env config becomes the fallback**; a workspace key, when
+present, wins.
+
+**The one structural wrinkle.** There are currently **two ways to send**: the
+agent's `email.send` tool, and (for Telegram) the channel adapter that the
+approval route uses. Only the adapter path is recorded. So email is registered as
+a **`ChannelAdapter`** (`packages/channels/src/email.ts`, `name: "email"`) and
+the agent's `email.send` sends **through that adapter** — one send path, so every
+outbound email lands on the thread and is gated/trusted identically.
+
+**Model.** `Workspace.email?: { from: string; handle?: string }` (the verified
+from-address; the domain for display). Secrets: `RESEND_API_KEY` and
+`RESEND_WEBHOOK_SECRET` (workspace secrets, vault-encrypted, set via the existing
+`POST /v1/workspaces/:id/secrets`). Registry: `listWorkspacesWithEmail()` mirroring
+`listWorkspacesWithTelegram`, so `registerWorkspaceEmails` can start an adapter per
+company.
+
+**Inbound.** A public route `POST /v1/webhooks/resend/:workspaceId` verifies the
+Svix signature (`svix-id`, `svix-timestamp`, `svix-signature`: HMAC-SHA256 over
+`${id}.${timestamp}.${rawBody}` with the base64 secret after the `whsec_` prefix)
+against that workspace's `RESEND_WEBHOOK_SECRET`, then maps an `email.received`
+event to a channel message — `conversationId` = the sender address, `senderId` =
+the sender, `text` = the text part (or HTML stripped). It is delivered to the
+`email:<workspaceId>` adapter and the **existing** routing does the rest: contact +
+thread upsert, the gate, the draft, trust, and the `/reply` route. The route is
+unauthenticated on purpose (Resend calls it) — the signature is the auth, and a
+bad signature is a 401.
+
+**Identity.** For email the address *is* the identity: `Contact.externalId` = the
+address, and `name` comes from the display name in `From:` (no `getChat` needed).
+
+**Compliance.** v1 is transactional/support only. Bulk marketing (§7.4) must add
+an unsubscribe link and a postal address first.
+
+**What that means in practice.** Nothing reaches a customer until the chair
+approves the draft — the same loop Telegram already has, so the External tab,
+trust toggle, "Needs you" item, and transcript pane all work for email unchanged.
+
+**Ops (yours; can't be done from here).** Create a Resend account; verify a
+sending domain (SPF/DKIM) — or use `onboarding@resend.dev` to start; create an API
+key; add an inbound webhook pointing at
+`https://<public-host>/v1/webhooks/resend/<workspaceId>` and copy its signing
+secret. **Local end-to-end needs a public tunnel and a real key**, which is why
+this can't be tested here: the tests use a stubbed `fetch` and a **locally
+computed Svix signature**.
+
+**Slices.** (a) the per-workspace email channel + adapter + secrets + settings;
+(b) the inbound webhook; (c) routing the agent's `email.send` through the channel.
+The chosen scope is (a)+(b)+(c) in one change.
