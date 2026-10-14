@@ -242,12 +242,14 @@ campaign → employee drafts → approvals (batch where safe) → schedule/publi
    upserting a contact + thread for every inbound company-bot message, and
    `GET /v1/workspaces/:id/contacts` (+ client). `crm.log_activity` still writes a
    wiki file — wiring it onto the Contact is a small follow-up.
-3. 🟡 **External Inbox** — **3a (data) SHIPPED**: `Conversation.sessionId`, the
-   store reads `listExternalConversations` / `getConversation`, and the routes
-   `GET /v1/workspaces/:id/conversations`, `GET /v1/conversations/:id/messages`
-   (transcript) and `PATCH /v1/conversations/:id` (the per-customer **trust**
-   toggle) + client methods. **3b (UI) pending**: the three-pane inbox with
-   approve/edit/deny and the **Trust this customer** control.
+3. ✅ **External Inbox** — **3a (data)**: `Conversation.sessionId`, the store reads
+   `listExternalConversations` / `getConversation`, and the routes
+   `GET /v1/workspaces/:id/conversations`, `GET /v1/workspaces/:id/conversations/:cid/messages`
+   (transcript) and `PATCH /v1/workspaces/:id/conversations/:cid` (the
+   per-customer **trust** toggle) + client methods. **3b (UI) SHIPPED**: an
+   **External** tab in the company HQ listing conversations (contact · platform ·
+   employee · last message) with a **Trust replies / Untrust** control per
+   customer. Three-pane transcript + approve/edit/deny lands next.
 4. **Attention kinds** in `inbox.ts` (rules + `company.escalate`) surfaced in HQ.
 5. **Contacts/Pipeline view** (the CRM answer).
 6. **Campaigns** (marketing) + email as a second platform.
