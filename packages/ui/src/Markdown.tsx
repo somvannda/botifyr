@@ -4,7 +4,8 @@ import type { ReactNode } from "react";
  * A tiny, dependency-free markdown renderer that builds React elements (no
  * innerHTML), so model output can never inject markup. Supports fenced code,
  * headings, bullet/numbered lists, tables, horizontal rules, bold, italic,
- * inline code and links.
+ * inline code and links. Bare media URLs (and media links) render as inline
+ * audio/video players, so a generated track can be played right in the chat.
  *
  * File names (e.g. OKRS.md, weekly-scorecard.md) become clickable refs when an
  * `onFileRef` handler is provided, so the reader can open the doc.
@@ -14,6 +15,20 @@ const FILE_RE = /([A-Za-z0-9][A-Za-z0-9._-]*\.(?:md|markdown|txt|csv|json|ya?ml|
 
 function isFileName(value: string): boolean {
   return /^[A-Za-z0-9][A-Za-z0-9._-]*\.(?:md|markdown|txt|csv|json|ya?ml|html?)$/.test(value);
+}
+
+const AUDIO_URL_RE = /\.(?:mp3|wav|m4a|aac|ogg|oga|opus|flac)(?:[?#].*)?$/i;
+const VIDEO_URL_RE = /\.(?:mp4|webm|mov|m4v|ogv)(?:[?#].*)?$/i;
+
+/** Render a media URL as a playable element; null when it isn't audio/video. */
+function mediaPlayer(url: string, key: string): ReactNode | null {
+  if (AUDIO_URL_RE.test(url)) {
+    return <audio key={key} className="md-audio" src={url} controls preload="metadata" />;
+  }
+  if (VIDEO_URL_RE.test(url)) {
+    return <video key={key} className="md-video" src={url} controls preload="metadata" />;
+  }
+  return null;
 }
 
 function fileRef(name: string, key: string, onFileRef: (name: string) => void): ReactNode {
@@ -44,7 +59,7 @@ function plainText(text: string, prefix: string, onFileRef?: (name: string) => v
 
 function inline(text: string, prefix: string, onFileRef?: (name: string) => void): ReactNode[] {
   const nodes: ReactNode[] = [];
-  const pattern = /(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*|\[[^\]]+\]\([^)]+\))/g;
+  const pattern = /(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*|\[[^\]]+\]\([^)]+\)|https?:\/\/[^\s<>()[\]]+)/g;
   let last = 0;
   let index = 0;
   let match: RegExpExecArray | null;
@@ -64,10 +79,22 @@ function inline(text: string, prefix: string, onFileRef?: (name: string) => void
       );
     } else if (token.startsWith("[")) {
       const link = /^\[([^\]]+)\]\(([^)]+)\)$/.exec(token);
+      const url = link?.[2] ?? "";
       nodes.push(
-        <a key={key} href={link?.[2]} target="_blank" rel="noreferrer">
-          {link?.[1]}
-        </a>,
+        mediaPlayer(url, key) ?? (
+          <a key={key} href={url} target="_blank" rel="noreferrer">
+            {link?.[1]}
+          </a>
+        ),
+      );
+    } else if (/^https?:\/\//.test(token)) {
+      // A bare URL: play it when it's media, otherwise make it a clickable link.
+      nodes.push(
+        mediaPlayer(token, key) ?? (
+          <a key={key} href={token} target="_blank" rel="noreferrer">
+            {token}
+          </a>
+        ),
       );
     } else {
       nodes.push(<em key={key}>{token.slice(1, -1)}</em>);

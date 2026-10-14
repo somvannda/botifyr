@@ -5326,6 +5326,19 @@ body {
   text-decoration: underline;
 }
 
+/* Inline media players (Markdown renders media URLs as playback). */
+.md-audio,
+.md-video {
+  display: block;
+  width: 100%;
+  margin: var(--space-3) 0;
+  border-radius: var(--radius-control);
+}
+
+.md-video {
+  max-height: 360px;
+}
+
 .md code {
   font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
   font-size: var(--text-md);
