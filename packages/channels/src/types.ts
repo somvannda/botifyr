@@ -22,6 +22,11 @@ export interface ChannelAdapter {
   onMessage(handler: ChannelMessageHandler): void;
   /** Send a message back to a conversation. */
   send(conversationId: string, text: string): Promise<void>;
+  /**
+   * Look up a chat's display name/handle, when the platform exposes it. Used to
+   * show a person instead of a raw chat id (docs/external-communications.md §4).
+   */
+  getChat?(conversationId: string): Promise<{ name?: string; handle?: string } | null>;
   start(): Promise<void>;
   stop(): Promise<void>;
 }

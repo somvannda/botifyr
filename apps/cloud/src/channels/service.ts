@@ -135,9 +135,13 @@ export class ChannelService {
     // Keep the external-comms spine in sync (contact + thread, §4), now that the
     // thread's session exists so the UI can read it back.
     if (scope && identity) {
-      const thread = await this.upsertContactThread(scope, identity, message, conversation.sessionId).catch(
-        () => null,
-      );
+      const thread = await this.upsertContactThread(
+        scope,
+        identity,
+        message,
+        conversation.sessionId,
+        adapter,
+      ).catch(() => null);
       if (thread) conversation.trust = thread.trust;
     }
 
@@ -211,6 +215,7 @@ export class ChannelService {
     identity: { userId: string; authorId: string },
     message: ChannelMessage,
     sessionId?: string,
+    adapter?: ChannelAdapter,
   ): Promise<Conversation> {
     const now = new Date().toISOString();
     const externalId = message.senderId ?? message.conversationId;
@@ -220,8 +225,7 @@ export class ChannelService {
       workspaceId: scope.workspaceId,
       platform: "telegram",
       externalId,
-      // The Telegram text update carries no display name; a getChat enrichment
-      // can fill this in later.
+      // Seeded with the platform id; filled in below from getChat on first sight.
       name: existingContact?.name ?? externalId,
       handle: existingContact?.handle,
       tags: existingContact?.tags ?? [],
@@ -231,6 +235,14 @@ export class ChannelService {
       firstSeenAt: existingContact?.firstSeenAt ?? now,
       lastMessageAt: now,
     };
+    // First sight of this person: ask the platform for a real name, so the chair
+    // sees a person rather than a chat id. One call per contact, not per message.
+    if (!existingContact && adapter?.getChat) {
+      const chat = await adapter.getChat(message.conversationId).catch(() => null);
+      const name = chat?.name?.trim();
+      if (name) contact.name = name;
+      if (chat?.handle) contact.handle = chat.handle;
+    }
     await this.store.saveContact(contact);
 
     const existingConversation = await this.store.getConversationByChat("telegram", message.conversationId);
