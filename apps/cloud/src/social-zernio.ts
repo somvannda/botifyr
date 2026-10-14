@@ -23,7 +23,7 @@ export interface ZernioAccount {
 
 export interface ZernioOptions {
   apiKey: string;
-  /** Accounts to publish to and read. */
+  /** Accounts to publish to. Empty means "discover from GET /v1/accounts". */
   accounts: ZernioAccount[];
   /** Zernio profile id (one profile per end customer). */
   profileId?: string;
@@ -58,16 +58,41 @@ function list<T>(data: unknown, key: string): T[] {
   return [];
 }
 
+/**
+ * The accounts to act on: the ones passed in, else discovered from
+ * `GET /v1/accounts` (a stored connection holds only the API key). Memoized, so
+ * a publish only asks once.
+ */
+function createAccountResolver(
+  call: <T>(method: string, path: string, body?: unknown) => Promise<T>,
+  options: ZernioOptions,
+): () => Promise<ZernioAccount[]> {
+  let cache: ZernioAccount[] | null = null;
+  return async () => {
+    if (options.accounts.length > 0) return options.accounts;
+    if (cache) return cache;
+    const query = options.profileId ? `?profileId=${encodeURIComponent(options.profileId)}` : "";
+    const data = await call<unknown>("GET", `/accounts${query}`);
+    cache = list<{ platform?: string; _id?: string; id?: string }>(data, "accounts")
+      .map((account) => ({
+        platform: String(account.platform ?? ""),
+        accountId: String(account._id ?? account.id ?? ""),
+      }))
+      .filter((account) => account.platform !== "" && account.accountId !== "");
+    return cache;
+  };
+}
+
 export function createZernioSocialClient(options: ZernioOptions): SocialClient {
   const { call } = createZernioApi(options);
-  const platforms = options.accounts.map((account) => account.platform).join(", ") || "no accounts";
+  const resolveAccounts = createAccountResolver(call, options);
 
   return {
     provider: "Zernio",
     async readInsights() {
       const data = await call<unknown>("GET", "/posts?limit=5");
       const posts = list<{ status?: string; platforms?: Array<{ platform?: string }> }>(data, "posts");
-      if (posts.length === 0) return `Zernio: no recent posts for ${platforms}.`;
+      if (posts.length === 0) return "Zernio: no recent posts.";
       return posts
         .map((post) => {
           const where = (post.platforms ?? [])
@@ -79,13 +104,15 @@ export function createZernioSocialClient(options: ZernioOptions): SocialClient {
         .join("\n");
     },
     async publish(text) {
+      const accounts = await resolveAccounts();
+      if (accounts.length === 0) throw new Error("Zernio: no accounts connected.");
       await call("POST", "/posts", {
         content: text,
-        platforms: options.accounts,
+        platforms: accounts,
         publishNow: true,
         ...(options.profileId ? { profileId: options.profileId } : {}),
       });
-      return `Posted to Zernio (${platforms}).`;
+      return `Posted to Zernio (${accounts.map((account) => account.platform).join(", ")}).`;
     },
     async reply(threadId, text) {
       await call("POST", `/inbox/conversations/${encodeURIComponent(threadId)}/messages`, { text });

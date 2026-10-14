@@ -62,6 +62,27 @@ describe("zernio social client", () => {
     const client = createZernioSocialClient({ apiKey: "z", accounts, fetchImpl });
     await expect(client.publish("x")).rejects.toThrow("Zernio 429");
   });
+
+  it("discovers accounts from /v1/accounts when none are given", async () => {
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const fetchImpl = (async (url: string, init: RequestInit) => {
+      calls.push({ url: String(url), init });
+      return {
+        ok: true,
+        json: async () =>
+          String(url).includes("/accounts")
+            ? { accounts: [{ _id: "acct_fb", platform: "facebook" }] }
+            : { _id: "p1" },
+      };
+    }) as unknown as typeof fetch;
+
+    const client = createZernioSocialClient({ apiKey: "z", accounts: [], fetchImpl });
+    expect(await client.publish("Hi")).toContain("facebook");
+    expect(calls[0]!.url).toContain("/accounts");
+    expect(JSON.parse(String(calls[1]!.init.body)).platforms).toEqual([
+      { platform: "facebook", accountId: "acct_fb" },
+    ]);
+  });
 });
 
 describe("zernio ads client", () => {
