@@ -338,6 +338,11 @@ secret. **Local end-to-end needs a public tunnel and a real key**, which is why
 this can't be tested here: the tests use a stubbed `fetch` and a **locally
 computed Svix signature**.
 
-**Slices.** (a) the per-workspace email channel + adapter + secrets + settings;
-(b) the inbound webhook; (c) routing the agent's `email.send` through the channel.
-The chosen scope is (a)+(b)+(c) in one change.
+**Slices.** ✅ **(a)+(b) SHIPPED**: the per-workspace email channel
+(`createEmailChannel`), `Workspace.email`, `listWorkspacesWithEmail`,
+`registerWorkspaceEmails`, `PATCH /v1/workspaces/:id/email`, the public
+`POST /v1/webhooks/resend/:id` (Svix-verified over the raw body) and
+`ChannelService.ingest`. ⬜ **(c) pending**: routing the agent's `email.send`
+through the channel, so **proactive** outreach is recorded on the spine and uses
+the workspace's own key. Until then `email.send` still uses the deployment env
+and is not recorded; inbound replies and chair-approved replies work fully.

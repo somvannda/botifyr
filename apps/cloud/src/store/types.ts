@@ -20,6 +20,7 @@ import type {
   Trigger,
   WorkItem,
   WorkspaceBudget,
+  WorkspaceEmail,
   WorkspaceTelegram,
 } from "@botifyr/shared";
 
@@ -354,6 +355,8 @@ export interface WorkspaceRecord {
   triggers?: Trigger[];
   /** The company's own Telegram bot (BYO) and the employee it answers as. */
   telegram?: WorkspaceTelegram;
+  /** The company's own email channel (BYO Resend) — §13. */
+  email?: WorkspaceEmail;
   createdAt: string;
   updatedAt: string;
 }
@@ -743,6 +746,7 @@ export interface Store {
   updateWorkspace(record: WorkspaceRecord): Promise<void>;
   /** Workspaces whose own Telegram bot is configured (for inbound routing). */
   listWorkspacesWithTelegram(): Promise<WorkspaceRecord[]>;
+  listWorkspacesWithEmail(): Promise<WorkspaceRecord[]>;
 
   /* Contacts + conversations: the external-communications spine (§4). */
   saveContact(record: ContactRecord): Promise<void>;

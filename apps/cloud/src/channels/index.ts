@@ -1,4 +1,4 @@
-import { createLocalChannel, createTelegramChannel, type LocalChannel } from "@botifyr/channels";
+import { createLocalChannel, createEmailChannel, createTelegramChannel, type LocalChannel } from "@botifyr/channels";
 import { ChannelService } from "./service.js";
 import type { Store } from "../store/index.js";
 import { decryptSecret } from "../vault.js";
@@ -29,6 +29,7 @@ export function createChannels(store: Store, opts: { vaultKey?: Buffer } = {}): 
   // Company-owned bots are loaded asynchronously; a slow/failed load must not
   // block boot, so it is fire-and-forget.
   void registerWorkspaceBots(store, service, opts.vaultKey).catch(() => {});
+  void registerWorkspaceEmails(store, service, opts.vaultKey).catch(() => {});
 
   return { service, local };
 }
@@ -60,6 +61,42 @@ export async function registerWorkspaceBots(
     if (!token.trim()) continue;
     service.register(createTelegramChannel({ token }), {
       key: `telegram:${workspace.id}`,
+      scope: { workspaceId: workspace.id, botId },
+    });
+    registered += 1;
+  }
+  return registered;
+}
+
+/**
+ * Register one email adapter per company that connected its own Resend account
+ * (docs/external-communications.md §13). Inbound is handed in by the Resend
+ * webhook rather than polled, so there is nothing to start. Fails closed the
+ * same way as bots: no vault key or no usable secret → that company is skipped.
+ */
+export async function registerWorkspaceEmails(
+  store: Store,
+  service: ChannelService,
+  vaultKey?: Buffer,
+): Promise<number> {
+  if (!vaultKey) return 0;
+  const workspaces = await store.listWorkspacesWithEmail().catch(() => []);
+  let registered = 0;
+  for (const workspace of workspaces) {
+    const from = workspace.email?.from;
+    const botId = workspace.email?.botId;
+    if (!from || !botId) continue;
+    const record = await store.getWorkspaceSecret(workspace.id, "RESEND_API_KEY").catch(() => null);
+    if (!record) continue;
+    let apiKey = "";
+    try {
+      apiKey = decryptSecret(vaultKey, record);
+    } catch {
+      continue;
+    }
+    if (!apiKey.trim()) continue;
+    service.register(createEmailChannel({ apiKey, from }), {
+      key: `email:${workspace.id}`,
       scope: { workspaceId: workspace.id, botId },
     });
     registered += 1;

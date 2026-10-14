@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
+import { randomUUID } from "node:crypto";
 import type { ChannelAdapter, ChannelMessage } from "@botifyr/channels";
 import { MemoryStore } from "../store/memory.js";
 import type { Task } from "@botifyr/shared";
 import type { RunnerDeps } from "../runner.js";
-import { registerWorkspaceBots } from "./index.js";
+import { registerWorkspaceBots, registerWorkspaceEmails } from "./index.js";
 import { ChannelService } from "./service.js";
+import { encryptSecret } from "../vault.js";
 import { emit } from "../events.js";
 
 /** A fake channel adapter that lets the test deliver a message and read sends. */
@@ -190,6 +192,53 @@ describe("ChannelService — company-bot routing", () => {
     // No company scope → a synthetic per-chat account, and no employee author.
     expect(calls[0]?.deps.userId).not.toBe("u1");
     expect(calls[0]?.deps.author).toBeUndefined();
+  });
+});
+
+describe("registerWorkspaceEmails", () => {
+  async function workspaceWithEmail() {
+    const store = new MemoryStore();
+    const now = new Date().toISOString();
+    await store.createWorkspace({
+      id: "ws1",
+      ownerId: "u1",
+      name: "Acme",
+      source: { kind: "idea", value: "" },
+      mission: "",
+      status: "active",
+      createdAt: now,
+      updatedAt: now,
+      email: { botId: "emp-support", from: "Bot <bot@acme.com>" },
+    });
+    return store;
+  }
+
+  it("fails closed without a vault key, and skips a company with no stored key", async () => {
+    const store = await workspaceWithEmail();
+    const service = new ChannelService(store, async () => {});
+    expect(await registerWorkspaceEmails(store, service, undefined)).toBe(0);
+    expect(await registerWorkspaceEmails(store, service, Buffer.alloc(32))).toBe(0);
+  });
+
+  it("registers an email adapter once the company's key is stored", async () => {
+    const store = await workspaceWithEmail();
+    const service = new ChannelService(store, async () => {});
+    const vaultKey = Buffer.alloc(32, 3);
+    const encrypted = encryptSecret(vaultKey, "re_company_key");
+    await store.createSecret({
+      id: randomUUID(),
+      userId: "u1",
+      workspaceId: "ws1",
+      name: "RESEND_API_KEY",
+      ciphertext: encrypted.ciphertext,
+      iv: encrypted.iv,
+      tag: encrypted.tag,
+      createdAt: new Date().toISOString(),
+    });
+    expect(await registerWorkspaceEmails(store, service, vaultKey)).toBe(1);
+    // The webhook path targets this key, and it is now registered.
+    expect(service.ingest("email:ws1", { conversationId: "a@b.c", text: "hi" })).toBe(true);
+    expect(service.ingest("email:other", { conversationId: "a@b.c", text: "hi" })).toBe(false);
   });
 });
 

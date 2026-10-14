@@ -56,6 +56,7 @@ import { buildTriggerGoal, findTrigger, normalizeTriggerName } from "./triggers.
 import { handleNodeMessage, nodeInfo, registerNode } from "./nodes.js";
 import { createToken, hashPassword, hashToken, verifyPassword } from "./auth.js";
 import { encryptSecret, decryptSecret } from "./vault.js";
+import { parseResendInbound, verifyResendSignature } from "./email-inbound.js";
 import { oneShot, runTask, runtimeInfo, summarizeConversation } from "./runner.js";
 import {
   analyzeSource,
@@ -274,6 +275,11 @@ export interface ServerOptions {
       externalChatId: string,
       text: string,
     ): Promise<boolean>;
+    /** Hand an inbound webhook message to a registered channel (e.g. Resend §13). */
+    ingest(
+      channel: string,
+      message: { conversationId: string; text: string; senderId?: string; userId?: string },
+    ): boolean;
   };
 }
 
@@ -3296,6 +3302,82 @@ export async function buildServer(options: ServerOptions) {
       return { telegram: workspace.telegram };
     },
   );
+
+  /**
+   * Connect (or disconnect) the company's own email channel (BYO Resend) and
+   * choose the employee that answers it. The API key is a workspace secret
+   * (`RESEND_API_KEY`) and the webhook signing secret is `RESEND_WEBHOOK_SECRET`.
+   * Takes effect on the next cloud start (docs/external-communications.md §13).
+   */
+  app.patch<{
+    Params: { id: string };
+    Body: { botId?: string | null; from?: string | null; handle?: string | null };
+  }>(
+    "/v1/workspaces/:id/email",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const workspace = await store.getWorkspace(request.params.id);
+      if (!workspace || workspace.ownerId !== userId) {
+        return reply.code(404).send({ error: "workspace not found" });
+      }
+      const botId = String(request.body?.botId ?? "").trim();
+      const from = String(request.body?.from ?? "").trim().slice(0, 200);
+      if (!botId || !from) {
+        workspace.email = undefined;
+        workspace.updatedAt = new Date().toISOString();
+        await store.updateWorkspace(workspace);
+        return { email: null };
+      }
+      const roles = await store.listBotRoles(workspace.id);
+      if (!roles.some((role) => role.botId === botId)) {
+        return reply.code(400).send({ error: "botId must be an employee in this company" });
+      }
+      const handle = String(request.body?.handle ?? "").trim().slice(0, 120) || undefined;
+      workspace.email = { botId, from, handle };
+      workspace.updatedAt = new Date().toISOString();
+      await store.updateWorkspace(workspace);
+      return { email: workspace.email };
+    },
+  );
+
+  /**
+   * Resend inbound email (docs/external-communications.md §13). Public — Resend
+   * calls it — so the Svix signature, checked against this workspace's
+   * `RESEND_WEBHOOK_SECRET` over the raw body, is the authentication.
+   */
+  app.post<{ Params: { id: string } }>("/v1/webhooks/resend/:id", async (request, reply) => {
+    const workspaceId = request.params.id;
+    const record = await store.getWorkspaceSecret(workspaceId, "RESEND_WEBHOOK_SECRET").catch(() => null);
+    if (!record) return reply.code(404).send({ error: "not found" });
+    let secret = "";
+    try {
+      secret = decryptSecret(vaultKey, record);
+    } catch {
+      return reply.code(404).send({ error: "not found" });
+    }
+    const raw = (request as FastifyRequest & { rawBody?: Buffer }).rawBody?.toString("utf8") ?? "";
+    const verified = verifyResendSignature(
+      secret,
+      {
+        id: String(request.headers["svix-id"] ?? ""),
+        timestamp: String(request.headers["svix-timestamp"] ?? ""),
+        signature: String(request.headers["svix-signature"] ?? ""),
+      },
+      raw,
+    );
+    if (!verified) return reply.code(401).send({ error: "invalid signature" });
+    const inbound = parseResendInbound(request.body);
+    if (!inbound || !inbound.text) return reply.code(202).send({ ok: true, routed: false });
+    // The subject becomes the thread's opening line, so the chair has context.
+    const text = inbound.subject ? `${inbound.subject}\n\n${inbound.text}` : inbound.text;
+    const routed = options.channels?.ingest(`email:${workspaceId}`, {
+      conversationId: inbound.from,
+      senderId: inbound.from,
+      text,
+    });
+    return { ok: true, routed: Boolean(routed) };
+  });
 
   /** The company's external contacts (docs/external-communications.md §4). */
   app.get<{ Params: { id: string } }>(

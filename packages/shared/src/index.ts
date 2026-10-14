@@ -276,6 +276,16 @@ export interface WorkspaceTelegram {
   handle?: string;
 }
 
+/** The company's own email channel (BYO Resend) — docs/external-communications.md §13. */
+export interface WorkspaceEmail {
+  /** The employee (bot) that answers this company's email. */
+  botId: string;
+  /** The verified from-address, e.g. `Bot <bot@acme.com>`. */
+  from: string;
+  /** The sending domain, for display. */
+  handle?: string;
+}
+
 export interface Workspace {
   id: string;
   /** The CEO (a real user). */
@@ -307,6 +317,7 @@ export interface Workspace {
   triggers?: Trigger[];
   /** The company's own Telegram bot (BYO) and the employee it answers as. */
   telegram?: WorkspaceTelegram;
+  email?: WorkspaceEmail;
   createdAt: string;
   updatedAt: string;
 }
