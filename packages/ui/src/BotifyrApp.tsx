@@ -8971,16 +8971,49 @@ const STEP_LABELS: Record<string, string> = {
   "youtube.info": "Inspecting a video",
   "shell.exec": "Running a command",
   "local.shell.exec": "Using your computer",
+  "music.credits": "Checking music credits",
+  "music.lyrics": "Writing lyrics",
+  "music.task": "Composing the track",
+  "music.generate": "Generating the audio",
+  "image.generate": "Generating the image",
+  "video.generate": "Generating the video",
+  "design.render": "Rendering the design",
 };
 function stepLabel(title: string): string {
   return STEP_LABELS[title] ?? title;
 }
-function stepDetail(title: string, detail: string | undefined): string | null {
+
+/** Tools whose raw output (JSON, ids, URLs) is never useful to a person. */
+const QUIET_STEP_TOOLS = /^(youtube|music|image|video|design|media)\./;
+
+/** A short, friendly sentence for a failed step — never the raw payload. */
+function friendlyStepError(detail: string): string {
+  const status = /(?:^|\D)(\d{3})(?:\D|$)/.exec(detail);
+  return status
+    ? `This step couldn't be completed — the service returned an error (HTTP ${status[1]}).`
+    : "This step couldn't be completed. Please try again.";
+}
+
+export function stepDetail(step: TaskStep): string | null {
+  const detail = step.detail;
   if (!detail) return null;
-  if (title.startsWith("youtube.")) return null;
-  // Raw tool arguments (JSON objects/arrays) are noise in the activity card.
-  if (/^\s*[{[][\s\S]*[}\]]\s*$/.test(detail)) return null;
+  const trimmed = detail.trim();
+  // A failure always reads as a friendly sentence, whatever the raw output.
+  if (step.status === "failed") return friendlyStepError(trimmed);
+  // Generated-media output (JSON, ids, URLs) is noise; hide it.
+  if (QUIET_STEP_TOOLS.test(step.title)) return null;
+  // Raw tool output (JSON objects/arrays, even truncated) is noise.
+  if (/^[[{]/.test(trimmed)) return null;
   return truncate(detail, 220);
+}
+
+/**
+ * The steps worth showing: the repeated "Thinking" heartbeat is kept only while
+ * it is the running one, so the list reflects the current thought instead of a
+ * growing column of identical rows.
+ */
+export function visibleSteps(steps: TaskStep[]): TaskStep[] {
+  return steps.filter((step) => step.title !== "Thinking" || step.status === "running");
 }
 
 /** Human labels for a company department (docs/company-os.md §6). */
@@ -9058,42 +9091,66 @@ function downloadProgress(detail: string | undefined): { done: number; total: nu
 /**
  * The checklist of steps a task ran. Shared by the live activity panel and the
  * finished assistant message, so both read the same way.
+ *
+ * The repeated "Thinking" heartbeat is collapsed to the single row that is
+ * currently running (past ones are dropped), and the whole list can be
+ * collapsed by hand — it never collapses on its own.
  */
 function TaskStepList({ steps }: { steps: TaskStep[] }): ReactNode {
+  const [collapsed, setCollapsed] = useState(false);
+  const visible = visibleSteps(steps);
+  if (visible.length === 0) return null;
+
   return (
-    <ol className="steps">
-      {steps.map((step) => {
-        const progress = step.title === "Downloads" ? downloadProgress(step.detail) : null;
-        if (progress) {
-          const pct = Math.round((progress.done / progress.total) * 100);
-          return (
-            <li key={step.id} className="step step-download">
-              <div className="step-progress-wrap">
-                <div className="step-progress-head">
-                  <span className="step-title">Downloading</span>
-                  <span className="step-progress-count">
-                    {progress.done} / {progress.total}
-                  </span>
+    <div className={`task-steps${collapsed ? " collapsed" : ""}`}>
+      <button
+        className="task-steps-head"
+        type="button"
+        aria-expanded={!collapsed}
+        title={collapsed ? "Show steps" : "Hide steps"}
+        onClick={() => setCollapsed((value) => !value)}
+      >
+        <span className="task-steps-summary">
+          {visible.length} {visible.length === 1 ? "step" : "steps"}
+        </span>
+        <ChevronIcon size={14} className={collapsed ? "chev-collapsed" : ""} />
+      </button>
+      {!collapsed && (
+        <ol className="steps">
+          {visible.map((step) => {
+            const progress = step.title === "Downloads" ? downloadProgress(step.detail) : null;
+            if (progress) {
+              const pct = Math.round((progress.done / progress.total) * 100);
+              return (
+                <li key={step.id} className="step step-download">
+                  <div className="step-progress-wrap">
+                    <div className="step-progress-head">
+                      <span className="step-title">Downloading</span>
+                      <span className="step-progress-count">
+                        {progress.done} / {progress.total}
+                      </span>
+                    </div>
+                    <div className="step-progress-bar">
+                      <span style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                </li>
+              );
+            }
+            const detail = stepDetail(step);
+            return (
+              <li key={step.id} className={`step step-${step.status}`}>
+                <span className="step-icon">{iconFor(step.status)}</span>
+                <div>
+                  <div className="step-title">{stepLabel(step.title)}</div>
+                  {detail && <div className="step-detail">{detail}</div>}
                 </div>
-                <div className="step-progress-bar">
-                  <span style={{ width: `${pct}%` }} />
-                </div>
-              </div>
-            </li>
-          );
-        }
-        const detail = stepDetail(step.title, step.detail);
-        return (
-          <li key={step.id} className={`step step-${step.status}`}>
-            <span className="step-icon">{iconFor(step.status)}</span>
-            <div>
-              <div className="step-title">{stepLabel(step.title)}</div>
-              {detail && <div className="step-detail">{detail}</div>}
-            </div>
-          </li>
-        );
-      })}
-    </ol>
+              </li>
+            );
+          })}
+        </ol>
+      )}
+    </div>
   );
 }
 
