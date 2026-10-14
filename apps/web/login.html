@@ -264,18 +264,25 @@
         tabSignin.addEventListener("click", () => setMode("signin"));
         tabSignup.addEventListener("click", () => setMode("signup"));
 
-        // Already signed in on this origin? Go straight to the app.
+        const params = new URLSearchParams(location.search);
+        setMode(params.get("mode") === "signup" ? "signup" : "signin");
+        if (params.get("error")) show(params.get("error"));
+
+        // Already signed in on this origin? Offer a one-click continue rather
+        // than bouncing (a stale token would loop through /portal/).
         try {
           if (localStorage.getItem(TOKEN_KEY)) {
-            location.replace(nextUrl());
+            alertEl.textContent = "You're already signed in on this browser. ";
+            const link = document.createElement("a");
+            link.href = nextUrl();
+            link.textContent = "Continue to your workspace →";
+            alertEl.appendChild(link);
+            alertEl.className = "alert info";
+            alertEl.hidden = false;
           }
         } catch {
           /* ignore */
         }
-
-        const params = new URLSearchParams(location.search);
-        setMode(params.get("mode") === "signup" ? "signup" : "signin");
-        if (params.get("error")) show(params.get("error"));
 
         // Hide Google if the cloud has no OAuth client configured.
         fetch(CLOUD + "/auth/config")
