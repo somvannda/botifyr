@@ -13,7 +13,7 @@ import type { SocialClient } from "./social-tools.js";
  */
 export interface PostForMeOptions {
   apiKey: string;
-  /** Connected social-account ids to publish to. */
+  /** Connected social-account ids to publish to. Empty means "discover from GET /social-accounts". */
   accountIds: string[];
   apiBase?: string;
   fetchImpl?: typeof fetch;
@@ -27,6 +27,26 @@ function list<T>(data: unknown, key: string): T[] {
     if (Array.isArray(value)) return value as T[];
   }
   return [];
+}
+
+/**
+ * The account ids to publish to: the ones passed in, else discovered from
+ * `GET /social-accounts` (a stored connection holds only the API key). Memoized.
+ */
+function createAccountIdResolver(
+  call: <T>(method: string, path: string, body?: unknown) => Promise<T>,
+  options: PostForMeOptions,
+): () => Promise<string[]> {
+  let cache: string[] | null = null;
+  return async () => {
+    if (options.accountIds.length > 0) return options.accountIds;
+    if (cache) return cache;
+    const data = await call<unknown>("GET", "/social-accounts");
+    cache = list<{ id?: string }>(data, "data")
+      .map((account) => String(account.id ?? ""))
+      .filter((id) => id !== "");
+    return cache;
+  };
 }
 
 export function createPostForMeSocialClient(options: PostForMeOptions): SocialClient {
@@ -43,6 +63,8 @@ export function createPostForMeSocialClient(options: PostForMeOptions): SocialCl
     return (await response.json()) as T;
   }
 
+  const resolveAccountIds = createAccountIdResolver(call, options);
+
   return {
     provider: "Post for Me",
     async readInsights() {
@@ -57,11 +79,13 @@ export function createPostForMeSocialClient(options: PostForMeOptions): SocialCl
         .join("\n");
     },
     async publish(text) {
+      const accountIds = await resolveAccountIds();
+      if (accountIds.length === 0) throw new Error("Post for Me: no accounts connected.");
       await call("POST", "/social-posts", {
         caption: text,
-        social_accounts: options.accountIds,
+        social_accounts: accountIds,
       });
-      return `Posted via Post for Me to ${options.accountIds.length} account(s).`;
+      return `Posted via Post for Me to ${accountIds.length} account(s).`;
     },
     async reply() {
       return "Post for Me publishes posts but can't reply to comments or DMs — connect Zernio or SocialAPI for inbox.";

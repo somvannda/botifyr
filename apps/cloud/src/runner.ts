@@ -25,6 +25,8 @@ import { createDelegationTools } from "./delegation-tools.js";
 import { createSocialTools, notConnectedSocial } from "./social-tools.js";
 import { createTelegramSocialClient, resolveTelegramChannel } from "./social-telegram.js";
 import { createPostizSocialClient } from "./social-postiz.js";
+import { createZernioAdsClient, createZernioSocialClient } from "./social-zernio.js";
+import { createPostForMeSocialClient } from "./social-postforme.js";
 import { createDesignTools } from "./design-tools.js";
 import { createCrmTools } from "./crm-tools.js";
 import { createFinanceTools } from "./finance-tools.js";
@@ -504,6 +506,21 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
       : { allowed: new Set<string>(), blocked: new Set<string>(), added: new Set<string>() };
     const has = (capability: string): boolean => resolved.allowed.has(capability);
 
+    // The workspace's own connected app keys (BYO aggregators) beat the shared
+    // process env keys: a company that connected Zernio / Post for Me drives its
+    // own accounts, and Botifyr never holds a platform app.
+    const readUserKey = async (provider: string): Promise<string | null> => {
+      if (!deps.vaultKey) return null;
+      const stored = await store.getConnection(userId, provider).catch(() => null);
+      if (!stored) return null;
+      try {
+        const tokens = JSON.parse(decryptSecret(deps.vaultKey, stored)) as { accessToken?: string };
+        return tokens.accessToken ?? null;
+      } catch {
+        return null;
+      }
+    };
+
     // Social hands: the connected page + Botifyr's own Feed (an owned channel,
     // no external setup). Publishing and replying are approval-gated; reads are
     // free. Only the capabilities the role actually holds are exposed.
@@ -533,16 +550,21 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
       const postizKey = process.env.POSTIZ_API_KEY;
       const postizIntegration = process.env.POSTIZ_INTEGRATION_ID;
       const postizPlatform = process.env.POSTIZ_PLATFORM;
-      const client =
-        postizKey && postizIntegration && postizPlatform
-          ? createPostizSocialClient({
-              apiKey: postizKey,
-              integrationId: postizIntegration,
-              platform: postizPlatform,
-            })
-          : telegram
-            ? createTelegramSocialClient(telegram)
-            : notConnectedSocial();
+      const zernioKey = await readUserKey("zernio");
+      const postForMeKey = await readUserKey("postforme");
+      const client = zernioKey
+        ? createZernioSocialClient({ apiKey: zernioKey, accounts: [] })
+        : postForMeKey
+          ? createPostForMeSocialClient({ apiKey: postForMeKey, accountIds: [] })
+          : postizKey && postizIntegration && postizPlatform
+            ? createPostizSocialClient({
+                apiKey: postizKey,
+                integrationId: postizIntegration,
+                platform: postizPlatform,
+              })
+            : telegram
+              ? createTelegramSocialClient(telegram)
+              : notConnectedSocial();
       tools.push(
         ...createSocialTools(client).filter((tool) => has(capabilityForTool(tool.name) ?? "")),
       );
@@ -558,11 +580,14 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
     if (has("ads.manage")) {
       const metaToken = process.env.META_ADS_TOKEN;
       const metaAccount = process.env.META_AD_ACCOUNT_ID;
+      const zernioKey = await readUserKey("zernio");
       tools.push(
         ...createAdsTools(
-          metaToken && metaAccount
-            ? createMetaAdsClient({ accessToken: metaToken, adAccountId: metaAccount })
-            : notConnectedAds(),
+          zernioKey
+            ? createZernioAdsClient({ apiKey: zernioKey, accounts: [] })
+            : metaToken && metaAccount
+              ? createMetaAdsClient({ accessToken: metaToken, adAccountId: metaAccount })
+              : notConnectedAds(),
         ),
       );
     }
