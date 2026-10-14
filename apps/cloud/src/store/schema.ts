@@ -186,6 +186,16 @@ ALTER TABLE capability_grants ADD COLUMN IF NOT EXISTS successes INTEGER NOT NUL
 ALTER TABLE capability_grants ADD COLUMN IF NOT EXISTS failures INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE capability_grants ADD COLUMN IF NOT EXISTS last_used_at TIMESTAMPTZ;
 
+/* Which connected app an employee (or role) uses for a capability (docs/company-workspace.md §44). */
+CREATE TABLE IF NOT EXISTS connector_preferences (
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  subject      TEXT NOT NULL,   -- "bot:<id>" | "role:<title>"
+  capability   TEXT NOT NULL,   -- a capability id, or "*" for the subject default
+  connector_id TEXT NOT NULL,
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (workspace_id, subject, capability)
+);
+
 /* Company reports — standups etc. (docs/company-os.md §5). */
 CREATE TABLE IF NOT EXISTS company_reports (
   id           TEXT PRIMARY KEY,

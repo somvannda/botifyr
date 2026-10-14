@@ -6,6 +6,7 @@ import type {
   BotRecord,
   BotRoleRecord,
   CapabilityGrantRecord,
+  ConnectorPreferenceRecord,
   CompanyReportRecord,
   ConnectionRecord,
   ContactRecord,
@@ -70,6 +71,7 @@ export class MemoryStore implements Store {
   private budgets = new Map<string, WorkspaceBudgetRecord>();
   /** Keyed by `${workspaceId}:${subject}:${capability}`. */
   private grants = new Map<string, CapabilityGrantRecord>();
+  private preferences = new Map<string, ConnectorPreferenceRecord>();
   private reports = new Map<string, CompanyReportRecord>();
   private providerRoles = new Map<ProviderRole, ProviderRoleConfig>();
   private deviceKeys = new Map<string, DeviceKey>();
@@ -512,6 +514,19 @@ export class MemoryStore implements Store {
 
   async setCapabilityGrant(record: CapabilityGrantRecord): Promise<void> {
     this.grants.set(`${record.workspaceId}:${record.subject}:${record.capability}`, structuredClone(record));
+  }
+
+  async listConnectorPreferences(workspaceId: string): Promise<ConnectorPreferenceRecord[]> {
+    return [...this.preferences.values()]
+      .filter((preference) => preference.workspaceId === workspaceId)
+      .map((preference) => structuredClone(preference));
+  }
+
+  async setConnectorPreference(record: ConnectorPreferenceRecord): Promise<void> {
+    this.preferences.set(
+      `${record.workspaceId}:${record.subject}:${record.capability}`,
+      structuredClone(record),
+    );
   }
 
   async createCompanyReport(record: CompanyReportRecord): Promise<void> {

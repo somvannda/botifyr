@@ -545,6 +545,59 @@ describe("workspaces API", () => {
     await app.close();
   });
 
+  it("sets and lists connector preferences", async () => {
+    const { app, signup } = await boot();
+    const auth = await signup("ws-pref@example.com");
+    const ws = (
+      await app.inject({
+        method: "POST",
+        url: "/v1/workspaces",
+        headers: auth,
+        payload: { name: "Pref Co" },
+      })
+    ).json() as { id: string };
+
+    const empty = (
+      await app.inject({
+        method: "GET",
+        url: `/v1/workspaces/${ws.id}/connector-preferences`,
+        headers: auth,
+      })
+    ).json() as unknown[];
+    expect(empty).toHaveLength(0);
+
+    const set = await app.inject({
+      method: "PUT",
+      url: `/v1/workspaces/${ws.id}/connector-preferences`,
+      headers: auth,
+      payload: { subject: "role:Marketer", capability: "ads.manage", connectorId: "zernio" },
+    });
+    expect(set.statusCode).toBe(200);
+
+    const list = (
+      await app.inject({
+        method: "GET",
+        url: `/v1/workspaces/${ws.id}/connector-preferences`,
+        headers: auth,
+      })
+    ).json() as Array<{ subject: string; capability: string; connectorId: string }>;
+    expect(list).toHaveLength(1);
+    expect(list[0]).toMatchObject({
+      subject: "role:Marketer",
+      capability: "ads.manage",
+      connectorId: "zernio",
+    });
+
+    const bad = await app.inject({
+      method: "PUT",
+      url: `/v1/workspaces/${ws.id}/connector-preferences`,
+      headers: auth,
+      payload: { subject: "role:Marketer" },
+    });
+    expect(bad.statusCode).toBe(400);
+    await app.close();
+  });
+
   it("records a standup report", async () => {
     const { app, signup } = await boot();
     const auth = await signup("ws-standup@example.com");

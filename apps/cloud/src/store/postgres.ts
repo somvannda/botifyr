@@ -7,6 +7,7 @@ import type {
   BotRecord,
   BotRoleRecord,
   CapabilityGrantRecord,
+  ConnectorPreferenceRecord,
   CompanyReportRecord,
   ConnectionRecord,
   ContactRecord,
@@ -649,6 +650,29 @@ export class PostgresStore implements Store {
         record.lastUsedAt ?? null,
         record.updatedAt,
       ],
+    );
+  }
+
+  async listConnectorPreferences(workspaceId: string): Promise<ConnectorPreferenceRecord[]> {
+    const { rows } = await this.pool.query(
+      "SELECT subject, capability, connector_id FROM connector_preferences WHERE workspace_id = $1",
+      [workspaceId],
+    );
+    return rows.map((row) => ({
+      workspaceId,
+      subject: row.subject as string,
+      capability: row.capability as string,
+      connectorId: row.connector_id as string,
+    }));
+  }
+
+  async setConnectorPreference(record: ConnectorPreferenceRecord): Promise<void> {
+    await this.pool.query(
+      "INSERT INTO connector_preferences (workspace_id, subject, capability, connector_id, updated_at) " +
+        "VALUES ($1, $2, $3, $4, now()) " +
+        "ON CONFLICT (workspace_id, subject, capability) DO UPDATE SET connector_id = EXCLUDED.connector_id, " +
+        "updated_at = now()",
+      [record.workspaceId, record.subject, record.capability, record.connectorId],
     );
   }
 
