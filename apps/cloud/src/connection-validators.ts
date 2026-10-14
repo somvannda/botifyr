@@ -70,6 +70,44 @@ export async function validateConnection(provider: string, token: string): Promi
         if (!data.ok) return { ok: false, message: data.error ? `Slack: ${data.error}` : "Invalid token." };
         return { ok: true, message: data.team ? `Connected to ${data.team}` : "Valid token" };
       }
+      case "zernio": {
+        const res = await fetch("https://zernio.com/api/v1/accounts", {
+          headers: { authorization: `Bearer ${token}` },
+        });
+        if (res.status === 401 || res.status === 403) return { ok: false, message: "Invalid API key." };
+        if (!res.ok) return { ok: false, message: `Zernio error ${res.status}.` };
+        const accounts = (await asJson(res)).accounts ?? [];
+        return {
+          ok: true,
+          message: Array.isArray(accounts) ? `Valid — ${accounts.length} account(s)` : "Valid API key",
+        };
+      }
+      case "postforme": {
+        const res = await fetch("https://api.postforme.dev/v1/social-accounts", {
+          headers: { authorization: `Bearer ${token}` },
+        });
+        if (res.status === 401 || res.status === 403) return { ok: false, message: "Invalid API key." };
+        if (!res.ok) return { ok: false, message: `Post for Me error ${res.status}.` };
+        const accounts = (await asJson(res)).data ?? [];
+        return {
+          ok: true,
+          message: Array.isArray(accounts) ? `Valid — ${accounts.length} account(s)` : "Valid API key",
+        };
+      }
+      case "publora": {
+        const res = await fetch("https://api.publora.com/api/v1/platform-connections", {
+          headers: { "x-publora-key": token },
+        });
+        if (res.status === 401 || res.status === 403) return { ok: false, message: "Invalid API key." };
+        if (!res.ok) return { ok: false, message: `Publora error ${res.status}.` };
+        const connections = (await asJson(res)).connections ?? [];
+        return {
+          ok: true,
+          message: Array.isArray(connections)
+            ? `Valid — ${connections.length} connection(s)`
+            : "Valid API key",
+        };
+      }
       default:
         return { ok: true, message: "Connected (this app can't be auto-checked)." };
     }

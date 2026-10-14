@@ -44,4 +44,29 @@ describe("connection validators", () => {
     expect(result.ok).toBe(false);
     expect(result.message).toContain("offline");
   });
+
+  it("validates a Zernio key and counts accounts", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ accounts: [{ _id: "a" }, { _id: "b" }] }), { status: 200 }),
+    );
+    const result = await validateConnection("zernio", "k");
+    expect(result.ok).toBe(true);
+    expect(result.message).toContain("2 account");
+  });
+
+  it("rejects an invalid Post for Me key (401)", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}", { status: 401 }));
+    const result = await validateConnection("postforme", "bad");
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("Invalid");
+  });
+
+  it("validates a Publora key against its connections", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ connections: [{ platformId: "linkedin-1" }] }), { status: 200 }),
+    );
+    const result = await validateConnection("publora", "k");
+    expect(result.ok).toBe(true);
+    expect(result.message).toContain("1 connection");
+  });
 });
