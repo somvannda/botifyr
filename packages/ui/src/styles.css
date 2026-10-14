@@ -5436,7 +5436,7 @@ body {
 .md-media-labels {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: var(--space-1);
   min-width: 0;
 }
 
@@ -5483,7 +5483,7 @@ body {
   height: 34px;
   padding: 0;
   border: none;
-  border-radius: 50%;
+  border-radius: var(--radius-round);
   color: #fff;
   background: var(--accent-solid);
   cursor: pointer;
@@ -5515,11 +5515,11 @@ body {
 .md-badge {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1);
   width: fit-content;
   padding: 4px 10px;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   font-size: var(--text-sm);
   line-height: 1.4;
   text-decoration: none;
