@@ -197,34 +197,49 @@ export function clipIdFromUrl(url: string): string | undefined {
 /**
  * Replace unplayable media URLs in a message with resolved tracks. Handles both
  * fenced `media` blocks and bare URLs (older messages wrote the Suno CloudFront
- * `.m4a` link straight into a bullet — see `unplayableMediaStream`). Each link
- * is matched to the clip it already referenced (by id) so a two-track reply keeps
- * track 1 as track 1; with no id it falls back to the next unused clip in order.
- * Non-media text is left untouched; already-playable links are kept as-is.
+ * `.m4a` link straight into a bullet — see `unplayableMediaStream`). Each link is
+ * matched to the clip it referenced (by id) so track 1 stays track 1, then
+ * expanded to EVERY take of that song (a Camxora job returns ~2 variations), so a
+ * reply that showed one player per song ends up with both. With no id it falls
+ * back to the next unused clip. Non-media text is left untouched; already-playable
+ * links are kept as-is.
  */
-export function rewriteMediaStreams(content: string, tracks: Array<{ id?: string; stream: string }>): string {
+export function rewriteMediaStreams(
+  content: string,
+  tracks: Array<{ id?: string; jobId?: string; stream: string }>,
+): string {
   if (tracks.length === 0) return content;
   const used = new Set<number>();
-  const pickStream = (original: string): string => {
+  const expandedJobs = new Set<string>();
+  /** The playable URLs to show for one link: every take of that link's song. */
+  const takesFor = (original: string): string[] => {
     const id = clipIdFromUrl(original);
     if (id) {
-      const at = tracks.findIndex(
-        (track, i) => !used.has(i) && (track.id === id || clipIdFromUrl(track.stream) === id),
-      );
+      const at = tracks.findIndex((track) => track.id === id || clipIdFromUrl(track.stream) === id);
       if (at !== -1) {
+        const already = used.has(at);
         used.add(at);
-        return tracks[at].stream;
+        const job = tracks[at].jobId;
+        if (!already && job && !expandedJobs.has(job)) {
+          expandedJobs.add(job);
+          const siblings = tracks
+            .map((track, i) => ({ track, i }))
+            .filter(({ track, i }) => !used.has(i) && track.jobId === job);
+          for (const sibling of siblings) used.add(sibling.i);
+          return [tracks[at].stream, ...siblings.map((sibling) => sibling.track.stream)];
+        }
+        return [tracks[at].stream];
       }
     }
     let i = 0;
     while (i < tracks.length && used.has(i)) i += 1;
     const at = i < tracks.length ? i : tracks.length - 1;
     used.add(at);
-    return tracks[at].stream;
+    return [tracks[at].stream];
   };
   const MEDIA_BLOCK_OR_URL = /```media[^\n]*\n([\s\S]*?)```|https?:\/\/[^\s<>()[\]]+/g;
   return content.replace(MEDIA_BLOCK_OR_URL, (whole: string, body?: string) => {
-    // Fenced `media` block: rewrite its `stream` field.
+    // Fenced `media` block: rewrite its `stream` field (one block per take).
     if (body !== undefined) {
       let parsed: Record<string, unknown>;
       try {
@@ -234,11 +249,13 @@ export function rewriteMediaStreams(content: string, tracks: Array<{ id?: string
       }
       const stream = typeof parsed.stream === "string" ? parsed.stream : "";
       if (!unplayableMediaStream(stream)) return whole;
-      return `\`\`\`media\n${JSON.stringify({ ...parsed, stream: pickStream(stream) })}\n\`\`\``;
+      return takesFor(stream)
+        .map((take) => `\`\`\`media\n${JSON.stringify({ ...parsed, stream: take })}\n\`\`\``)
+        .join("\n");
     }
-    // Bare URL: swap an unplayable one for its resolved playable track.
+    // Bare URL: swap an unplayable one for its playable takes, as extra bullets.
     if (!unplayableMediaStream(whole)) return whole;
-    return pickStream(whole);
+    return takesFor(whole).join("\n- ▶️ ");
   });
 }
 
@@ -254,6 +271,8 @@ export function camxoraTaskIdsFromAudit(details: string[]): string[] {
 
 export interface ResolvedTrack {
   id?: string;
+  /** Camxora job the clip came from — its takes all belong to the same song. */
+  jobId?: string;
   title: string;
   stream: string;
   cover?: string;
@@ -273,7 +292,7 @@ export async function resolveCamxoraTracks(
     const res = await camxoraRaw(key, "GET", `/v1/task/${encodeURIComponent(id)}`);
     if (!res.ok) continue;
     for (const clip of summarizeMusicTask(res.data).clips) {
-      if (clip.audio) out.push({ id: clip.id, title: clip.title, stream: clip.audio, cover: clip.image });
+      if (clip.audio) out.push({ id: clip.id, jobId: id, title: clip.title, stream: clip.audio, cover: clip.image });
     }
   }
   return out;

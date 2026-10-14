@@ -286,6 +286,27 @@ describe("old-track refresh helpers", () => {
     expect(out).not.toContain("cloudfront.net");
   });
 
+  it("expands a matched link to every take of that song", () => {
+    const A1 = "a1111111-1111-1111-1111-111111111111";
+    const A2 = "a2222222-2222-2222-2222-222222222222";
+    const B1 = "b1111111-1111-1111-1111-111111111111";
+    const B2 = "b2222222-2222-2222-2222-222222222222";
+    const content =
+      `1) Song A\n- ▶️ https://d2lwuy8qc234o3.cloudfront.net/1/clip/${A1}.m4a\n\n` +
+      `2) Song B\n- ▶️ https://d2lwuy8qc234o3.cloudfront.net/1/clip/${B1}.m4a`;
+    const tracks = [
+      { id: A1, jobId: "jobA", stream: `https://b2.example/clips/${A1}.mp3` },
+      { id: A2, jobId: "jobA", stream: `https://b2.example/clips/${A2}.mp3` },
+      { id: B1, jobId: "jobB", stream: `https://b2.example/clips/${B1}.mp3` },
+      { id: B2, jobId: "jobB", stream: `https://b2.example/clips/${B2}.mp3` },
+    ];
+    const out = rewriteMediaStreams(content, tracks);
+    for (const id of [A1, A2, B1, B2]) expect(out).toContain(`${id}.mp3`);
+    // Song A's second take is added next to song A, before song B.
+    expect(out.indexOf(`${A2}.mp3`)).toBeLessThan(out.indexOf(`${B1}.mp3`));
+    expect(out).not.toContain("cloudfront.net");
+  });
+
   it("extracts Camxora task ids from audit details (old and new formats)", () => {
     const ids = camxoraTaskIdsFromAudit([
       '- 5c948dfe-4c5b-463e-bee1-38b1f9b9cc83: {"job_id":"5c948dfe-4c5b-463e-bee1-38b1f9b9cc83"}',
