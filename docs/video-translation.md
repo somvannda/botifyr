@@ -198,13 +198,47 @@ Admins register and control the providers:
 | Host | Can use the user's GPU/CPU? | Notes |
 | --- | --- | --- |
 | **Desktop (Tauri)** | **Yes** | Run a local worker (sidecar) with GPU; fastest, cheapest, private. Needs a packaged Python/ffmpeg runtime and a GPU check. |
-| **Web / portal** | **No** | The browser/portal can't reach the user's hardware. Jobs run on **cloud GPU workers** (or a user's self-hosted node). |
+| **Web / portal** | **Partly** | WebGPU reaches the user's GPU for the **light stages** (ASR, subtitles, ffmpeg mux, dub-lite); the heavy stages (lip-sync/voice clone) do not run in-browser. See §7.1. |
 | **Self-hosted / cloud node** | — | Same worker, deployed server-side. |
 
-So the requirement becomes: **one job model, two executors** —
+So the requirement becomes: **one job model, three executors** —
+- **Browser executor** (web portal, zero-install): the light stages on the user's
+  GPU via **WebGPU**. Tab must stay open — no true background run. See §7.1.
 - **Local executor** in the desktop app (uses the PC's GPU; "background" = a job
   runner that keeps working while the app is open, with resume across restarts).
 - **Cloud executor** on a GPU node for web/portal users and for phones.
+
+### 7.1 Browser (WebGPU) executor — what runs, and the four constraints
+
+WebGPU gives the portal access to the user's GPU **without an install**, but only
+for the cheap stages. The probe (`packages/ui/src/webgpu.ts`) picks the tier.
+
+| Pipeline stage | Browser (WebGPU)? | Notes |
+| --- | --- | --- |
+| ASR / Whisper (small/base) | ✅ | ONNX Runtime Web / transformers.js, WebGPU EP. |
+| Subtitle translation | ✅ | Small local LLM (WebLLM), or call the cloud for text. |
+| ffmpeg mux / trim / encode | ✅ | `ffmpeg.wasm` — needs SharedArrayBuffer → COOP/COEP. |
+| TTS (stock voices) | 🟡 | Piper/ONNX; quality-limited, no cloning. |
+| Voice clone | ⛔ | Too heavy for browser VRAM/ops. |
+| Vocal/SFX separation (Demucs) | ⛔ | Minutes of video → hours in-browser. |
+| Lip-sync (LatentSync/MuseTalk) | ⛔ | Diffusion video models; no browser path. |
+
+The four constraints to design around:
+1. **A tab must stay open.** Web Workers can use WebGPU; **Service Workers
+   cannot** — so there is no true background execution. Closing the tab stops the
+   job (the desktop sidecar has no such limit).
+2. **Cross-origin isolation.** ffmpeg.wasm / wasm threads need
+   `Cross-Origin-Opener-Policy` + `Cross-Origin-Embedder-Policy` headers on the
+   portal.
+3. **VRAM & device limits.** Browsers cap GPU allocation and WebGPU operator
+   coverage is incomplete; large models OOM and laptops `device-lost` — needs
+   retry/resume.
+4. **Support isn't universal.** Chrome/Edge since 2023; Safari and Firefox
+   shipped it during 2025. Old devices and most mobile need a fallback
+   (WASM-CPU is slow → fall back to `subs` or the cloud).
+
+Tier mapping (browser never reaches `full`): a WebGPU adapter with a large
+reported buffer → `dub`; otherwise → `subs` (never a dead end, §13.1).
 
 `apps/node` already exists (local node) — the local media worker can live beside it,
 reusing the same job queue and progress events. The existing sandbox exec cap
