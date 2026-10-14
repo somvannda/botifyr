@@ -89,17 +89,38 @@ describe("camxora music tools", () => {
     expect(result.output).toContain("task-1");
   });
 
-  it("polls several tasks at once", async () => {
+  it("polls several tasks and surfaces only the playable CDN url", async () => {
     const store = new MemoryStore();
     await connect(store, "k");
-    const fetchMock = vi
-      .spyOn(globalThis, "fetch")
-      .mockImplementation(async (url) => new Response(JSON.stringify({ url }), { status: 200 }));
+    const payload = (id: string) => ({
+      job_id: id,
+      status: "running",
+      result: {
+        clips: [
+          {
+            id,
+            title: "Test Song",
+            status: "complete",
+            // The auth-gated placeholder the model must NOT use for playback.
+            audio_url: "https://studio-api.prod.suno.com/api/forbidden",
+            media_urls: [{ url: `https://cdn.example/${id}.m4a` }],
+          },
+        ],
+      },
+    });
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
+      const id = String(url).split("/").pop() ?? "?";
+      return new Response(JSON.stringify(payload(id)), { status: 200 });
+    });
     const result = await tool("music.tasks", store).run({ taskIds: ["a", "b"] }, ctx);
     expect(result.ok).toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(result.output).toContain("/v1/task/a");
-    expect(result.output).toContain("/v1/task/b");
+    expect(result.output).toContain("https://cdn.example/a.m4a");
+    expect(result.output).toContain("https://cdn.example/b.m4a");
+    // The auth-gated audio_url is never surfaced as the play link.
+    expect(result.output).not.toContain("/api/forbidden");
+    // Ready clips tell the model to reply with a media block.
+    expect(result.output).toContain("media");
   });
 
   it("maps the spend tools to a money capability, leaving reads unmapped", () => {

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 import type { TaskStep } from "@botifyr/shared";
-import { stepDetail, visibleSteps } from "./BotifyrApp";
+import { groupSteps, stepDetail, visibleSteps } from "./BotifyrApp";
 
 function step(partial: Partial<TaskStep> & Pick<TaskStep, "title" | "status">): TaskStep {
   return { id: partial.id ?? Math.random().toString(36).slice(2), index: 0, ...partial };
@@ -19,6 +19,26 @@ describe("visibleSteps", () => {
     expect(visible).toHaveLength(2);
     expect(visible.map((entry) => entry.title)).toEqual(["music.task", "Thinking"]);
     expect(visible[1].status).toBe("running");
+  });
+});
+
+describe("groupSteps", () => {
+  it("merges consecutive identical tool calls into one row with a count", () => {
+    const steps = [
+      step({ title: "music.generate_batch", status: "done" }),
+      step({ title: "music.tasks", status: "done" }),
+      step({ title: "music.tasks", status: "done" }),
+      step({ title: "music.tasks", status: "running" }),
+      step({ title: "music.task", status: "done" }),
+    ];
+    const groups = groupSteps(steps);
+    expect(groups.map((group) => [group.step.title, group.count])).toEqual([
+      ["music.generate_batch", 1],
+      ["music.tasks", 3],
+      ["music.task", 1],
+    ]);
+    // The merged row keeps the latest status.
+    expect(groups[1].step.status).toBe("running");
   });
 });
 

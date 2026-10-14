@@ -9047,6 +9047,32 @@ export function visibleSteps(steps: TaskStep[]): TaskStep[] {
   return steps.filter((step) => step.title !== "Thinking" || step.status === "running");
 }
 
+export interface StepGroup {
+  key: string;
+  step: TaskStep;
+  /** Consecutive calls this row stands for (e.g. polling `music.tasks`). */
+  count: number;
+}
+
+/**
+ * Merge runs of consecutive steps with the same title into one row, keeping the
+ * latest status/detail. A polling tool (`music.tasks` called every second) then
+ * reads as a single "music.tasks ×13" row instead of a wall of identical rows.
+ */
+export function groupSteps(steps: TaskStep[]): StepGroup[] {
+  const groups: StepGroup[] = [];
+  for (const step of steps) {
+    const last = groups[groups.length - 1];
+    if (last && last.step.title === step.title) {
+      last.count += 1;
+      last.step = step;
+      continue;
+    }
+    groups.push({ key: step.id, step, count: 1 });
+  }
+  return groups;
+}
+
 /** Human labels for a company department (docs/company-os.md §6). */
 export const DEPARTMENT_LABELS: Record<Department, string> = {
   exec: "Executive",
@@ -9129,8 +9155,8 @@ function downloadProgress(detail: string | undefined): { done: number; total: nu
  */
 function TaskStepList({ steps }: { steps: TaskStep[] }): ReactNode {
   const [collapsed, setCollapsed] = useState(false);
-  const visible = visibleSteps(steps);
-  if (visible.length === 0) return null;
+  const groups = groupSteps(visibleSteps(steps));
+  if (groups.length === 0) return null;
 
   return (
     <div className={`task-steps${collapsed ? " collapsed" : ""}`}>
@@ -9142,18 +9168,18 @@ function TaskStepList({ steps }: { steps: TaskStep[] }): ReactNode {
         onClick={() => setCollapsed((value) => !value)}
       >
         <span className="task-steps-summary">
-          {visible.length} {visible.length === 1 ? "step" : "steps"}
+          {groups.length} {groups.length === 1 ? "step" : "steps"}
         </span>
         <ChevronIcon size={14} className={collapsed ? "chev-collapsed" : ""} />
       </button>
       {!collapsed && (
         <ol className="steps">
-          {visible.map((step) => {
+          {groups.map(({ key, step, count }) => {
             const progress = step.title === "Downloads" ? downloadProgress(step.detail) : null;
             if (progress) {
               const pct = Math.round((progress.done / progress.total) * 100);
               return (
-                <li key={step.id} className="step step-download">
+                <li key={key} className="step step-download">
                   <div className="step-progress-wrap">
                     <div className="step-progress-head">
                       <span className="step-title">Downloading</span>
@@ -9170,10 +9196,13 @@ function TaskStepList({ steps }: { steps: TaskStep[] }): ReactNode {
             }
             const detail = stepDetail(step);
             return (
-              <li key={step.id} className={`step step-${step.status}`}>
+              <li key={key} className={`step step-${step.status}`}>
                 <span className="step-icon">{iconFor(step.status)}</span>
                 <div>
-                  <div className="step-title">{stepLabel(step.title)}</div>
+                  <div className="step-title">
+                    {stepLabel(step.title)}
+                    {count > 1 && <span className="step-count"> ×{count}</span>}
+                  </div>
                   {detail && <div className="step-detail">{detail}</div>}
                 </div>
               </li>
