@@ -388,6 +388,50 @@ export function createCamxoraTools(store: Store, vaultKey: Buffer, userId: strin
         return camxoraCall(key, "POST", path, (args.body as Record<string, unknown> | undefined) ?? {});
       },
     },
+    {
+      name: "music.batch",
+      description:
+        "Run several Camxora POST calls under ONE approval — e.g. extend/cover/stems/video a list of clips, or any mix of spend endpoints. Each call is { path, body }; results are returned per call.",
+      parameters: {
+        type: "object",
+        properties: {
+          calls: {
+            type: "array",
+            description: `Calls to run (1–${MAX_BATCH}).`,
+            items: {
+              type: "object",
+              properties: {
+                path: { type: "string", description: 'e.g. "/v1/music/extend".' },
+                body: { type: "object", description: "JSON body for that endpoint." },
+              },
+              required: ["path"],
+            },
+          },
+        },
+        required: ["calls"],
+      },
+      requiresApproval: true,
+      run: async (args) => {
+        const key = await camxoraKey(store, vaultKey, userId);
+        if (!key) return notConnected();
+        const calls = Array.isArray(args.calls) ? args.calls.slice(0, MAX_BATCH) : [];
+        if (calls.length === 0) return { ok: false, output: "Provide calls: [{ path, body }]." };
+        const lines: string[] = [];
+        let succeeded = 0;
+        for (let index = 0; index < calls.length; index += 1) {
+          const call = (calls[index] ?? {}) as { path?: unknown; body?: unknown };
+          const path = String(call.path ?? "");
+          if (!path.startsWith("/")) {
+            lines.push(`${index + 1}. skipped — path must begin with "/"`);
+            continue;
+          }
+          const res = await camxoraCall(key, "POST", path, (call.body as Record<string, unknown> | undefined) ?? {});
+          if (res.ok) succeeded += 1;
+          lines.push(`${index + 1}. ${path}: ${res.output.slice(0, 300)}`);
+        }
+        return { ok: succeeded > 0, output: `${succeeded}/${calls.length} succeeded:\n${lines.join("\n")}` };
+      },
+    },
   ];
 }
 
@@ -407,4 +451,5 @@ export const CAMXORA_TOOL_NAMES = [
   "music.tasks",
   "music.get",
   "music.request",
+  "music.batch",
 ] as const;

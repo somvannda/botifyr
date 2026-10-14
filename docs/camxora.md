@@ -57,6 +57,7 @@ blocking the connection.
 | `music.tasks` | `GET /v1/task/:id` ×N | — |
 | `music.get` | any `GET` path | — |
 | `music.request` | any `POST` path | ✅ |
+| `music.batch` | any `POST` paths ×N | ✅ (one approval) |
 
 **Coverage of "every endpoint":** the curated tools cover the common operations;
 `music.get` and `music.request` are a passthrough that reaches *any* of the ~47
@@ -73,7 +74,9 @@ use well, with a generic escape hatch.
 `music.generate_batch` (`{ prompt, count }`, clamped to `BOTIFYR_MUSIC_MAX_BATCH`,
 default 10) — it starts all N in a **single** approval and returns a task id per
 generation, polled together with `music.tasks`. Without it, N songs would mean N
-separate approval prompts. The spend tools map to the `music.generate` capability
+separate approval prompts. For any other batch of spend calls
+(extend/cover/stems/video/…), `music.batch` runs a list of `{ path, body }` calls
+under one approval. The spend tools map to the `music.generate` capability
 (risk `money`), so the trust ladder can promote them once proven; reads
 (credits/task/get/wav_status) stay ungated and free.
 

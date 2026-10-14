@@ -105,8 +105,25 @@ describe("camxora music tools", () => {
   it("maps the spend tools to a money capability, leaving reads unmapped", () => {
     expect(capabilityForTool("music.generate")).toBe("music.generate");
     expect(capabilityForTool("music.generate_batch")).toBe("music.generate");
+    expect(capabilityForTool("music.batch")).toBe("music.generate");
     expect(capabilityForTool("music.request")).toBe("music.generate");
     expect(capabilityForTool("music.credits")).toBeNull();
     expect(capabilityForTool("music.task")).toBeNull();
+  });
+
+  it("runs a batch of calls in one run, reporting per call", async () => {
+    const store = new MemoryStore();
+    await connect(store, "k");
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (url) => new Response(JSON.stringify({ path: url }), { status: 200 }));
+    const result = await tool("music.batch", store).run(
+      { calls: [{ path: "/v1/music/extend", body: { clip_id: "a" } }, { path: "bad" }] },
+      ctx,
+    );
+    expect(result.ok).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1); // only the rooted path hits the API
+    expect(result.output).toContain("/v1/music/extend");
+    expect(result.output).toContain("skipped");
   });
 });

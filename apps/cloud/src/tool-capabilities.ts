@@ -23,7 +23,7 @@ const TOOL_CAPABILITIES: Array<[RegExp, string]> = [
   [/^design\./, "files.write"],
   // Camxora music spend tools → one "money" capability, so the trust ladder can
   // promote them. Reads (credits/task/get/wav_status) stay unmapped → always free.
-  [/^music\.(generate|generate_batch|extend|cover|stems|video|request)$/, "music.generate"],
+  [/^music\.(generate|generate_batch|batch|extend|cover|stems|video|request)$/, "music.generate"],
   [/^browser\./, "browser.use"],
   [/^(shell|code)\./, "code.run"],
   [/^github\./, "repo.write"],
