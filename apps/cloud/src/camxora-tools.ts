@@ -93,7 +93,7 @@ export function createCamxoraTools(store: Store, vaultKey: Buffer, userId: strin
     {
       name: "music.generate",
       description:
-        "Generate a song (or instrumental) with Camxora from a description or lyrics. Returns a task id to poll with music.task.",
+        "Generate a song (or instrumental) with Camxora from a description or lyrics. Returns a task id to poll with music.task. When the track is ready, share its audio URL with the user — it renders as an inline player.",
       parameters: {
         type: "object",
         properties: {
@@ -228,7 +228,8 @@ export function createCamxoraTools(store: Store, vaultKey: Buffer, userId: strin
     },
     {
       name: "music.task",
-      description: "Poll a Camxora task's status and result by id.",
+      description:
+        "Poll a Camxora task's status and result by id. On success, relay the track's audio URL to the user — it renders as an inline player.",
       parameters: {
         type: "object",
         properties: { taskId: { type: "string", description: "Task id from a generate/extend/etc call." } },
