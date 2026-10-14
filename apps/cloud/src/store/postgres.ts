@@ -9,6 +9,8 @@ import type {
   CapabilityGrantRecord,
   CompanyReportRecord,
   ConnectionRecord,
+  ContactRecord,
+  ConversationRecord,
   DeviceKey,
   FileRecord,
   FriendRequestRecord,
@@ -407,6 +409,52 @@ export class PostgresStore implements Store {
       "SELECT data FROM workspaces WHERE data -> 'telegram' ->> 'botId' IS NOT NULL ORDER BY created_at ASC",
     );
     return rows.map((row) => row.data as WorkspaceRecord);
+  }
+
+  async saveContact(record: ContactRecord): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO contacts (id, workspace_id, platform, external_id, data)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (id) DO UPDATE SET data = $5, updated_at = now()`,
+      [record.id, record.workspaceId, record.platform, record.externalId, record],
+    );
+  }
+
+  async getContactByExternal(
+    workspaceId: string,
+    platform: string,
+    externalId: string,
+  ): Promise<ContactRecord | null> {
+    const { rows } = await this.pool.query(
+      "SELECT data FROM contacts WHERE workspace_id = $1 AND platform = $2 AND external_id = $3",
+      [workspaceId, platform, externalId],
+    );
+    return (rows[0]?.data as ContactRecord) ?? null;
+  }
+
+  async listContacts(workspaceId: string): Promise<ContactRecord[]> {
+    const { rows } = await this.pool.query(
+      "SELECT data FROM contacts WHERE workspace_id = $1 ORDER BY updated_at DESC",
+      [workspaceId],
+    );
+    return rows.map((row) => row.data as ContactRecord);
+  }
+
+  async saveConversation(record: ConversationRecord): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO conversations (id, workspace_id, contact_id, platform, external_chat_id, data)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (id) DO UPDATE SET data = $6, updated_at = now()`,
+      [record.id, record.workspaceId, record.contactId, record.platform, record.externalChatId, record],
+    );
+  }
+
+  async getConversationByChat(platform: string, externalChatId: string): Promise<ConversationRecord | null> {
+    const { rows } = await this.pool.query(
+      "SELECT data FROM conversations WHERE platform = $1 AND external_chat_id = $2",
+      [platform, externalChatId],
+    );
+    return (rows[0]?.data as ConversationRecord) ?? null;
   }
 
   async updateWorkspace(record: WorkspaceRecord): Promise<void> {

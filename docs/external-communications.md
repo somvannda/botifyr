@@ -237,7 +237,11 @@ campaign → employee drafts → approvals (batch where safe) → schedule/publi
    `PATCH /v1/workspaces/:id/telegram` (+ client). An inbound message on a
    company bot now runs **as the employee** (its role, tools, session). Config
    changes take effect on the next cloud start.
-2. **Contact + Conversation records** on inbound; `crm.log_activity` writes to them.
+2. ✅ **Contact + Conversation records on inbound** (SHIPPED): `Contact` /
+   `Conversation` types, memory + postgres stores (with tables), `ChannelService`
+   upserting a contact + thread for every inbound company-bot message, and
+   `GET /v1/workspaces/:id/contacts` (+ client). `crm.log_activity` still writes a
+   wiki file — wiring it onto the Contact is a small follow-up.
 3. **External Inbox UI** (Telegram only) with approve/edit/deny + **Trust this
    customer**.
 4. **Attention kinds** in `inbox.ts` (rules + `company.escalate`) surfaced in HQ.

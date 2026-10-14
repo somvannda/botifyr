@@ -71,6 +71,29 @@ describe("ChannelService — company-bot routing", () => {
     expect(session?.botId).toBe("emp-sales");
     // The channel got an acknowledgement.
     expect(sent.some((entry) => /on it/i.test(entry.text))).toBe(true);
+
+    // …and the external-comms spine exists: a contact + thread for this chat.
+    const contacts = await store.listContacts("ws1");
+    expect(contacts).toHaveLength(1);
+    expect(contacts[0]?.externalId).toBe("chat-9");
+    expect(contacts[0]?.ownerBotId).toBe("emp-sales");
+    const thread = await store.getConversationByChat("telegram", "chat-9");
+    expect(thread?.assignedBotId).toBe("emp-sales");
+    expect(thread?.trust).toBe("gated");
+  });
+
+  it("refreshes the thread on a repeat message instead of duplicating it", async () => {
+    const store = await seededWorkspace({ botId: "emp-sales" });
+    const service = new ChannelService(store, async () => {});
+    const { adapter, deliver } = fakeChannel();
+    service.register(adapter, { key: "telegram:ws1", scope: { workspaceId: "ws1", botId: "emp-sales" } });
+
+    deliver("chat-9", "first");
+    await tick();
+    deliver("chat-9", "second");
+    await tick();
+
+    expect(await store.listContacts("ws1")).toHaveLength(1);
   });
 
   it("keeps the legacy per-chat user when the channel is unscoped", async () => {

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { ChatMessage, ServerEvent, Task } from "@botifyr/shared";
+import type { ChatMessage, Contact, Conversation, ServerEvent, Task } from "@botifyr/shared";
 import type { ChannelAdapter, ChannelMessage } from "@botifyr/channels";
 import { emit, subscribe } from "../events.js";
 import { rememberSession, rememberTask } from "../runtime.js";
@@ -9,7 +9,7 @@ import { runTask, type RunnerDeps } from "../runner.js";
 import type { Store } from "../store/index.js";
 import { scopedChannelIdentity, type ChannelScope } from "../channel-routing.js";
 
-interface Conversation {
+interface ChannelConversation {
   userId: string;
   sessionId: string;
   /** The employee this thread runs as, when the channel is company-scoped. */
@@ -36,7 +36,7 @@ const DECISIONS: Record<string, "allow" | "deny"> = {
 /** Routes inbound channel messages to agent tasks and delivers progress back. */
 export class ChannelService {
   private readonly adapters = new Map<string, ChannelAdapter>();
-  private readonly conversations = new Map<string, Conversation>();
+  private readonly conversations = new Map<string, ChannelConversation>();
   private readonly taskConversation = new Map<string, string>();
   private readonly scopes = new Map<string, ChannelScope>();
   private started = false;
@@ -97,13 +97,18 @@ export class ChannelService {
     const conversationKey = this.key(channel, message.conversationId);
     let conversation = this.conversations.get(conversationKey);
 
+    // A company-scoped channel runs as the employee it answers for (so it
+    // inherits that role's instructions, tools and permissions) and keeps the
+    // external-comms spine — a contact + thread (docs/external-communications.md §4).
+    const scope = this.scopes.get(channel);
+    const identity = scope
+      ? scopedChannelIdentity(scope, await this.store.getWorkspace(scope.workspaceId).catch(() => null))
+      : null;
+    if (scope && identity) {
+      await this.upsertContactThread(scope, identity, message).catch(() => {});
+    }
+
     if (!conversation) {
-      // A company-scoped channel runs as the employee it answers for, so it
-      // inherits that role's instructions, tools and permissions.
-      const scope = this.scopes.get(channel);
-      const identity = scope
-        ? scopedChannelIdentity(scope, await this.store.getWorkspace(scope.workspaceId).catch(() => null))
-        : null;
       const userId =
         identity?.userId ?? message.userId ?? (await this.ensureChannelUser(channel, message.conversationId));
       const sessionId = randomUUID();
@@ -175,6 +180,52 @@ export class ChannelService {
         task,
       )
       .catch(() => {});
+  }
+
+  /**
+   * Create or refresh the Contact + Conversation for an inbound scoped message,
+   * so the CRM/pipeline has a spine (docs/external-communications.md §4).
+   */
+  private async upsertContactThread(
+    scope: ChannelScope,
+    identity: { userId: string; authorId: string },
+    message: ChannelMessage,
+  ): Promise<void> {
+    const now = new Date().toISOString();
+    const externalId = message.senderId ?? message.conversationId;
+    const existingContact = await this.store.getContactByExternal(scope.workspaceId, "telegram", externalId);
+    const contact: Contact = {
+      id: existingContact?.id ?? randomUUID(),
+      workspaceId: scope.workspaceId,
+      platform: "telegram",
+      externalId,
+      // The Telegram text update carries no display name; a getChat enrichment
+      // can fill this in later.
+      name: existingContact?.name ?? externalId,
+      handle: existingContact?.handle,
+      tags: existingContact?.tags ?? [],
+      ownerBotId: existingContact?.ownerBotId ?? identity.authorId,
+      source: existingContact?.source ?? "inbound",
+      status: existingContact?.status ?? "new",
+      firstSeenAt: existingContact?.firstSeenAt ?? now,
+      lastMessageAt: now,
+    };
+    await this.store.saveContact(contact);
+
+    const existingConversation = await this.store.getConversationByChat("telegram", message.conversationId);
+    const conversation: Conversation = {
+      id: existingConversation?.id ?? randomUUID(),
+      workspaceId: scope.workspaceId,
+      contactId: contact.id,
+      platform: "telegram",
+      externalChatId: message.conversationId,
+      kind: "dm",
+      assignedBotId: existingConversation?.assignedBotId ?? identity.authorId,
+      trust: existingConversation?.trust ?? "gated",
+      lastMessageAt: now,
+      createdAt: existingConversation?.createdAt ?? now,
+    };
+    await this.store.saveConversation(conversation);
   }
 
   private onEvent(event: ServerEvent): void {

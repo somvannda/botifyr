@@ -228,6 +228,42 @@ export interface Trigger {
   createdAt: string;
 }
 
+/** Who we talk to on an external platform (docs/external-communications.md §4). */
+export interface Contact {
+  id: string;
+  workspaceId: string;
+  /** e.g. "telegram". */
+  platform: string;
+  /** The id on that platform (Telegram user id). */
+  externalId: string;
+  name: string;
+  handle?: string;
+  tags: string[];
+  /** The employee that owns this relationship, when assigned. */
+  ownerBotId?: string;
+  source: "inbound" | "campaign" | "import";
+  status: "new" | "active" | "won" | "lost" | "archived";
+  firstSeenAt: string;
+  lastMessageAt: string;
+}
+
+/** A thread with a contact on one platform (§4). */
+export interface Conversation {
+  id: string;
+  workspaceId: string;
+  contactId: string;
+  platform: string;
+  /** The platform's chat id (Telegram chat id). */
+  externalChatId: string;
+  kind: "dm" | "group" | "channel";
+  /** The employee that answers this thread. */
+  assignedBotId?: string;
+  /** Once trusted, replies in this customer's thread skip approval (§5). */
+  trust: "gated" | "trusted";
+  lastMessageAt: string;
+  createdAt: string;
+}
+
 /** The company's own messaging bot (BYO): which employee it answers as. */
 export interface WorkspaceTelegram {
   /** The employee (bot) the Telegram bot answers as. */

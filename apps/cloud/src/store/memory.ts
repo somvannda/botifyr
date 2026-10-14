@@ -8,6 +8,8 @@ import type {
   CapabilityGrantRecord,
   CompanyReportRecord,
   ConnectionRecord,
+  ContactRecord,
+  ConversationRecord,
   DeviceKey,
   FileRecord,
   FriendRequestRecord,
@@ -59,6 +61,8 @@ export class MemoryStore implements Store {
   private sessions = new Map<string, SessionRecord>();
   private bots = new Map<string, BotRecord>();
   private workspaces = new Map<string, WorkspaceRecord>();
+  private contacts = new Map<string, ContactRecord>();
+  private conversations = new Map<string, ConversationRecord>();
   /** Keyed by `${workspaceId}:${botId}`. */
   private botRoles = new Map<string, BotRoleRecord>();
   private workItems = new Map<string, WorkItemRecord>();
@@ -355,6 +359,42 @@ export class MemoryStore implements Store {
       .filter((workspace) => Boolean(workspace.telegram?.botId))
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
       .map((workspace) => structuredClone(workspace));
+  }
+
+  async saveContact(record: ContactRecord): Promise<void> {
+    this.contacts.set(record.id, structuredClone(record));
+  }
+
+  async getContactByExternal(
+    workspaceId: string,
+    platform: string,
+    externalId: string,
+  ): Promise<ContactRecord | null> {
+    const found = [...this.contacts.values()].find(
+      (entry) =>
+        entry.workspaceId === workspaceId &&
+        entry.platform === platform &&
+        entry.externalId === externalId,
+    );
+    return found ? structuredClone(found) : null;
+  }
+
+  async listContacts(workspaceId: string): Promise<ContactRecord[]> {
+    return [...this.contacts.values()]
+      .filter((entry) => entry.workspaceId === workspaceId)
+      .sort((a, b) => b.lastMessageAt.localeCompare(a.lastMessageAt))
+      .map((entry) => structuredClone(entry));
+  }
+
+  async saveConversation(record: ConversationRecord): Promise<void> {
+    this.conversations.set(record.id, structuredClone(record));
+  }
+
+  async getConversationByChat(platform: string, externalChatId: string): Promise<ConversationRecord | null> {
+    const found = [...this.conversations.values()].find(
+      (entry) => entry.platform === platform && entry.externalChatId === externalChatId,
+    );
+    return found ? structuredClone(found) : null;
   }
 
   async updateWorkspace(record: WorkspaceRecord): Promise<void> {

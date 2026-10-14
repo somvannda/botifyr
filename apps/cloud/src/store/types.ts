@@ -5,6 +5,8 @@ import type {
   CodeRepo,
   CompanyDNA,
   CompanyReport,
+  Contact,
+  Conversation,
   Department,
   DeviceKey,
   MediaRecipe,
@@ -369,6 +371,12 @@ export interface BotRoleRecord {
 
 /** A unit of work on the company board. */
 export type WorkItemRecord = WorkItem;
+
+/** Who we talk to on an external platform (docs/external-communications.md §4). */
+export type ContactRecord = Contact;
+
+/** A thread with a contact on one platform (docs/external-communications.md §4). */
+export type ConversationRecord = Conversation;
 
 /** A company mission above the board (docs/company-quests.md). */
 export type QuestRecord = Quest;
@@ -735,6 +743,17 @@ export interface Store {
   updateWorkspace(record: WorkspaceRecord): Promise<void>;
   /** Workspaces whose own Telegram bot is configured (for inbound routing). */
   listWorkspacesWithTelegram(): Promise<WorkspaceRecord[]>;
+
+  /* Contacts + conversations: the external-communications spine (§4). */
+  saveContact(record: ContactRecord): Promise<void>;
+  getContactByExternal(
+    workspaceId: string,
+    platform: string,
+    externalId: string,
+  ): Promise<ContactRecord | null>;
+  listContacts(workspaceId: string): Promise<ContactRecord[]>;
+  saveConversation(record: ConversationRecord): Promise<void>;
+  getConversationByChat(platform: string, externalChatId: string): Promise<ConversationRecord | null>;
   deleteWorkspace(ownerId: string, id: string): Promise<boolean>;
 
   setBotRole(record: BotRoleRecord): Promise<void>;
