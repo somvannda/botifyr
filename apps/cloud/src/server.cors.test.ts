@@ -37,6 +37,28 @@ describe("CORS", () => {
     await app.close();
   });
 
+  it("allows the marketing-site dev origin so /login works locally", async () => {
+    const app = await buildServer({
+      store: new MemoryStore(),
+      vaultKey: Buffer.alloc(32),
+      localChannel: createLocalChannel(),
+    });
+    await app.ready();
+
+    const response = await app.inject({
+      method: "OPTIONS",
+      url: "/auth/login",
+      headers: {
+        origin: "http://localhost:4321",
+        "access-control-request-method": "POST",
+        "access-control-request-headers": "content-type",
+      },
+    });
+    expect(String(response.headers["access-control-allow-origin"])).toBe("http://localhost:4321");
+
+    await app.close();
+  });
+
   it("refuses an origin that is not allowlisted", async () => {
     const app = await buildServer({
       store: new MemoryStore(),
