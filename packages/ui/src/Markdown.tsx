@@ -70,7 +70,7 @@ function mediaPlayer(url: string, key: string): ReactNode | null {
  * bullet marker and the emoji don't sit next to it.
  */
 function loneMedia(text: string, key: string): ReactNode | null {
-  const stripped = text.replace(/^[\s\u25B6\u25BA\u23F5\u23F4\u27A4\uFE0F]+/, "").trim();
+  const stripped = text.replace(/^(?:\s|\u25B6|\u25BA|\u23F5|\u23F4|\u27A4|\uFE0F)+/, "").trim();
   const url = /^(https?:\/\/\S+)$/.exec(stripped)?.[1];
   return url ? mediaPlayer(url, key) : null;
 }
