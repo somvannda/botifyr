@@ -27,6 +27,8 @@ interface StoredAiConfig {
   model: string;
   baseUrl?: string;
   enabled: boolean;
+  /** "server" (default) or "device" — the latter keeps the key off the server. */
+  mode?: "server" | "device";
   apiKey?: string;
   updatedAt?: string;
 }
@@ -54,6 +56,7 @@ export function toPublicAiConfig(stored: StoredAiConfig): AiKeyConfig {
     model: stored.model,
     baseUrl: stored.baseUrl,
     enabled: stored.enabled,
+    mode: stored.mode ?? "server",
     hasKey: Boolean(stored.apiKey),
     updatedAt: stored.updatedAt,
   };
@@ -86,7 +89,8 @@ export function validateAiInput(input: AiKeyInput, hasExistingKey: boolean): str
   }
 
   const key = (input.apiKey ?? "").trim();
-  if (!preset.keyless && !key && !hasExistingKey) {
+  // In device mode the key lives on the user's machine (the node), not here.
+  if (input.mode !== "device" && !preset.keyless && !key && !hasExistingKey) {
     return "An API key is required.";
   }
   return null;
@@ -104,14 +108,18 @@ export async function saveAiKey(
   const provider = preset?.id ?? (input.provider ?? "").trim();
   const model = (input.model ?? "").trim() || preset?.defaultModel || "";
   const baseUrl = (input.baseUrl ?? "").trim() || undefined;
-  // Omit `apiKey` to keep the previous key (e.g. editing only the model).
-  const apiKey = (input.apiKey ?? "").trim() || existing?.apiKey;
+  const mode = input.mode ?? existing?.mode ?? "server";
+  // Omit `apiKey` to keep the previous key (e.g. editing only the model). In
+  // device mode the key is never stored server-side.
+  const apiKey =
+    mode === "device" ? undefined : (input.apiKey ?? "").trim() || existing?.apiKey;
 
   const stored: StoredAiConfig = {
     provider,
     model,
     baseUrl,
     enabled: input.enabled ?? existing?.enabled ?? true,
+    mode,
     apiKey,
     updatedAt: new Date().toISOString(),
   };
@@ -157,8 +165,9 @@ export function buildProviderFromKey(stored: StoredAiConfig, demoUrl: string): M
 }
 
 /**
- * The provider to use for a user's task: their own key when enabled and usable,
- * otherwise null (the caller falls back to the platform provider).
+ * The provider to use for a user's task: their own server-stored key when
+ * enabled and usable, otherwise null. Device-mode configs return null here —
+ * their key lives on the node (see `loadAiKey` + the runner's node provider).
  */
 export async function userProvider(
   store: Store,
@@ -167,14 +176,27 @@ export async function userProvider(
   demoUrl: string,
 ): Promise<ModelProvider | null> {
   const stored = await readStored(store, vaultKey, userId);
-  if (!stored || !stored.enabled) return null;
+  if (!stored || !stored.enabled || stored.mode === "device") return null;
   return buildProviderFromKey(stored, demoUrl);
 }
 
-/** True when the user has an enabled, usable own key (used to bypass quota). */
+/**
+ * The user's stored config (key-free), including its mode. Used by the runner to
+ * decide between the server provider and the device (node) provider.
+ */
+export async function loadAiConfig(
+  store: Store,
+  vaultKey: Buffer,
+  userId: string,
+): Promise<AiKeyConfig | null> {
+  const stored = await readStored(store, vaultKey, userId);
+  return stored ? toPublicAiConfig(stored) : null;
+}
+
+/** True when the user has an enabled, usable server-stored key (bypasses quota). */
 export async function hasUsableOwnKey(store: Store, vaultKey: Buffer, userId: string): Promise<boolean> {
   const stored = await readStored(store, vaultKey, userId);
-  if (!stored || !stored.enabled) return false;
+  if (!stored || !stored.enabled || stored.mode === "device") return false;
   return buildProviderFromKey(stored, "http://localhost") !== null;
 }
 

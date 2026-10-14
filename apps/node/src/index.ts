@@ -1,4 +1,5 @@
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
+import { createProvider, type AgentMessage, type ToolSpec } from "@botifyr/agent-core";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { readFile, readdir, writeFile } from "node:fs/promises";
@@ -203,6 +204,39 @@ async function shellAction(
 
 /* -------------------------------------------------------------------- socket */
 
+/**
+ * Device-mode model calls: when the user keeps their AI key on this machine
+ * (docs/ai-keys-hybrid.md), the cloud asks the node to perform the model call
+ * with `model.complete`. The provider/model/base URL come from the cloud; the
+ * KEY is read from the node's environment and never sent to the cloud.
+ */
+async function modelAction(
+  action: string,
+  args: Record<string, unknown>,
+): Promise<{ ok: boolean; output: string }> {
+  if (action !== "model.complete") return { ok: false, output: `Unknown model action "${action}".` };
+  const baseUrl = String(args.baseUrl ?? "");
+  const key = process.env.BOTIFYR_AI_KEY ?? "";
+  if (!baseUrl) return { ok: false, output: "device mode: no provider base URL was provided." };
+  if (!key && process.env.BOTIFYR_AI_ALLOW_NO_KEY !== "1") {
+    return { ok: false, output: "device mode: set BOTIFYR_AI_KEY in the node environment." };
+  }
+  const provider = createProvider({
+    provider: "openai-compatible",
+    baseUrl,
+    model: String(args.model ?? ""),
+    apiKey: key || undefined,
+    demoUrl: "http://localhost",
+  });
+  const response = await provider.complete({
+    messages: (args.messages ?? []) as AgentMessage[],
+    tools: (args.tools ?? []) as ToolSpec[],
+    maxTokens: typeof args.maxTokens === "number" ? args.maxTokens : undefined,
+    toolChoice: args.toolChoice as "auto" | "none" | "required" | undefined,
+  });
+  return { ok: true, output: JSON.stringify(response) };
+}
+
 const socket = new WebSocket(`${CLOUD.replace(/^http/, "ws")}/v1/node?token=${encodeURIComponent(TOKEN)}`);
 
 socket.onopen = () => {
@@ -223,9 +257,11 @@ socket.onmessage = async (message) => {
   try {
     const action = String(msg.action);
     const shellActions = ["exec", "read", "write", "list", "open"];
-    const result = shellActions.includes(action)
-      ? await shellAction(action, msg.args ?? {})
-      : await browserAction(action, msg.args ?? {});
+    const result = action.startsWith("model.")
+      ? await modelAction(action, msg.args ?? {})
+      : shellActions.includes(action)
+        ? await shellAction(action, msg.args ?? {})
+        : await browserAction(action, msg.args ?? {});
     socket.send(JSON.stringify({ type: "node.result", id: msg.id, ...result }));
   } catch (error) {
     socket.send(

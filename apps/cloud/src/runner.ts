@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { ServerEvent, Task } from "@botifyr/shared";
+import { resolveAiBaseUrl } from "@botifyr/shared";
 import {
   createBrowserBackend,
   createBrowserTools,
@@ -65,7 +66,8 @@ import { createNotionTools, createSlackTools, createTelegramTools } from "./toke
 import { decryptSecret } from "./vault.js";
 import { createLocalTools, nodeInfo } from "./nodes.js";
 import { priceFor } from "./billing.js";
-import { userProvider } from "./ai-keys.js";
+import { loadAiConfig, userProvider } from "./ai-keys.js";
+import { createNodeProvider } from "./node-provider.js";
 import type { Store } from "./store/index.js";
 
 export interface RunnerDeps {
@@ -131,20 +133,50 @@ function getProvider(): ModelProvider {
 }
 
 /**
+ * Resolve the provider for a user's calls. A `device`-mode config runs on the
+ * local node (their key never touches the server); a `server`-mode config uses
+ * their stored key; otherwise the platform provider. `byo` marks runs that
+ * shouldn't be metered against plan credits.
+ */
+export async function resolveUserProvider(
+  store: Store,
+  vaultKey: Buffer | undefined,
+  userId: string,
+): Promise<{ provider: ModelProvider; byo: boolean }> {
+  if (vaultKey) {
+    const config = await loadAiConfig(store, vaultKey, userId).catch(() => null);
+    if (config?.enabled && config.mode === "device") {
+      if (nodeInfo(userId).online) {
+        const baseUrl = resolveAiBaseUrl(config) ?? "";
+        if (baseUrl) {
+          return {
+            provider: createNodeProvider(userId, {
+              provider: config.provider,
+              model: config.model,
+              baseUrl,
+            }),
+            byo: true,
+          };
+        }
+      }
+      // No node online (or no resolvable endpoint): fall through to the platform.
+    }
+    const own = await userProvider(store, vaultKey, userId, demoUrlFor()).catch(() => null);
+    if (own) return { provider: own, byo: true };
+  }
+  return { provider: getProvider(), byo: false };
+}
+
+/**
  * The provider to use for a user's non-agent calls (rolling summaries,
- * translation, one-shot planning): their own key when they've enabled and saved
- * one, otherwise the platform provider.
+ * translation, one-shot planning).
  */
 export async function providerForUser(
   store: Store,
   vaultKey: Buffer | undefined,
   userId: string,
 ): Promise<ModelProvider> {
-  if (vaultKey) {
-    const own = await userProvider(store, vaultKey, userId, demoUrlFor()).catch(() => null);
-    if (own) return own;
-  }
-  return getProvider();
+  return (await resolveUserProvider(store, vaultKey, userId)).provider;
 }
 
 function demoUrlFor(): string {
@@ -398,17 +430,14 @@ function buildTools(
 export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
   const { store, userId, history } = deps;
 
-  // Bring-your-own key: use the user's own provider when they've enabled one,
-  // otherwise the platform provider. `chargeByo` decides whether a BYO run is
-  // still metered against plan credits (admin policy — see PlatformSettings).
-  const demoUrl =
-    process.env.BOTIFYR_DEMO_URL ??
-    `http://${sandboxMode() === "docker" ? "host.docker.internal" : "localhost"}:${process.env.PORT ?? 8787}/demo`;
-  const ownProvider = deps.vaultKey
-    ? await userProvider(store, deps.vaultKey, userId, demoUrl).catch(() => null)
-    : null;
-  const usingOwnKey = ownProvider !== null;
-  const activeProvider = ownProvider ?? getProvider();
+  // Bring-your-own key: the user's own provider (server-stored key, or their
+  // device via the node) when enabled, otherwise the platform provider.
+  // `chargeByo` decides whether a BYO run is still metered (admin policy).
+  const { provider: activeProvider, byo: usingOwnKey } = await resolveUserProvider(
+    store,
+    deps.vaultKey,
+    userId,
+  );
   const byoBilling = (await store.getPlatformSettings().catch(() => null))?.byoKey?.billing ?? "free";
   const chargeByo = !usingOwnKey || byoBilling === "charge";
 

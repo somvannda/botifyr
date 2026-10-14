@@ -60,6 +60,7 @@ import { encryptSecret, decryptSecret } from "./vault.js";
 import {
   clearAiKey,
   hasUsableOwnKey,
+  loadAiConfig,
   loadAiKey,
   providerForInput,
   saveAiKey,
@@ -553,7 +554,10 @@ export async function buildServer(options: ServerOptions) {
   async function ownKeyBypassesQuota(userId: string): Promise<boolean> {
     const settings = await store.getPlatformSettings();
     if ((settings.byoKey?.billing ?? "free") !== "free") return false;
-    return hasUsableOwnKey(store, vaultKey, userId).catch(() => false);
+    if (await hasUsableOwnKey(store, vaultKey, userId).catch(() => false)) return true;
+    // Device mode: the key lives on the node, so it counts only while online.
+    const config = await loadAiConfig(store, vaultKey, userId).catch(() => null);
+    return Boolean(config?.enabled && config.mode === "device" && nodeInfo(userId).online);
   }
 
   /** Whether new work should be refused because the daily budget is spent. */

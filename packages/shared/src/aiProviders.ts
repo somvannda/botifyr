@@ -148,6 +148,8 @@ export function findAiProviderPreset(id: string): AiProviderPreset | undefined {
  * A stored, user-owned provider config. `hasKey` reports whether a key is
  * present; the key value itself is never included.
  */
+export type AiKeyMode = "server" | "device";
+
 export interface AiKeyConfig {
   /** Preset id, or `custom`. */
   provider: string;
@@ -156,6 +158,12 @@ export interface AiKeyConfig {
   baseUrl?: string;
   /** Whether the user wants their own key used for their tasks. */
   enabled: boolean;
+  /**
+   * Where the key lives. `server` (default): encrypted in the vault, the cloud
+   * calls the provider. `device` (desktop only): the key stays on the user's
+   * machine and the local node performs the model calls.
+   */
+  mode: AiKeyMode;
   /** True when a key is stored (always false for keyless local presets). */
   hasKey: boolean;
   updatedAt?: string;
@@ -166,9 +174,14 @@ export interface AiKeyInput {
   provider: string;
   model: string;
   baseUrl?: string;
-  /** Omit to keep the existing key (e.g. when only the model changes). */
+  /**
+   * Omit to keep the existing key (e.g. when only the model changes). Never sent
+   * in `device` mode — the key lives on the node, not the server.
+   */
   apiKey?: string;
   enabled?: boolean;
+  /** Storage mode; defaults to `server`. */
+  mode?: AiKeyMode;
 }
 
 export interface AiKeyTestResult {
