@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 /**
  * A tiny, dependency-free markdown renderer that builds React elements (no
@@ -20,14 +20,34 @@ function isFileName(value: string): boolean {
 const AUDIO_URL_RE = /\.(?:mp3|wav|m4a|aac|ogg|oga|opus|flac)(?:[?#].*)?$/i;
 const VIDEO_URL_RE = /\.(?:mp4|webm|mov|m4v|ogv)(?:[?#].*)?$/i;
 
+/**
+ * Inline player for a media URL, plus a direct download link.
+ *
+ * Nothing is proxied through our server: playback streams from the provider's
+ * CDN and the download goes straight to the same URL. When playback fails (the
+ * common cause is an expired signed URL), we surface the download link as the
+ * fallback.
+ */
+function MediaPlayer({ url, kind }: { url: string; kind: "audio" | "video" }) {
+  const [failed, setFailed] = useState(false);
+  return (
+    <span className="md-media">
+      {kind === "audio" ? (
+        <audio className="md-audio" src={url} controls preload="metadata" onError={() => setFailed(true)} />
+      ) : (
+        <video className="md-video" src={url} controls preload="metadata" onError={() => setFailed(true)} />
+      )}
+      <a className="md-download" href={url} download target="_blank" rel="noreferrer">
+        {failed ? "Couldn't play — download from Camxora" : "Download"}
+      </a>
+    </span>
+  );
+}
+
 /** Render a media URL as a playable element; null when it isn't audio/video. */
 function mediaPlayer(url: string, key: string): ReactNode | null {
-  if (AUDIO_URL_RE.test(url)) {
-    return <audio key={key} className="md-audio" src={url} controls preload="metadata" />;
-  }
-  if (VIDEO_URL_RE.test(url)) {
-    return <video key={key} className="md-video" src={url} controls preload="metadata" />;
-  }
+  if (AUDIO_URL_RE.test(url)) return <MediaPlayer key={key} url={url} kind="audio" />;
+  if (VIDEO_URL_RE.test(url)) return <MediaPlayer key={key} url={url} kind="video" />;
   return null;
 }
 
