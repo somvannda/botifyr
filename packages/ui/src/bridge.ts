@@ -19,7 +19,7 @@ export interface BotBridge {
   /** Show an OS-level notification (used while the window is in the background). */
   notify?(title: string, body: string): void | Promise<void>;
   /** Start the local "my computer" node with a short-lived token (desktop only). */
-  startLocalNode?(token: string): void | Promise<void>;
+  startLocalNode?(token: string, aiKey?: string): void | Promise<void>;
   /** Stop the local node (desktop only). */
   stopLocalNode?(): void | Promise<void>;
 }

@@ -24,17 +24,27 @@ fn stop(child: &mut Child) {
 }
 
 #[tauri::command]
-fn start_local_node(token: String, state: State<NodeProcess>) -> Result<(), String> {
+fn start_local_node(
+    token: String,
+    ai_key: Option<String>,
+    state: State<NodeProcess>,
+) -> Result<(), String> {
     let mut guard = state.0.lock().map_err(|error| error.to_string())?;
     if let Some(mut existing) = guard.take() {
         stop(&mut existing);
     }
 
     let root = repo_root();
-    let child = Command::new("cmd")
+    let mut command = Command::new("cmd");
+    command
         .args(["/C", "npm run node:start"])
         .current_dir(&root)
-        .env("BOTIFYR_TOKEN", &token)
+        .env("BOTIFYR_TOKEN", &token);
+    // Device-mode AI key: handed to the node so it never goes to the cloud.
+    if let Some(key) = ai_key.filter(|value| !value.is_empty()) {
+        command.env("BOTIFYR_AI_KEY", key);
+    }
+    let child = command
         .spawn()
         .map_err(|error| format!("failed to start local node: {error}"))?;
 

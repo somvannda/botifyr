@@ -29,8 +29,8 @@ const tauriBridge: BotBridge = {
       // Notifications are best-effort; never block the app.
     }
   },
-  startLocalNode: async (token: string) => {
-    await invoke("start_local_node", { token });
+  startLocalNode: async (token: string, aiKey?: string) => {
+    await invoke("start_local_node", { token, aiKey: aiKey ?? null });
   },
   stopLocalNode: async () => {
     await invoke("stop_local_node");
