@@ -457,6 +457,19 @@ export class PostgresStore implements Store {
     return (rows[0]?.data as ConversationRecord) ?? null;
   }
 
+  async getConversation(id: string): Promise<ConversationRecord | null> {
+    const { rows } = await this.pool.query("SELECT data FROM conversations WHERE id = $1", [id]);
+    return (rows[0]?.data as ConversationRecord) ?? null;
+  }
+
+  async listExternalConversations(workspaceId: string): Promise<ConversationRecord[]> {
+    const { rows } = await this.pool.query(
+      "SELECT data FROM conversations WHERE workspace_id = $1 ORDER BY updated_at DESC",
+      [workspaceId],
+    );
+    return rows.map((row) => row.data as ConversationRecord);
+  }
+
   async updateWorkspace(record: WorkspaceRecord): Promise<void> {
     await this.pool.query("UPDATE workspaces SET data = $1, updated_at = $2 WHERE id = $3", [
       record,

@@ -80,6 +80,8 @@ describe("ChannelService — company-bot routing", () => {
     const thread = await store.getConversationByChat("telegram", "chat-9");
     expect(thread?.assignedBotId).toBe("emp-sales");
     expect(thread?.trust).toBe("gated");
+    // The thread points at its session, so the UI can read the transcript back.
+    expect(thread?.sessionId).toBe(calls[0]?.task.sessionId);
   });
 
   it("refreshes the thread on a repeat message instead of duplicating it", async () => {

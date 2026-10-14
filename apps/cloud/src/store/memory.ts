@@ -397,6 +397,17 @@ export class MemoryStore implements Store {
     return found ? structuredClone(found) : null;
   }
 
+  async getConversation(id: string): Promise<ConversationRecord | null> {
+    const found = this.conversations.get(id);
+    return found ? structuredClone(found) : null;
+  }
+
+  async listExternalConversations(workspaceId: string): Promise<ConversationRecord[]> {
+    return [...this.conversations.values()]
+      .filter((entry) => entry.workspaceId === workspaceId)
+      .map((entry) => structuredClone(entry));
+  }
+
   async updateWorkspace(record: WorkspaceRecord): Promise<void> {
     this.workspaces.set(record.id, structuredClone(record));
   }

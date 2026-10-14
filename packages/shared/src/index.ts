@@ -258,6 +258,8 @@ export interface Conversation {
   kind: "dm" | "group" | "channel";
   /** The employee that answers this thread. */
   assignedBotId?: string;
+  /** The chat session that holds this thread's transcript. */
+  sessionId?: string;
   /** Once trusted, replies in this customer's thread skip approval (§5). */
   trust: "gated" | "trusted";
   lastMessageAt: string;

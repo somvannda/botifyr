@@ -4,11 +4,13 @@ import type {
   Bot,
   BotFile,
   CapabilityGrant,
+  ChatMessage,
   CompanyDNA,
   CompanyDirection,
   CompanyReport,
   ConnectionInfo,
   Contact,
+  Conversation as ExternalConversation,
   CreateWorkspaceRequest,
   Department,
   DeviceKey,
@@ -1116,6 +1118,31 @@ export class BotifyrClient {
   /** The company's external contacts (docs/external-communications.md §4). */
   listContacts(workspaceId: string): Promise<Contact[]> {
     return this.request(`/v1/workspaces/${workspaceId}/contacts`);
+  }
+
+  /** The company's external conversations, each with its contact. */
+  listExternalConversations(
+    workspaceId: string,
+  ): Promise<Array<{ conversation: ExternalConversation; contact: Contact | null }>> {
+    return this.request(`/v1/workspaces/${workspaceId}/conversations`);
+  }
+
+  /** An external conversation's transcript. */
+  getExternalConversationMessages(workspaceId: string, conversationId: string): Promise<ChatMessage[]> {
+    return this.request(`/v1/workspaces/${workspaceId}/conversations/${conversationId}/messages`);
+  }
+
+  /** Trust (or gate) a customer's thread — the per-customer approval decision. */
+  setExternalConversationTrust(
+    workspaceId: string,
+    conversationId: string,
+    trust: "gated" | "trusted",
+  ): Promise<ExternalConversation> {
+    return this.request(`/v1/workspaces/${workspaceId}/conversations/${conversationId}`, {
+      method: "PATCH",
+      json: true,
+      body: JSON.stringify({ trust }),
+    });
   }
 
   /** Recent agent runs for a workspace — real execution, including failures. */
