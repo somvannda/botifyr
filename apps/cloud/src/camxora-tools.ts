@@ -169,6 +169,22 @@ function musicTaskOutput(id: string, data: unknown): string {
   return `${id}: ${running ? "preparing" : "finished"}\n${lines.join("\n")}${hint}`;
 }
 
+/** A task's clips are ready when every clip has a playable MP3. */
+function clipsReady(data: unknown): boolean {
+  const { clips } = summarizeMusicTask(data);
+  return clips.length > 0 && clips.every((clip) => clip.audio);
+}
+
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Read the poll window lazily so tests can shrink it. */
+function pollWindow(): { interval: number; max: number } {
+  return {
+    interval: Math.max(0, Number(process.env.BOTIFYR_MUSIC_POLL_INTERVAL_MS ?? 3000)),
+    max: Math.max(0, Number(process.env.BOTIFYR_MUSIC_POLL_MAX_MS ?? 15000)),
+  };
+}
+
 export function createCamxoraTools(store: Store, vaultKey: Buffer, userId: string): ToolDefinition[] {
   const modelParam = {
     type: "string",
@@ -395,16 +411,24 @@ export function createCamxoraTools(store: Store, vaultKey: Buffer, userId: strin
         const key = await camxoraKey(store, vaultKey, userId);
         if (!key) return notConnected();
         const id = String(args.taskId ?? "");
-        const res = await camxoraRaw(key, "GET", `/v1/task/${encodeURIComponent(id)}`);
-        return res.ok
-          ? { ok: true, output: musicTaskOutput(id, res.data) }
-          : { ok: false, output: `Camxora error ${res.status}: ${trim(res.data, 300)}` };
+        const { interval, max } = pollWindow();
+        const deadline = Date.now() + max;
+        for (;;) {
+          const res = await camxoraRaw(key, "GET", `/v1/task/${encodeURIComponent(id)}`);
+          if (!res.ok) return { ok: false, output: `Camxora error ${res.status}: ${trim(res.data, 300)}` };
+          // Wait inside the call so a generation that finishes in a few seconds
+          // is reported ready in one step, not by the agent polling every second.
+          if (clipsReady(res.data) || Date.now() >= deadline) {
+            return { ok: true, output: musicTaskOutput(id, res.data) };
+          }
+          await sleep(interval);
+        }
       },
     },
     {
       name: "music.tasks",
       description:
-        'Poll several Camxora tasks at once (from music.generate_batch). Reports each clip compactly with its playable MP3 "play" URL; present EVERY ✅ clip as its own `media` block (one per track).',
+        'Poll several Camxora tasks at once (from music.generate_batch). Waits briefly for the audio, then reports each clip compactly with its playable MP3 "play" URL; present EVERY ✅ clip as its own `media` block (one per track).',
       parameters: {
         type: "object",
         properties: {
@@ -419,11 +443,31 @@ export function createCamxoraTools(store: Store, vaultKey: Buffer, userId: strin
           ? args.taskIds.map(String).filter(Boolean).slice(0, MAX_BATCH)
           : [];
         if (ids.length === 0) return { ok: false, output: "Provide taskIds." };
-        const lines: string[] = [];
-        for (const id of ids) {
-          const res = await camxoraRaw(key, "GET", `/v1/task/${encodeURIComponent(id)}`);
-          lines.push(res.ok ? musicTaskOutput(id, res.data) : `${id}: Camxora error ${res.status}: ${trim(res.data, 200)}`);
+        const { interval, max } = pollWindow();
+        const deadline = Date.now() + max;
+        const latest = new Map<string, { ok: boolean; data: unknown }>();
+        for (;;) {
+          await Promise.all(
+            ids.map(async (id) => {
+              const res = await camxoraRaw(key, "GET", `/v1/task/${encodeURIComponent(id)}`);
+              latest.set(id, {
+                ok: res.ok,
+                data: res.ok ? res.data : `Camxora error ${res.status}: ${trim(res.data, 200)}`,
+              });
+            }),
+          );
+          const allReady = ids.every((id) => {
+            const entry = latest.get(id);
+            return entry?.ok === true && clipsReady(entry.data);
+          });
+          if (allReady || Date.now() >= deadline) break;
+          await sleep(interval);
         }
+        const lines = ids.map((id) => {
+          const entry = latest.get(id);
+          if (!entry) return `${id}: no response`;
+          return entry.ok ? musicTaskOutput(id, entry.data) : `${id}: ${entry.data}`;
+        });
         return { ok: true, output: lines.join("\n") };
       },
     },

@@ -128,30 +128,79 @@ describe("camxora music tools", () => {
   });
 
   it("keeps polling while a clip is complete but its MP3 copy isn't ready", async () => {
-    const store = new MemoryStore();
-    await connect(store, "k");
-    vi.spyOn(globalThis, "fetch").mockImplementation(
-      async () =>
-        new Response(
+    const saved = process.env.BOTIFYR_MUSIC_POLL_MAX_MS;
+    process.env.BOTIFYR_MUSIC_POLL_MAX_MS = "0";
+    try {
+      const store = new MemoryStore();
+      await connect(store, "k");
+      vi.spyOn(globalThis, "fetch").mockImplementation(
+        async () =>
+          new Response(
+            JSON.stringify({
+              status: "running",
+              result: {
+                clips: [
+                  {
+                    id: "a",
+                    status: "complete",
+                    audio_url: "https://studio-api.prod.suno.com/api/forbidden",
+                    media_urls: [{ url: "https://cdn.example/a.m4a" }],
+                  },
+                ],
+              },
+            }),
+            { status: 200 },
+          ),
+      );
+      const result = await tool("music.task", store).run({ taskId: "a" }, ctx);
+      expect(result.output).toContain("preparing");
+      expect(result.output).toContain("do not reply");
+    } finally {
+      if (saved === undefined) delete process.env.BOTIFYR_MUSIC_POLL_MAX_MS;
+      else process.env.BOTIFYR_MUSIC_POLL_MAX_MS = saved;
+    }
+  });
+
+  it("waits inside a single call until the MP3 is ready", async () => {
+    const savedInterval = process.env.BOTIFYR_MUSIC_POLL_INTERVAL_MS;
+    const savedMax = process.env.BOTIFYR_MUSIC_POLL_MAX_MS;
+    process.env.BOTIFYR_MUSIC_POLL_INTERVAL_MS = "1";
+    process.env.BOTIFYR_MUSIC_POLL_MAX_MS = "5000";
+    try {
+      const store = new MemoryStore();
+      await connect(store, "k");
+      let calls = 0;
+      vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+        calls += 1;
+        const ready = calls >= 2;
+        return new Response(
           JSON.stringify({
-            status: "running",
+            status: ready ? "complete" : "running",
             result: {
               clips: [
                 {
                   id: "a",
-                  status: "complete",
+                  title: "Song",
+                  status: ready ? "complete" : "streaming",
+                  stream_audio_url: ready ? "https://b2.example/a.mp3" : undefined,
                   audio_url: "https://studio-api.prod.suno.com/api/forbidden",
-                  media_urls: [{ url: "https://cdn.example/a.m4a" }],
                 },
               ],
             },
           }),
           { status: 200 },
-        ),
-    );
-    const result = await tool("music.task", store).run({ taskId: "a" }, ctx);
-    expect(result.output).toContain("preparing");
-    expect(result.output).toContain("do not reply");
+        );
+      });
+      const result = await tool("music.task", store).run({ taskId: "a" }, ctx);
+      // One agent call, two upstream polls: it waited for readiness.
+      expect(calls).toBe(2);
+      expect(result.output).toContain("https://b2.example/a.mp3");
+    } finally {
+      if (savedInterval === undefined) delete process.env.BOTIFYR_MUSIC_POLL_INTERVAL_MS;
+      else process.env.BOTIFYR_MUSIC_POLL_INTERVAL_MS = savedInterval;
+      if (savedMax === undefined) delete process.env.BOTIFYR_MUSIC_POLL_MAX_MS;
+      else process.env.BOTIFYR_MUSIC_POLL_MAX_MS = savedMax;
+    }
   });
 
   it("maps the spend tools to a money capability, leaving reads unmapped", () => {
