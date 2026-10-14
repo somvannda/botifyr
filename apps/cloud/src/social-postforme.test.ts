@@ -53,4 +53,21 @@ describe("post for me social client", () => {
     const client = createPostForMeSocialClient({ apiKey: "k", accountIds, fetchImpl });
     await expect(client.publish("x")).rejects.toThrow("Post for Me 401");
   });
+
+  it("discovers account ids from /social-accounts when none are given", async () => {
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const fetchImpl = (async (url: string, init: RequestInit) => {
+      calls.push({ url: String(url), init });
+      return {
+        ok: true,
+        json: async () =>
+          String(url).includes("/social-accounts") ? { data: [{ id: "sa_fb" }] } : { id: "p1" },
+      };
+    }) as unknown as typeof fetch;
+
+    const client = createPostForMeSocialClient({ apiKey: "k", accountIds: [], fetchImpl });
+    expect(await client.publish("Hi")).toContain("1 account");
+    expect(calls[0]!.url).toContain("/social-accounts");
+    expect(JSON.parse(String(calls[1]!.init.body)).social_accounts).toEqual(["sa_fb"]);
+  });
 });
