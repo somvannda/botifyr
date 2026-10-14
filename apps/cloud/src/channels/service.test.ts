@@ -5,6 +5,7 @@ import type { Task } from "@botifyr/shared";
 import type { RunnerDeps } from "../runner.js";
 import { registerWorkspaceBots } from "./index.js";
 import { ChannelService } from "./service.js";
+import { emit } from "../events.js";
 
 /** A fake channel adapter that lets the test deliver a message and read sends. */
 function fakeChannel() {
@@ -69,8 +70,9 @@ describe("ChannelService — company-bot routing", () => {
     // The thread belongs to the employee, so its role applies.
     const session = await store.getSession(calls[0]!.task.sessionId);
     expect(session?.botId).toBe("emp-sales");
-    // The channel got an acknowledgement.
-    expect(sent.some((entry) => /on it/i.test(entry.text))).toBe(true);
+    // A gated customer thread gets nothing outbound: the reply is drafted for
+    // the chair instead (docs/external-communications.md §5).
+    expect(sent).toHaveLength(0);
 
     // …and the external-comms spine exists: a contact + thread for this chat.
     const contacts = await store.listContacts("ws1");
@@ -96,6 +98,57 @@ describe("ChannelService — company-bot routing", () => {
     await tick();
 
     expect(await store.listContacts("ws1")).toHaveLength(1);
+  });
+
+  it("holds a gated reply for the chair, and sends it once approved", async () => {
+    const store = await seededWorkspace({ botId: "emp-sales" });
+    const calls: Array<{ deps: RunnerDeps; task: Task }> = [];
+    const service = new ChannelService(store, async (deps, task) => {
+      calls.push({ deps, task });
+    });
+    const { adapter, deliver, sent } = fakeChannel();
+    service.register(adapter, { key: "telegram:ws1", scope: { workspaceId: "ws1", botId: "emp-sales" } });
+
+    deliver("chat-9", "Do you deliver to Siem Reap?");
+    await tick();
+    emit({
+      type: "task.completed",
+      task: { ...calls[0]!.task, result: "Yes — next-day." },
+    });
+    await tick();
+
+    // Nothing reached the customer: the reply is staged for the chair (§5).
+    expect(sent).toHaveLength(0);
+    const thread = await store.getConversationByChat("telegram", "chat-9");
+    expect(thread?.pendingReply).toBe("Yes — next-day.");
+
+    // The chair approves → the reply is delivered to the customer.
+    const ok = await service.sendExternalReply("ws1", "telegram", "chat-9", thread!.pendingReply!);
+    expect(ok).toBe(true);
+    expect(sent.at(-1)?.text).toBe("Yes — next-day.");
+  });
+
+  it("sends a trusted customer's reply straight through", async () => {
+    const store = await seededWorkspace({ botId: "emp-sales" });
+    const calls: Array<{ task: Task }> = [];
+    const service = new ChannelService(store, async (_deps, task) => {
+      calls.push({ task });
+    });
+    const { adapter, deliver, sent } = fakeChannel();
+    service.register(adapter, { key: "telegram:ws1", scope: { workspaceId: "ws1", botId: "emp-sales" } });
+
+    deliver("chat-9", "first");
+    await tick();
+    const thread = await store.getConversationByChat("telegram", "chat-9");
+    await store.saveConversation({ ...thread!, trust: "trusted" });
+
+    deliver("chat-9", "second");
+    await tick();
+    emit({ type: "task.completed", task: { ...calls[1]!.task, result: "Sure!" } });
+    await tick();
+
+    // A trusted thread needs no approval, so the reply goes straight out (§5).
+    expect(sent.some((entry) => entry.text === "Sure!")).toBe(true);
   });
 
   it("keeps the legacy per-chat user when the channel is unscoped", async () => {

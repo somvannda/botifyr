@@ -14,6 +14,8 @@ interface ChannelConversation {
   sessionId: string;
   /** The employee this thread runs as, when the channel is company-scoped. */
   authorId?: string;
+  /** Whether outgoing replies are trusted, or held for the chair's approval (§5). */
+  trust?: "gated" | "trusted";
   pending?: { taskId: string; approvalId: string };
 }
 
@@ -37,8 +39,13 @@ const DECISIONS: Record<string, "allow" | "deny"> = {
 export class ChannelService {
   private readonly adapters = new Map<string, ChannelAdapter>();
   private readonly conversations = new Map<string, ChannelConversation>();
-  private readonly taskConversation = new Map<string, string>();
+  private readonly taskConversation = new Map<
+    string,
+    { key: string; channel: string; conversationId: string }
+  >();
   private readonly scopes = new Map<string, ChannelScope>();
+  /** workspace:platform → the registered adapter key, for chair-approved sends. */
+  private readonly scopedAdapters = new Map<string, string>();
   private started = false;
 
   constructor(
@@ -56,7 +63,10 @@ export class ChannelService {
   register(adapter: ChannelAdapter, opts: { key?: string; scope?: ChannelScope } = {}): void {
     const key = opts.key ?? adapter.name;
     this.adapters.set(key, adapter);
-    if (opts.scope) this.scopes.set(key, opts.scope);
+    if (opts.scope) {
+      this.scopes.set(key, opts.scope);
+      this.scopedAdapters.set(`${opts.scope.workspaceId}:${adapter.name}`, key);
+    }
     adapter.onMessage((message) => {
       void this.handle(key, message);
     });
@@ -125,7 +135,10 @@ export class ChannelService {
     // Keep the external-comms spine in sync (contact + thread, §4), now that the
     // thread's session exists so the UI can read it back.
     if (scope && identity) {
-      await this.upsertContactThread(scope, identity, message, conversation.sessionId).catch(() => {});
+      const thread = await this.upsertContactThread(scope, identity, message, conversation.sessionId).catch(
+        () => null,
+      );
+      if (thread) conversation.trust = thread.trust;
     }
 
     const decision = DECISIONS[message.text.trim().toLowerCase()];
@@ -167,11 +180,15 @@ export class ChannelService {
     await this.store.updateSession(session);
     await this.store.createTask(task);
     rememberTask(task.id, conversation.sessionId, conversation.userId);
-    this.taskConversation.set(task.id, conversationKey);
+    this.taskConversation.set(task.id, { key: conversationKey, channel, conversationId: message.conversationId });
     emit({ type: "session.updated", session });
     emit({ type: "task.created", task });
 
-    await adapter.send(message.conversationId, "On it — I'll report back here.");
+    // Internal chats get an immediate ack; external ones don't, because on a
+    // gated thread nothing reaches the customer until the chair approves (§5).
+    if (!(scope && identity)) {
+      await adapter.send(message.conversationId, "On it — I'll report back here.");
+    }
     void this
       .run(
         {
@@ -194,7 +211,7 @@ export class ChannelService {
     identity: { userId: string; authorId: string },
     message: ChannelMessage,
     sessionId?: string,
-  ): Promise<void> {
+  ): Promise<Conversation> {
     const now = new Date().toISOString();
     const externalId = message.senderId ?? message.conversationId;
     const existingContact = await this.store.getContactByExternal(scope.workspaceId, "telegram", externalId);
@@ -231,6 +248,33 @@ export class ChannelService {
       createdAt: existingConversation?.createdAt ?? now,
     };
     await this.store.saveConversation(conversation);
+    return conversation;
+  }
+
+  /**
+   * Hold a gated reply for the chair instead of sending it to the customer
+   * (docs/external-communications.md §5).
+   */
+  private async stagePendingReply(platform: string, externalChatId: string, text: string): Promise<void> {
+    const record = await this.store.getConversationByChat(platform, externalChatId).catch(() => null);
+    if (!record) return;
+    await this.store
+      .saveConversation({ ...record, pendingReply: text, lastMessageAt: new Date().toISOString() })
+      .catch(() => {});
+  }
+
+  /** Deliver an approved reply to a customer (the chair's approval route, §5). */
+  async sendExternalReply(
+    workspaceId: string,
+    platform: string,
+    externalChatId: string,
+    text: string,
+  ): Promise<boolean> {
+    const key = this.scopedAdapters.get(`${workspaceId}:${platform}`);
+    const adapter = key ? this.adapters.get(key) : undefined;
+    if (!adapter) return false;
+    await adapter.send(externalChatId, text);
+    return true;
   }
 
   private onEvent(event: ServerEvent): void {
@@ -239,16 +283,18 @@ export class ChannelService {
     else if (event.type === "task.completed" || event.type === "task.failed") taskId = event.task.id;
     if (!taskId) return;
 
-    const conversationKey = this.taskConversation.get(taskId);
-    if (!conversationKey) return;
-    const separator = conversationKey.indexOf(":");
-    const channel = conversationKey.slice(0, separator);
-    const conversationId = conversationKey.slice(separator + 1);
+    const target = this.taskConversation.get(taskId);
+    if (!target) return;
+    const { key: conversationKey, channel, conversationId } = target;
     const adapter = this.adapters.get(channel);
     const conversation = this.conversations.get(conversationKey);
     if (!adapter || !conversation) return;
 
+    const external = this.scopes.has(channel);
     if (event.type === "approval.requested") {
+      // Internal approvals are never surfaced into a customer's chat, and a
+      // customer must not be able to resolve one by typing "allow" (§5).
+      if (external) return;
       conversation.pending = { taskId, approvalId: event.approval.id };
       void adapter.send(
         conversationId,
@@ -257,7 +303,13 @@ export class ChannelService {
     } else if (event.type === "task.completed") {
       conversation.pending = undefined;
       this.taskConversation.delete(taskId);
-      void adapter.send(conversationId, `Done: ${event.task.result ?? "task completed"}`);
+      const text = event.task.result ?? "task completed";
+      // A gated thread is drafted for the chair, not sent to the customer (§5).
+      if (external && conversation.trust !== "trusted") {
+        void this.stagePendingReply(adapter.name, conversationId, text);
+      } else {
+        void adapter.send(conversationId, external ? text : `Done: ${text}`);
+      }
     } else if (event.type === "task.failed") {
       conversation.pending = undefined;
       this.taskConversation.delete(taskId);
