@@ -8,6 +8,7 @@ they land. Keep entries short; link code paths instead of explaining them.
 > and its features are the deferred consumer product: see
 > [`launch-cut.md`](launch-cut.md) and [`social-roadmap.md`](social-roadmap.md).
 > Chat between real friends and with bots **stays** in the launch.
+> Feature backlog for the two launch products: [`launch-plan.md`](launch-plan.md).
 
 ## Pending (requested, not finished)
 - [ ] **AI-company positioning** — the "AI workforce" category is real (NanoCorp,
