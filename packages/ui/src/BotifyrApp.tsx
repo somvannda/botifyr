@@ -304,6 +304,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [connectingApp, setConnectingApp] = useState<string | null>(null);
   const [marketQuery, setMarketQuery] = useState("");
   const [marketViewAll, setMarketViewAll] = useState(false);
+  const [marketTab, setMarketTab] = useState<"browse" | "installed">("browse");
   const [tokenInputFor, setTokenInputFor] = useState<string | null>(null);
   const [tokenValue, setTokenValue] = useState("");
   const [tokenError, setTokenError] = useState<string | null>(null);
@@ -3639,6 +3640,12 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
         `${app.name} ${app.category} ${app.desc}`.toLowerCase().includes(marketQuery.trim().toLowerCase()),
       )
     : [];
+  // Installed apps live in their own tab; the marketplace only shows what's left.
+  const installedApps = MARKETPLACE.filter(
+    (app) => app.provider && connections.some((entry) => entry.provider === app.provider),
+  );
+  const knownProviders = new Set(MARKETPLACE.map((app) => app.provider).filter(Boolean));
+  const otherConnections = connections.filter((entry) => !knownProviders.has(entry.provider));
 
   // Fetch any files a finished task produced (e.g. a YouTube download).
   useEffect(() => {
@@ -6529,7 +6536,30 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       {showConnectApps && (
         <div className="apps-overlay" onClick={() => setShowConnectApps(false)}>
           <div className="apps-panel marketplace" onClick={(event) => event.stopPropagation()}>
-            <div className="market-search-wrap">
+            <div className="market-tabs" role="tablist">
+              <button
+                className={`market-tab${marketTab === "browse" ? " active" : ""}`}
+                type="button"
+                role="tab"
+                aria-selected={marketTab === "browse"}
+                onClick={() => setMarketTab("browse")}
+              >
+                Marketplace
+              </button>
+              <button
+                className={`market-tab${marketTab === "installed" ? " active" : ""}`}
+                type="button"
+                role="tab"
+                aria-selected={marketTab === "installed"}
+                onClick={() => setMarketTab("installed")}
+              >
+                Installed{connections.length ? ` (${connections.length})` : ""}
+              </button>
+            </div>
+
+            {marketTab === "browse" ? (
+              <>
+                <div className="market-search-wrap">
               <SearchIcon size={15} />
               <input
                 className="market-search"
@@ -6571,6 +6601,10 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                     ? MARKETPLACE
                     : MARKETPLACE.filter((app) => app.section === section)
                 ).filter((app) => {
+                  // Installed apps live in the "Installed" tab, not the marketplace.
+                  if (app.provider && connections.some((entry) => entry.provider === app.provider)) {
+                    return false;
+                  }
                   if (!marketQuery.trim()) return true;
                   return `${app.name} ${app.category} ${app.desc}`
                     .toLowerCase()
@@ -6684,6 +6718,75 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                 );
               })}
             </div>
+              </>
+            ) : (
+              <div className="market-body">
+                {installedApps.length === 0 && otherConnections.length === 0 ? (
+                  <p className="market-empty">
+                    No apps connected yet. Add one from the Marketplace tab.
+                  </p>
+                ) : (
+                  <section className="market-section">
+                    <div className="market-section-head">
+                      <h3>Installed</h3>
+                    </div>
+                    <div className="market-rows">
+                      {installedApps.map((app) => (
+                        <div key={app.id} className="market-row">
+                          <span className="market-ico">{app.icon}</span>
+                          <span className="market-row-text">
+                            <span className="market-name">{app.name}</span>
+                            <span className="market-desc">{app.desc}</span>
+                          </span>
+                          <span className="market-added">
+                            <CheckIcon size={13} /> Added
+                          </span>
+                          {app.tokenApp && app.provider && (
+                            <button
+                              className="market-btn ghost small"
+                              type="button"
+                              onClick={() => void checkApp(app.provider!)}
+                            >
+                              Check
+                            </button>
+                          )}
+                          {app.provider && (
+                            <button
+                              className="market-remove"
+                              type="button"
+                              title="Remove"
+                              onClick={() => void disconnectApp(app.provider!)}
+                            >
+                              <CloseIcon size={12} />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                      {otherConnections.map((entry) => (
+                        <div key={entry.provider} className="market-row">
+                          <span className="market-ico">🔌</span>
+                          <span className="market-row-text">
+                            <span className="market-name">{entry.provider}</span>
+                            <span className="market-desc">Connected</span>
+                          </span>
+                          <span className="market-added">
+                            <CheckIcon size={13} /> Added
+                          </span>
+                          <button
+                            className="market-remove"
+                            type="button"
+                            title="Remove"
+                            onClick={() => void disconnectApp(entry.provider)}
+                          >
+                            <CloseIcon size={12} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
