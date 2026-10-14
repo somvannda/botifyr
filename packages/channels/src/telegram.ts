@@ -19,6 +19,16 @@ interface TelegramUpdate {
   };
 }
 
+/** The subset of Telegram's Chat object we read for contact identity. */
+interface TelegramChat {
+  /** Groups and channels carry a title. */
+  title?: string;
+  /** Private chats carry a first/last name. */
+  first_name?: string;
+  last_name?: string;
+  username?: string;
+}
+
 export function createTelegramChannel(options: TelegramOptions): ChannelAdapter {
   const api = (options.apiBase ?? "https://api.telegram.org").replace(/\/$/, "");
   const base = `${api}/bot${options.token}`;
@@ -63,6 +73,17 @@ export function createTelegramChannel(options: TelegramOptions): ChannelAdapter 
     },
     async send(conversationId, text) {
       await call("sendMessage", { chat_id: conversationId, text });
+    },
+    async getChat(conversationId) {
+      try {
+        const data = await call<{ result?: TelegramChat }>("getChat", { chat_id: conversationId });
+        const chat = data.result;
+        if (!chat) return null;
+        const name = chat.title ?? [chat.first_name, chat.last_name].filter(Boolean).join(" ");
+        return { name: name.trim() || undefined, handle: chat.username };
+      } catch {
+        return null;
+      }
     },
     async start() {
       running = true;

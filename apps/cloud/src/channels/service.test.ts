@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { ChannelAdapter, ChannelMessage } from "@botifyr/channels";
 import { MemoryStore } from "../store/memory.js";
 import type { Task } from "@botifyr/shared";
@@ -149,6 +149,30 @@ describe("ChannelService — company-bot routing", () => {
 
     // A trusted thread needs no approval, so the reply goes straight out (§5).
     expect(sent.some((entry) => entry.text === "Sure!")).toBe(true);
+  });
+
+  it("names a new contact from getChat, once per contact", async () => {
+    const store = await seededWorkspace({ botId: "emp-sales" });
+    const service = new ChannelService(store, async () => {});
+    const { adapter, deliver } = fakeChannel();
+    const getChat = vi.fn().mockResolvedValue({ name: "Sokha Chan", handle: "sokha" });
+    service.register(
+      { ...adapter, getChat },
+      { key: "telegram:ws1", scope: { workspaceId: "ws1", botId: "emp-sales" } },
+    );
+
+    deliver("chat-9", "hello");
+    await tick();
+
+    // The chair sees a person, not a chat id.
+    const contacts = await store.listContacts("ws1");
+    expect(contacts[0]?.name).toBe("Sokha Chan");
+    expect(contacts[0]?.handle).toBe("sokha");
+
+    deliver("chat-9", "again");
+    await tick();
+    // Enrichment is a one-off per contact, not a call per message.
+    expect(getChat).toHaveBeenCalledTimes(1);
   });
 
   it("keeps the legacy per-chat user when the channel is unscoped", async () => {
