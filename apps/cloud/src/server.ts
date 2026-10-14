@@ -97,8 +97,13 @@ import type {
   PollRecord,
   PostCommentRecord,
   PostRecord,
+  ProviderRole,
+  ProviderRoleConfig,
   ReactionType,
 } from "./store/types.js";
+
+/** Roles in the media provider registry (docs/video-translation.md §6). */
+const PROVIDER_ROLES = ["brain", "translator", "asr", "tts", "lipsync"] as const;
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -1599,6 +1604,38 @@ export async function buildServer(options: ServerOptions) {
       if (!removed) return reply.code(404).send({ error: "model not found" });
       auditAdmin(request, "modelPricing.delete", request.params.model);
       return reply.code(204).send();
+    },
+  );
+
+  /* Media-pipeline provider roles (video translation, docs/video-translation.md
+     §6). Admin sets which provider/model serves each role; API keys live in the
+     vault (`keyRef`). This is P0 of the video-translation build plan. */
+  app.get("/admin/provider-roles", { preHandler: requireAdmin }, async () => store.listProviderRoles());
+
+  app.put<{ Params: { role: string }; Body: Partial<ProviderRoleConfig> }>(
+    "/admin/provider-roles/:role",
+    { preHandler: requireAdmin },
+    async (request, reply) => {
+      const role = request.params.role;
+      if (!(PROVIDER_ROLES as readonly string[]).includes(role)) {
+        return reply.code(400).send({ error: "unknown role" });
+      }
+      const body = request.body ?? {};
+      const existing = await store.getProviderRole(role as ProviderRole);
+      const record: ProviderRoleConfig = {
+        role: role as ProviderRole,
+        provider: String(body.provider ?? existing?.provider ?? ""),
+        baseUrl: body.baseUrl ?? existing?.baseUrl,
+        model: body.model ?? existing?.model,
+        keyRef: body.keyRef ?? existing?.keyRef,
+        enabled: body.enabled ?? existing?.enabled ?? false,
+        isDefault: body.isDefault ?? existing?.isDefault ?? false,
+        pricing: body.pricing ?? existing?.pricing,
+        updatedAt: new Date().toISOString(),
+      };
+      await store.saveProviderRole(record);
+      auditAdmin(request, "providerRole.update", role);
+      return record;
     },
   );
 

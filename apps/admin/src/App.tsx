@@ -1,8 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AuthError, BotifyrClient } from "@botifyr/client";
 import type { AdminAuditEvent, AdminReport, AdminSkill, AdminUser } from "@botifyr/client";
-import type { MediaRecipe, ModelPricingRecord, PlatformSettings } from "@botifyr/shared";
+import type { MediaRecipe, ModelPricingRecord, PlatformSettings, ProviderRole, ProviderRoleConfig } from "@botifyr/shared";
 import { BotLogo, LogoutIcon } from "@botifyr/ui";
+
+/** Roles in the media provider registry (docs/video-translation.md §6). */
+const PROVIDER_ROLES: ProviderRole[] = ["brain", "translator", "asr", "tts", "lipsync"];
+
+/** Insert or replace one provider-role config in local UI state. */
+function upsertProvider(list: ProviderRoleConfig[], next: ProviderRoleConfig): ProviderRoleConfig[] {
+  const index = list.findIndex((p) => p.role === next.role);
+  if (index === -1) return [...list, next];
+  return list.map((p, i) => (i === index ? next : p));
+}
 
 /**
  * Platform admin console. Signs in with the same Google account, then requires
@@ -32,25 +42,29 @@ export function Admin() {
   const [audit, setAudit] = useState<AdminAuditEvent[]>([]);
   const [settings, setSettings] = useState<PlatformSettings | null>(null);
   const [pricing, setPricing] = useState<ModelPricingRecord[]>([]);
+  const [providers, setProviders] = useState<ProviderRoleConfig[]>([]);
   const [recipes, setRecipes] = useState<MediaRecipe[]>([]);
   const [reports, setReports] = useState<AdminReport[]>([]);
   const [openSkill, setOpenSkill] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const [userList, skillList, auditList, settingsData, pricingList, recipeList, reportList] = await Promise.all([
-      client.adminUsers(),
-      client.adminSkills(),
-      client.adminAudit(),
-      client.adminSettings(),
-      client.adminModelPricing(),
-      client.adminMediaRecipes(),
-      client.adminReports(),
-    ]);
+    const [userList, skillList, auditList, settingsData, pricingList, providerList, recipeList, reportList] =
+      await Promise.all([
+        client.adminUsers(),
+        client.adminSkills(),
+        client.adminAudit(),
+        client.adminSettings(),
+        client.adminModelPricing(),
+        client.adminProviderRoles(),
+        client.adminMediaRecipes(),
+        client.adminReports(),
+      ]);
     setUsers(userList);
     setSkills(skillList);
     setAudit(auditList);
     setSettings(settingsData);
     setPricing(pricingList);
+    setProviders(providerList);
     setRecipes(recipeList);
     setReports(reportList);
   }, [client]);
@@ -211,6 +225,16 @@ export function Admin() {
     setError(null);
     try {
       await client.adminDeleteModelPricing(model);
+      await load();
+    } catch (err: unknown) {
+      setError(messageOf(err));
+    }
+  }
+
+  async function saveProviderRow(record: ProviderRoleConfig) {
+    setError(null);
+    try {
+      await client.adminSaveProviderRole(record.role, record);
       await load();
     } catch (err: unknown) {
       setError(messageOf(err));
@@ -881,6 +905,101 @@ export function Admin() {
               >
                 Add model
               </button>
+            </div>
+
+            <div className="admin-card" style={{ marginTop: 14 }}>
+              <strong>Provider roles (video translation)</strong>
+              <p className="admin-muted" style={{ marginTop: 6 }}>
+                Which provider/model serves each stage of the media pipeline. API keys live in the vault
+                (<code>keyRef</code>) — never here. P0 of <code>docs/video-translation.md</code>.
+              </p>
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th>Role</th>
+                    <th>Provider</th>
+                    <th>Model</th>
+                    <th>Key ref</th>
+                    <th>¢/min</th>
+                    <th>On</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {PROVIDER_ROLES.map((role) => {
+                    const row: ProviderRoleConfig = providers.find((p) => p.role === role) ?? {
+                      role,
+                      provider: "",
+                      enabled: false,
+                      isDefault: false,
+                      updatedAt: "",
+                    };
+                    return (
+                      <tr key={role}>
+                        <td>{role}</td>
+                        <td>
+                          <input
+                            value={row.provider}
+                            placeholder="openai / elevenlabs / local"
+                            onChange={(e) =>
+                              setProviders((prev) => upsertProvider(prev, { ...row, provider: e.target.value }))
+                            }
+                          />
+                        </td>
+                        <td>
+                          <input
+                            value={row.model ?? ""}
+                            placeholder="model id"
+                            onChange={(e) =>
+                              setProviders((prev) => upsertProvider(prev, { ...row, model: e.target.value }))
+                            }
+                          />
+                        </td>
+                        <td>
+                          <input
+                            value={row.keyRef ?? ""}
+                            placeholder="vault secret name"
+                            onChange={(e) =>
+                              setProviders((prev) => upsertProvider(prev, { ...row, keyRef: e.target.value }))
+                            }
+                          />
+                        </td>
+                        <td>
+                          <input
+                            type="number"
+                            value={row.pricing?.perMinuteCents ?? ""}
+                            onChange={(e) =>
+                              setProviders((prev) =>
+                                upsertProvider(prev, {
+                                  ...row,
+                                  pricing:
+                                    e.target.value === ""
+                                      ? undefined
+                                      : { perMinuteCents: Number(e.target.value) },
+                                }),
+                              )
+                            }
+                          />
+                        </td>
+                        <td>
+                          <input
+                            type="checkbox"
+                            checked={row.enabled}
+                            onChange={(e) =>
+                              setProviders((prev) => upsertProvider(prev, { ...row, enabled: e.target.checked }))
+                            }
+                          />
+                        </td>
+                        <td>
+                          <button className="ghost small" type="button" onClick={() => void saveProviderRow(row)}>
+                            Save
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
         )}

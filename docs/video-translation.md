@@ -1,7 +1,7 @@
 # Video translation (dubbing + subtitles + lip-sync)
 
-> **Status:** requirements / design draft — nothing built yet.
-> Captured from the owner's request so we can scope it and decide the build order.
+> **Status:** P0 shipped (the admin role-based provider registry); P1+ are design
+> only. Captured from the owner's request so we can scope it and decide the build order.
 > Related: [`extractors.md`](extractors.md) (downloading source video),
 > [`botifyr-blueprint.md`](botifyr-blueprint.md) (agent + model router),
 > [`cost-controls.md`](cost-controls.md) (budgets), [`computer.md`](computer.md) (sandbox).
@@ -330,7 +330,7 @@ upfront: *"your machine has no GPU — lip-sync will be skipped."*
 
 | Phase | Deliverable | Depends on |
 | --- | --- | --- |
-| **P0** | Role-based **provider registry** (brain / translator / ASR / TTS / lip-sync) + admin keys + per-media-minute pricing. No media yet. | billing, vault |
+| **P0** ✅ | Role-based **provider registry** (brain / translator / ASR / TTS / lip-sync) + admin keys + per-media-minute pricing. No media yet. Shipped: `provider_roles` + `GET/PUT /admin/provider-roles` + admin UI. | billing, vault |
 | **P1** | **GPU probe + job queue + local desktop worker** (`apps/node`-adjacent). The spine every later stage rides on. | node host, media volume |
 | **P2** | `video.transcribe` + `video.subtitle` — first real output (`.srt`), reuses the existing download path. | extractors, ASR |
 | **P3** | `video.dub` — aligned TTS with stock voices, music/sfx separation + mix. | P2, TTS |
