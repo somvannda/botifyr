@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
-const { invokeNode } = vi.hoisted(() => ({ invokeNode: vi.fn() }));
-vi.mock("./nodes.js", () => ({ invokeNode }));
+const { invokeNode, invokeNodeStream } = vi.hoisted(() => ({
+  invokeNode: vi.fn(),
+  invokeNodeStream: vi.fn(),
+}));
+vi.mock("./nodes.js", () => ({ invokeNode, invokeNodeStream }));
 
 import { createNodeProvider } from "./node-provider.js";
 
@@ -20,6 +23,33 @@ describe("node provider", () => {
       "u1",
       "model.complete",
       expect.objectContaining({ model: "gpt-4o-mini", baseUrl: "https://api.openai.com/v1" }),
+      180_000,
+    );
+  });
+
+  it("forwards streamed deltas via completeStream", async () => {
+    invokeNodeStream.mockImplementationOnce(
+      async (
+        _user: string,
+        _action: string,
+        _args: unknown,
+        onDelta: ((text: string) => void) | undefined,
+      ) => {
+        onDelta?.("he");
+        onDelta?.("llo");
+        return { ok: true, output: JSON.stringify({ text: "hello", toolCalls: [] }) };
+      },
+    );
+    const provider = createNodeProvider("u1", { provider: "openai", model: "m", baseUrl: "https://x" });
+    const seen: string[] = [];
+    const res = await provider.completeStream?.({ messages: [], tools: [] }, (d) => seen.push(d));
+    expect(seen).toEqual(["he", "llo"]);
+    expect(res?.text).toBe("hello");
+    expect(invokeNodeStream).toHaveBeenCalledWith(
+      "u1",
+      "model.complete",
+      expect.objectContaining({ stream: true }),
+      expect.any(Function),
       180_000,
     );
   });

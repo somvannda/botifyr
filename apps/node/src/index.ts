@@ -211,6 +211,7 @@ async function shellAction(
  * KEY is read from the node's environment and never sent to the cloud.
  */
 async function modelAction(
+  id: string,
   action: string,
   args: Record<string, unknown>,
 ): Promise<{ ok: boolean; output: string }> {
@@ -228,12 +229,19 @@ async function modelAction(
     apiKey: key || undefined,
     demoUrl: "http://localhost",
   });
-  const response = await provider.complete({
+  const input = {
     messages: (args.messages ?? []) as AgentMessage[],
     tools: (args.tools ?? []) as ToolSpec[],
     maxTokens: typeof args.maxTokens === "number" ? args.maxTokens : undefined,
     toolChoice: args.toolChoice as "auto" | "none" | "required" | undefined,
-  });
+  };
+  // Stream deltas back to the cloud as they arrive when asked.
+  const response =
+    args.stream === true && provider.completeStream
+      ? await provider.completeStream(input, (delta) =>
+          socket.send(JSON.stringify({ type: "node.stream", id, delta })),
+        )
+      : await provider.complete(input);
   return { ok: true, output: JSON.stringify(response) };
 }
 
@@ -258,7 +266,7 @@ socket.onmessage = async (message) => {
     const action = String(msg.action);
     const shellActions = ["exec", "read", "write", "list", "open"];
     const result = action.startsWith("model.")
-      ? await modelAction(action, msg.args ?? {})
+      ? await modelAction(msg.id, action, msg.args ?? {})
       : shellActions.includes(action)
         ? await shellAction(action, msg.args ?? {})
         : await browserAction(action, msg.args ?? {});
