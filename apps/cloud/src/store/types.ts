@@ -754,6 +754,8 @@ export interface Store {
   listContacts(workspaceId: string): Promise<ContactRecord[]>;
   saveConversation(record: ConversationRecord): Promise<void>;
   getConversationByChat(platform: string, externalChatId: string): Promise<ConversationRecord | null>;
+  getConversation(id: string): Promise<ConversationRecord | null>;
+  listExternalConversations(workspaceId: string): Promise<ConversationRecord[]>;
   deleteWorkspace(ownerId: string, id: string): Promise<boolean>;
 
   setBotRole(record: BotRoleRecord): Promise<void>;

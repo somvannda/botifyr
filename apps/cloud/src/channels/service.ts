@@ -104,9 +104,6 @@ export class ChannelService {
     const identity = scope
       ? scopedChannelIdentity(scope, await this.store.getWorkspace(scope.workspaceId).catch(() => null))
       : null;
-    if (scope && identity) {
-      await this.upsertContactThread(scope, identity, message).catch(() => {});
-    }
 
     if (!conversation) {
       const userId =
@@ -123,6 +120,12 @@ export class ChannelService {
       rememberSession(sessionId, userId);
       conversation = { userId, sessionId, authorId: identity?.authorId };
       this.conversations.set(conversationKey, conversation);
+    }
+
+    // Keep the external-comms spine in sync (contact + thread, §4), now that the
+    // thread's session exists so the UI can read it back.
+    if (scope && identity) {
+      await this.upsertContactThread(scope, identity, message, conversation.sessionId).catch(() => {});
     }
 
     const decision = DECISIONS[message.text.trim().toLowerCase()];
@@ -190,6 +193,7 @@ export class ChannelService {
     scope: ChannelScope,
     identity: { userId: string; authorId: string },
     message: ChannelMessage,
+    sessionId?: string,
   ): Promise<void> {
     const now = new Date().toISOString();
     const externalId = message.senderId ?? message.conversationId;
@@ -221,6 +225,7 @@ export class ChannelService {
       externalChatId: message.conversationId,
       kind: "dm",
       assignedBotId: existingConversation?.assignedBotId ?? identity.authorId,
+      sessionId: sessionId ?? existingConversation?.sessionId,
       trust: existingConversation?.trust ?? "gated",
       lastMessageAt: now,
       createdAt: existingConversation?.createdAt ?? now,

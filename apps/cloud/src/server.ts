@@ -3222,6 +3222,67 @@ export async function buildServer(options: ServerOptions) {
     },
   );
 
+  /** The company's external conversations, each with its contact (§4). */
+  app.get<{ Params: { id: string } }>(
+    "/v1/workspaces/:id/conversations",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const workspace = await store.getWorkspace(request.params.id);
+      if (!workspace || workspace.ownerId !== userId) {
+        return reply.code(404).send({ error: "workspace not found" });
+      }
+      const [conversations, contacts] = await Promise.all([
+        store.listExternalConversations(workspace.id),
+        store.listContacts(workspace.id),
+      ]);
+      const contactById = new Map(contacts.map((contact) => [contact.id, contact]));
+      return conversations
+        .sort((a, b) => b.lastMessageAt.localeCompare(a.lastMessageAt))
+        .map((conversation) => ({ conversation, contact: contactById.get(conversation.contactId) ?? null }));
+    },
+  );
+
+  /** An external conversation's transcript, from its channel session. */
+  app.get<{ Params: { id: string; cid: string } }>(
+    "/v1/workspaces/:id/conversations/:cid/messages",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const workspace = await store.getWorkspace(request.params.id);
+      if (!workspace || workspace.ownerId !== userId) {
+        return reply.code(404).send({ error: "workspace not found" });
+      }
+      const conversation = await store.getConversation(request.params.cid);
+      if (!conversation || conversation.workspaceId !== workspace.id) {
+        return reply.code(404).send({ error: "conversation not found" });
+      }
+      if (!conversation.sessionId) return [];
+      const session = await store.getSession(conversation.sessionId);
+      return session?.messages ?? [];
+    },
+  );
+
+  /** Trust (or gate) a customer's thread — the per-customer approval decision (§5). */
+  app.patch<{ Params: { id: string; cid: string }; Body: { trust?: string } }>(
+    "/v1/workspaces/:id/conversations/:cid",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const workspace = await store.getWorkspace(request.params.id);
+      if (!workspace || workspace.ownerId !== userId) {
+        return reply.code(404).send({ error: "workspace not found" });
+      }
+      const conversation = await store.getConversation(request.params.cid);
+      if (!conversation || conversation.workspaceId !== workspace.id) {
+        return reply.code(404).send({ error: "conversation not found" });
+      }
+      conversation.trust = request.body?.trust === "trusted" ? "trusted" : "gated";
+      await store.saveConversation(conversation);
+      return conversation;
+    },
+  );
+
   /** Recent agent runs for the company — real execution, including failures. */
   app.get<{ Params: { id: string } }>(
     "/v1/workspaces/:id/activity",
