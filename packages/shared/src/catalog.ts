@@ -44,6 +44,7 @@ export const CAPABILITIES: CapabilityDef[] = [
   { id: "finance.read", kind: "tool", risk: "none", description: "Read the spend ledger" },
   { id: "ads.manage", kind: "connector", risk: "money", description: "Create / boost ads" },
   { id: "payments.charge", kind: "connector", risk: "money", description: "Charge a customer" },
+  { id: "music.generate", kind: "connector", risk: "money", description: "Generate music (spends credits)" },
 ];
 
 /** Skill ids the catalog roles draw from (merged with the built-in skill packs later). */

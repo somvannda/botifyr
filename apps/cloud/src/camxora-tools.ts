@@ -19,6 +19,9 @@ const BASE = (process.env.BOTIFYR_CAMXORA_URL ?? "https://musicapi.camxora.com")
 /** Model keys the API accepts (docs → AI Model Versions). */
 const MODELS = ["chirp-hawk", "chirp-goose", "chirp-hawk-wild"] as const;
 
+/** Max songs one `music.generate_batch` may start (bounds credits in one approval). */
+const MAX_BATCH = Math.max(1, Math.min(20, Number(process.env.BOTIFYR_MUSIC_MAX_BATCH ?? 10)));
+
 async function camxoraKey(store: Store, vaultKey: Buffer, userId: string): Promise<string | null> {
   const record = await store.getConnection(userId, "camxora");
   if (!record) return null;
@@ -37,12 +40,13 @@ function notConnected(): { ok: boolean; output: string } {
   };
 }
 
-async function camxoraCall(
+/** One Camxora call, returning the parsed body for callers that need fields. */
+async function camxoraRaw(
   key: string,
   method: "GET" | "POST",
   path: string,
   body?: unknown,
-): Promise<{ ok: boolean; output: string }> {
+): Promise<{ ok: boolean; status: number; data: unknown }> {
   try {
     const response = await fetch(`${BASE}${path}`, {
       method,
@@ -59,17 +63,37 @@ async function camxoraCall(
     } catch {
       /* keep raw text */
     }
-    const trimmed =
-      typeof data === "string" ? data.slice(0, 800) : JSON.stringify(data).slice(0, 1500);
-    return response.ok
-      ? { ok: true, output: trimmed }
-      : { ok: false, output: `Camxora error ${response.status}: ${trimmed}` };
+    return { ok: response.ok, status: response.status, data };
   } catch (error) {
-    return {
-      ok: false,
-      output: `Camxora request failed: ${error instanceof Error ? error.message : String(error)}`,
-    };
+    return { ok: false, status: 0, data: error instanceof Error ? error.message : String(error) };
   }
+}
+
+/** Serialize a result into a bounded string for the model context. */
+function trim(data: unknown, max = 1500): string {
+  return typeof data === "string" ? data.slice(0, 800) : JSON.stringify(data).slice(0, max);
+}
+
+async function camxoraCall(
+  key: string,
+  method: "GET" | "POST",
+  path: string,
+  body?: unknown,
+): Promise<{ ok: boolean; output: string }> {
+  const res = await camxoraRaw(key, method, path, body);
+  return res.ok
+    ? { ok: true, output: trim(res.data) }
+    : { ok: false, output: `Camxora error ${res.status}: ${trim(res.data)}` };
+}
+
+/** Best-effort task id from a create response (Camxora native or sunoapi shape). */
+function taskIdOf(data: unknown): string | null {
+  if (!data || typeof data !== "object") return null;
+  const pick = (value: unknown): string | null =>
+    typeof value === "string" && value ? value : typeof value === "number" ? String(value) : null;
+  const obj = data as Record<string, unknown>;
+  const nested = (obj.data ?? {}) as Record<string, unknown>;
+  return pick(obj.task_id) ?? pick(obj.taskId) ?? pick(obj.id) ?? pick(nested.task_id) ?? pick(nested.taskId) ?? null;
 }
 
 export function createCamxoraTools(store: Store, vaultKey: Buffer, userId: string): ToolDefinition[] {
@@ -118,6 +142,49 @@ export function createCamxoraTools(store: Store, vaultKey: Buffer, userId: strin
           custom_mode: args.customMode,
           model: args.model,
         });
+      },
+    },
+    {
+      name: "music.generate_batch",
+      description:
+        "Start several songs (same prompt/style) in ONE approval instead of calling music.generate repeatedly. Returns a task id per generation; poll them together with music.tasks.",
+      parameters: {
+        type: "object",
+        properties: {
+          prompt: { type: "string", description: "Style/description, or lyrics in custom mode." },
+          count: { type: "number", description: `How many to generate (1–${MAX_BATCH}).` },
+          instrumental: { type: "boolean", description: "Generate instrumentals only." },
+          model: modelParam,
+        },
+        required: ["prompt", "count"],
+      },
+      requiresApproval: true,
+      run: async (args) => {
+        const key = await camxoraKey(store, vaultKey, userId);
+        if (!key) return notConnected();
+        const requested = Math.floor(Number(args.count ?? 1));
+        const count = Math.max(1, Math.min(MAX_BATCH, Number.isFinite(requested) ? requested : 1));
+        const tasks: string[] = [];
+        for (let index = 0; index < count; index += 1) {
+          const res = await camxoraRaw(key, "POST", "/v1/music", {
+            gpt_description_prompt: String(args.prompt ?? ""),
+            instrumental: args.instrumental,
+            model: args.model,
+          });
+          if (!res.ok) {
+            return {
+              ok: false,
+              output: `Batch stopped after ${index}/${count} (−${count - index} not started). ${trim(res.data, 300)}`,
+            };
+          }
+          tasks.push(taskIdOf(res.data) ?? `? ${trim(res.data, 160)}`);
+        }
+        return {
+          ok: true,
+          output:
+            `Started ${count} generation(s) (≈${count * 10} credits). Poll with music.tasks:\n` +
+            tasks.map((task, index) => `${index + 1}. ${task}`).join("\n"),
+        };
       },
     },
     {
@@ -258,6 +325,32 @@ export function createCamxoraTools(store: Store, vaultKey: Buffer, userId: strin
       },
     },
     {
+      name: "music.tasks",
+      description:
+        "Poll several Camxora tasks at once (from music.generate_batch). Returns each task's status/result; present finished tracks as `media` blocks.",
+      parameters: {
+        type: "object",
+        properties: {
+          taskIds: { type: "array", items: { type: "string" }, description: "Task ids to poll." },
+        },
+        required: ["taskIds"],
+      },
+      run: async (args) => {
+        const key = await camxoraKey(store, vaultKey, userId);
+        if (!key) return notConnected();
+        const ids = Array.isArray(args.taskIds)
+          ? args.taskIds.map(String).filter(Boolean).slice(0, MAX_BATCH)
+          : [];
+        if (ids.length === 0) return { ok: false, output: "Provide taskIds." };
+        const lines: string[] = [];
+        for (const id of ids) {
+          const res = await camxoraCall(key, "GET", `/v1/task/${encodeURIComponent(id)}`);
+          lines.push(`- ${id}: ${res.output}`);
+        }
+        return { ok: true, output: lines.join("\n") };
+      },
+    },
+    {
       name: "music.get",
       description:
         "Call any Camxora GET endpoint (read-only) not covered by a specific tool — e.g. clip detail, stems/video/midi/cover status, WAV detail. Path begins with '/'.",
@@ -302,6 +395,7 @@ export function createCamxoraTools(store: Store, vaultKey: Buffer, userId: strin
 export const CAMXORA_TOOL_NAMES = [
   "music.credits",
   "music.generate",
+  "music.generate_batch",
   "music.extend",
   "music.cover",
   "music.lyrics",
@@ -310,6 +404,7 @@ export const CAMXORA_TOOL_NAMES = [
   "music.wav_status",
   "music.video",
   "music.task",
+  "music.tasks",
   "music.get",
   "music.request",
 ] as const;

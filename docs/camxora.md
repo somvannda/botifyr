@@ -45,6 +45,7 @@ blocking the connection.
 | --- | --- | --- |
 | `music.credits` | `GET /v1/credits` | — |
 | `music.generate` | `POST /v1/music` | ✅ |
+| `music.generate_batch` | `POST /v1/music` ×N | ✅ (one approval) |
 | `music.extend` | `POST /v1/music/extend` | ✅ |
 | `music.cover` | `POST /v1/music/cover` | ✅ |
 | `music.lyrics` | `POST /v1/lyrics` | — (free) |
@@ -53,6 +54,7 @@ blocking the connection.
 | `music.wav_status` | `GET /v1/music/wav/:id` | — |
 | `music.video` | `POST /v1/mp4/generate` | ✅ |
 | `music.task` | `GET /v1/task/:id` | — |
+| `music.tasks` | `GET /v1/task/:id` ×N | — |
 | `music.get` | any `GET` path | — |
 | `music.request` | any `POST` path | ✅ |
 
@@ -66,6 +68,14 @@ use well, with a generic escape hatch.
 **Credits = money → approval.** Every tool that spends credits
 (`requiresApproval`) pauses for the user before it runs, per
 [`product-plan.md`](product-plan.md) and the trust ladder.
+
+**Batch, one approval.** For "generate N songs" the agent uses
+`music.generate_batch` (`{ prompt, count }`, clamped to `BOTIFYR_MUSIC_MAX_BATCH`,
+default 10) — it starts all N in a **single** approval and returns a task id per
+generation, polled together with `music.tasks`. Without it, N songs would mean N
+separate approval prompts. The spend tools map to the `music.generate` capability
+(risk `money`), so the trust ladder can promote them once proven; reads
+(credits/task/get/wav_status) stay ungated and free.
 
 **Async by design.** Generation returns a task id; the bot polls with
 `music.task` until the result carries playback URLs. Callbacks
