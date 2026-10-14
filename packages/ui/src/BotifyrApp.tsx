@@ -6738,9 +6738,6 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                             <span className="market-name">{app.name}</span>
                             <span className="market-desc">{app.desc}</span>
                           </span>
-                          <span className="market-added">
-                            <CheckIcon size={13} /> Added
-                          </span>
                           {app.tokenApp && app.provider && (
                             <button
                               className="market-btn ghost small"
@@ -6768,9 +6765,6 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                           <span className="market-row-text">
                             <span className="market-name">{entry.provider}</span>
                             <span className="market-desc">Connected</span>
-                          </span>
-                          <span className="market-added">
-                            <CheckIcon size={13} /> Added
                           </span>
                           <button
                             className="market-remove"
