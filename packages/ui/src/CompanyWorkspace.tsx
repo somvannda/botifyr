@@ -238,7 +238,7 @@ export function CompanyWorkspace({
           client.getWorkspaceInbox(id).catch(() => null),
           client.listExternalConversations(id).catch(() => []),
           client.listConnectorPreferences(id).catch(() => []),
-          client.listConnections().catch(() => []),
+          client.listConnections(id).catch(() => []),
         ]);
         setItems(it);
         setNeeds(nd);
@@ -1707,6 +1707,9 @@ export function CompanyWorkspace({
                                     { value: "trusted", label: "trusted" },
                                   ]}
                                 />
+                              )}
+                              {granted && eligible.length === 0 && (
+                                <span className="cws-chip-app none">no connected app yet</span>
                               )}
                               {granted && eligible.length === 1 && (
                                 <span className="cws-chip-app static">{eligible[0]?.name}</span>

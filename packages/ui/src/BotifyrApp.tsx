@@ -310,6 +310,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [marketViewAll, setMarketViewAll] = useState(false);
   const [marketTab, setMarketTab] = useState<"browse" | "installed">("browse");
   const [tokenInputFor, setTokenInputFor] = useState<string | null>(null);
+  /** Which company a new connection belongs to ("" = personal). */
+  const [connectWorkspaceId, setConnectWorkspaceId] = useState("");
   const [tokenValue, setTokenValue] = useState("");
   const [tokenError, setTokenError] = useState<string | null>(null);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
@@ -2886,11 +2888,12 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
         setTokenError(check.message);
         return;
       }
-      await client.connectToken(provider, value);
+      await client.connectToken(provider, value, connectWorkspaceId || undefined);
       setConnections(await client.listConnections());
       const app = MARKETPLACE.find((entry) => entry.provider === provider);
       setTokenInputFor(null);
       setTokenValue("");
+      setConnectWorkspaceId("");
       pushToast({ kind: "message", title: `${app?.name ?? "App"} connected`, body: check.message });
     } catch (err: unknown) {
       setTokenError(messageOf(err));
@@ -6917,6 +6920,21 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
               Paste your {MARKETPLACE.find((a) => a.provider === tokenInputFor)?.credentialLabel ?? "token"} to
               connect. We check it with the provider first; it is stored encrypted and never shared with the model.
             </p>
+            {workspaces.length > 0 && (
+              <div className="connect-workspace">
+                <span className="connect-workspace-label">Connect for</span>
+                <Select
+                  value={connectWorkspaceId}
+                  disabled={connectingApp === tokenInputFor}
+                  onChange={(next) => setConnectWorkspaceId(next)}
+                  ariaLabel="Connect for"
+                  options={[
+                    { value: "", label: "Personal (just me)" },
+                    ...workspaces.map((company) => ({ value: company.id, label: company.name })),
+                  ]}
+                />
+              </div>
+            )}
             <div className="market-token">
               <input
                 type="password"

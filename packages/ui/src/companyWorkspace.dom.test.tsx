@@ -579,6 +579,43 @@ describe("CompanyWorkspace (DOM)", () => {
     });
   });
 
+  it("flags a granted capability that no connected app can serve", async () => {
+    const employee = {
+      workspaceId: "ws1",
+      botId: "bot2",
+      title: "Head of Marketing",
+      department: "marketing",
+      hiredAt: "",
+    };
+    const withTeam = { ...company, roles: [employee, ...company.roles] } as WorkspaceWithRoles;
+    const client = fakeClient({
+      listCapabilityGrants: vi.fn().mockResolvedValue([
+        {
+          workspaceId: "ws1",
+          subject: "role:Head of Marketing",
+          capability: "ads.manage",
+          granted: true,
+          updatedAt: "",
+        },
+      ]),
+      // Publora publishes, but it cannot manage ads.
+      listConnections: vi.fn().mockResolvedValue([{ provider: "publora" }]),
+    });
+    render(
+      <CompanyWorkspace
+        client={client}
+        companies={[withTeam]}
+        bots={[{ id: "bot2", name: "Andres" } as never]}
+        onOpenOffice={() => {}}
+        onCreated={() => {}}
+      />,
+    );
+    fireEvent.click(await screen.findByRole("tab", { name: "Team" }));
+    await waitFor(() => {
+      expect(document.querySelector(".cws-chip-app.none")).toBeTruthy();
+    });
+  });
+
   it("renders wiki files as readable markdown, not raw source", async () => {
     const client = fakeClient({
       listWorkspaceFiles: vi.fn().mockResolvedValue([
