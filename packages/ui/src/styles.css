@@ -5415,6 +5415,43 @@ body {
   max-height: 360px;
 }
 
+/* Structured Results list (generated tracks). */
+.md-results {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.md-results-title {
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+
+.md-result {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-bubble);
+  padding: var(--space-3);
+}
+
+.md-media {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.md-media-cover {
+  width: 72px;
+  height: 72px;
+  border-radius: var(--radius-control);
+  object-fit: cover;
+}
+
+.md-media-title {
+  font-size: var(--text-lg);
+  font-weight: 500;
+}
+
 .md code {
   font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
   font-size: var(--text-md);

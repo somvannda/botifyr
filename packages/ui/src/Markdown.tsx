@@ -31,11 +31,13 @@ const VIDEO_URL_RE = /\.(?:mp4|webm|mov|m4v|ogv)(?:[?#].*)?$/i;
 function MediaPlayer({
   stream,
   download,
+  cover,
   kind,
   title,
 }: {
   stream: string;
   download?: string;
+  cover?: string;
   kind: "audio" | "video";
   title?: string;
 }) {
@@ -45,6 +47,7 @@ function MediaPlayer({
   const mediaProps = { src, controls: true, preload: "metadata" as const, onError: () => setFailed(true) };
   return (
     <span className="md-media">
+      {cover && <img className="md-media-cover" src={cover} alt="" loading="lazy" />}
       {title && <span className="md-media-title">{title}</span>}
       {kind === "audio" ? <audio className="md-audio" {...mediaProps} /> : <video className="md-video" {...mediaProps} />}
       <a className="md-download" href={href} download target="_blank" rel="noreferrer">
@@ -71,25 +74,75 @@ function mediaPlayer(url: string, key: string): ReactNode | null {
  *
  * The player starts on `stream` and falls back to `download` when it expires.
  */
-function parseMediaBlock(segment: string): { stream: string; download?: string; kind: "audio" | "video"; title?: string } | null {
+function parseMediaBlock(segment: string): { stream: string; download?: string; cover?: string; kind: "audio" | "video"; title?: string } | null {
   const nl = segment.indexOf("\n");
   if (nl === -1 || segment.slice(0, nl).trim() !== "media") return null;
   try {
     const raw = JSON.parse(segment.slice(nl + 1).trim()) as {
       stream?: unknown;
       download?: unknown;
+      cover?: unknown;
       title?: unknown;
     };
     if (typeof raw.stream !== "string" || !raw.stream) return null;
     return {
       stream: raw.stream,
       download: typeof raw.download === "string" ? raw.download : undefined,
+      cover: typeof raw.cover === "string" ? raw.cover : undefined,
       kind: VIDEO_URL_RE.test(raw.stream) ? "video" : "audio",
       title: typeof raw.title === "string" ? raw.title : undefined,
     };
   } catch {
     return null;
   }
+}
+
+export interface MediaTrack {
+  stream: string;
+  download?: string;
+  cover?: string;
+  title?: string;
+  kind: "audio" | "video";
+}
+
+/**
+ * Pull the fenced `media` blocks out of a message so they can be shown as a
+ * dedicated Results list instead of inline. The remaining prose is returned as
+ * `body` (with the blocks removed).
+ */
+export function parseMediaBlocks(text: string): { body: string; tracks: MediaTrack[] } {
+  const tracks: MediaTrack[] = [];
+  const body = text
+    .replace(/```media[^\n]*\n([\s\S]*?)```/g, (whole, inner: string) => {
+      const parsed = parseMediaBlock(`media\n${String(inner).trim()}`);
+      if (!parsed) return whole;
+      tracks.push(parsed);
+      return "";
+    })
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return { body, tracks };
+}
+
+/** A structured "Results" list for generated tracks (title, cover, player, download). */
+export function MediaResults({ tracks }: { tracks: MediaTrack[] }): ReactNode {
+  if (tracks.length === 0) return null;
+  return (
+    <div className="md-results">
+      <div className="md-results-title">{tracks.length === 1 ? "Result" : `Results (${tracks.length})`}</div>
+      {tracks.map((track, index) => (
+        <div className="md-result" key={`${track.stream}-${index}`}>
+          <MediaPlayer
+            stream={track.stream}
+            download={track.download}
+            cover={track.cover}
+            kind={track.kind}
+            title={track.title}
+          />
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function fileRef(name: string, key: string, onFileRef: (name: string) => void): ReactNode {
