@@ -25,6 +25,7 @@ function fakeClient(overrides: Record<string, unknown> = {}): BotifyrClient {
     listProposals: vi.fn().mockResolvedValue([]),
     listWorkspaceActivity: vi.fn().mockResolvedValue([]),
     getWorkspaceInbox: vi.fn().mockResolvedValue(null),
+    listExternalConversations: vi.fn().mockResolvedValue([]),
     getWorkspace: vi.fn().mockResolvedValue(null),
   };
   return { ...base, ...overrides } as unknown as BotifyrClient;
@@ -155,6 +156,54 @@ describe("CompanyWorkspace (DOM)", () => {
     expect(await screen.findByText(/blocked:/i)).toBeTruthy();
     expect(screen.getByText("A task on the board is blocked.")).toBeTruthy();
     expect(screen.getByRole("button", { name: /open board/i })).toBeTruthy();
+  });
+
+  it("lists external conversations and lets the chair trust a customer", async () => {
+    const threads = [
+      {
+        conversation: {
+          id: "conv1",
+          workspaceId: "ws1",
+          contactId: "ct1",
+          platform: "telegram",
+          externalChatId: "555",
+          assignedBotId: "bot1",
+          trust: "gated",
+          lastMessageAt: "2026-01-02T03:04:05.000Z",
+          createdAt: "",
+          updatedAt: "",
+        },
+        contact: {
+          id: "ct1",
+          workspaceId: "ws1",
+          platform: "telegram",
+          externalId: "555",
+          name: "Sokha",
+          createdAt: "",
+          updatedAt: "",
+        },
+      },
+    ];
+    const setExternalConversationTrust = vi.fn().mockResolvedValue({});
+    const client = fakeClient({
+      listExternalConversations: vi.fn().mockResolvedValue(threads),
+      setExternalConversationTrust,
+    });
+    render(
+      <CompanyWorkspace
+        client={client}
+        companies={[company]}
+        bots={[{ id: "bot1", name: "Maya" } as never]}
+        onOpenOffice={() => {}}
+        onCreated={() => {}}
+      />,
+    );
+    fireEvent.click(await screen.findByRole("tab", { name: /external/i }));
+    expect(await screen.findByText("Sokha")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /trust replies/i }));
+    await waitFor(() =>
+      expect(setExternalConversationTrust).toHaveBeenCalledWith("ws1", "conv1", "trusted"),
+    );
   });
 
   it("shows the three autonomy levels, defaulting an un-activated company to Assisted", async () => {

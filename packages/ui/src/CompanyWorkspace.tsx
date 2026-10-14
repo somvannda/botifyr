@@ -6,6 +6,8 @@ import type {
   CompanyDirection,
   CompanyDNA,
   CompanyReport,
+  Contact,
+  Conversation as ExternalConversation,
   CreateWorkspaceRequest,
   Quest,
   Task,
@@ -99,6 +101,7 @@ type WorkspaceFile = { id: string; name: string; content: string; department?: s
 type Section =
   | "home"
   | "inbox"
+  | "external"
   | "team"
   | "board"
   | "office"
@@ -145,6 +148,9 @@ export function CompanyWorkspace({
   const [items, setItems] = useState<WorkItem[]>([]);
   const [needs, setNeeds] = useState<Task[]>([]);
   const [inbox, setInbox] = useState<WorkspaceInbox | null>(null);
+  const [threads, setThreads] = useState<
+    Array<{ conversation: ExternalConversation; contact: Contact | null }>
+  >([]);
   const [quests, setQuests] = useState<Quest[]>([]);
   const [grants, setGrants] = useState<CapabilityGrant[]>([]);
   const [reports, setReports] = useState<CompanyReport[]>([]);
@@ -206,11 +212,12 @@ export function CompanyWorkspace({
         setBudget(null);
         setMeta(null);
         setInbox(null);
+        setThreads([]);
         return;
       }
       setLoading(true);
       try {
-        const [it, nd, bd, gr, rp, qs, wk, ws, pr, ac, ib] = await Promise.all([
+        const [it, nd, bd, gr, rp, qs, wk, ws, pr, ac, ib, th] = await Promise.all([
           client.listWorkItems(id).catch(() => []),
           client.listWorkspaceNeeds(id).catch(() => []),
           client.getWorkspaceBudget(id).catch(() => null),
@@ -222,6 +229,7 @@ export function CompanyWorkspace({
           client.listProposals(id).catch(() => []),
           client.listWorkspaceActivity(id).catch(() => []),
           client.getWorkspaceInbox(id).catch(() => null),
+          client.listExternalConversations(id).catch(() => []),
         ]);
         setItems(it);
         setNeeds(nd);
@@ -234,6 +242,7 @@ export function CompanyWorkspace({
         setProposals(pr);
         setActivity(ac);
         setInbox(ib);
+        setThreads(th);
         if (ws) setMeta(ws);
       } finally {
         setLoading(false);
@@ -360,6 +369,13 @@ export function CompanyWorkspace({
     await withBusy(async () => {
       await client.resolveApproval(task.id, approvalId, decision).catch(() => {});
       setNeeds(await client.listWorkspaceNeeds(selectedId).catch(() => needs));
+    });
+  }
+
+  async function setThreadTrust(conversationId: string, trust: "gated" | "trusted") {
+    await withBusy(async () => {
+      await client.setExternalConversationTrust(selectedId, conversationId, trust).catch(() => {});
+      setThreads(await client.listExternalConversations(selectedId).catch(() => threads));
     });
   }
 
@@ -1114,6 +1130,7 @@ export function CompanyWorkspace({
           [
             ["home", "Home"],
             ["inbox", `Inbox${inboxCount ? ` (${inboxCount})` : ""}`],
+            ["external", `External${threads.length ? ` (${threads.length})` : ""}`],
             ["team", "Team"],
             ["board", "Board"],
             ["office", "Office"],
@@ -1413,6 +1430,53 @@ export function CompanyWorkspace({
               )}
             </div>
           </>
+        )}
+
+        {tab === "external" && (
+          <div className="cws-card">
+            <div className="cws-card-head">
+              <h3>External conversations</h3>
+              <span className="cws-muted">
+                {threads.length ? `${threads.length} thread${threads.length === 1 ? "" : "s"}` : "No one yet"}
+              </span>
+            </div>
+            {threads.length === 0 && (
+              <p className="cws-muted">
+                No customer conversations yet. Connect a bot in Settings → Channels to put an employee
+                on Telegram.
+              </p>
+            )}
+            <ul className="cws-list">
+              {threads.map(({ conversation, contact }) => {
+                const trusted = conversation.trust === "trusted";
+                return (
+                  <li key={conversation.id} className="cws-need">
+                    <span className="cws-need-text">
+                      <strong>{contact?.name || conversation.externalChatId}</strong>{" "}
+                      <span className="cws-muted">
+                        · {conversation.platform}
+                        {conversation.assignedBotId ? ` · ${botName(conversation.assignedBotId)}` : ""}
+                      </span>{" "}
+                      <span className="cws-muted">
+                        — last message {new Date(conversation.lastMessageAt).toLocaleString()}
+                      </span>
+                    </span>
+                    <div className="cws-need-actions">
+                      <span className="cws-muted">{trusted ? "Trusted" : "Gated"}</span>
+                      <button
+                        className={trusted ? "ghost small" : "btn primary small"}
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void setThreadTrust(conversation.id, trusted ? "gated" : "trusted")}
+                      >
+                        {trusted ? "Untrust" : "Trust replies"}
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
         )}
 
         {tab === "inbox" && (
