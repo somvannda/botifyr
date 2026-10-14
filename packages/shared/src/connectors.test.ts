@@ -4,7 +4,9 @@ import {
   CONNECTORS,
   ROLE_CATALOG,
   capabilitiesFor,
+  connectorById,
   connectorsProviding,
+  preferredConnectorId,
   providedCapabilities,
   resolveConnector,
 } from "./index.js";
@@ -78,5 +80,29 @@ describe("connector registry", () => {
     });
     expect(result.enabled).toEqual([]);
     expect(result.missing[0]?.reason).toBe("not-granted");
+  });
+
+  it("lists Post for Me as a publishing-only connector", () => {
+    const postforme = connectorById("postforme");
+    expect(postforme?.provides).toEqual(["social.publish", "social.read_insights"]);
+    expect(postforme?.provides).not.toContain("social.reply");
+    expect(postforme?.platforms).not.toContain("telegram");
+  });
+
+  it("honours an employee's app preference, then falls back to registry order", () => {
+    expect(resolveConnector("social.publish", ["zernio", "publora"])?.id).toBe("zernio");
+    expect(resolveConnector("social.publish", ["zernio", "publora"], "publora")?.id).toBe("publora");
+    // A preference for an app that doesn't provide the capability is ignored.
+    expect(resolveConnector("social.publish", ["zernio"], "publora")?.id).toBe("zernio");
+  });
+
+  it("resolves a subject's preferred connector id, exact before wildcard", () => {
+    const preferences = [
+      { workspaceId: "w", subject: "role:Marketer", capability: "*", connectorId: "publora" },
+      { workspaceId: "w", subject: "role:Marketer", capability: "ads.manage", connectorId: "zernio" },
+    ];
+    expect(preferredConnectorId(preferences, "role:Marketer", "ads.manage")).toBe("zernio");
+    expect(preferredConnectorId(preferences, "role:Marketer", "social.publish")).toBe("publora");
+    expect(preferredConnectorId(preferences, "role:Sales", "social.publish")).toBeUndefined();
   });
 });
