@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sign in — Botifyr</title>
+    <meta name="description" content="Sign in to Botifyr to run your agents from any browser." />
+    <meta name="theme-color" content="#07070a" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="auth">
+      <div class="auth-card">
+        <a class="auth-brand" href="/">
+          <svg viewBox="0 0 100 100" width="30" height="30" aria-hidden="true">
+            <g stroke="#141416" stroke-width="3.4" stroke-linecap="round">
+              <line x1="42" y1="17" x2="34.5" y2="7" />
+              <line x1="58" y1="17" x2="65.5" y2="7" />
+            </g>
+            <circle cx="33" cy="6" r="5" fill="#141416" />
+            <circle cx="67" cy="6" r="5" fill="#141416" />
+            <rect x="27" y="14" width="46" height="30" rx="9" fill="#e9eaee" stroke="#141416" stroke-width="3.4" />
+            <rect x="40.5" y="23" width="5.5" height="9.5" rx="2.6" fill="#141416" />
+            <rect x="54" y="23" width="5.5" height="9.5" rx="2.6" fill="#141416" />
+            <path
+              d="M13 46h74L61 87.5Q50 95 39 87.5Z"
+              fill="#19b7c9"
+              stroke="#141416"
+              stroke-width="3.4"
+              stroke-linejoin="round"
+            />
+            <path
+              d="M29 50h42L56 71.5Q50 77 44 71.5Z"
+              fill="#f5a623"
+              stroke="#141416"
+              stroke-width="3.4"
+              stroke-linejoin="round"
+            />
+            <circle cx="50" cy="69" r="10" fill="#141416" />
+            <text x="50" y="74" text-anchor="middle" font-family="Georgia, serif" font-size="14" font-weight="700" fill="#fff">f</text>
+          </svg>
+          Botifyr
+        </a>
+
+        <h1 id="title">Welcome back</h1>
+        <p class="sub" id="subtitle">Sign in to run your agents from any browser.</p>
+
+        <div class="tabs" role="tablist" aria-label="Sign in or create an account">
+          <button type="button" id="tab-signin" role="tab" aria-selected="true" class="active">Sign in</button>
+          <button type="button" id="tab-signup" role="tab" aria-selected="false">Create account</button>
+        </div>
+
+        <div id="alert" class="alert" role="alert" hidden></div>
+
+        <form id="form" novalidate>
+          <div class="field">
+            <label for="email">Email</label>
+            <input
+              id="email"
+              name="email"
+              type="email"
+              autocomplete="email"
+              placeholder="you@company.com"
+              required
+            />
+          </div>
+          <div class="field">
+            <label for="password">
+              Password
+              <span id="pw-hint" style="color: var(--faint); font-weight: 400"></span>
+            </label>
+            <input
+              id="password"
+              name="password"
+              type="password"
+              autocomplete="current-password"
+              placeholder="••••••••"
+              required
+            />
+          </div>
+          <button class="btn-primary" id="submit" type="submit">Sign in</button>
+        </form>
+
+        <div class="divider" id="google-divider">OR</div>
+
+        <button class="btn-google" id="google" type="button">
+          <svg viewBox="0 0 48 48" aria-hidden="true">
+            <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.9 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.1 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.2-.1-2.3-.4-3.5z" />
+            <path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.1 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z" />
+            <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.1-11.3-7.6l-6.5 5C9.6 39.6 16.2 44 24 44z" />
+            <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.1 5.6l6.2 5.2C41.2 35.9 44 30.5 44 24c0-1.2-.1-2.3-.4-3.5z" />
+          </svg>
+          Continue with Google
+        </button>
+
+        <p class="auth-note">
+          By continuing you agree to our terms of service.<br />
+          <a href="/">← Back to botifyr.xyz</a>
+        </p>
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        // Local dev talks to the compose cloud; production uses api.botifyr.xyz.
+        const CLOUD =
+          document.body.dataset.cloud ||
+          (location.hostname === "localhost" || location.hostname === "127.0.0.1"
+            ? "http://localhost:8787"
+            : "https://api.botifyr.xyz");
+
+        const TOKEN_KEY = "botifyr.token";
+        const REFRESH_KEY = "botifyr.refresh";
+
+        const alertEl = document.getElementById("alert");
+        const formEl = document.getElementById("form");
+        const submitEl = document.getElementById("submit");
+        const emailEl = document.getElementById("email");
+        const passwordEl = document.getElementById("password");
+        const googleEl = document.getElementById("google");
+        const googleDivider = document.getElementById("google-divider");
+        const tabSignin = document.getElementById("tab-signin");
+        const tabSignup = document.getElementById("tab-signup");
+        const titleEl = document.getElementById("title");
+        const subtitleEl = document.getElementById("subtitle");
+        const pwHint = document.getElementById("pw-hint");
+
+        let mode = "signin";
+
+        // Only ever redirect to a same-origin path, never an absolute URL.
+        function nextUrl() {
+          const raw = new URLSearchParams(location.search).get("next") || "/portal/";
+          return raw.startsWith("/") && !raw.startsWith("//") ? raw : "/portal/";
+        }
+
+        function show(message, kind) {
+          alertEl.textContent = message;
+          alertEl.className = "alert " + (kind || "error");
+          alertEl.hidden = false;
+        }
+
+        function hide() {
+          alertEl.hidden = true;
+        }
+
+        function setMode(next) {
+          mode = next;
+          const signin = next === "signin";
+          tabSignin.classList.toggle("active", signin);
+          tabSignup.classList.toggle("active", !signin);
+          tabSignin.setAttribute("aria-selected", String(signin));
+          tabSignup.setAttribute("aria-selected", String(!signin));
+          titleEl.textContent = signin ? "Welcome back" : "Create your account";
+          subtitleEl.textContent = signin
+            ? "Sign in to run your agents from any browser."
+            : "Start free — no credit card required.";
+          submitEl.textContent = signin ? "Sign in" : "Create account";
+          passwordEl.setAttribute("autocomplete", signin ? "current-password" : "new-password");
+          pwHint.textContent = signin ? "" : "· at least 8 characters";
+          hide();
+        }
+
+        function store(session) {
+          if (!session || !session.token) return;
+          try {
+            localStorage.setItem(TOKEN_KEY, session.token);
+            if (session.refreshToken) localStorage.setItem(REFRESH_KEY, session.refreshToken);
+          } catch {
+            /* storage may be blocked; the portal will ask again */
+          }
+        }
+
+        async function errorFrom(response) {
+          try {
+            const body = await response.json();
+            if (body && body.error) return body.error;
+          } catch {
+            /* not JSON */
+          }
+          return "Something went wrong (" + response.status + "). Please try again.";
+        }
+
+        formEl.addEventListener("submit", async (event) => {
+          event.preventDefault();
+          hide();
+          const email = emailEl.value.trim();
+          const password = passwordEl.value;
+          if (!email || !password) {
+            show("Enter your email and password.");
+            return;
+          }
+          if (mode === "signup" && password.length < 8) {
+            show("Password must be at least 8 characters.");
+            return;
+          }
+          submitEl.disabled = true;
+          const original = submitEl.textContent;
+          submitEl.textContent = "Please wait…";
+          try {
+            const response = await fetch(CLOUD + "/auth/" + (mode === "signup" ? "signup" : "login"), {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ email, password }),
+            });
+            if (!response.ok) {
+              show(await errorFrom(response));
+              return;
+            }
+            const session = await response.json();
+            store(session);
+            location.href = nextUrl();
+          } catch {
+            show("Couldn't reach Botifyr. Check your connection and try again.");
+          } finally {
+            submitEl.disabled = false;
+            submitEl.textContent = original;
+          }
+        });
+
+        async function googleSignIn() {
+          hide();
+          googleEl.disabled = true;
+          // The `web:` prefix tells the cloud to hand the session back to a
+          // browser sign-in (the tab that opened the flow), not the desktop app.
+          const state = "web:" + crypto.randomUUID();
+          const popup = window.open(
+            CLOUD + "/auth/google?state=" + encodeURIComponent(state),
+            "botifyr-signin",
+            "popup,width=520,height=680",
+          );
+          if (!popup) {
+            show("Allow pop-ups for this site to sign in with Google.");
+            googleEl.disabled = false;
+            return;
+          }
+          const started = Date.now();
+          const timer = setInterval(async () => {
+            if (Date.now() - started > 180000) {
+              clearInterval(timer);
+              googleEl.disabled = false;
+              return;
+            }
+            try {
+              const response = await fetch(CLOUD + "/auth/google/result?state=" + encodeURIComponent(state));
+              if (!response.ok) return;
+              const session = await response.json();
+              clearInterval(timer);
+              store(session);
+              try {
+                popup.close();
+              } catch {
+                /* ignore */
+              }
+              location.href = nextUrl();
+            } catch {
+              /* keep polling */
+            }
+          }, 1200);
+        }
+
+        googleEl.addEventListener("click", googleSignIn);
+
+        tabSignin.addEventListener("click", () => setMode("signin"));
+        tabSignup.addEventListener("click", () => setMode("signup"));
+
+        // Already signed in on this origin? Go straight to the app.
+        try {
+          if (localStorage.getItem(TOKEN_KEY)) {
+            location.replace(nextUrl());
+          }
+        } catch {
+          /* ignore */
+        }
+
+        const params = new URLSearchParams(location.search);
+        setMode(params.get("mode") === "signup" ? "signup" : "signin");
+        if (params.get("error")) show(params.get("error"));
+
+        // Hide Google if the cloud has no OAuth client configured.
+        fetch(CLOUD + "/auth/config")
+          .then((response) => (response.ok ? response.json() : null))
+          .then((config) => {
+            if (config && config.google === false) {
+              googleEl.hidden = true;
+              googleDivider.hidden = true;
+            }
+          })
+          .catch(() => {
+            /* leave the button visible if we can't tell */
+          });
+      })();
+    </script>
+  </body>
+</html>

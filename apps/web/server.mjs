@@ -5,6 +5,9 @@ import { fileURLToPath } from "node:url";
 
 /** Tiny dependency-free static server for the Botifyr marketing/help site. */
 const root = fileURLToPath(new URL(".", import.meta.url));
+// The web image copies the shared UI's fonts to `/fonts`; dev mirrors that so
+// the site loads the same Inter face it gets in the container.
+const fontsRoot = fileURLToPath(new URL("../portal/public/fonts/", import.meta.url));
 const port = Number(process.env.PORT ?? 4321);
 // The old static /admin.html is retired; send people to the real console.
 const adminUrl = process.env.ADMIN_URL ?? "http://localhost:4324";
@@ -16,6 +19,9 @@ const types = {
   ".svg": "image/svg+xml",
   ".png": "image/png",
   ".ico": "image/x-icon",
+  ".woff2": "font/woff2",
+  ".woff": "font/woff",
+  ".ttf": "font/ttf",
 };
 
 createServer(async (request, response) => {
@@ -30,7 +36,10 @@ createServer(async (request, response) => {
     }
     if (path === "/skills") path = "/skills.html";
     if (path === "/developers") path = "/developers.html";
-    const file = join(root, normalize(path).replace(/^(\.\.[/\\])+/, ""));
+    if (path === "/login" || path === "/signin" || path === "/signin.html") path = "/login.html";
+    const file = path.startsWith("/fonts/")
+      ? join(fontsRoot, normalize(path.slice("/fonts/".length)).replace(/^(\.\.[/\\])+/, ""))
+      : join(root, normalize(path).replace(/^(\.\.[/\\])+/, ""));
     const body = await readFile(file);
     response.writeHead(200, {
       "content-type": types[extname(file)] ?? "application/octet-stream",

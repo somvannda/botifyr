@@ -279,6 +279,9 @@ function allowedOrigins(): Set<string> {
     "http://127.0.0.1:4322",
     "http://localhost:4323",
     "http://127.0.0.1:4323",
+    // Marketing site dev server (apps/web/server.mjs) — used by `/login`.
+    "http://localhost:4321",
+    "http://127.0.0.1:4321",
     // Portal Vite dev server (apps/portal `server.port`).
     "http://localhost:1421",
     "http://127.0.0.1:1421",

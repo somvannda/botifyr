@@ -8,231 +8,400 @@
       name="description"
       content="Botifyr is an AI agent that gets real work done — on the web, on a computer, and through the apps you already use."
     />
+    <meta name="theme-color" content="#07070a" />
+    <meta property="og:title" content="Botifyr — your team of always-on agents" />
+    <meta
+      property="og:description"
+      content="Plans, operates software — the web, a computer, code, and the apps you already use — and comes back when the job is done or needs your approval."
+    />
+    <meta property="og:type" content="website" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <div class="wrap">
-      <header class="site">
-        <a class="brand" href="/">
-          <svg width="26" height="26" viewBox="0 0 100 100" aria-hidden="true">
-            <g stroke="#141416" stroke-width="3.4" stroke-linecap="round">
-              <line x1="42" y1="17" x2="34.5" y2="7" />
-              <line x1="58" y1="17" x2="65.5" y2="7" />
-            </g>
-            <circle cx="33" cy="6" r="5" fill="#141416" />
-            <circle cx="67" cy="6" r="5" fill="#141416" />
-            <rect
-              x="27"
-              y="14"
-              width="46"
-              height="30"
-              rx="9"
-              fill="#e9eaee"
-              stroke="#141416"
-              stroke-width="3.4"
-            />
-            <rect x="40.5" y="23" width="5.5" height="9.5" rx="2.6" fill="#141416" />
-            <rect x="54" y="23" width="5.5" height="9.5" rx="2.6" fill="#141416" />
-            <path
-              d="M13 46h74L61 87.5Q50 95 39 87.5Z"
-              fill="#19b7c9"
-              stroke="#141416"
-              stroke-width="3.4"
-              stroke-linejoin="round"
-            />
-            <path
-              d="M29 50h42L56 71.5Q50 77 44 71.5Z"
-              fill="#f5a623"
-              stroke="#141416"
-              stroke-width="3.4"
-              stroke-linejoin="round"
-            />
-            <circle cx="50" cy="69" r="10" fill="#141416" />
-            <text
-              x="50"
-              y="74"
-              text-anchor="middle"
-              font-family="Georgia, serif"
-              font-size="14"
-              font-weight="700"
-              fill="#fff"
-            >
-              f
-            </text>
-          </svg>
-          Botifyr
-        </a>
-        <nav class="links">
-          <a href="/#pricing">Pricing</a>
-          <a href="/developers">Developers</a>
-          <a href="/skills">Skills</a>
-          <a href="/help">Help</a>
-          <a href="mailto:support@botifyr.xyz">Contact</a>
-        </nav>
-      </header>
+    <header class="site">
+      <a class="brand" href="/">
+        <svg viewBox="0 0 100 100" aria-hidden="true">
+          <g stroke="#141416" stroke-width="3.4" stroke-linecap="round">
+            <line x1="42" y1="17" x2="34.5" y2="7" />
+            <line x1="58" y1="17" x2="65.5" y2="7" />
+          </g>
+          <circle cx="33" cy="6" r="5" fill="#141416" />
+          <circle cx="67" cy="6" r="5" fill="#141416" />
+          <rect x="27" y="14" width="46" height="30" rx="9" fill="#e9eaee" stroke="#141416" stroke-width="3.4" />
+          <rect x="40.5" y="23" width="5.5" height="9.5" rx="2.6" fill="#141416" />
+          <rect x="54" y="23" width="5.5" height="9.5" rx="2.6" fill="#141416" />
+          <path
+            d="M13 46h74L61 87.5Q50 95 39 87.5Z"
+            fill="#19b7c9"
+            stroke="#141416"
+            stroke-width="3.4"
+            stroke-linejoin="round"
+          />
+          <path
+            d="M29 50h42L56 71.5Q50 77 44 71.5Z"
+            fill="#f5a623"
+            stroke="#141416"
+            stroke-width="3.4"
+            stroke-linejoin="round"
+          />
+          <circle cx="50" cy="69" r="10" fill="#141416" />
+          <text
+            x="50"
+            y="74"
+            text-anchor="middle"
+            font-family="Georgia, serif"
+            font-size="14"
+            font-weight="700"
+            fill="#fff"
+          >
+            f
+          </text>
+        </svg>
+        Botifyr
+      </a>
+      <nav class="links">
+        <a href="#product">Product</a>
+        <a href="#how">How it works</a>
+        <a href="#pricing">Pricing</a>
+        <a href="/developers">Developers</a>
+        <a href="/help">Docs</a>
+        <a href="/login">Log in</a>
+        <a class="nav-cta" href="/login?mode=signup">Get started</a>
+      </nav>
+    </header>
 
+    <main class="wrap">
+      <!-- Hero -->
       <section class="hero">
-        <h1>Your team of always-on agents that you can give real work to</h1>
+        <span class="kicker"><span class="dot"></span> Always-on agents · safe by default</span>
+        <h1>Your team of always-on agents that <span class="grad">get real work done</span></h1>
         <p>
-          Botifyr plans, operates software — the web, a computer, code, and the apps you already use — and
-          comes back when the job is done or when it needs your approval. Safe by default, self-hostable,
+          Botifyr plans, operates software — the web, a computer, code, and the apps you already use — and comes
+          back when the job is done or when it needs your approval. Safe by default, self-hostable,
           model-agnostic.
         </p>
-        <a class="cta" href="/help">Get started →</a>
+        <div class="hero-actions">
+          <a class="cta" href="/login?mode=signup">Start free →</a>
+          <a class="cta ghost" href="#how">See how it works</a>
+        </div>
+        <div class="trust">
+          <span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"
+              ><path d="M20 6 9 17l-5-5"
+            /></svg>
+            No credit card to start
+          </span>
+          <span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"
+              ><path d="M20 6 9 17l-5-5"
+            /></svg>
+            Self-hostable
+          </span>
+          <span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"
+              ><path d="M20 6 9 17l-5-5"
+            /></svg>
+            Bring your own model
+          </span>
+        </div>
+
+        <!-- Product mock -->
+        <div class="mock" aria-hidden="true">
+          <div class="mock-bar">
+            <i></i><i></i><i></i>
+            <span class="mock-title">botifyr — workspace</span>
+          </div>
+          <div class="mock-body">
+            <div class="mock-side">
+              <div class="row active"><span class="av"></span> Botifyr</div>
+              <div class="row"><span class="av"></span> Inbox triage</div>
+              <div class="row"><span class="av"></span> Watch the page</div>
+              <div class="row"><span class="av"></span> Weekly report</div>
+            </div>
+            <div class="mock-chat">
+              <div class="bubble me">Summarise today's top post on news.ycombinator.com and save the links to Drive.</div>
+              <div class="bubble bot">
+                On it — opening the page, pulling the top story, and staging a <span class="muted">links.md</span> file
+                for you. I'll ask before uploading.
+              </div>
+              <div class="mock-approve">
+                <span class="tick">
+                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M20 6 9 17l-5-5" /></svg>
+                </span>
+                <span><b>Upload links.md to Drive</b><small>Waiting for your approval — nothing leaves without it.</small></span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="stats">
+          <div class="stat"><b>3</b><span>Browser · Desktop · Code</span></div>
+          <div class="stat"><b>0</b><span>Credentials shared with the model</span></div>
+          <div class="stat"><b>100%</b><span>Consequential actions audited</span></div>
+          <div class="stat"><b>BYO</b><span>Model key, any OpenAI-compatible</span></div>
+        </div>
       </section>
 
-      <section class="grid">
-        <div class="card">
-          <h3>Real hands</h3>
-          <p>
-            Browser use, desktop computer use, and code/shell — each task in a throwaway, isolated sandbox.
-          </p>
+      <!-- Features -->
+      <section class="section" id="product">
+        <div class="section-head">
+          <span class="eyebrow">Capabilities</span>
+          <h2>Hands, memory and judgement</h2>
+          <p>Everything a real teammate needs — isolated execution, a library of skills, and a human in the loop.</p>
         </div>
-        <div class="card">
-          <h3>Bots &amp; group chats</h3>
-          <p>
-            Create a bot for each job, give it instructions, or put several in a group that replies in turn.
-          </p>
-        </div>
-        <div class="card">
-          <h3>Always-on</h3>
-          <p>Schedule a bot to run on its own — summarise an inbox, watch a page, keep a report fresh.</p>
-        </div>
-        <div class="card">
-          <h3>Connect apps</h3>
-          <p>Link Gmail, Calendar and Drive so your agents can act on the tools you already use.</p>
-        </div>
-        <div class="card">
-          <h3>Approval first</h3>
-          <p>
-            Consequential actions wait for your OK, unless you choose “Always allow”. Everything is audited.
-          </p>
-        </div>
-        <div class="card">
-          <h3>Cost controls</h3>
-          <p>
-            Token caps, history summarisation, a response cache and per-user budgets keep spend predictable.
-          </p>
+        <div class="grid">
+          <div class="card">
+            <div class="icon-chip">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="14" rx="2" /><path d="M8 22h8M12 18v4" /></svg>
+            </div>
+            <h3>Real hands</h3>
+            <p>Browser use, desktop computer use, and code/shell — each task in a throwaway, isolated sandbox.</p>
+          </div>
+          <div class="card">
+            <div class="icon-chip teal">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></svg>
+            </div>
+            <h3>Bots &amp; group chats</h3>
+            <p>Create a bot for each job, give it instructions, or put several in a group that replies in turn.</p>
+          </div>
+          <div class="card">
+            <div class="icon-chip amber">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
+            </div>
+            <h3>Always-on</h3>
+            <p>Schedule a bot to run on its own — summarise an inbox, watch a page, keep a report fresh.</p>
+          </div>
+          <div class="card">
+            <div class="icon-chip">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h10" /></svg>
+            </div>
+            <h3>Connect apps</h3>
+            <p>Link Gmail, Calendar and Drive so your agents can act on the tools you already use.</p>
+          </div>
+          <div class="card">
+            <div class="icon-chip teal">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" /><path d="m9 12 2 2 4-4" /></svg>
+            </div>
+            <h3>Approval first</h3>
+            <p>Consequential actions wait for your OK, unless you choose “Always allow”. Everything is audited.</p>
+          </div>
+          <div class="card">
+            <div class="icon-chip amber">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18" /><path d="m7 14 3-3 3 3 5-6" /></svg>
+            </div>
+            <h3>Cost controls</h3>
+            <p>Token caps, history summarisation, a response cache and per-user budgets keep spend predictable.</p>
+          </div>
         </div>
       </section>
 
-      <h2 style="text-align: center; margin: 16px 0 0; font-size: 26px">How it works</h2>
-      <section class="grid">
-        <div class="card">
-          <h3>1 · Pick a bot</h3>
-          <p>Create a bot for the job, or drop several into a group chat that replies in turn.</p>
+      <!-- How it works -->
+      <section class="section" id="how">
+        <div class="section-head">
+          <span class="eyebrow">How it works</span>
+          <h2>From a task to a result in three steps</h2>
         </div>
-        <div class="card">
-          <h3>2 · Give it work</h3>
-          <p>Paste a link, a repo, or a task. It plans, operates software, and asks before risky steps.</p>
+        <div class="steps">
+          <div class="step">
+            <div class="num">1</div>
+            <h3>Pick a bot</h3>
+            <p>Create a bot for the job, or drop several into a group chat that replies in turn.</p>
+          </div>
+          <div class="step">
+            <div class="num">2</div>
+            <h3>Give it work</h3>
+            <p>Paste a link, a repo, or a task. It plans, operates software, and asks before risky steps.</p>
+          </div>
+          <div class="step">
+            <div class="num">3</div>
+            <h3>Get results</h3>
+            <p>Files, summaries and changes come back — with an audit trail and your approval.</p>
+          </div>
         </div>
-        <div class="card">
-          <h3>3 · Get results</h3>
-          <p>Files, summaries and changes come back — with an audit trail and your approval.</p>
+
+        <div class="band">
+          <div>
+            <span class="eyebrow">Trust</span>
+            <h2>You stay in control — down to the last click</h2>
+            <p>
+              Every task runs in a disposable sandbox and pauses at anything consequential. Secrets are hidden with
+              envelope encryption, and self-hosting keeps data in your own database and volumes.
+            </p>
+            <a class="cta ghost sm" href="/login?mode=signup">Start free →</a>
+          </div>
+          <ul class="checklist">
+            <li>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M20 6 9 17l-5-5" /></svg>
+              Throwaway, isolated sandboxes per task
+            </li>
+            <li>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M20 6 9 17l-5-5" /></svg>
+              Human approval before risky steps
+            </li>
+            <li>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M20 6 9 17l-5-5" /></svg>
+              Full audit trail on every action
+            </li>
+            <li>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M20 6 9 17l-5-5" /></svg>
+              Envelope-encrypted secrets, or bring your own infra
+            </li>
+          </ul>
         </div>
       </section>
 
-      <h2 id="selfhost" style="text-align: center; margin: 24px 0 0; font-size: 26px">
-        Self-host in seconds
-      </h2>
-      <section class="hero" style="padding: 14px 0 48px">
-        <pre
-          style="
-            display: inline-block;
-            text-align: left;
-            background: #121214;
-            border: 1px solid #26262b;
-            border-radius: 12px;
-            padding: 16px 20px;
-            font-size: 13px;
-            line-height: 1.7;
-          "
-        ><code>git clone &lt;your-repo&gt;
+      <!-- Pricing -->
+      <section class="section" id="pricing">
+        <div class="section-head">
+          <span class="eyebrow">Pricing</span>
+          <h2>Simple, predictable pricing</h2>
+          <p class="section-sub" style="margin-top: 6px">Start free. Upgrade when you put your bots to work.</p>
+        </div>
+        <div class="pricing">
+          <div class="card price-card">
+            <h3>Free</h3>
+            <div class="price"><span>$0</span>/month</div>
+            <ul>
+              <li>Chat with bots</li>
+              <li>Browser &amp; code capabilities</li>
+              <li>Group chats &amp; the skill library</li>
+              <li>Community support</li>
+            </ul>
+            <a class="cta ghost" href="/login?mode=signup">Get started</a>
+          </div>
+          <div class="card price-card popular">
+            <span class="badge">Most popular</span>
+            <h3>Pro</h3>
+            <div class="price"><span>$20</span>/month</div>
+            <ul>
+              <li>Everything in Free</li>
+              <li>Desktop computer use</li>
+              <li>Always-on scheduled bots</li>
+              <li>Priority sandboxes &amp; higher limits</li>
+              <li>Email support</li>
+            </ul>
+            <a class="cta" href="/login?mode=signup">Start free trial</a>
+          </div>
+          <div class="card price-card">
+            <h3>Self-host</h3>
+            <div class="price"><span>Your infra</span></div>
+            <ul>
+              <li>Bring your own model key</li>
+              <li>Unlimited bots &amp; seats</li>
+              <li>Full data control</li>
+              <li>Audit trail &amp; approvals</li>
+            </ul>
+            <a class="cta ghost" href="/#selfhost">Deploy it →</a>
+          </div>
+        </div>
+      </section>
+
+      <!-- Self-host -->
+      <section class="section" id="selfhost">
+        <div class="section-head">
+          <span class="eyebrow">Self-host</span>
+          <h2>Run the whole stack in seconds</h2>
+          <p>The stack runs anywhere Docker does — cloud, Postgres and the desktop app.</p>
+        </div>
+        <div class="doc" style="grid-template-columns: 1fr; padding-top: 8px">
+          <pre><code>git clone &lt;your-repo&gt;
 npm install
 docker compose up -d --build cloud
 npm run dev:desktop:tauri</code></pre>
-      </section>
-
-      <h2 id="pricing" style="text-align: center; margin: 24px 0 0; font-size: 26px">Simple pricing</h2>
-      <p class="section-sub">Start free. Upgrade when you put your bots to work.</p>
-      <section class="pricing">
-        <div class="card price-card">
-          <h3>Free</h3>
-          <div class="price"><span>$0</span>/month</div>
-          <ul>
-            <li>Chat with bots</li>
-            <li>Browser &amp; code capabilities</li>
-            <li>Group chats &amp; the skill library</li>
-            <li>Community support</li>
-          </ul>
-          <a class="cta ghost" href="/help">Get started</a>
-        </div>
-        <div class="card price-card popular">
-          <span class="badge">Most popular</span>
-          <h3>Pro</h3>
-          <div class="price"><span>$20</span>/month</div>
-          <ul>
-            <li>Everything in Free</li>
-            <li>Desktop computer use</li>
-            <li>Always-on scheduled bots</li>
-            <li>Priority sandboxes &amp; higher limits</li>
-            <li>Email support</li>
-          </ul>
-          <a class="cta" href="/help">Start free trial</a>
-        </div>
-        <div class="card price-card">
-          <h3>Self-host</h3>
-          <div class="price"><span>Your infra</span></div>
-          <ul>
-            <li>Bring your own model key</li>
-            <li>Unlimited bots &amp; seats</li>
-            <li>Full data control</li>
-            <li>Audit trail &amp; approvals</li>
-          </ul>
-          <a class="cta ghost" href="/#selfhost">Deploy it →</a>
         </div>
       </section>
 
-      <h2 style="text-align: center; margin: 32px 0 0; font-size: 26px">Frequently asked</h2>
-      <section class="faq">
-        <details>
-          <summary>Does it really operate software, or just talk about it?</summary>
-          <p>
-            It really operates: browser use, desktop computer use, and a code/shell sandbox — each task runs
-            in a throwaway, isolated environment, and consequential steps wait for your approval.
-          </p>
-        </details>
-        <details>
-          <summary>Where does my data live?</summary>
-          <p>
-            Botifyr is self-hostable. Cloud hides secrets with envelope encryption; self-hosting keeps
-            everything in your own database and volumes.
-          </p>
-        </details>
-        <details>
-          <summary>Which models can I use?</summary>
-          <p>
-            It's model-agnostic — any OpenAI-compatible provider. The default is a cost-efficient model with
-            strict token caps, history summarisation and a response cache.
-          </p>
-        </details>
-        <details>
-          <summary>How do bots learn new skills?</summary>
-          <p>
-            A bot can save a capability it worked out. Once approved, it joins a shared library so new users'
-            bots start already trained.
-          </p>
-        </details>
+      <!-- FAQ -->
+      <section class="section">
+        <div class="section-head">
+          <span class="eyebrow">FAQ</span>
+          <h2>Frequently asked</h2>
+        </div>
+        <div class="faq">
+          <details>
+            <summary>Does it really operate software, or just talk about it?</summary>
+            <p>
+              It really operates: browser use, desktop computer use, and a code/shell sandbox — each task runs in a
+              throwaway, isolated environment, and consequential steps wait for your approval.
+            </p>
+          </details>
+          <details>
+            <summary>Where does my data live?</summary>
+            <p>
+              Botifyr is self-hostable. Cloud hides secrets with envelope encryption; self-hosting keeps everything
+              in your own database and volumes.
+            </p>
+          </details>
+          <details>
+            <summary>Which models can I use?</summary>
+            <p>
+              It's model-agnostic — any OpenAI-compatible provider. The default is a cost-efficient model with strict
+              token caps, history summarisation and a response cache.
+            </p>
+          </details>
+          <details>
+            <summary>How do bots learn new skills?</summary>
+            <p>
+              A bot can save a capability it worked out. Once approved, it joins a shared library so new users' bots
+              start already trained.
+            </p>
+          </details>
+          <details>
+            <summary>Can I sign in from the web, or only the desktop app?</summary>
+            <p>
+              Both. Use the desktop app for computer use, or sign in at <a href="/login">botifyr.xyz/login</a> to drive
+              your agents from any browser.
+            </p>
+          </details>
+        </div>
       </section>
 
-      <footer class="site">
-        <span>© 2026 Botifyr</span>
-        <span
-          ><a href="/skills">Skills</a> · <a href="/help">Help</a> · <a href="/admin">Admin</a> ·
-          <a href="mailto:support@botifyr.xyz">support@botifyr.xyz</a></span
-        >
-      </footer>
-    </div>
+      <!-- CTA -->
+      <section class="cta-band">
+        <h2>Put your agents to work</h2>
+        <p>Spin up your first bot in under a minute — no credit card, no lock-in.</p>
+        <div class="hero-actions">
+          <a class="cta" href="/login?mode=signup">Start free →</a>
+          <a class="cta ghost" href="/developers">Explore the API</a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site full">
+      <div class="wrap">
+        <div class="footer-cols">
+          <div class="footer-brand">
+            <a class="brand" href="/">
+              Botifyr
+            </a>
+            <p>Your team of always-on agents that you can give real work to.</p>
+          </div>
+          <div>
+            <h4>Product</h4>
+            <a href="#product">Capabilities</a>
+            <a href="#how">How it works</a>
+            <a href="#pricing">Pricing</a>
+            <a href="/skills">Skill library</a>
+          </div>
+          <div>
+            <h4>Developers</h4>
+            <a href="/developers">API reference</a>
+            <a href="/help">Docs</a>
+            <a href="/login">Sign in</a>
+          </div>
+          <div>
+            <h4>Company</h4>
+            <a href="mailto:support@botifyr.xyz">Contact</a>
+            <a href="/login">Log in</a>
+            <a href="/admin">Admin</a>
+          </div>
+        </div>
+        <div class="footer-bottom">
+          <span>© 2026 Botifyr</span>
+          <span><a href="mailto:support@botifyr.xyz">support@botifyr.xyz</a></span>
+        </div>
+      </div>
+    </footer>
   </body>
 </html>
