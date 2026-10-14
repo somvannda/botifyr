@@ -3,6 +3,12 @@
 Living checklist. We work top to bottom, one item per change, and tick boxes as
 they land. Keep entries short; link code paths instead of explaining them.
 
+> **Scope note (launch cut):** the launch is **one product** — the agent + its
+> chat + the AI workspace. The **Feed** (posts, pages, groups, stories, reels)
+> and its features are the deferred consumer product: see
+> [`launch-cut.md`](launch-cut.md) and [`social-roadmap.md`](social-roadmap.md).
+> Chat between real friends and with bots **stays** in the launch.
+
 ## Pending (requested, not finished)
 - [ ] **AI-company positioning** — the "AI workforce" category is real (NanoCorp,
       Polsia, AGEMS, SIMI, Syzygia, OrgZero). Research + SWOT:

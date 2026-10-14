@@ -651,6 +651,9 @@ export interface RuntimeConfig {
   demo: boolean;
   /** True when a local node (on the user's machine) is connected. */
   nodeOnline: boolean;
+  /** Whether the deferred social Feed product is served (see docs/launch-cut.md).
+   *  False in a launch build; the Feed tab and its routes are hidden. */
+  social?: boolean;
   /** Cost-control limits enforced by the cloud. */
   limits?: {
     rateLimitPerHour: number;
