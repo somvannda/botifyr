@@ -306,6 +306,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [marketViewAll, setMarketViewAll] = useState(false);
   const [tokenInputFor, setTokenInputFor] = useState<string | null>(null);
   const [tokenValue, setTokenValue] = useState("");
+  const [tokenError, setTokenError] = useState<string | null>(null);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [groupWorking, setGroupWorking] = useState<{ sessionId: string; names: string[] } | null>(null);
   const [replyTo, setReplyTo] = useState<{ id: string; author: string; content: string } | null>(null);
@@ -2794,14 +2795,43 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   }
 
   async function saveToken(provider: string) {
-    if (!tokenValue.trim()) return;
+    const value = tokenValue.trim();
+    if (!value) return;
+    setTokenError(null);
+    setConnectingApp(provider);
     try {
-      await client.connectToken(provider, tokenValue.trim());
+      // Verify with the provider before storing — a bad key never gets saved.
+      const check = await client.validateConnection(provider, value);
+      if (!check.ok) {
+        setTokenError(check.message);
+        return;
+      }
+      await client.connectToken(provider, value);
       setConnections(await client.listConnections());
+      const app = MARKETPLACE.find((entry) => entry.provider === provider);
       setTokenInputFor(null);
       setTokenValue("");
+      pushToast({ kind: "message", title: `${app?.name ?? "App"} connected`, body: check.message });
     } catch (err: unknown) {
-      setError(messageOf(err));
+      setTokenError(messageOf(err));
+    } finally {
+      setConnectingApp(null);
+    }
+  }
+
+  /** Re-check a stored connection and report the provider's detail. */
+  async function checkApp(provider: string) {
+    const app = MARKETPLACE.find((entry) => entry.provider === provider);
+    try {
+      const check = await client.validateConnection(provider);
+      pushToast({
+        kind: "message",
+        title: `${app?.name ?? "App"}${check.ok ? "" : " — needs attention"}`,
+        body: check.message,
+      });
+      if (!check.ok) setError(check.message);
+    } catch (err: unknown) {
+      pushToast({ kind: "message", title: `${app?.name ?? "App"} check failed`, body: messageOf(err) });
     }
   }
 
@@ -6605,6 +6635,15 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                                   <span className="market-added">
                                     <CheckIcon size={13} /> Added
                                   </span>
+                                  {app.tokenApp && (
+                                    <button
+                                      className="market-btn ghost small"
+                                      type="button"
+                                      onClick={() => void checkApp(app.provider!)}
+                                    >
+                                      Check
+                                    </button>
+                                  )}
                                   <button
                                     className="market-remove"
                                     type="button"
@@ -6621,6 +6660,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                                   disabled={connectingApp === app.provider}
                                   onClick={() => {
                                     if (app.tokenApp) {
+                                      setTokenError(null);
                                       setTokenInputFor(app.provider);
                                       setTokenValue("");
                                     } else {
@@ -6654,6 +6694,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
           onClick={() => {
             setTokenInputFor(null);
             setTokenValue("");
+            setTokenError(null);
           }}
         >
           <div className="apps-panel connect-modal" onClick={(event) => event.stopPropagation()}>
@@ -6667,6 +6708,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                 onClick={() => {
                   setTokenInputFor(null);
                   setTokenValue("");
+                  setTokenError(null);
                 }}
               >
                 <CloseIcon size={13} />
@@ -6674,7 +6716,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
             </div>
             <p className="apps-sub">
               Paste your {MARKETPLACE.find((a) => a.provider === tokenInputFor)?.credentialLabel ?? "token"} to
-              connect. It is stored encrypted and never shared with the model.
+              connect. We check it with the provider first; it is stored encrypted and never shared with the model.
             </p>
             <div className="market-token">
               <input
@@ -6682,12 +6724,16 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                 autoFocus
                 placeholder={MARKETPLACE.find((a) => a.provider === tokenInputFor)?.credentialLabel ?? "Token"}
                 value={tokenValue}
-                onChange={(event) => setTokenValue(event.target.value)}
+                onChange={(event) => {
+                  setTokenValue(event.target.value);
+                  if (tokenError) setTokenError(null);
+                }}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && tokenValue.trim()) void saveToken(tokenInputFor);
                 }}
               />
             </div>
+            {tokenError && <p className="connect-error">{tokenError}</p>}
             <div className="connect-actions">
               <button
                 className="ghost small"
@@ -6695,6 +6741,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                 onClick={() => {
                   setTokenInputFor(null);
                   setTokenValue("");
+                  setTokenError(null);
                 }}
               >
                 Cancel
@@ -6702,10 +6749,10 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
               <button
                 className="market-btn"
                 type="button"
-                disabled={!tokenValue.trim()}
+                disabled={!tokenValue.trim() || connectingApp === tokenInputFor}
                 onClick={() => void saveToken(tokenInputFor)}
               >
-                Connect
+                {connectingApp === tokenInputFor ? "Checking…" : "Connect"}
               </button>
             </div>
           </div>

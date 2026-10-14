@@ -81,6 +81,8 @@ import {
   settleInvoice,
   verifyChmabaSignature,
 } from "./billing.js";
+import { connectionToken } from "./connections-tools.js";
+import { validateConnection } from "./connection-validators.js";
 import { SKILLS, skillInstructions } from "./skills.js";
 import type { Store } from "./store/index.js";
 import type {
@@ -2192,6 +2194,24 @@ export async function buildServer(options: ServerOptions) {
         createdAt: now,
       });
       return { provider, connectedAt: now };
+    },
+  );
+
+  // Validate a token app's credential (a cheap whoami at the provider). Runs on
+  // the candidate token before it's stored, or on the stored one afterwards so
+  // the UI can show a connected detail / re-check.
+  app.post<{ Params: { provider: string }; Body: { token?: string } }>(
+    "/v1/connections/:provider/validate",
+    { preHandler: requireAuth },
+    async (request) => {
+      const provider = request.params.provider;
+      const bodyToken = (request.body?.token ?? "").trim();
+      const stored = bodyToken
+        ? null
+        : await connectionToken(store, vaultKey, request.userId as string, provider);
+      const token = bodyToken || stored || "";
+      if (!token) return { ok: false, message: "Not connected." };
+      return validateConnection(provider, token);
     },
   );
 

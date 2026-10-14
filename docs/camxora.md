@@ -23,6 +23,19 @@ Marketplace entry: `packages/ui/src/BotifyrApp.tsx` (`MARKETPLACE`), brand icon 
 `packages/ui/src/BrandIcons.tsx`. Token provider allowlist:
 `TOKEN_APPS` in `apps/cloud/src/server.ts`.
 
+### Key validation
+
+Connecting opens a modal that **checks the key with Camxora** (`GET /v1/credits`)
+**before** storing it — an invalid key is rejected inline and never saved, and a
+valid one reports the balance (e.g. *"Valid — 512 credits"*). A connected app
+shows **Added** plus a **Check** button that re-validates the stored key on demand.
+
+`POST /v1/connections/:provider/validate` (auth) backs this: with `{ token }` it
+checks a candidate; without, it checks the stored one. Validators live in
+`apps/cloud/src/connection-validators.ts` (camxora, github, telegram, notion,
+slack); apps without a probe pass through as "can't be auto-checked" rather than
+blocking the connection.
+
 ## Tools (agent)
 
 `apps/cloud/src/camxora-tools.ts` — registered for a run when the user has the

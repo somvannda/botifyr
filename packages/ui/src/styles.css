@@ -7285,6 +7285,12 @@ body {
   margin-top: var(--space-4);
 }
 
+.connect-error {
+  margin: var(--space-2) 0 0;
+  color: #ff6b6b;
+  font-size: var(--text-xs);
+}
+
 /* Bot Library ------------------------------------------------------------ */
 .library {
   display: flex;
