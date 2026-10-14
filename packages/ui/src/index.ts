@@ -14,3 +14,4 @@ export * from "./Markdown";
 export { BotifyrApp, TITLEBAR_SLOT_ID } from "./BotifyrApp";
 export { webBridge, defaultBridge, type BotBridge } from "./bridge";
 export { Select, type SelectOption } from "./Select";
+export { ConnectorsPanel } from "./ConnectorsPanel";
