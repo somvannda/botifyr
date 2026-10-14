@@ -243,10 +243,13 @@ reported buffer → `dub`; otherwise → `subs` (never a dead end, §13.1).
 **Spike page:** `apps/portal/public/webgpu-smoke.html` (open at
 `/portal/webgpu-smoke.html` in the running portal — a dev tool, not linked in the
 app). It reports the capability probe (crossOriginIsolated, SharedArrayBuffer,
-WASM SIMD, WebGPU adapter), runs a **real WebGPU compute** shader, and
-best-effort loads **ffmpeg.wasm** and **Whisper** from a CDN. Add COOP/COEP
-headers to the portal (nginx in `apps/web/Dockerfile`) to unlock
-SharedArrayBuffer / multithreaded ffmpeg.
+WASM SIMD, WebGPU adapter), runs a **real WebGPU compute** shader, and loads
+**ffmpeg.wasm** + **Whisper** from a CDN on demand. The page is served with
+**COOP/COEP scoped to its path** (nginx `apps/web/Dockerfile` + a Vite dev
+plugin), so it is `crossOriginIsolated` and uses the **multithread** ffmpeg core
+when SharedArrayBuffer is available (single-thread otherwise). The ffmpeg worker
+is blobbed with its relative imports rewritten, so the CDN module loads
+same-origin. The rest of the portal is deliberately **not** isolated.
 
 `apps/node` already exists (local node) — the local media worker can live beside it,
 reusing the same job queue and progress events. The existing sandbox exec cap
