@@ -27,7 +27,8 @@ included tokens are used up.
   (`apps/cloud/src/server.ts`). The `test` call sends a one-word prompt and
   reports a friendly result.
 - **Routing** — `apps/cloud/src/runner.ts` resolves the user's provider
-  (`userProvider`) and uses it for their task; otherwise the platform provider.
+  (`userProvider`) and uses it for their task, their rolling conversation
+  summaries and per-chat translation; otherwise the platform provider.
 - **Billing policy** — `PlatformSettings.byoKey.billing` (admin console):
   - `free` (default): BYO runs are **not** charged and their tokens are recorded
     with `source = "byo"`, excluded from plan quota and company/quest budgets.

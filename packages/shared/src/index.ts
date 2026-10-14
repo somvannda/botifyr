@@ -686,6 +686,8 @@ export interface RuntimeConfig {
   };
   /** ICE servers (STUN/TURN) for device-to-device transfer. */
   iceServers?: Array<{ urls: string | string[]; username?: string; credential?: string }>;
+  /** Platform model health, so the UI can warn before the next call fails. */
+  ai?: { ok: boolean; message?: string; at?: string };
 }
 
 /* -------------------------------------------------------------------------- */

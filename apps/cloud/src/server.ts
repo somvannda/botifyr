@@ -67,7 +67,15 @@ import {
   validateAiInput,
 } from "./ai-keys.js";
 import { parseResendInbound, verifyResendSignature } from "./email-inbound.js";
-import { oneShot, runTask, runtimeInfo, summarizeConversation } from "./runner.js";
+import {
+  noteModelFailure,
+  oneShot,
+  providerForUser,
+  providerHealth,
+  runTask,
+  runtimeInfo,
+  summarizeConversation,
+} from "./runner.js";
 import {
   analyzeSource,
   boardFingerprint,
@@ -847,7 +855,10 @@ export async function buildServer(options: ServerOptions) {
             .slice(already, boundary)
             .map((message) => `${message.role}: ${message.content.slice(0, maxMessageChars)}`)
             .join("\n");
-          const summary = await summarizeConversation(snapshot ? `${snapshot}\n${older}` : older);
+          const summary = await summarizeConversation(
+            snapshot ? `${snapshot}\n${older}` : older,
+            await providerForUser(store, vaultKey, userId),
+          );
           if (summary) {
             // Re-read before writing: the run may have appended messages since
             // this snapshot, and writing the stale object would wipe them.
@@ -1411,6 +1422,7 @@ export async function buildServer(options: ServerOptions) {
       },
       usage: { tokensToday: usage.tokens, requestsToday: usage.requests },
       iceServers,
+      ai: providerHealth(),
     };
   });
 
@@ -7443,7 +7455,9 @@ export async function buildServer(options: ServerOptions) {
           body: form,
         });
         if (!upstream.ok) {
-          return reply.code(502).send({ error: `transcription failed (${upstream.status})` });
+          return reply
+            .code(502)
+            .send({ error: friendlyModelError(new Error(`transcription failed (${upstream.status})`)) });
         }
         const json = (await upstream.json()) as { text?: string };
         return { text: (json.text ?? "").trim() };
@@ -7464,16 +7478,19 @@ export async function buildServer(options: ServerOptions) {
       if (!message) return reply.code(400).send({ error: "text is required" });
       if (!to) return reply.code(400).send({ error: "to is required" });
       try {
-        const text = await oneShot({
-          system: `You are a translation engine. Translate the user's message into ${to}. Reply with only the translation, with no notes or quotes.`,
-          user: message.slice(0, 4000),
-          maxTokens: 1000,
-        });
+        const text = await oneShot(
+          {
+            system: `You are a translation engine. Translate the user's message into ${to}. Reply with only the translation, with no notes or quotes.`,
+            user: message.slice(0, 4000),
+            maxTokens: 1000,
+          },
+          await providerForUser(store, vaultKey, request.userId as string),
+        );
         return { text: text.trim() };
       } catch (err) {
         request.log.warn({ err }, "translate failed");
-        const detail = err instanceof Error ? err.message : "translation unavailable";
-        return reply.code(502).send({ error: `translation failed: ${detail}` });
+        noteModelFailure(err);
+        return reply.code(502).send({ error: friendlyModelError(err) });
       }
     },
   );

@@ -9,6 +9,7 @@ import {
   createMediaTools,
   createProvider,
   createShellTools,
+  friendlyModelError,
   runAgent,
   withResponseCache,
   type ModelProvider,
@@ -129,11 +130,49 @@ function getProvider(): ModelProvider {
   return provider;
 }
 
+/**
+ * The provider to use for a user's non-agent calls (rolling summaries,
+ * translation, one-shot planning): their own key when they've enabled and saved
+ * one, otherwise the platform provider.
+ */
+export async function providerForUser(
+  store: Store,
+  vaultKey: Buffer | undefined,
+  userId: string,
+): Promise<ModelProvider> {
+  if (vaultKey) {
+    const own = await userProvider(store, vaultKey, userId, demoUrlFor()).catch(() => null);
+    if (own) return own;
+  }
+  return getProvider();
+}
+
+function demoUrlFor(): string {
+  const port = process.env.PORT ?? 8787;
+  const hostForBrowser = sandboxMode() === "docker" ? "host.docker.internal" : "localhost";
+  return process.env.BOTIFYR_DEMO_URL ?? `http://${hostForBrowser}:${port}/demo`;
+}
+
+/** Most recent platform model failure, surfaced so clients can warn early. */
+let lastModelError: { message: string; at: string } | null = null;
+
+/** Record a provider failure (called on any model call that fails). */
+export function noteModelFailure(error: unknown): void {
+  lastModelError = { message: friendlyModelError(error), at: new Date().toISOString() };
+}
+
+/** Platform model health: healthy unless the last observed call failed. */
+export function providerHealth(): { ok: boolean; message?: string; at?: string } {
+  return lastModelError
+    ? { ok: false, message: lastModelError.message, at: lastModelError.at }
+    : { ok: true };
+}
+
 /** Summarize older turns cheaply so long chats keep their memory. */
-export async function summarizeConversation(text: string): Promise<string> {
+export async function summarizeConversation(text: string, userProvider?: ModelProvider): Promise<string> {
   const maxTokens = Number(process.env.BOTIFYR_SUMMARY_MAX_TOKENS ?? 300);
   try {
-    const response = await getProvider().complete({
+    const response = await (userProvider ?? getProvider()).complete({
       messages: [
         {
           role: "system",
@@ -152,8 +191,11 @@ export async function summarizeConversation(text: string): Promise<string> {
 }
 
 /** A single tool-less completion, for planning tasks (e.g. company onboarding). */
-export async function oneShot(input: { system: string; user: string; maxTokens: number }): Promise<string> {
-  const response = await getProvider().complete({
+export async function oneShot(
+  input: { system: string; user: string; maxTokens: number },
+  userProvider?: ModelProvider,
+): Promise<string> {
+  const response = await (userProvider ?? getProvider()).complete({
     messages: [
       { role: "system", content: input.system },
       { role: "user", content: input.user },
@@ -827,6 +869,7 @@ export async function runTask(deps: RunnerDeps, task: Task): Promise<void> {
       onStreamReset: () => {
         emit({ type: "assistant.reset", sessionId: task.sessionId, taskId: task.id, botId: deps.author?.id });
       },
+      onModelError: noteModelFailure,
       onScreenshot: (png) => {
         setScreenshot(task.id, png);
         task.screenshotAt = new Date().toISOString();
