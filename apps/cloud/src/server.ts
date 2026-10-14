@@ -2156,7 +2156,7 @@ export async function buildServer(options: ServerOptions) {
   );
 
   // Token-based connection (apps with a personal access token, e.g. GitHub).
-  const TOKEN_APPS = new Set(["github", "notion", "slack", "linear", "telegram"]);
+  const TOKEN_APPS = new Set(["github", "notion", "slack", "linear", "telegram", "camxora"]);
   app.post<{ Params: { provider: string }; Body: { token?: string } }>(
     "/v1/connections/:provider/token",
     { preHandler: requireAuth },

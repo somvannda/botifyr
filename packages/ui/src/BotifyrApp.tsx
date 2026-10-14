@@ -48,7 +48,7 @@ import {
   type SealedMessage,
 } from "@botifyr/client";
 import { CalendarIcon, DriveIcon, GmailIcon } from "./AppIcons";
-import { GithubBrand, NotionBrand, SlackBrand, TelegramBrand } from "./BrandIcons";
+import { CamxoraBrand, GithubBrand, NotionBrand, SlackBrand, TelegramBrand } from "./BrandIcons";
 import { BOT_SCHEMES, BotLogo } from "./BotLogo";
 import {
   BellIcon,
@@ -8323,6 +8323,16 @@ const MARKET_SECTIONS = [
 ];
 
 const MARKETPLACE: MarketApp[] = [
+  {
+    id: "camxora",
+    provider: "camxora",
+    tokenApp: true,
+    name: "Camxora Music",
+    category: "Media",
+    section: "Featured",
+    desc: "Generate music, lyrics, stems & music videos",
+    icon: <CamxoraBrand size={24} />,
+  },
   {
     id: "github",
     provider: "github",
