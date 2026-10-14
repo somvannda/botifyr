@@ -155,6 +155,42 @@ export const CONNECTORS: ConnectorDef[] = [
     docsUrl: "https://docs.publora.com",
   },
   {
+    id: "postforme",
+    name: "Post for Me",
+    vendor: "Post for Me",
+    category: "social",
+    summary: "Cheap publishing to 9 platforms.",
+    description:
+      "Publishes and schedules posts to Facebook, Instagram, Threads, X, LinkedIn, TikTok, " +
+      "Pinterest, Bluesky and YouTube, and reads post-level analytics. Publishing only — no " +
+      "comments, inbox, Telegram or ads.",
+    platforms: [
+      "facebook",
+      "instagram",
+      "threads",
+      "x",
+      "linkedin",
+      "tiktok",
+      "pinterest",
+      "bluesky",
+      "youtube",
+    ],
+    provides: ["social.publish", "social.read_insights"],
+    billing: { model: "byo", note: "You pay Post for Me $10/month for 1,000 posts." },
+    auth: { kind: "api-key", label: "Paste your Post for Me API key" },
+    setup: [
+      "Create an account at postforme.dev.",
+      "Connect your social accounts.",
+      "Copy your API key and paste it here.",
+    ],
+    actsOnBehalf: "Post for Me's approved platform apps publish on your behalf.",
+    limitations: [
+      "Publishing and post analytics only — no comments, inbox, Telegram or ads.",
+      "Billed per successful post (1,000 included on the $10 plan).",
+    ],
+    docsUrl: "https://www.postforme.dev",
+  },
+  {
     id: "telegram",
     name: "Telegram",
     vendor: "Telegram (direct)",
@@ -202,15 +238,51 @@ export function providedCapabilities(connectedIds: readonly string[]): Set<strin
 }
 
 /**
- * Route a capability to the connector that should run it: the first *connected*
+ * Route a capability to the connector that should run it: the subject's preferred
+ * *connected* app when it provides the capability, else the first connected
  * connector (in `CONNECTORS` order) that provides it. `undefined` means nothing
  * the workspace has connected provides this capability.
  */
 export function resolveConnector(
   capability: string,
   connectedIds: readonly string[],
+  preferredConnectorId?: string,
 ): ConnectorDef | undefined {
-  return connectorsProviding(capability).find((connector) => connectedIds.includes(connector.id));
+  const providers = connectorsProviding(capability).filter((connector) =>
+    connectedIds.includes(connector.id),
+  );
+  if (preferredConnectorId) {
+    const preferred = providers.find((connector) => connector.id === preferredConnectorId);
+    if (preferred) return preferred;
+  }
+  return providers[0];
+}
+
+/**
+ * A per-employee (or per-role) choice of which connected app handles a capability
+ * (docs/company-workspace.md §44). `capability: "*"` sets the subject's default,
+ * so a common case is one app per employee and a wildcard covers the rest.
+ */
+export interface ConnectorPreference {
+  workspaceId: string;
+  /** "bot:<id>" or "role:<title>". */
+  subject: string;
+  /** A capability id, or "*" for the subject's default across capabilities. */
+  capability: string;
+  connectorId: string;
+}
+
+/** The connector id a subject prefers for a capability (exact match, else "*"). */
+export function preferredConnectorId(
+  preferences: readonly ConnectorPreference[],
+  subject: string,
+  capability: string,
+): string | undefined {
+  const mine = preferences.filter((preference) => preference.subject === subject);
+  return (
+    mine.find((preference) => preference.capability === capability)?.connectorId ??
+    mine.find((preference) => preference.capability === "*")?.connectorId
+  );
 }
 
 /** Why a role capability is not usable right now. */
