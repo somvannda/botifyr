@@ -96,6 +96,66 @@ function taskIdOf(data: unknown): string | null {
   return pick(obj.task_id) ?? pick(obj.taskId) ?? pick(obj.id) ?? pick(nested.task_id) ?? pick(nested.taskId) ?? null;
 }
 
+interface MusicClip {
+  id: string;
+  title: string;
+  status: string;
+  /** The playable CDN file (media_urls[0].url). */
+  audio?: string;
+  image?: string;
+  model?: string;
+}
+
+/**
+ * Compact view of a Camxora task. The raw payload dumps ~1.5 KB of JSON where
+ * `audio_url` is an auth-gated "/api/forbidden" placeholder and the real,
+ * playable file lives at `media_urls[].url` — so we surface only the good URL.
+ */
+function summarizeMusicTask(data: unknown): { clips: MusicClip[]; running: boolean } {
+  const root = (data && typeof data === "object" ? data : {}) as Record<string, unknown>;
+  const result = (root.result ?? root.data ?? {}) as Record<string, unknown>;
+  const raw = Array.isArray(result.clips) ? result.clips : Array.isArray(root.clips) ? root.clips : [];
+  const clips: MusicClip[] = (raw as unknown[]).map((entry) => {
+    const clip = (entry && typeof entry === "object" ? entry : {}) as Record<string, unknown>;
+    const media = Array.isArray(clip.media_urls) ? (clip.media_urls[0] as Record<string, unknown> | undefined) : undefined;
+    const playable = typeof media?.url === "string" ? media.url : undefined;
+    return {
+      id: String(clip.id ?? ""),
+      title: String(clip.title ?? ""),
+      status: String(clip.status ?? "unknown"),
+      audio: playable,
+      image: typeof clip.image_url === "string" ? clip.image_url : undefined,
+      model: typeof clip.model_name === "string" ? clip.model_name : undefined,
+    };
+  });
+  const status = String(root.status ?? result.status ?? "");
+  const running =
+    clips.length > 0 ? clips.some((clip) => clip.status !== "complete") : status === "running" || status === "pending";
+  return { clips, running };
+}
+
+/** A model-friendly poll result: only the playable URL, plus a clear next step. */
+function musicTaskOutput(id: string, data: unknown): string {
+  const { clips, running } = summarizeMusicTask(data);
+  if (clips.length === 0) {
+    return `${id}: ${running ? "still generating" : "no clips yet"}. Poll again shortly; don't reply yet.`;
+  }
+  const ready = clips.filter((clip) => clip.status === "complete" && clip.audio);
+  const lines = clips.map((clip) => {
+    const state = clip.status === "complete" && clip.audio ? "✅ ready" : "⏳ generating";
+    return (
+      `${state}: "${clip.title}"${clip.model ? ` (${clip.model})` : ""}` +
+      (clip.audio ? `\n  play: ${clip.audio}` : "") +
+      (clip.image ? `\n  cover: ${clip.image}` : "")
+    );
+  });
+  const hint = ready.length
+    ? '\n\nReply now: for each ✅ track include a fenced `media` block using exactly its "play" URL as "stream" ' +
+      '(never the audio_url field — that one is auth-gated and will not play).'
+    : "\n\nStill generating — poll again shortly and do not reply to the user yet.";
+  return `${id}: ${running ? "generating" : "finished"}\n${lines.join("\n")}${hint}`;
+}
+
 export function createCamxoraTools(store: Store, vaultKey: Buffer, userId: string): ToolDefinition[] {
   const modelParam = {
     type: "string",
@@ -312,7 +372,7 @@ export function createCamxoraTools(store: Store, vaultKey: Buffer, userId: strin
     {
       name: "music.task",
       description:
-        'Poll a Camxora task\'s status and result by id. On success, present the track to the user as a fenced `media` block: { "stream": <playback url>, "download": <durable url once music.wav finishes> }. It renders as an inline player that starts on the stream and falls back to the download when the stream expires.',
+        'Poll a Camxora task\'s status and result by id. When a clip is ✅ ready, present it to the user as a fenced `media` block using its "play" URL as "stream" (the CDN file — never the audio_url field, which is auth-gated).',
       parameters: {
         type: "object",
         properties: { taskId: { type: "string", description: "Task id from a generate/extend/etc call." } },
@@ -321,13 +381,17 @@ export function createCamxoraTools(store: Store, vaultKey: Buffer, userId: strin
       run: async (args) => {
         const key = await camxoraKey(store, vaultKey, userId);
         if (!key) return notConnected();
-        return camxoraCall(key, "GET", `/v1/task/${encodeURIComponent(String(args.taskId ?? ""))}`);
+        const id = String(args.taskId ?? "");
+        const res = await camxoraRaw(key, "GET", `/v1/task/${encodeURIComponent(id)}`);
+        return res.ok
+          ? { ok: true, output: musicTaskOutput(id, res.data) }
+          : { ok: false, output: `Camxora error ${res.status}: ${trim(res.data, 300)}` };
       },
     },
     {
       name: "music.tasks",
       description:
-        "Poll several Camxora tasks at once (from music.generate_batch). Returns each task's status/result; present finished tracks as `media` blocks.",
+        'Poll several Camxora tasks at once (from music.generate_batch). Reports each clip compactly with its playable URL; when clips are ✅ ready, present each as a `media` block using that "play" URL as "stream" (never the audio_url field).',
       parameters: {
         type: "object",
         properties: {
@@ -344,8 +408,8 @@ export function createCamxoraTools(store: Store, vaultKey: Buffer, userId: strin
         if (ids.length === 0) return { ok: false, output: "Provide taskIds." };
         const lines: string[] = [];
         for (const id of ids) {
-          const res = await camxoraCall(key, "GET", `/v1/task/${encodeURIComponent(id)}`);
-          lines.push(`- ${id}: ${res.output}`);
+          const res = await camxoraRaw(key, "GET", `/v1/task/${encodeURIComponent(id)}`);
+          lines.push(res.ok ? musicTaskOutput(id, res.data) : `${id}: Camxora error ${res.status}: ${trim(res.data, 200)}`);
         }
         return { ok: true, output: lines.join("\n") };
       },
