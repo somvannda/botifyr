@@ -93,7 +93,7 @@ import {
   UserPlusIcon,
   UsersIcon,
 } from "./Icons";
-import { Markdown } from "./Markdown";
+import { Markdown, MediaResults, parseMediaBlocks } from "./Markdown";
 import { FeedRail, FeedView } from "./FeedView";
 import { FeedSidebar } from "./FeedSidebar";
 import type { FeedSection } from "./feedTypes";
@@ -5523,6 +5523,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                             (message.botId && bots.find((entry) => entry.id === message.botId)) || activeBot;
                           const msgScheme = BOT_SCHEMES[(msgBot?.scheme ?? 0) % BOT_SCHEMES.length];
                           const parsed = parseOptions(message.content);
+                          const { body: mediaBody, tracks: mediaTracks } = parseMediaBlocks(parsed.body);
                           return (
                             <div
                               key={message.id}
@@ -5552,7 +5553,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                                 {/* The result (text + media players) reads after what
                                     the agent did, so generated songs sit below the
                                     activity list rather than above it. */}
-                                <Markdown text={parsed.body} onFileRef={openFileRef} />
+                                <Markdown text={mediaBody} onFileRef={openFileRef} />
+                                <MediaResults tracks={mediaTracks} />
                                 {message.taskId &&
                                   /cloudfront\.net\/\d+\/clip\/|\/api\/forbidden/.test(message.content) && (
                                     <button

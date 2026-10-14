@@ -164,7 +164,7 @@ function musicTaskOutput(id: string, data: unknown): string {
   });
   const hint = ready.length
     ? "\n\nReply now: include ONE fenced `media` block PER ✅ track (all of them), using exactly its \"play\" URL as " +
-      '"stream". Do not use the media_urls/audio_url values from the raw JSON.'
+      '"stream" and its "cover" URL as "cover". Do not use the media_urls/audio_url values from the raw JSON.'
     : "\n\nStill preparing the audio — poll again shortly and do not reply to the user yet.";
   return `${id}: ${running ? "preparing" : "finished"}\n${lines.join("\n")}${hint}`;
 }
