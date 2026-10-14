@@ -10,6 +10,7 @@ import {
 } from "./ai-keys.js";
 import { buildServer } from "./server.js";
 import { MemoryStore } from "./store/memory.js";
+import { decryptSecret } from "./vault.js";
 
 /**
  * Bring-your-own AI key: encrypted per-user storage, validation, and the
@@ -51,6 +52,25 @@ describe("ai keys", () => {
     const updated = await saveAiKey(store, vaultKey, "u1", { provider: "groq", model: "mixtral-8x7b-32768" });
     expect(updated.model).toBe("mixtral-8x7b-32768");
     expect(updated.hasKey).toBe(true);
+  });
+
+  it("device mode keeps the key off the server", async () => {
+    const store = new MemoryStore();
+    const vaultKey = Buffer.alloc(32);
+    const saved = await saveAiKey(store, vaultKey, "u1", {
+      provider: "openai",
+      model: "gpt-4o-mini",
+      mode: "device",
+    });
+    expect(saved.mode).toBe("device");
+    expect(saved.hasKey).toBe(false);
+    expect((await loadAiKey(store, vaultKey, "u1"))?.mode).toBe("device");
+
+    // Nothing key-shaped is stored, and device mode doesn't require a key.
+    const record = await store.getSecret("u1", AI_CONFIG_SECRET);
+    const plain = record ? decryptSecret(vaultKey, record) : "";
+    expect(plain).not.toContain("apiKey");
+    expect(validateAiInput({ provider: "openai", model: "gpt-4o-mini", mode: "device" }, false)).toBeNull();
   });
 
   it("validates provider, model, base URL and key requirements", () => {

@@ -12,6 +12,7 @@ import type {
 import type {
   AiKeyConfig,
   AiKeyInput,
+  AiKeyMode,
   AuditEvent,
   Bot,
   BotFile,
@@ -680,6 +681,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [aiApiKey, setAiApiKey] = useState("");
   const [aiBaseUrl, setAiBaseUrl] = useState("");
   const [aiEnabled, setAiEnabled] = useState(true);
+  const [aiMode, setAiMode] = useState<AiKeyMode>("server");
   const [aiNote, setAiNote] = useState<string | null>(null);
   const [aiBusy, setAiBusy] = useState(false);
 
@@ -1059,6 +1061,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
         setAiModel(config.model);
         setAiBaseUrl(config.baseUrl ?? "");
         setAiEnabled(config.enabled);
+        setAiMode(config.mode);
       })
       .catch(() => {});
 
@@ -2783,6 +2786,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
       baseUrl: aiBaseUrl.trim() || undefined,
       apiKey: aiApiKey.trim() || undefined,
       enabled: aiEnabled,
+      mode: aiMode,
     };
   }
 
@@ -8648,6 +8652,21 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                   )}
 
                   <form className="ai-form" onSubmit={saveAiKey}>
+                    {bridge.kind === "desktop" && (
+                      <label className="ai-field">
+                        <span>Where the key lives</span>
+                        <Select
+                          value={aiMode}
+                          onChange={(value) => setAiMode(value as AiKeyMode)}
+                          options={[
+                            { value: "server", label: "Server (encrypted)" },
+                            { value: "device", label: "This device only (never sent)" },
+                          ]}
+                          ariaLabel="Key storage"
+                        />
+                      </label>
+                    )}
+
                     <label className="ai-field">
                       <span>Provider</span>
                       <Select
@@ -8677,17 +8696,27 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                       />
                     </label>
 
-                    {!findAiProviderPreset(aiProvider)?.keyless && (
-                      <label className="ai-field">
-                        <span>API key</span>
-                        <input
-                          type="password"
-                          autoComplete="off"
-                          placeholder={aiConfig?.hasKey ? "•••••••• saved — leave blank to keep" : "paste your key"}
-                          value={aiApiKey}
-                          onChange={(event) => setAiApiKey(event.target.value)}
-                        />
-                      </label>
+                    {aiMode === "device" ? (
+                      <p className="settings-note">
+                        Your key stays on this computer — the local node makes the model calls. Set
+                        <code> BOTIFYR_AI_KEY </code> in the node environment (once per machine). Prompts still
+                        pass through the cloud on their way to your device.
+                      </p>
+                    ) : (
+                      !findAiProviderPreset(aiProvider)?.keyless && (
+                        <label className="ai-field">
+                          <span>API key</span>
+                          <input
+                            type="password"
+                            autoComplete="off"
+                            placeholder={
+                              aiConfig?.hasKey ? "•••••••• saved — leave blank to keep" : "paste your key"
+                            }
+                            value={aiApiKey}
+                            onChange={(event) => setAiApiKey(event.target.value)}
+                          />
+                        </label>
+                      )
                     )}
 
                     <label className="ai-field">
