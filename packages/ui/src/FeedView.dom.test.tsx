@@ -698,18 +698,23 @@ describe("Feed timeline & discovery", () => {
   it("surfaces newer posts behind the banner when the app regains focus (FEED-D10)", async () => {
     const older = makePost({ id: "old", body: "old top post" });
     const newer = makePost({ id: "new", body: "brand new post" });
-    const listFeed = vi
-      .fn()
-      .mockResolvedValueOnce({ items: [older], nextCursor: null })
-      .mockResolvedValue({ items: [newer, older], nextCursor: null });
+    // Deterministic: every call before the flip returns the old top; the wake
+    // check (after the flip) sees the newer post. Robust to an extra initial
+    // call, which previously desynced a `mockResolvedValueOnce` sequence.
+    let refreshed = false;
+    const listFeed = vi.fn(async () => ({
+      items: refreshed ? [newer, older] : [older],
+      nextCursor: null,
+    }));
     const client = { ...makeClient([]), listFeed } as unknown as BotifyrClient;
     render(<FeedView client={client} cloudUrl="http://cloud" viewerId="viewer-1" />);
     await screen.findByText("old top post");
 
+    refreshed = true;
     Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
     document.dispatchEvent(new Event("visibilitychange"));
 
-    const banner = await screen.findByRole("button", { name: /New activity/ });
+    const banner = await screen.findByRole("button", { name: /New activity/ }, { timeout: 5000 });
     expect(banner).toBeTruthy();
     // The list was NOT silently replaced — the old top is still rendered.
     expect(screen.getByText("old top post")).toBeTruthy();
