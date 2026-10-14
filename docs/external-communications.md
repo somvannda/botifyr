@@ -255,7 +255,9 @@ campaign → employee drafts → approvals (batch where safe) → schedule/publi
    A waiting draft also raises a **`reply_pending`** item at the top of the
    chair's "Needs you" inbox (with a **Review reply** shortcut), and contacts are
    named from Telegram's `getChat` on first sight (§4), so the chair sees a
-   person rather than a chat id. The three-pane transcript pane lands next.
+   person rather than a chat id. **Open** on a thread reads its full transcript
+   back from the channel session, so the chair can see the whole conversation
+   before replying.
 4. **Attention kinds** in `inbox.ts` (rules + `company.escalate`) surfaced in HQ.
 5. **Contacts/Pipeline view** (the CRM answer).
 6. **Campaigns** (marketing) + email as a second platform.
