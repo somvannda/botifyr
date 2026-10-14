@@ -206,6 +206,11 @@ CREATE TABLE IF NOT EXISTS connections (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (user_id, provider)
 );
+/* Workspace connections are shared across a company's employees. */
+ALTER TABLE connections ADD COLUMN IF NOT EXISTS workspace_id TEXT;
+CREATE INDEX IF NOT EXISTS connections_workspace_idx ON connections (workspace_id);
+CREATE UNIQUE INDEX IF NOT EXISTS connections_workspace_provider_idx
+  ON connections (workspace_id, provider) WHERE workspace_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS usage_events (
   id                TEXT PRIMARY KEY,

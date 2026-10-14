@@ -499,6 +499,52 @@ describe("workspaces API", () => {
     await app.close();
   });
 
+  it("scopes a connection to a workspace the user owns", async () => {
+    const { app, signup } = await boot();
+    const auth = await signup("ws-conn@example.com");
+    const ws = (
+      await app.inject({
+        method: "POST",
+        url: "/v1/workspaces",
+        headers: auth,
+        payload: { name: "Conn Co" },
+      })
+    ).json() as { id: string };
+
+    const saved = await app.inject({
+      method: "POST",
+      url: "/v1/connections/zernio/token",
+      headers: auth,
+      payload: { token: "zk_test", workspaceId: ws.id },
+    });
+    expect(saved.statusCode).toBe(200);
+    expect((saved.json() as { workspaceId?: string }).workspaceId).toBe(ws.id);
+
+    // It shows up for the workspace...
+    const scoped = (
+      await app.inject({ method: "GET", url: `/v1/connections?workspaceId=${ws.id}`, headers: auth })
+    ).json() as Array<{ provider: string }>;
+    expect(scoped.some((entry) => entry.provider === "zernio")).toBe(true);
+
+    // ...but not as a personal connection.
+    const personal = (
+      await app.inject({ method: "GET", url: "/v1/connections", headers: auth })
+    ).json() as Array<{ provider: string }>;
+    expect(personal.some((entry) => entry.provider === "zernio")).toBe(false);
+
+    // Someone who doesn't own the workspace is refused.
+    const stranger = await signup("ws-conn-stranger@example.com");
+    const denied = await app.inject({
+      method: "POST",
+      url: "/v1/connections/zernio/token",
+      headers: stranger,
+      payload: { token: "zk_other", workspaceId: ws.id },
+    });
+    expect(denied.statusCode).toBe(404);
+
+    await app.close();
+  });
+
   it("records a standup report", async () => {
     const { app, signup } = await boot();
     const auth = await signup("ws-standup@example.com");
