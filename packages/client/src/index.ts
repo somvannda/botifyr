@@ -8,6 +8,7 @@ import type {
   CompanyDirection,
   CompanyReport,
   ConnectionInfo,
+  Contact,
   CreateWorkspaceRequest,
   Department,
   DeviceKey,
@@ -1110,6 +1111,11 @@ export class BotifyrClient {
       json: true,
       body: JSON.stringify(input),
     });
+  }
+
+  /** The company's external contacts (docs/external-communications.md §4). */
+  listContacts(workspaceId: string): Promise<Contact[]> {
+    return this.request(`/v1/workspaces/${workspaceId}/contacts`);
   }
 
   /** Recent agent runs for a workspace — real execution, including failures. */

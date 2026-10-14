@@ -107,6 +107,32 @@ CREATE TABLE IF NOT EXISTS workspaces (
 );
 CREATE INDEX IF NOT EXISTS workspaces_owner_idx ON workspaces (owner_id, created_at);
 
+/* External comms: who we talk to, and the thread (docs/external-communications.md §4). */
+CREATE TABLE IF NOT EXISTS contacts (
+  id           TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  platform     TEXT NOT NULL,
+  external_id  TEXT NOT NULL,
+  data         JSONB NOT NULL,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (workspace_id, platform, external_id)
+);
+CREATE INDEX IF NOT EXISTS contacts_ws_idx ON contacts (workspace_id, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS conversations (
+  id               TEXT PRIMARY KEY,
+  workspace_id     TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  contact_id       TEXT NOT NULL,
+  platform         TEXT NOT NULL,
+  external_chat_id TEXT NOT NULL,
+  data             JSONB NOT NULL,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (platform, external_chat_id)
+);
+CREATE INDEX IF NOT EXISTS conversations_ws_idx ON conversations (workspace_id, updated_at DESC);
+
 CREATE TABLE IF NOT EXISTS workspace_roles (
   workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
   bot_id       TEXT NOT NULL REFERENCES bots(id) ON DELETE CASCADE,

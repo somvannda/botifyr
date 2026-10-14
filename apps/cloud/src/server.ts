@@ -3208,6 +3208,20 @@ export async function buildServer(options: ServerOptions) {
     },
   );
 
+  /** The company's external contacts (docs/external-communications.md §4). */
+  app.get<{ Params: { id: string } }>(
+    "/v1/workspaces/:id/contacts",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const workspace = await store.getWorkspace(request.params.id);
+      if (!workspace || workspace.ownerId !== userId) {
+        return reply.code(404).send({ error: "workspace not found" });
+      }
+      return store.listContacts(workspace.id);
+    },
+  );
+
   /** Recent agent runs for the company — real execution, including failures. */
   app.get<{ Params: { id: string } }>(
     "/v1/workspaces/:id/activity",
