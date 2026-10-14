@@ -597,19 +597,51 @@ export class MemoryStore implements Store {
   }
 
   async upsertConnection(record: ConnectionRecord): Promise<void> {
-    this.connections.set(`${record.userId}:${record.provider}`, record);
+    this.connections.set(`${record.workspaceId ?? ""}|${record.userId}|${record.provider}`, record);
   }
 
   async listConnections(userId: string): Promise<ConnectionRecord[]> {
-    return [...this.connections.values()].filter((record) => record.userId === userId);
+    return [...this.connections.values()].filter(
+      (record) => record.userId === userId && !record.workspaceId,
+    );
+  }
+
+  async listWorkspaceConnections(workspaceId: string): Promise<ConnectionRecord[]> {
+    return [...this.connections.values()].filter((record) => record.workspaceId === workspaceId);
   }
 
   async getConnection(userId: string, provider: string): Promise<ConnectionRecord | null> {
-    return this.connections.get(`${userId}:${provider}`) ?? null;
+    const found = [...this.connections.values()].find(
+      (record) => record.userId === userId && record.provider === provider && !record.workspaceId,
+    );
+    return found ?? null;
+  }
+
+  async getWorkspaceConnection(workspaceId: string, provider: string): Promise<ConnectionRecord | null> {
+    const found = [...this.connections.values()].find(
+      (record) => record.workspaceId === workspaceId && record.provider === provider,
+    );
+    return found ?? null;
   }
 
   async deleteConnection(userId: string, provider: string): Promise<boolean> {
-    return this.connections.delete(`${userId}:${provider}`);
+    for (const [key, record] of this.connections) {
+      if (record.userId === userId && record.provider === provider && !record.workspaceId) {
+        this.connections.delete(key);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  async deleteWorkspaceConnection(workspaceId: string, provider: string): Promise<boolean> {
+    for (const [key, record] of this.connections) {
+      if (record.workspaceId === workspaceId && record.provider === provider) {
+        this.connections.delete(key);
+        return true;
+      }
+    }
+    return false;
   }
 
   async addUsage(record: UsageRecord): Promise<void> {

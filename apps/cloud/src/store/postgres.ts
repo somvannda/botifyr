@@ -792,35 +792,73 @@ export class PostgresStore implements Store {
   }
 
   async upsertConnection(record: ConnectionRecord): Promise<void> {
+    const workspaceId = record.workspaceId ?? null;
+    // Workspace rows conflict on the partial (workspace_id, provider) index; user
+    // rows on the (user_id, provider) unique constraint.
+    const conflict = workspaceId
+      ? "ON CONFLICT (workspace_id, provider) WHERE workspace_id IS NOT NULL DO UPDATE SET ciphertext = EXCLUDED.ciphertext, iv = EXCLUDED.iv, tag = EXCLUDED.tag, created_at = EXCLUDED.created_at"
+      : "ON CONFLICT (user_id, provider) DO UPDATE SET ciphertext = EXCLUDED.ciphertext, iv = EXCLUDED.iv, tag = EXCLUDED.tag, created_at = EXCLUDED.created_at";
     await this.pool.query(
-      "INSERT INTO connections (id, user_id, provider, ciphertext, iv, tag, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7) " +
-        "ON CONFLICT (user_id, provider) DO UPDATE SET ciphertext = EXCLUDED.ciphertext, iv = EXCLUDED.iv, " +
-        "tag = EXCLUDED.tag, created_at = EXCLUDED.created_at",
-      [record.id, record.userId, record.provider, record.ciphertext, record.iv, record.tag, record.createdAt],
+      "INSERT INTO connections (id, user_id, provider, workspace_id, ciphertext, iv, tag, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) " +
+        conflict,
+      [
+        record.id,
+        record.userId,
+        record.provider,
+        workspaceId,
+        record.ciphertext,
+        record.iv,
+        record.tag,
+        record.createdAt,
+      ],
     );
   }
 
   async listConnections(userId: string): Promise<ConnectionRecord[]> {
     const { rows } = await this.pool.query(
-      "SELECT id, user_id, provider, ciphertext, iv, tag, created_at FROM connections WHERE user_id = $1 ORDER BY provider",
+      "SELECT id, user_id, provider, workspace_id, ciphertext, iv, tag, created_at FROM connections WHERE user_id = $1 AND workspace_id IS NULL ORDER BY provider",
       [userId],
+    );
+    return rows.map(toConnection);
+  }
+
+  async listWorkspaceConnections(workspaceId: string): Promise<ConnectionRecord[]> {
+    const { rows } = await this.pool.query(
+      "SELECT id, user_id, provider, workspace_id, ciphertext, iv, tag, created_at FROM connections WHERE workspace_id = $1 ORDER BY provider",
+      [workspaceId],
     );
     return rows.map(toConnection);
   }
 
   async getConnection(userId: string, provider: string): Promise<ConnectionRecord | null> {
     const { rows } = await this.pool.query(
-      "SELECT id, user_id, provider, ciphertext, iv, tag, created_at FROM connections WHERE user_id = $1 AND provider = $2",
+      "SELECT id, user_id, provider, workspace_id, ciphertext, iv, tag, created_at FROM connections WHERE user_id = $1 AND provider = $2 AND workspace_id IS NULL",
       [userId, provider],
     );
     return rows[0] ? toConnection(rows[0]) : null;
   }
 
+  async getWorkspaceConnection(workspaceId: string, provider: string): Promise<ConnectionRecord | null> {
+    const { rows } = await this.pool.query(
+      "SELECT id, user_id, provider, workspace_id, ciphertext, iv, tag, created_at FROM connections WHERE workspace_id = $1 AND provider = $2",
+      [workspaceId, provider],
+    );
+    return rows[0] ? toConnection(rows[0]) : null;
+  }
+
   async deleteConnection(userId: string, provider: string): Promise<boolean> {
-    const result = await this.pool.query("DELETE FROM connections WHERE user_id = $1 AND provider = $2", [
-      userId,
-      provider,
-    ]);
+    const result = await this.pool.query(
+      "DELETE FROM connections WHERE user_id = $1 AND provider = $2 AND workspace_id IS NULL",
+      [userId, provider],
+    );
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async deleteWorkspaceConnection(workspaceId: string, provider: string): Promise<boolean> {
+    const result = await this.pool.query(
+      "DELETE FROM connections WHERE workspace_id = $1 AND provider = $2",
+      [workspaceId, provider],
+    );
     return (result.rowCount ?? 0) > 0;
   }
 
@@ -2676,6 +2714,7 @@ function toConnection(row: any): ConnectionRecord {
   return {
     id: row.id,
     userId: row.user_id,
+    workspaceId: row.workspace_id ?? null,
     provider: row.provider,
     ciphertext: row.ciphertext,
     iv: row.iv,

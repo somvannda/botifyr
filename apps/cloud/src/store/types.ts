@@ -419,6 +419,8 @@ export interface AuditRecord {
 export interface ConnectionRecord {
   id: string;
   userId: string;
+  /** Set when the connection belongs to a workspace (shared by its employees). */
+  workspaceId?: string | null;
   provider: string;
   ciphertext: string;
   iv: string;
@@ -817,6 +819,10 @@ export interface Store {
   listConnections(userId: string): Promise<ConnectionRecord[]>;
   getConnection(userId: string, provider: string): Promise<ConnectionRecord | null>;
   deleteConnection(userId: string, provider: string): Promise<boolean>;
+  /** Connections owned by a workspace (shared by its employees). */
+  listWorkspaceConnections(workspaceId: string): Promise<ConnectionRecord[]>;
+  getWorkspaceConnection(workspaceId: string, provider: string): Promise<ConnectionRecord | null>;
+  deleteWorkspaceConnection(workspaceId: string, provider: string): Promise<boolean>;
 
   addUsage(record: UsageRecord): Promise<void>;
   /** Total tokens + request count for a user since an ISO timestamp. */

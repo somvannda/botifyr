@@ -2124,14 +2124,32 @@ export async function buildServer(options: ServerOptions) {
   };
   const pendingConnects = new Map<string, { userId: string; provider: string; createdAt: number }>();
 
-  app.get("/v1/connections", { preHandler: requireAuth }, async (request) => {
-    const records = await store.listConnections(request.userId as string);
-    const list: ConnectionInfo[] = records.map((record) => ({
-      provider: record.provider,
-      connectedAt: record.createdAt,
-    }));
-    return list;
-  });
+  app.get<{ Querystring: { workspaceId?: string } }>(
+    "/v1/connections",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const records = await store.listConnections(userId);
+      const requested = (request.query?.workspaceId ?? "").trim();
+      let workspaceRecords: typeof records = [];
+      if (requested) {
+        const workspace = await store.getWorkspace(requested);
+        if (!workspace || workspace.ownerId !== userId) {
+          return reply.code(404).send({ error: "workspace not found" });
+        }
+        workspaceRecords = await store.listWorkspaceConnections(workspace.id);
+      }
+      // A workspace connection wins over a personal one for the same provider.
+      const byProvider = new Map<string, ConnectionInfo>();
+      for (const record of records) {
+        byProvider.set(record.provider, { provider: record.provider, connectedAt: record.createdAt });
+      }
+      for (const record of workspaceRecords) {
+        byProvider.set(record.provider, { provider: record.provider, connectedAt: record.createdAt });
+      }
+      return [...byProvider.values()];
+    },
+  );
 
   app.post<{ Params: { provider: string } }>(
     "/v1/connections/:provider/start",
@@ -2172,7 +2190,7 @@ export async function buildServer(options: ServerOptions) {
     "publora",
     "postforme",
   ]);
-  app.post<{ Params: { provider: string }; Body: { token?: string } }>(
+  app.post<{ Params: { provider: string }; Body: { token?: string; workspaceId?: string } }>(
     "/v1/connections/:provider/token",
     { preHandler: requireAuth },
     async (request, reply) => {
@@ -2180,6 +2198,18 @@ export async function buildServer(options: ServerOptions) {
       if (!TOKEN_APPS.has(provider)) return reply.code(400).send({ error: "unknown app" });
       const token = (request.body?.token ?? "").trim();
       if (!token) return reply.code(400).send({ error: "a token is required" });
+      const userId = request.userId as string;
+      // A connection is personal by default, or owned by a workspace the user
+      // controls — so a whole company can share one vendor account.
+      let workspaceId: string | null = null;
+      const requestedWorkspace = (request.body?.workspaceId ?? "").trim();
+      if (requestedWorkspace) {
+        const workspace = await store.getWorkspace(requestedWorkspace);
+        if (!workspace || workspace.ownerId !== userId) {
+          return reply.code(404).send({ error: "workspace not found" });
+        }
+        workspaceId = workspace.id;
+      }
       const encrypted = encryptSecret(
         vaultKey,
         JSON.stringify({ accessToken: token, refreshToken: null, expiresAt: null }),
@@ -2187,14 +2217,15 @@ export async function buildServer(options: ServerOptions) {
       const now = new Date().toISOString();
       await store.upsertConnection({
         id: randomUUID(),
-        userId: request.userId as string,
+        userId,
+        workspaceId,
         provider,
         ciphertext: encrypted.ciphertext,
         iv: encrypted.iv,
         tag: encrypted.tag,
         createdAt: now,
       });
-      return { provider, connectedAt: now };
+      return { provider, connectedAt: now, workspaceId };
     },
   );
 
