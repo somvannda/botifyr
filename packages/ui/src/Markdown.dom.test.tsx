@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, fireEvent, render } from "@testing-library/react";
 import { Markdown } from "./Markdown";
 
 afterEach(() => cleanup());
@@ -35,5 +35,19 @@ describe("Markdown media URLs", () => {
     const { container } = render(<Markdown text="**bold** [site](https://example.com)" />);
     expect(container.querySelector("strong")?.textContent).toBe("bold");
     expect(container.querySelector("a")?.getAttribute("href")).toBe("https://example.com");
+  });
+
+  it("offers a direct download link to the CDN (no server proxy)", () => {
+    const { container } = render(<Markdown text="https://cdn.example/song.mp3" />);
+    const link = container.querySelector("a.md-download") as HTMLAnchorElement;
+    expect(link?.getAttribute("href")).toBe("https://cdn.example/song.mp3");
+    expect(link?.hasAttribute("download")).toBe(true);
+  });
+
+  it("falls back to the download link when playback fails (expired URL)", () => {
+    const { container } = render(<Markdown text="https://cdn.example/song.mp3" />);
+    const audio = container.querySelector("audio") as HTMLAudioElement;
+    fireEvent.error(audio);
+    expect(container.querySelector("a.md-download")?.textContent).toMatch(/download/i);
   });
 });
