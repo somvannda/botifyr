@@ -2170,6 +2170,7 @@ export async function buildServer(options: ServerOptions) {
     "zernio",
     "socialapi",
     "publora",
+    "postforme",
   ]);
   app.post<{ Params: { provider: string }; Body: { token?: string } }>(
     "/v1/connections/:provider/token",
