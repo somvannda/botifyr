@@ -19,6 +19,8 @@ function fakeClient(overrides: Record<string, unknown> = {}): BotifyrClient {
       .fn()
       .mockResolvedValue({ workspaceId: "ws1", limitTokens: 0, usedTokens: 0, updatedAt: "" }),
     listCapabilityGrants: vi.fn().mockResolvedValue([]),
+    listConnectorPreferences: vi.fn().mockResolvedValue([]),
+    listConnections: vi.fn().mockResolvedValue([]),
     listCompanyReports: vi.fn().mockResolvedValue([]),
     listQuests: vi.fn().mockResolvedValue([]),
     listWorkspaceFiles: vi.fn().mockResolvedValue([]),
@@ -537,6 +539,44 @@ describe("CompanyWorkspace (DOM)", () => {
         assigneeBotId: "bot2",
       }),
     );
+  });
+
+  it("offers a connected app per capability on the Team tab", async () => {
+    const employee = {
+      workspaceId: "ws1",
+      botId: "bot2",
+      title: "Head of Marketing",
+      department: "marketing",
+      hiredAt: "",
+    };
+    const withTeam = { ...company, roles: [employee, ...company.roles] } as WorkspaceWithRoles;
+    const client = fakeClient({
+      listCapabilityGrants: vi.fn().mockResolvedValue([
+        {
+          workspaceId: "ws1",
+          subject: "role:Head of Marketing",
+          capability: "social.publish",
+          granted: true,
+          updatedAt: "",
+        },
+      ]),
+      // Two connected apps can publish, so the founder gets a real choice.
+      listConnections: vi.fn().mockResolvedValue([{ provider: "zernio" }, { provider: "publora" }]),
+      listConnectorPreferences: vi.fn().mockResolvedValue([]),
+    });
+    render(
+      <CompanyWorkspace
+        client={client}
+        companies={[withTeam]}
+        bots={[{ id: "bot2", name: "Andres" } as never]}
+        onOpenOffice={() => {}}
+        onCreated={() => {}}
+      />,
+    );
+    fireEvent.click(await screen.findByRole("tab", { name: "Team" }));
+    await waitFor(() => {
+      expect(document.querySelectorAll(".cws-chip-app").length).toBeGreaterThan(0);
+    });
   });
 
   it("renders wiki files as readable markdown, not raw source", async () => {
