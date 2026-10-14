@@ -30,6 +30,7 @@ import type {
   WorkItem,
   WorkspaceBudget,
   WorkspaceInbox,
+  WorkspaceEmail,
   WorkspaceTelegram,
   WorkspaceWithRoles,
 } from "@botifyr/shared";
@@ -1109,6 +1110,22 @@ export class BotifyrClient {
     input: { botId: string | null; handle?: string | null },
   ): Promise<{ telegram: WorkspaceTelegram | null }> {
     return this.request(`/v1/workspaces/${workspaceId}/telegram`, {
+      method: "PATCH",
+      json: true,
+      body: JSON.stringify(input),
+    });
+  }
+
+  /**
+   * Connect the company's own email channel (BYO Resend) and pick the employee
+   * that answers it (docs/external-communications.md §13). Pass `botId: null`
+   * (or no `from`) to disconnect.
+   */
+  setWorkspaceEmail(
+    workspaceId: string,
+    input: { botId: string | null; from?: string | null; handle?: string | null },
+  ): Promise<{ email: WorkspaceEmail | null }> {
+    return this.request(`/v1/workspaces/${workspaceId}/email`, {
       method: "PATCH",
       json: true,
       body: JSON.stringify(input),

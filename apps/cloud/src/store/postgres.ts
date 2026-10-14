@@ -411,6 +411,13 @@ export class PostgresStore implements Store {
     return rows.map((row) => row.data as WorkspaceRecord);
   }
 
+  async listWorkspacesWithEmail(): Promise<WorkspaceRecord[]> {
+    const { rows } = await this.pool.query(
+      "SELECT data FROM workspaces WHERE data -> 'email' ->> 'from' IS NOT NULL ORDER BY created_at ASC",
+    );
+    return rows.map((row) => row.data as WorkspaceRecord);
+  }
+
   async saveContact(record: ContactRecord): Promise<void> {
     await this.pool.query(
       `INSERT INTO contacts (id, workspace_id, platform, external_id, data)

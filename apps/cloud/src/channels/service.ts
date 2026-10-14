@@ -74,6 +74,13 @@ export class ChannelService {
     if (this.started) void adapter.start();
   }
 
+  /** Inbound from a webhook (e.g. Resend email) — the same path a poll takes. */
+  ingest(channel: string, message: ChannelMessage): boolean {
+    if (!this.adapters.has(channel)) return false;
+    void this.handle(channel, message);
+    return true;
+  }
+
   async start(): Promise<void> {
     this.started = true;
     for (const adapter of this.adapters.values()) {

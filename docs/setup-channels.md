@@ -55,6 +55,16 @@ account:
 `email.send` is approval-gated. Without these env vars the tool reports that email
 isn't configured.
 
+**Per company (preferred).** A company can connect its **own** Resend account,
+like its own Telegram bot (`docs/external-communications.md` §13):
+`PATCH /v1/workspaces/:id/email` sets `Workspace.email` (`botId` + `from`), and the
+credentials are workspace secrets — `RESEND_API_KEY` and `RESEND_WEBHOOK_SECRET`
+(set via `POST /v1/workspaces/:id/secrets`). Inbound mail arrives on the public
+route `POST /v1/webhooks/resend/:workspaceId`, authenticated by Resend's Svix
+signature. This drives the **external-comms channel** (inbound → employee →
+draft → approval → send). The agent's `email.send` tool still uses the
+deployment env above.
+
 ## 4. Postiz — multi-platform (optional, needs an account)
 
 For Facebook / Instagram / LinkedIn / X posting, Postiz is an aggregator. Set

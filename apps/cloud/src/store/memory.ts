@@ -361,6 +361,13 @@ export class MemoryStore implements Store {
       .map((workspace) => structuredClone(workspace));
   }
 
+  async listWorkspacesWithEmail(): Promise<WorkspaceRecord[]> {
+    return [...this.workspaces.values()]
+      .filter((workspace) => Boolean(workspace.email?.from))
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      .map((workspace) => structuredClone(workspace));
+  }
+
   async saveContact(record: ContactRecord): Promise<void> {
     this.contacts.set(record.id, structuredClone(record));
   }
