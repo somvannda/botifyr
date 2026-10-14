@@ -1,4 +1,5 @@
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
+import { DownloadIcon, PauseIcon, PlayIcon } from "./Icons";
 
 /**
  * A tiny, dependency-free markdown renderer that builds React elements (no
@@ -20,13 +21,22 @@ function isFileName(value: string): boolean {
 const AUDIO_URL_RE = /\.(?:mp3|wav|m4a|aac|ogg|oga|opus|flac)(?:[?#].*)?$/i;
 const VIDEO_URL_RE = /\.(?:mp4|webm|mov|m4v|ogv)(?:[?#].*)?$/i;
 
+/** mm:ss clock for the custom player (NaN / negative → 0:00). */
+function clock(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return "0:00";
+  const total = Math.floor(seconds);
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+}
+
 /**
- * Inline player for a media URL, plus a direct download link.
+ * Inline player for a media URL, plus a download pill.
  *
- * Nothing is proxied through our server: playback streams from the provider's
- * CDN and the download goes straight to the same URL. When a streaming URL is
- * signed/expiring, pass a durable `download` URL too — playback starts on the
- * stream and, if it fails (expired), switches to the durable URL.
+ * Audio gets a compact custom player (play/pause, seek, time) with optional
+ * cover, title and version badge; video keeps the native controls. Nothing is
+ * proxied through our server: playback streams from the provider's CDN and the
+ * download goes straight to the same URL. When a streaming URL is signed/expiring,
+ * pass a durable `download` URL too — playback starts on the stream and, if it
+ * fails (expired), switches to the durable URL.
  */
 function MediaPlayer({
   stream,
@@ -34,25 +44,102 @@ function MediaPlayer({
   cover,
   kind,
   title,
+  badge,
 }: {
   stream: string;
   download?: string;
   cover?: string;
   kind: "audio" | "video";
   title?: string;
+  badge?: string;
 }) {
   const [failed, setFailed] = useState(false);
+  const [playing, setPlaying] = useState(false);
+  const [time, setTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const src = failed && download ? download : stream;
   const href = download ?? stream;
-  const mediaProps = { src, controls: true, preload: "metadata" as const, onError: () => setFailed(true) };
+  const max = Number.isFinite(duration) && duration > 0 ? duration : 0;
+
+  const toggle = () => {
+    const el = audioRef.current;
+    if (!el) return;
+    if (el.paused) void el.play().catch(() => setFailed(true));
+    else el.pause();
+  };
+  const seek = (next: number) => {
+    const el = audioRef.current;
+    if (!el) return;
+    el.currentTime = next;
+    setTime(next);
+  };
+
+  const head = (cover || title || badge) && (
+    <span className="md-media-head">
+      {cover && <img className="md-media-cover" src={cover} alt="" loading="lazy" />}
+      <span className="md-media-labels">
+        {badge && <span className="md-badge md-badge-version">{badge}</span>}
+        {title && <span className="md-media-title">{title}</span>}
+      </span>
+    </span>
+  );
+  const downloadLink = (
+    <a className="md-badge md-badge-download" href={href} download target="_blank" rel="noreferrer">
+      <DownloadIcon size={14} />
+      {failed && !download ? "Couldn't play — download from Camxora" : "Download"}
+    </a>
+  );
+
+  if (kind === "video") {
+    return (
+      <span className="md-media">
+        {head}
+        <video className="md-video" src={src} controls preload="metadata" onError={() => setFailed(true)} />
+        {downloadLink}
+      </span>
+    );
+  }
+
   return (
     <span className="md-media">
-      {cover && <img className="md-media-cover" src={cover} alt="" loading="lazy" />}
-      {title && <span className="md-media-title">{title}</span>}
-      {kind === "audio" ? <audio className="md-audio" {...mediaProps} /> : <video className="md-video" {...mediaProps} />}
-      <a className="md-download" href={href} download target="_blank" rel="noreferrer">
-        {failed && !download ? "Couldn't play — download from Camxora" : "Download"}
-      </a>
+      {head}
+      <span className="md-player">
+        <audio
+          ref={audioRef}
+          className="md-audio"
+          src={src}
+          preload="metadata"
+          onPlay={() => setPlaying(true)}
+          onPause={() => setPlaying(false)}
+          onEnded={() => setPlaying(false)}
+          onTimeUpdate={(event) => setTime(event.currentTarget.currentTime)}
+          onLoadedMetadata={(event) => setDuration(event.currentTarget.duration)}
+          onError={() => setFailed(true)}
+        />
+        <button
+          className="md-player-play"
+          type="button"
+          onClick={toggle}
+          aria-label={playing ? "Pause" : "Play"}
+        >
+          {playing ? <PauseIcon size={16} /> : <PlayIcon size={16} />}
+        </button>
+        <input
+          className="md-player-seek"
+          type="range"
+          min={0}
+          max={max}
+          step={0.1}
+          value={max > 0 ? Math.min(time, max) : 0}
+          onChange={(event) => seek(Number(event.currentTarget.value))}
+          aria-label="Seek"
+        />
+        <span className="md-player-time">
+          {clock(time)} <span className="md-player-sep">/</span> {clock(duration)}
+        </span>
+      </span>
+      {downloadLink}
     </span>
   );
 }
@@ -66,13 +153,13 @@ function mediaPlayer(url: string, key: string): ReactNode | null {
 
 /**
  * A bullet that is nothing but a play glyph + a media URL — the shape old music
- * messages used (`- ▶️ https://…/clip.mp3`). Rendered as a plain player so the
- * bullet marker and the emoji don't sit next to it.
+ * messages used (`- ▶️ https://…/clip.mp3`). Returns the media URL so the caller
+ * can render it as its own versioned player.
  */
-function loneMedia(text: string, key: string): ReactNode | null {
+function loneMediaUrl(text: string): string | null {
   const stripped = text.replace(/^(?:\s|\u25B6|\u25BA|\u23F5|\u23F4|\u27A4|\uFE0F)+/, "").trim();
   const url = /^(https?:\/\/\S+)$/.exec(stripped)?.[1];
-  return url ? mediaPlayer(url, key) : null;
+  return url && (AUDIO_URL_RE.test(url) || VIDEO_URL_RE.test(url)) ? url : null;
 }
 
 /**
@@ -275,6 +362,7 @@ export function Markdown({ text, onFileRef }: { text: string; onFileRef?: (name:
     let items: ReactNode[] = [];
     let listType: "ul" | "ol" | null = null;
     let paragraph: string[] = [];
+    let mediaPlayers: ReactNode[] = [];
 
     const flushParagraph = () => {
       if (paragraph.length === 0) return;
@@ -292,6 +380,17 @@ export function Markdown({ text, onFileRef }: { text: string; onFileRef?: (name:
       items = [];
       listType = null;
     };
+    // Consecutive `- ▶️ <url>` lines are one song's takes — collect them so each
+    // gets a "Version N" badge and they sit together in a card group.
+    const flushMedia = () => {
+      if (mediaPlayers.length === 0) return;
+      blocks.push(
+        <div className="md-versions" key={`versions-${segIndex}-${blocks.length}`}>
+          {mediaPlayers}
+        </div>,
+      );
+      mediaPlayers = [];
+    };
 
     for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
       const line = lines[lineIndex] as string;
@@ -300,6 +399,7 @@ export function Markdown({ text, onFileRef }: { text: string; onFileRef?: (name:
       if (TABLE_ROW_RE.test(line) && TABLE_SEP_RE.test(lines[lineIndex + 1] ?? "")) {
         flushParagraph();
         flushList();
+        flushMedia();
         const header = cells(line);
         const bodyRows: string[][] = [];
         let row = lineIndex + 2;
@@ -336,6 +436,7 @@ export function Markdown({ text, onFileRef }: { text: string; onFileRef?: (name:
       if (RULE_RE.test(line)) {
         flushParagraph();
         flushList();
+        flushMedia();
         blocks.push(<hr key={`hr-${segIndex}-${lineIndex}`} />);
         continue;
       }
@@ -347,6 +448,7 @@ export function Markdown({ text, onFileRef }: { text: string; onFileRef?: (name:
       if (heading) {
         flushParagraph();
         flushList();
+        flushMedia();
         const level = heading[1].length;
         const key = `h-${segIndex}-${lineIndex}`;
         const content = inline(heading[2], key, onFileRef);
@@ -362,19 +464,24 @@ export function Markdown({ text, onFileRef }: { text: string; onFileRef?: (name:
         continue;
       }
       if (bullet) {
-        const media = loneMedia(bullet[1], `li-${segIndex}-${lineIndex}`);
-        if (media) {
-          // `- ▶️ <url>` → just the player (no bullet marker, no play emoji).
+        const mediaUrl = loneMediaUrl(bullet[1]);
+        if (mediaUrl) {
+          // `- ▶️ <url>` → a themed, versioned player (no bullet marker/emoji).
           flushParagraph();
           flushList();
-          blocks.push(
-            <div className="md-media-line" key={`ml-${segIndex}-${lineIndex}`}>
-              {media}
+          mediaPlayers.push(
+            <div className="md-version" key={`v-${segIndex}-${lineIndex}`}>
+              <MediaPlayer
+                stream={mediaUrl}
+                kind={VIDEO_URL_RE.test(mediaUrl) ? "video" : "audio"}
+                badge={`Version ${mediaPlayers.length + 1}`}
+              />
             </div>,
           );
           continue;
         }
         flushParagraph();
+        flushMedia();
         if (listType && listType !== "ul") flushList();
         listType = "ul";
         items.push(
@@ -386,6 +493,7 @@ export function Markdown({ text, onFileRef }: { text: string; onFileRef?: (name:
       }
       if (numbered) {
         flushParagraph();
+        flushMedia();
         if (listType && listType !== "ol") flushList();
         listType = "ol";
         items.push(
@@ -396,11 +504,13 @@ export function Markdown({ text, onFileRef }: { text: string; onFileRef?: (name:
         continue;
       }
       flushList();
+      flushMedia();
       paragraph.push(line);
     }
 
     flushList();
     flushParagraph();
+    flushMedia();
   });
 
   return <div className="md">{blocks}</div>;

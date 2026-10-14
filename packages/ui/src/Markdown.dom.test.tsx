@@ -31,18 +31,28 @@ describe("Markdown media URLs", () => {
     expect(container.querySelector("audio.md-audio")).toBeTruthy();
   });
 
-  it("renders a legacy `- ▶️ <url>` bullet as a bare player, no marker or emoji", () => {
+  it("renders a legacy `- ▶️ <url>` bullet as a versioned player, no marker or emoji", () => {
     const { container } = render(<Markdown text={"1) Song A\n- ▶️ https://cdn.example/a.mp3"} />);
     expect(container.querySelector("ul")).toBeNull();
     expect(container.querySelector("li")).toBeNull();
-    expect(container.querySelector(".md-media-line audio.md-audio")).toBeTruthy();
+    expect(container.querySelector(".md-versions .md-version audio.md-audio")).toBeTruthy();
+    expect(container.querySelector(".md-badge-version")?.textContent).toBe("Version 1");
     expect(container.textContent).not.toContain("▶");
+  });
+
+  it("groups a song's takes and labels them Version 1 / Version 2", () => {
+    const { container } = render(
+      <Markdown text={"- ▶️ https://cdn.example/a.mp3\n- ▶️ https://cdn.example/b.mp3"} />,
+    );
+    expect(container.querySelectorAll(".md-versions")).toHaveLength(1);
+    const badges = [...container.querySelectorAll(".md-badge-version")].map((b) => b.textContent);
+    expect(badges).toEqual(["Version 1", "Version 2"]);
   });
 
   it("keeps a bullet that has extra text as a list item", () => {
     const { container } = render(<Markdown text={"- Listen: https://cdn.example/a.mp3"} />);
     expect(container.querySelector("li")).toBeTruthy();
-    expect(container.querySelector(".md-media-line")).toBeNull();
+    expect(container.querySelector(".md-versions")).toBeNull();
   });
 
   it("still renders bold text and ordinary links", () => {
@@ -53,7 +63,7 @@ describe("Markdown media URLs", () => {
 
   it("offers a direct download link to the CDN (no server proxy)", () => {
     const { container } = render(<Markdown text="https://cdn.example/song.mp3" />);
-    const link = container.querySelector("a.md-download") as HTMLAnchorElement;
+    const link = container.querySelector("a.md-badge-download") as HTMLAnchorElement;
     expect(link?.getAttribute("href")).toBe("https://cdn.example/song.mp3");
     expect(link?.hasAttribute("download")).toBe(true);
   });
@@ -62,7 +72,7 @@ describe("Markdown media URLs", () => {
     const { container } = render(<Markdown text="https://cdn.example/song.mp3" />);
     const audio = container.querySelector("audio") as HTMLAudioElement;
     fireEvent.error(audio);
-    expect(container.querySelector("a.md-download")?.textContent).toMatch(/download/i);
+    expect(container.querySelector("a.md-badge-download")?.textContent).toMatch(/download/i);
   });
 
   it("streams the media block's stream URL and swaps to the durable download on expiry", () => {
@@ -74,7 +84,7 @@ describe("Markdown media URLs", () => {
     const { container } = render(<Markdown text={text} />);
     const audio = container.querySelector("audio") as HTMLAudioElement;
     expect(audio?.getAttribute("src")).toBe("https://cdn.example/song.mp3?t=1");
-    expect((container.querySelector("a.md-download") as HTMLAnchorElement)?.getAttribute("href")).toBe(
+    expect((container.querySelector("a.md-badge-download") as HTMLAnchorElement)?.getAttribute("href")).toBe(
       "https://cdn.example/song.mp3",
     );
     fireEvent.error(audio);
@@ -118,3 +128,4 @@ describe("Markdown media URLs", () => {
     expect(container.textContent).toContain("A");
   });
 });
+

@@ -5403,16 +5403,142 @@ body {
 }
 
 /* Inline media players (Markdown renders media URLs as playback). */
-.md-audio,
 .md-video {
   display: block;
   width: 100%;
   margin: var(--space-3) 0;
   border-radius: var(--radius-control);
+  max-height: 360px;
 }
 
-.md-video {
-  max-height: 360px;
+.md-media {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+.md-media-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.md-media-cover {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-control);
+  object-fit: cover;
+  flex: none;
+}
+
+.md-media-labels {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.md-media-title {
+  font-size: var(--text-md);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* One card per take, grouped under a song (`- ▶️ <url>` runs). */
+.md-versions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: var(--space-2) 0;
+}
+
+.md-version {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-bubble);
+  padding: var(--space-3);
+  background: var(--panel-2);
+}
+
+/* Custom audio player: the native <audio> is hidden behind these controls. */
+.md-audio {
+  display: none;
+}
+
+.md-player {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.md-player-play {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-round);
+  color: #fff;
+  background: var(--accent-solid);
+  cursor: pointer;
+}
+
+.md-player-play:hover {
+  background: var(--accent);
+}
+
+.md-player-seek {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--accent);
+}
+
+.md-player-time {
+  flex: none;
+  font-size: var(--text-sm);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.md-player-sep {
+  margin: 0 2px;
+  opacity: 0.6;
+}
+
+/* Badges: version label and download pill. */
+.md-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  width: fit-content;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+  text-decoration: none;
+}
+
+.md-badge-version {
+  color: var(--accent);
+  border-color: var(--accent-border);
+  background: var(--accent-soft);
+  font-weight: 600;
+}
+
+.md-badge-download {
+  color: var(--text);
+  background: var(--panel-2);
+}
+
+.md-badge-download:hover {
+  border-color: var(--accent);
 }
 
 /* Structured Results list (generated tracks). */
@@ -5432,29 +5558,6 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius-bubble);
   padding: var(--space-3);
-}
-
-.md-media {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.md-media-cover {
-  width: 72px;
-  height: 72px;
-  border-radius: var(--radius-control);
-  object-fit: cover;
-}
-
-.md-media-title {
-  font-size: var(--text-lg);
-  font-weight: 500;
-}
-
-/* A media-only bullet (`- ▶️ <url>`) drops its marker + emoji. */
-.md-media-line {
-  margin-top: var(--space-2);
 }
 
 .md code {
