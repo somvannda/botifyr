@@ -19,7 +19,7 @@
 //   npm run wt -- list
 
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import path from "node:path";
 
 const BASE_BRANCH = "main";
@@ -150,6 +150,20 @@ function runGate(dir) {
   }
 }
 
+// Remove a task worktree best-effort. On Windows `git worktree remove --force`
+// fails when the tree still holds files (node_modules) — "Directory not empty" —
+// so fall back to an fs delete followed by `git worktree prune`.
+function removeWorktree(root, dir) {
+  const res = git(["worktree", "remove", "--force", dir], { cwd: root, capture: true, allowFail: true });
+  if (res.status === 0) return;
+  try {
+    rmSync(dir, { recursive: true, force: true });
+  } catch {
+    // best-effort: leave the directory if the OS won't release it
+  }
+  git(["worktree", "prune"], { cwd: root, capture: true, allowFail: true });
+}
+
 // Default finish: land through a reviewed, CI-gated PR so `main` never moves by
 // a hidden local merge. CI is the gate; never merge red.
 function finishViaPr(root, dir, branch) {
@@ -184,16 +198,16 @@ function finishViaPr(root, dir, branch) {
   }
 
   console.log(`\n▶ squash-merging ${branch} …`);
-  const merged = run(GH, ["pr", "merge", branch, "--squash", "--delete-branch"], {
-    cwd: dir,
-    capture: true,
-    allowFail: true,
-  });
-  if (merged.status !== 0) {
-    throw new Error(`merge failed (review or up-to-date required?). PR kept.\n${merged.stderr}`);
+  run(GH, ["pr", "merge", branch, "--squash", "--delete-branch"], { cwd: dir, capture: true, allowFail: true });
+
+  // `gh pr merge` can exit non-zero on its own post-merge local cleanup even
+  // when the merge succeeded, so trust the PR state, not gh's exit code.
+  const state = run(GH, ["pr", "view", branch, "--json", "state"], { cwd: dir, capture: true, allowFail: true });
+  if (!/"state"\s*:\s*"MERGED"/.test(state.stdout ?? "")) {
+    throw new Error(`PR did not merge (review or up-to-date required?). PR kept.\n${state.stderr ?? ""}`);
   }
 
-  git(["worktree", "remove", "--force", dir], { cwd: root });
+  removeWorktree(root, dir);
   git(["branch", "-D", branch], { cwd: root, capture: true, allowFail: true });
   updateLocalMain(root);
   console.log(`\n✓ merged ${branch} via PR; worktree + branch removed.`);
@@ -252,7 +266,7 @@ function finishLocally(root, dir, branch, slug, flags) {
     );
   }
 
-  git(["worktree", "remove", "--force", dir], { cwd: root });
+  removeWorktree(root, dir);
   git(["branch", "-D", branch], { cwd: root });
   console.log(`\n✓ merged ${branch} into ${BASE_BRANCH}; worktree + branch removed. One source tree.`);
 }
@@ -286,7 +300,7 @@ function cmdRemove(root, slug) {
   assertSlug(slug);
   const dir = worktreeDir(root, slug);
   const branch = branchFor(slug);
-  if (existsSync(dir)) git(["worktree", "remove", "--force", dir], { cwd: root });
+  if (existsSync(dir)) removeWorktree(root, dir);
   git(["branch", "-D", branch], { cwd: root, capture: true, allowFail: true });
   console.log(`✓ removed worktree + branch for '${slug}' (changes discarded).`);
 }
