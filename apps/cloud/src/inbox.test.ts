@@ -77,7 +77,13 @@ describe("buildInbox", () => {
     const inbox = buildInbox(empty);
     expect(inbox.items).toEqual([]);
     expect(inbox.urgent).toBe(0);
-    expect(inbox.counts).toEqual({ approval: 0, trust_review: 0, blocked_work: 0, quest_proposed: 0 });
+    expect(inbox.counts).toEqual({
+      approval: 0,
+      trust_review: 0,
+      blocked_work: 0,
+      quest_proposed: 0,
+      reply_pending: 0,
+    });
   });
 
   it("ranks high-risk approvals above medium, low, and a proposed quest", () => {
@@ -101,6 +107,31 @@ describe("buildInbox", () => {
     expect(inbox.urgent).toBe(2);
     expect(inbox.counts.approval).toBe(3);
     expect(inbox.counts.quest_proposed).toBe(1);
+  });
+
+  it("raises a waiting customer reply as the loudest item", () => {
+    const inbox = buildInbox({
+      ...empty,
+      tasks: [task({ id: "a-low", risk: "low" })],
+      conversations: [
+        {
+          id: "conv1",
+          workspaceId: "ws1",
+          contactId: "ct1",
+          platform: "telegram",
+          externalChatId: "555",
+          kind: "dm",
+          trust: "gated",
+          pendingReply: "Yes — next-day delivery.",
+          lastMessageAt: "2026-01-02T00:00:00.000Z",
+          createdAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+    });
+    // A real person is waiting, so it outranks a low-risk approval.
+    expect(inbox.items[0]?.kind).toBe("reply_pending");
+    expect(inbox.items[0]?.ref.conversationId).toBe("conv1");
+    expect(inbox.counts.reply_pending).toBe(1);
   });
 
   it("ignores resolved approvals and non-proposed quests", () => {

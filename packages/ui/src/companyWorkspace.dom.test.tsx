@@ -260,6 +260,45 @@ describe("CompanyWorkspace (DOM)", () => {
     );
   });
 
+  it("surfaces a waiting customer reply with a Review reply action", async () => {
+    const client = fakeClient({
+      getWorkspaceInbox: vi.fn().mockResolvedValue({
+        urgent: 1,
+        items: [
+          {
+            id: "reply:conv1",
+            kind: "reply_pending",
+            urgency: 3,
+            title: "Customer reply waiting",
+            detail: "Yes — next-day delivery.",
+            at: "",
+            ref: { conversationId: "conv1" },
+          },
+        ],
+        counts: {
+          approval: 0,
+          trust_review: 0,
+          blocked_work: 0,
+          quest_proposed: 0,
+          reply_pending: 1,
+        },
+      }),
+    });
+    render(
+      <CompanyWorkspace
+        client={client}
+        companies={[company]}
+        bots={[]}
+        onOpenOffice={() => {}}
+        onCreated={() => {}}
+      />,
+    );
+    expect(await screen.findByText(/yes — next-day delivery/i)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /review reply/i }));
+    // The action lands the chair on the External tab, where the draft can be sent.
+    expect(screen.getByRole("tab", { name: /external/i }).getAttribute("aria-selected")).toBe("true");
+  });
+
   it("shows the three autonomy levels, defaulting an un-activated company to Assisted", async () => {
     const manual = { ...company, autonomy: "manual" } as WorkspaceWithRoles;
     render(

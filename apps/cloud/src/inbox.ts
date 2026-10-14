@@ -1,5 +1,6 @@
 import type {
   CapabilityGrant,
+  Conversation,
   InboxItem,
   InboxKind,
   Quest,
@@ -23,6 +24,7 @@ const EMPTY_COUNTS: Record<InboxKind, number> = {
   trust_review: 0,
   blocked_work: 0,
   quest_proposed: 0,
+  reply_pending: 0,
 };
 
 export interface InboxInput {
@@ -31,6 +33,8 @@ export interface InboxInput {
   quests: Quest[];
   workItems: WorkItem[];
   grants: CapabilityGrant[];
+  /** External threads that may be holding a drafted reply for the chair (§5). */
+  conversations?: Conversation[];
   /** Optional botId → role title, so a blocked item can name who is blocked. */
   roleTitleByBot?: Map<string, string>;
   /** Max items to return (default 50). */
@@ -102,6 +106,22 @@ export function buildInbox(input: InboxInput): WorkspaceInbox {
       detail: quest.objective,
       at: quest.createdAt,
       ref: { questId: quest.id },
+    });
+  }
+
+  // 5. A customer is waiting: a gated thread drafted a reply and is holding it
+  //    for the chair (docs/external-communications.md §5). Loudest, because a
+  //    real person is waiting on the other end.
+  for (const conversation of input.conversations ?? []) {
+    if (!conversation.pendingReply) continue;
+    items.push({
+      id: `reply:${conversation.id}`,
+      kind: "reply_pending",
+      urgency: 3,
+      title: "Customer reply waiting",
+      detail: conversation.pendingReply,
+      at: conversation.lastMessageAt,
+      ref: { conversationId: conversation.id },
     });
   }
 

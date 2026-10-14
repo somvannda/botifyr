@@ -341,6 +341,7 @@ export function CompanyWorkspace({
   // the endpoint isn't available (an older cloud).
   const inboxCount = inbox ? inbox.urgent : needs.length + proposedQuests.length + promotions.length;
   const blockedWork = inbox?.items.filter((item) => item.kind === "blocked_work") ?? [];
+  const waitingReplies = inbox?.items.filter((item) => item.kind === "reply_pending") ?? [];
   const failedRuns = activity.filter((run) => run.status === "failed");
   const runningRuns = activity.filter((run) => run.status === "running" || run.status === "queued");
   // Runs paused on a founder decision (a consequential action needs approval).
@@ -635,6 +636,16 @@ export function CompanyWorkspace({
           <span className="cws-muted">{item.detail}</span>
           <button className="ghost small" type="button" onClick={() => setTab("board")}>
             Open board
+          </button>
+        </li>
+      ))}
+      {waitingReplies.map((item) => (
+        <li key={item.id} className="cws-need">
+          <span className="cws-need-text">
+            <strong>{item.title}</strong> — {item.detail}
+          </span>
+          <button className="btn primary small" type="button" onClick={() => setTab("external")}>
+            Review reply
           </button>
         </li>
       ))}
