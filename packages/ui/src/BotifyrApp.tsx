@@ -2800,6 +2800,15 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     }
   }
 
+  /** Re-resolve a task's Camxora tracks so an old (encrypted-link) message plays. */
+  async function refreshMessageMedia(taskId: string): Promise<void> {
+    try {
+      await client.refreshTaskMedia(taskId);
+    } catch (err: unknown) {
+      setError(messageOf(err));
+    }
+  }
+
   async function testAiKey() {
     setAiBusy(true);
     setAiNote("Testing…");
@@ -5523,6 +5532,16 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                                     the agent did, so generated songs sit below the
                                     activity list rather than above it. */}
                                 <Markdown text={parsed.body} onFileRef={openFileRef} />
+                                {message.taskId &&
+                                  /cloudfront\.net\/\d+\/clip\/|\/api\/forbidden/.test(message.content) && (
+                                    <button
+                                      className="link msg-refresh-media"
+                                      type="button"
+                                      onClick={() => void refreshMessageMedia(message.taskId as string)}
+                                    >
+                                      Refresh playback
+                                    </button>
+                                  )}
                                 {parsed.options.length > 0 && (
                                   <div className="quick-replies">
                                     {parsed.options.map((option, index) => (
