@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Botifyr — WebGPU browser-executor smoke</title>
+    <style>
+      :root { color-scheme: dark; }
+      body { margin: 0; background: #0b0d12; color: #e6e9f2; font: 15px/1.55 system-ui, sans-serif; }
+      main { max-width: 760px; margin: 0 auto; padding: 32px 20px 64px; }
+      h1 { font-size: 20px; margin: 0 0 4px; }
+      p.lead { color: #9aa3b2; margin: 0 0 22px; }
+      section { border: 1px solid #232a3a; border-radius: 12px; padding: 16px 18px; margin: 14px 0; background: #12151d; }
+      h2 { font-size: 15px; margin: 0 0 10px; }
+      ul { margin: 0; padding-left: 18px; }
+      li { margin: 3px 0; }
+      code { background: #1b2030; padding: 1px 5px; border-radius: 5px; }
+      button { font: inherit; padding: 8px 14px; border: none; border-radius: 8px; cursor: pointer; color: #fff; background: linear-gradient(135deg, #6d8bff, #8f6dff); }
+      button[disabled] { opacity: .5; cursor: default; }
+      .ok { color: #3fd18b; } .bad { color: #ff6b6b; } .muted { color: #9aa3b2; }
+      pre { background: #0e1118; border: 1px solid #232a3a; border-radius: 8px; padding: 10px; overflow: auto; font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>WebGPU browser-executor smoke</h1>
+      <p class="lead">
+        Dev tool for docs/video-translation.md §7.1 — not linked in the app. It checks whether this
+        browser can run the pipeline's light stages on the user's own GPU.
+      </p>
+
+      <section>
+        <h2>1. Capability report</h2>
+        <ul id="caps"><li class="muted">probing…</li></ul>
+      </section>
+
+      <section>
+        <h2>2. WebGPU compute</h2>
+        <p class="muted">Doubles a buffer with a compute shader — proves GPU compute works here.</p>
+        <button id="gpu-run">Run compute</button>
+        <pre id="gpu-out" hidden></pre>
+      </section>
+
+      <section>
+        <h2>3. ffmpeg.wasm (best effort, CDN)</h2>
+        <p class="muted">
+          Loads <code>@ffmpeg/ffmpeg@0.12.15</code> + <code>@ffmpeg/core@0.12.10</code> (single-thread,
+          no SharedArrayBuffer needed) and transcodes a generated tone to MP3. Multithread needs
+          COOP/COEP — this page reports if the portal isolates.
+        </p>
+        <button id="ffmpeg-run">Run ffmpeg</button>
+        <pre id="ffmpeg-out" hidden></pre>
+      </section>
+
+      <section>
+        <h2>4. Whisper (best effort, CDN)</h2>
+        <p class="muted">Loads <code>@xenova/transformers@2.17.2</code> and transcribes a short audio file (Whisper tiny). Pick a &lt; 30s clip.</p>
+        <input id="audio" type="file" accept="audio/*" />
+        <button id="whisper-run" disabled>Transcribe</button>
+        <pre id="whisper-out" hidden></pre>
+      </section>
+    </main>
+
+    <script type="module">
+      const $ = (id) => document.getElementById(id);
+
+      function row(label, value, good) {
+        const li = document.createElement("li");
+        const mark = good === undefined ? "" : good ? " ✅" : " ⛔";
+        li.innerHTML = `${label}: <b class="${good === true ? "ok" : good === false ? "bad" : ""}">${value}</b>${mark}`;
+        return li;
+      }
+
+      // A minimal module that only validates on engines with WebAssembly SIMD.
+      const SIMD_TEST = new Uint8Array([
+        0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 123, 3, 2, 1, 0, 10, 10, 1, 8, 0, 65, 0, 253, 15, 253, 98, 11,
+      ]);
+      const hasSimd = (() => {
+        try {
+          return WebAssembly.validate(SIMD_TEST);
+        } catch {
+          return false;
+        }
+      })();
+
+      let adapterInfo = null;
+      async function probe() {
+        const caps = $("caps");
+        caps.innerHTML = "";
+        const isolated = !!globalThis.crossOriginIsolated;
+        const sab = typeof SharedArrayBuffer !== "undefined";
+        caps.append(row("crossOriginIsolated", String(isolated), isolated));
+        caps.append(row("SharedArrayBuffer", sab ? "available" : "unavailable", sab));
+        caps.append(row("WebAssembly SIMD", hasSimd ? "yes" : "no", hasSimd));
+
+        if (!navigator.gpu) {
+          caps.append(row("WebGPU", "not available in this browser", false));
+          $("gpu-run").disabled = true;
+          return;
+        }
+        try {
+          const adapter = await navigator.gpu.requestAdapter();
+          if (!adapter) {
+            caps.append(row("WebGPU", "no adapter", false));
+            $("gpu-run").disabled = true;
+            return;
+          }
+          adapterInfo = adapter.info ?? {};
+          const label = [adapterInfo.vendor, adapterInfo.architecture].filter(Boolean).join(" ") || "adapter present";
+          caps.append(row("WebGPU", `available (${label})`, true));
+          caps.append(row("Tier", "dub / subs — a browser never runs lip-sync", undefined));
+        } catch (error) {
+          caps.append(row("WebGPU", `probe failed: ${error}`, false));
+        }
+      }
+
+      const WGSL = `
+        @group(0) @binding(0) var<storage, read> src : array<f32>;
+        @group(0) @binding(1) var<storage, read_write> dst : array<f32>;
+        @compute @workgroup_size(4) fn main(@builtin(global_invocation_id) id : vec3<u32>) {
+          let i = id.x;
+          dst[i] = src[i] * 2.0;
+        }`;
+
+      $("gpu-run").addEventListener("click", async () => {
+        const out = $("gpu-out");
+        out.hidden = false;
+        out.textContent = "running…";
+        try {
+          const adapter = await navigator.gpu.requestAdapter();
+          const device = await adapter.requestDevice();
+          const data = new Float32Array([1, 2, 3, 4, 5, 6, 7, 8]);
+          const size = data.byteLength;
+          const src = device.createBuffer({ size, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+          device.queue.writeBuffer(src, 0, data);
+          const dst = device.createBuffer({ size, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
+          const read = device.createBuffer({ size, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+          const module = device.createShaderModule({ code: WGSL });
+          const pipeline = device.createComputePipeline({ layout: "auto", compute: { module, entryPoint: "main" } });
+          const bind = device.createBindGroup({
+            layout: pipeline.getBindGroupLayout(0),
+            entries: [
+              { binding: 0, resource: { buffer: src } },
+              { binding: 1, resource: { buffer: dst } },
+            ],
+          });
+          const enc = device.createCommandEncoder();
+          const pass = enc.beginComputePass();
+          pass.setPipeline(pipeline);
+          pass.setBindGroup(0, bind);
+          pass.dispatchWorkgroups(Math.ceil(data.length / 4));
+          pass.end();
+          enc.copyBufferToBuffer(dst, 0, read, 0, size);
+          device.queue.submit([enc.finish()]);
+          await read.mapAsync(GPUMapMode.READ);
+          const result = new Float32Array(read.getMappedRange()).slice();
+          read.unmap();
+          out.textContent = `input:  ${Array.from(data).join(", ")}\noutput: ${Array.from(result).join(", ")}\n` +
+            (result.every((v, i) => v === data[i] * 2) ? "✅ compute correct" : "⛔ unexpected result");
+        } catch (error) {
+          out.textContent = `⛔ ${error}`;
+        }
+      });
+
+      $("ffmpeg-run").addEventListener("click", async () => {
+        const out = $("ffmpeg-out");
+        out.hidden = false;
+        out.textContent = "loading ffmpeg from CDN (~30 MB)…";
+        try {
+          const { FFmpeg } = await import("https://unpkg.com/@ffmpeg/ffmpeg@0.12.15/dist/esm/index.js");
+          const ffmpeg = new FFmpeg();
+          const blobUrl = async (url, type) => {
+            const res = await fetch(url);
+            const blob = await res.blob();
+            return URL.createObjectURL(new Blob([blob], { type }));
+          };
+          // Cross-origin workers aren't allowed, so blob the worker + core too.
+          const classWorkerURL = await blobUrl(
+            "https://unpkg.com/@ffmpeg/ffmpeg@0.12.15/dist/esm/worker.js",
+            "text/javascript",
+          );
+          const coreURL = await blobUrl("https://unpkg.com/@ffmpeg/core@0.12.10/dist/esm/ffmpeg-core.js", "text/javascript");
+          const wasmURL = await blobUrl("https://unpkg.com/@ffmpeg/core@0.12.10/dist/esm/ffmpeg-core.wasm", "application/wasm");
+          await ffmpeg.load({ coreURL, wasmURL, classWorkerURL });
+          // Generate a 1s 440 Hz tone as WAV, then transcode to MP3.
+          const rate = 8000;
+          const n = rate;
+          const buffer = new ArrayBuffer(44 + n * 2);
+          const view = new DataView(buffer);
+          const put = (o, s) => { for (let i = 0; i < s.length; i++) view.setUint8(o + i, s.charCodeAt(i)); };
+          put(0, "RIFF"); view.setUint32(4, 36 + n * 2, true); put(8, "WAVEfmt ");
+          view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+          view.setUint32(24, rate, true); view.setUint32(28, rate * 2, true);
+          view.setUint16(32, 2, true); view.setUint16(34, 16, true); put(36, "data"); view.setUint32(40, n * 2, true);
+          for (let i = 0; i < n; i++) view.setInt16(44 + i * 2, Math.sin((i / rate) * Math.PI * 2 * 440) * 0x3fff, true);
+          await ffmpeg.writeFile("in.wav", new Uint8Array(buffer));
+          await ffmpeg.exec(["-i", "in.wav", "-codec:a", "libmp3lame", "out.mp3"]);
+          const mp3 = await ffmpeg.readFile("out.mp3");
+          out.textContent = `✅ ffmpeg.wasm ran — out.mp3 = ${mp3.length} bytes` + (mp3.length ? "" : " (empty!)");
+        } catch (error) {
+          out.textContent = `⛔ ${error}\n\n(best-effort via CDN; pin/adapt the worker + core URLs if this fails)`;
+        }
+      });
+
+      const audioInput = $("audio");
+      audioInput.addEventListener("change", () => {
+        $("whisper-run").disabled = !audioInput.files?.length;
+      });
+      $("whisper-run").addEventListener("click", async () => {
+        const out = $("whisper-out");
+        out.hidden = false;
+        out.textContent = "loading transformers.js + Whisper tiny (~40 MB)…";
+        try {
+          const { pipeline } = await import("https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2");
+          const transcribe = await pipeline("automatic-speech-recognition", "Xenova/whisper-tiny.en");
+          const buffer = await audioInput.files[0].arrayBuffer();
+          const ctx = new AudioContext({ sampleRate: 16000 });
+          const decoded = await ctx.decodeAudioData(buffer);
+          const data = decoded.getChannelData(0);
+          const result = await transcribe(data, { chunk_length_s: 30 });
+          out.textContent = `✅ transcription:\n${result.text}`;
+        } catch (error) {
+          out.textContent = `⛔ ${error}`;
+        }
+      });
+
+      probe();
+    </script>
+  </body>
+</html>

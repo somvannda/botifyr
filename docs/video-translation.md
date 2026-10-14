@@ -240,6 +240,14 @@ The four constraints to design around:
 Tier mapping (browser never reaches `full`): a WebGPU adapter with a large
 reported buffer → `dub`; otherwise → `subs` (never a dead end, §13.1).
 
+**Spike page:** `apps/portal/public/webgpu-smoke.html` (open at
+`/portal/webgpu-smoke.html` in the running portal — a dev tool, not linked in the
+app). It reports the capability probe (crossOriginIsolated, SharedArrayBuffer,
+WASM SIMD, WebGPU adapter), runs a **real WebGPU compute** shader, and
+best-effort loads **ffmpeg.wasm** and **Whisper** from a CDN. Add COOP/COEP
+headers to the portal (nginx in `apps/web/Dockerfile`) to unlock
+SharedArrayBuffer / multithreaded ffmpeg.
+
 `apps/node` already exists (local node) — the local media worker can live beside it,
 reusing the same job queue and progress events. The existing sandbox exec cap
 (15 min, see `roadmap.md` "Long jobs") must be lifted for these jobs via a
