@@ -28,6 +28,7 @@ function fakeClient(overrides: Record<string, unknown> = {}): BotifyrClient {
     listExternalConversations: vi.fn().mockResolvedValue([]),
     approveExternalReply: vi.fn().mockResolvedValue({}),
     denyExternalReply: vi.fn().mockResolvedValue({}),
+    getExternalConversationMessages: vi.fn().mockResolvedValue([]),
     getWorkspace: vi.fn().mockResolvedValue(null),
   };
   return { ...base, ...overrides } as unknown as BotifyrClient;
@@ -297,6 +298,68 @@ describe("CompanyWorkspace (DOM)", () => {
     fireEvent.click(screen.getByRole("button", { name: /review reply/i }));
     // The action lands the chair on the External tab, where the draft can be sent.
     expect(screen.getByRole("tab", { name: /external/i }).getAttribute("aria-selected")).toBe("true");
+  });
+
+  it("opens a thread's transcript on demand", async () => {
+    const threads = [
+      {
+        conversation: {
+          id: "conv1",
+          workspaceId: "ws1",
+          contactId: "ct1",
+          platform: "telegram",
+          externalChatId: "555",
+          kind: "dm",
+          assignedBotId: "bot1",
+          trust: "gated",
+          lastMessageAt: "2026-01-02T03:04:05.000Z",
+          createdAt: "",
+        },
+        contact: {
+          id: "ct1",
+          workspaceId: "ws1",
+          platform: "telegram",
+          externalId: "555",
+          name: "Sokha Chan",
+          tags: [],
+          status: "new",
+          firstSeenAt: "",
+          lastMessageAt: "",
+        },
+      },
+    ];
+    const getExternalConversationMessages = vi.fn().mockResolvedValue([
+      {
+        id: "m1",
+        role: "user",
+        content: "Do you deliver to Siem Reap?",
+        createdAt: "2026-01-02T03:00:00.000Z",
+      },
+      {
+        id: "m2",
+        role: "assistant",
+        content: "Yes — next-day.",
+        createdAt: "2026-01-02T03:04:00.000Z",
+      },
+    ]);
+    const client = fakeClient({
+      listExternalConversations: vi.fn().mockResolvedValue(threads),
+      getExternalConversationMessages,
+    });
+    render(
+      <CompanyWorkspace
+        client={client}
+        companies={[company]}
+        bots={[]}
+        onOpenOffice={() => {}}
+        onCreated={() => {}}
+      />,
+    );
+    fireEvent.click(await screen.findByRole("tab", { name: /external/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^open$/i }));
+    expect(await screen.findByText(/do you deliver to siem reap\?/i)).toBeTruthy();
+    expect(screen.getByText(/yes — next-day\./i)).toBeTruthy();
+    expect(getExternalConversationMessages).toHaveBeenCalledWith("ws1", "conv1");
   });
 
   it("shows the three autonomy levels, defaulting an un-activated company to Assisted", async () => {

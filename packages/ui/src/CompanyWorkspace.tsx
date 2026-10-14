@@ -3,6 +3,7 @@ import type { FormEvent, ReactNode } from "react";
 import type {
   Bot,
   CapabilityGrant,
+  ChatMessage,
   CompanyDirection,
   CompanyDNA,
   CompanyReport,
@@ -152,6 +153,9 @@ export function CompanyWorkspace({
     Array<{ conversation: ExternalConversation; contact: Contact | null }>
   >([]);
   const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
+  /** The thread whose transcript is open, and its messages. */
+  const [openThread, setOpenThread] = useState<string | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [quests, setQuests] = useState<Quest[]>([]);
   const [grants, setGrants] = useState<CapabilityGrant[]>([]);
   const [reports, setReports] = useState<CompanyReport[]>([]);
@@ -395,6 +399,17 @@ export function CompanyWorkspace({
     await withBusy(async () => {
       await client.denyExternalReply(selectedId, conversationId).catch(() => {});
       setThreads(await client.listExternalConversations(selectedId).catch(() => threads));
+    });
+  }
+
+  /** Read a thread's transcript back from its channel session. */
+  async function openConversation(conversationId: string) {
+    setOpenThread(conversationId);
+    setMessages([]);
+    await withBusy(async () => {
+      setMessages(
+        await client.getExternalConversationMessages(selectedId, conversationId).catch(() => []),
+      );
     });
   }
 
@@ -1495,6 +1510,13 @@ export function CompanyWorkspace({
                         {trusted ? "Trusted" : conversation.pendingReply ? "Draft waiting" : "Gated"}
                       </span>
                       <button
+                        className="ghost small"
+                        type="button"
+                        onClick={() => void openConversation(conversation.id)}
+                      >
+                        Open
+                      </button>
+                      <button
                         className={trusted ? "ghost small" : "btn primary small"}
                         type="button"
                         disabled={busy}
@@ -1534,6 +1556,29 @@ export function CompanyWorkspace({
                   </li>
                 );
               })}
+            </ul>
+          </div>
+        )}
+
+        {tab === "external" && openThread && (
+          <div className="cws-card">
+            <div className="cws-card-head">
+              <h3>Conversation</h3>
+              <button className="ghost small" type="button" onClick={() => setOpenThread(null)}>
+                Close
+              </button>
+            </div>
+            {messages.length === 0 && <p className="cws-muted">No messages yet.</p>}
+            <ul className="cws-list">
+              {messages.map((message) => (
+                <li key={message.id} className="cws-need">
+                  <span className="cws-need-text">
+                    <strong>{message.role === "user" ? "Customer" : "Employee"}</strong> —{" "}
+                    {message.content}
+                  </span>
+                  <span className="cws-muted">{new Date(message.createdAt).toLocaleString()}</span>
+                </li>
+              ))}
             </ul>
           </div>
         )}
