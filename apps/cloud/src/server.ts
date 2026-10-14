@@ -2156,7 +2156,19 @@ export async function buildServer(options: ServerOptions) {
   );
 
   // Token-based connection (apps with a personal access token, e.g. GitHub).
-  const TOKEN_APPS = new Set(["github", "notion", "slack", "linear", "telegram", "camxora"]);
+  const TOKEN_APPS = new Set([
+    "github",
+    "notion",
+    "slack",
+    "linear",
+    "telegram",
+    "camxora",
+    // Social aggregators (docs/company-workspace.md §44). The workspace brings its
+    // own vendor key (BYO), so Botifyr stores the token but never holds a Meta app.
+    "zernio",
+    "socialapi",
+    "publora",
+  ]);
   app.post<{ Params: { provider: string }; Body: { token?: string } }>(
     "/v1/connections/:provider/token",
     { preHandler: requireAuth },
