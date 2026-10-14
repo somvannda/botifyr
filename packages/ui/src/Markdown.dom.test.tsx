@@ -31,6 +31,20 @@ describe("Markdown media URLs", () => {
     expect(container.querySelector("audio.md-audio")).toBeTruthy();
   });
 
+  it("renders a legacy `- ▶️ <url>` bullet as a bare player, no marker or emoji", () => {
+    const { container } = render(<Markdown text={"1) Song A\n- ▶️ https://cdn.example/a.mp3"} />);
+    expect(container.querySelector("ul")).toBeNull();
+    expect(container.querySelector("li")).toBeNull();
+    expect(container.querySelector(".md-media-line audio.md-audio")).toBeTruthy();
+    expect(container.textContent).not.toContain("▶");
+  });
+
+  it("keeps a bullet that has extra text as a list item", () => {
+    const { container } = render(<Markdown text={"- Listen: https://cdn.example/a.mp3"} />);
+    expect(container.querySelector("li")).toBeTruthy();
+    expect(container.querySelector(".md-media-line")).toBeNull();
+  });
+
   it("still renders bold text and ordinary links", () => {
     const { container } = render(<Markdown text="**bold** [site](https://example.com)" />);
     expect(container.querySelector("strong")?.textContent).toBe("bold");

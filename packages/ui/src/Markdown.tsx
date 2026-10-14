@@ -65,6 +65,17 @@ function mediaPlayer(url: string, key: string): ReactNode | null {
 }
 
 /**
+ * A bullet that is nothing but a play glyph + a media URL — the shape old music
+ * messages used (`- ▶️ https://…/clip.mp3`). Rendered as a plain player so the
+ * bullet marker and the emoji don't sit next to it.
+ */
+function loneMedia(text: string, key: string): ReactNode | null {
+  const stripped = text.replace(/^[\s\u25B6\u25BA\u23F5\u23F4\u27A4\uFE0F]+/, "").trim();
+  const url = /^(https?:\/\/\S+)$/.exec(stripped)?.[1];
+  return url ? mediaPlayer(url, key) : null;
+}
+
+/**
  * A fenced `media` block carries a stream URL and an optional durable download
  * URL, e.g.:
  *
@@ -351,6 +362,18 @@ export function Markdown({ text, onFileRef }: { text: string; onFileRef?: (name:
         continue;
       }
       if (bullet) {
+        const media = loneMedia(bullet[1], `li-${segIndex}-${lineIndex}`);
+        if (media) {
+          // `- ▶️ <url>` → just the player (no bullet marker, no play emoji).
+          flushParagraph();
+          flushList();
+          blocks.push(
+            <div className="md-media-line" key={`ml-${segIndex}-${lineIndex}`}>
+              {media}
+            </div>,
+          );
+          continue;
+        }
         flushParagraph();
         if (listType && listType !== "ul") flushList();
         listType = "ul";

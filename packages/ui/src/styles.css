@@ -5452,6 +5452,11 @@ body {
   font-weight: 500;
 }
 
+/* A media-only bullet (`- ▶️ <url>`) drops its marker + emoji. */
+.md-media-line {
+  margin-top: var(--space-2);
+}
+
 .md code {
   font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
   font-size: var(--text-md);
