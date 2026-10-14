@@ -6619,7 +6619,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                                   <div className="market-token">
                                     <input
                                       type="password"
-                                      placeholder="Token"
+                                      placeholder={app.credentialLabel ?? "Token"}
                                       value={tokenValue}
                                       onChange={(event) => setTokenValue(event.target.value)}
                                       onKeyDown={(event) => {
@@ -8324,6 +8324,8 @@ interface MarketApp {
   provider: string | null;
   /** True when the app connects with a personal access token (no OAuth). */
   tokenApp?: boolean;
+  /** Label for the credential field when `tokenApp` is set (e.g. "API key"). */
+  credentialLabel?: string;
   name: string;
   category: string;
   section: string;
@@ -8346,6 +8348,7 @@ const MARKETPLACE: MarketApp[] = [
     id: "camxora",
     provider: "camxora",
     tokenApp: true,
+    credentialLabel: "API key",
     name: "Camxora Music",
     category: "Media",
     section: "Featured",
