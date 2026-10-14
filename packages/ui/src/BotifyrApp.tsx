@@ -33,6 +33,7 @@ import type {
   WorkspaceBudget,
   WorkspaceWithRoles,
 } from "@botifyr/shared";
+import { CAPABILITIES, connectorById } from "@botifyr/shared";
 import {
   AuthError,
   BotifyrClient,
@@ -6573,12 +6574,30 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                         const installed = app.provider
                           ? connections.some((entry) => entry.provider === app.provider)
                           : false;
+                        const connector = connectorById(app.id);
                         return (
                           <div key={app.id} className="market-row">
                             <span className="market-ico">{app.icon}</span>
                             <span className="market-row-text">
                               <span className="market-name">{app.name}</span>
                               <span className="market-desc">{app.desc}</span>
+                              {connector && (
+                                <>
+                                  <span className="market-caps">
+                                    {connector.provides.map((capability) => (
+                                      <span
+                                        key={capability}
+                                        className={`market-cap risk-${
+                                          CAPABILITY_RISK.get(capability) ?? "none"
+                                        }`}
+                                      >
+                                        {capability}
+                                      </span>
+                                    ))}
+                                  </span>
+                                  <span className="market-behalf">{connector.actsOnBehalf}</span>
+                                </>
+                              )}
                             </span>
                             {app.provider ? (
                               installed ? (
@@ -8436,7 +8455,42 @@ const MARKETPLACE: MarketApp[] = [
     desc: "Draft and schedule posts",
     icon: <span className="market-emoji">𝕏</span>,
   },
+  // Social connectors (docs/company-workspace.md §44). Each workspace brings its
+  // own aggregator account (BYO), so Botifyr never has to pass Meta App Review.
+  {
+    id: "zernio",
+    provider: "zernio",
+    tokenApp: true,
+    name: "Zernio",
+    category: "Social",
+    section: "Social",
+    desc: "Posts, comments, inbox and Meta ads",
+    icon: <span className="market-emoji">🦈</span>,
+  },
+  {
+    id: "socialapi",
+    provider: "socialapi",
+    tokenApp: true,
+    name: "SocialAPI.ai",
+    category: "Social",
+    section: "Social",
+    desc: "Publish and reply across 13 platforms",
+    icon: <span className="market-emoji">🔗</span>,
+  },
+  {
+    id: "publora",
+    provider: "publora",
+    tokenApp: true,
+    name: "Publora",
+    category: "Social",
+    section: "Social",
+    desc: "Cheap publishing to 10 platforms",
+    icon: <span className="market-emoji">🗓️</span>,
+  },
 ];
+
+/** Capability risk from the shared catalog — badges money/consequential actions. */
+const CAPABILITY_RISK = new Map(CAPABILITIES.map((capability) => [capability.id, capability.risk]));
 
 /** Resize an image file to a small JPEG data URL (longest edge = size). */
 async function downscaleImage(file: File, size: number): Promise<string> {

@@ -7178,6 +7178,36 @@ body {
   white-space: nowrap;
 }
 
+/* Capability badges for connector-backed marketplace apps (docs/company-workspace.md §44). */
+.market-caps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+}
+
+.market-cap {
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.market-cap.risk-consequential {
+  color: var(--warn);
+}
+
+.market-cap.risk-money {
+  color: var(--danger);
+}
+
+.market-behalf {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  margin-top: var(--space-1);
+}
+
 .market-btn {
   flex: none;
   border: 1px solid var(--border);
