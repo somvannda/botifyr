@@ -8673,6 +8673,16 @@ const MARKETPLACE: MarketApp[] = [
     desc: "Cheap publishing to 10 platforms",
     icon: <span className="market-emoji">🗓️</span>,
   },
+  {
+    id: "postforme",
+    provider: "postforme",
+    tokenApp: true,
+    name: "Post for Me",
+    category: "Social",
+    section: "Social",
+    desc: "Cheap publishing to 9 platforms",
+    icon: <span className="market-emoji">📬</span>,
+  },
 ];
 
 /** Capability risk from the shared catalog — badges money/consequential actions. */
