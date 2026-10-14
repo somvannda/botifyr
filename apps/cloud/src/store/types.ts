@@ -5,6 +5,7 @@ import type {
   CodeRepo,
   CompanyDNA,
   CompanyReport,
+  ConnectorPreference,
   Contact,
   Conversation,
   Department,
@@ -389,6 +390,7 @@ export type WorkspaceBudgetRecord = WorkspaceBudget;
 
 /** A per-subject capability grant. */
 export type CapabilityGrantRecord = CapabilityGrant;
+export type ConnectorPreferenceRecord = ConnectorPreference;
 
 /** A company report (standup / weekly / incident). */
 export type CompanyReportRecord = CompanyReport;
@@ -795,6 +797,9 @@ export interface Store {
   /* Capability grants (authorization) */
   listCapabilityGrants(workspaceId: string): Promise<CapabilityGrantRecord[]>;
   setCapabilityGrant(record: CapabilityGrantRecord): Promise<void>;
+  /** Which connected app a subject uses for a capability (docs/company-workspace.md §44). */
+  listConnectorPreferences(workspaceId: string): Promise<ConnectorPreferenceRecord[]>;
+  setConnectorPreference(record: ConnectorPreferenceRecord): Promise<void>;
 
   /* Company reports (standups) */
   createCompanyReport(record: CompanyReportRecord): Promise<void>;

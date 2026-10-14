@@ -3670,6 +3670,43 @@ export async function buildServer(options: ServerOptions) {
     },
   );
 
+  /** Connector preferences: which connected app an employee (or role) uses (docs/company-workspace.md §44). */
+  app.get<{ Params: { id: string } }>(
+    "/v1/workspaces/:id/connector-preferences",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const workspace = await store.getWorkspace(request.params.id);
+      if (!workspace || workspace.ownerId !== userId) {
+        return reply.code(404).send({ error: "workspace not found" });
+      }
+      return store.listConnectorPreferences(workspace.id);
+    },
+  );
+
+  app.put<{
+    Params: { id: string };
+    Body: { subject?: string; capability?: string; connectorId?: string };
+  }>(
+    "/v1/workspaces/:id/connector-preferences",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      const workspace = await store.getWorkspace(request.params.id);
+      if (!workspace || workspace.ownerId !== userId) {
+        return reply.code(404).send({ error: "workspace not found" });
+      }
+      const subject = (request.body?.subject ?? "").trim().slice(0, 120);
+      const capability = (request.body?.capability ?? "").trim().slice(0, 80);
+      const connectorId = (request.body?.connectorId ?? "").trim().slice(0, 80);
+      if (!subject || !capability || !connectorId) {
+        return reply.code(400).send({ error: "subject, capability and connectorId are required" });
+      }
+      await store.setConnectorPreference({ workspaceId: workspace.id, subject, capability, connectorId });
+      return { workspaceId: workspace.id, subject, capability, connectorId };
+    },
+  );
+
   /** Capability grants: which tools/connectors an employee (or role) may use. */
   app.get<{ Params: { id: string } }>(
     "/v1/workspaces/:id/grants",
