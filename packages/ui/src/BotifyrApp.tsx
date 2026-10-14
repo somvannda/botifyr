@@ -8633,7 +8633,7 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                     own tasks; your key is never shown again or shared.
                   </p>
 
-                  {aiConfig?.hasKey && (
+                  {aiConfig && (aiConfig.hasKey || aiConfig.mode === "device") && (
                     <div className="settings-row">
                       <span className="settings-row-main">
                         <span className="settings-row-name">
@@ -8642,6 +8642,9 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                         </span>
                         <span className="settings-row-sub">
                           {aiConfig.model}
+                          {aiConfig.mode === "device"
+                            ? ` · on this device${config?.nodeOnline ? "" : " (node offline)"}`
+                            : ""}
                           {aiConfig.enabled ? "" : " · disabled"}
                         </span>
                       </span>
@@ -8701,6 +8704,13 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                         Your key stays on this computer — the local node makes the model calls. Set
                         <code> BOTIFYR_AI_KEY </code> in the node environment (once per machine). Prompts still
                         pass through the cloud on their way to your device.
+                        {!config?.nodeOnline && (
+                          <>
+                            {" "}
+                            <strong>The node is offline right now — tasks fall back to the platform account
+                            until it connects.</strong>
+                          </>
+                        )}
                       </p>
                     ) : (
                       !findAiProviderPreset(aiProvider)?.keyless && (
