@@ -39,6 +39,12 @@ RUN printf '%s\n' \
   '  index index.html;' \
   "  location = /admin { return 302 ${ADMIN_URL}; }" \
   "  location = /admin.html { return 302 ${ADMIN_URL}; }" \
+  '  location = /portal/webgpu-smoke.html {' \
+  '    add_header Cross-Origin-Opener-Policy "same-origin" always;' \
+  '    add_header Cross-Origin-Embedder-Policy "require-corp" always;' \
+  '    add_header Cache-Control "no-cache";' \
+  '    try_files $uri =404;' \
+  '  }' \
   '  location /portal {' \
   '    add_header Cache-Control "no-cache";' \
   '    try_files $uri $uri/ /portal/index.html;' \

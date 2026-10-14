@@ -162,26 +162,37 @@
         }
       });
 
+      const FF = "https://unpkg.com/@ffmpeg/ffmpeg@0.12.15/dist/esm";
+      const coreUrl = (mt) =>
+        `https://unpkg.com/@ffmpeg/${mt ? "core-mt" : "core"}@0.12.10/dist/esm/ffmpeg-core.js`;
+
+      /** Blob a module and rewrite relative imports so a cross-origin worker can load it. */
+      async function blobModule(url, rewrites = []) {
+        let src = await (await fetch(url)).text();
+        for (const [from, to] of rewrites) src = src.replace(from, to);
+        return URL.createObjectURL(new Blob([src], { type: "text/javascript" }));
+      }
+
       $("ffmpeg-run").addEventListener("click", async () => {
         const out = $("ffmpeg-out");
         out.hidden = false;
-        out.textContent = "loading ffmpeg from CDN (~30 MB)…";
+        out.textContent = "loading ffmpeg from CDN…";
         try {
-          const { FFmpeg } = await import("https://unpkg.com/@ffmpeg/ffmpeg@0.12.15/dist/esm/index.js");
+          // '@ffmpeg/ffmpeg' worker imports './const.js' + './errors.js'; a
+          // cross-origin worker can't resolve those, so blob it with the imports
+          // rewritten to blob URLs. The core itself is a CORS module import — allowed.
+          const constUrl = await blobModule(`${FF}/const.js`);
+          const errorsUrl = await blobModule(`${FF}/errors.js`);
+          const classWorkerURL = await blobModule(`${FF}/worker.js`, [
+            [/from\s*["']\.\/const\.js["']/g, `from ${JSON.stringify(constUrl)}`],
+            [/from\s*["']\.\/errors\.js["']/g, `from ${JSON.stringify(errorsUrl)}`],
+          ]);
+          // Multithread core needs SharedArrayBuffer → cross-origin isolation
+          // (COOP/COEP, set for this page); otherwise fall back to single-thread.
+          const mt = !!globalThis.crossOriginIsolated && typeof SharedArrayBuffer !== "undefined";
+          const { FFmpeg } = await import(`${FF}/index.js`);
           const ffmpeg = new FFmpeg();
-          const blobUrl = async (url, type) => {
-            const res = await fetch(url);
-            const blob = await res.blob();
-            return URL.createObjectURL(new Blob([blob], { type }));
-          };
-          // Cross-origin workers aren't allowed, so blob the worker + core too.
-          const classWorkerURL = await blobUrl(
-            "https://unpkg.com/@ffmpeg/ffmpeg@0.12.15/dist/esm/worker.js",
-            "text/javascript",
-          );
-          const coreURL = await blobUrl("https://unpkg.com/@ffmpeg/core@0.12.10/dist/esm/ffmpeg-core.js", "text/javascript");
-          const wasmURL = await blobUrl("https://unpkg.com/@ffmpeg/core@0.12.10/dist/esm/ffmpeg-core.wasm", "application/wasm");
-          await ffmpeg.load({ coreURL, wasmURL, classWorkerURL });
+          await ffmpeg.load({ coreURL: coreUrl(mt), classWorkerURL });
           // Generate a 1s 440 Hz tone as WAV, then transcode to MP3.
           const rate = 8000;
           const n = rate;
@@ -196,7 +207,7 @@
           await ffmpeg.writeFile("in.wav", new Uint8Array(buffer));
           await ffmpeg.exec(["-i", "in.wav", "-codec:a", "libmp3lame", "out.mp3"]);
           const mp3 = await ffmpeg.readFile("out.mp3");
-          out.textContent = `✅ ffmpeg.wasm ran — out.mp3 = ${mp3.length} bytes` + (mp3.length ? "" : " (empty!)");
+          out.textContent = `✅ ffmpeg.wasm (${mt ? "multithread" : "single-thread"}) ran — out.mp3 = ${mp3.length} bytes` + (mp3.length ? "" : " (empty!)");
         } catch (error) {
           out.textContent = `⛔ ${error}\n\n(best-effort via CDN; pin/adapt the worker + core URLs if this fails)`;
         }
