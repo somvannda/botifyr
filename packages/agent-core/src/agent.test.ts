@@ -197,6 +197,24 @@ describe("runAgent", () => {
     expect(result.summary).toContain("demo_echo");
   });
 
+  it("reports an empty model turn instead of a silent Task finished", async () => {
+    // A reasoning model can spend its whole output budget thinking and return
+    // no content and no tool call — that must not read as success.
+    const provider = scriptedProvider([{ text: "", toolCalls: [] }]);
+    const result = await runAgent({
+      goal: "do something",
+      provider,
+      tools: [echoTool(() => {})],
+      workspaceDir: ".",
+      requestApproval: async () => true,
+      onStep: () => {},
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.summary).toMatch(/no output/i);
+    expect(result.summary).not.toBe("Task finished.");
+  });
+
   it("auto-approve runs a consequential tool without asking", async () => {
     let asked = false;
     const risky: ToolDefinition = {
