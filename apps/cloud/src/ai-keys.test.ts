@@ -140,4 +140,19 @@ describe("ai provider endpoints", () => {
 
     await app.close();
   });
+
+  it("tells the user to start the node when testing device mode offline", async () => {
+    const { app, auth } = await setup();
+    const res = await app.inject({
+      method: "POST",
+      url: "/v1/ai/provider/test",
+      headers: auth,
+      payload: { provider: "openai", model: "gpt-4o-mini", mode: "device" },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { ok: boolean; message: string };
+    expect(body.ok).toBe(false);
+    expect(body.message).toMatch(/device|node/i);
+    await app.close();
+  });
 });

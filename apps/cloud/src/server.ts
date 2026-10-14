@@ -32,6 +32,7 @@ import type {
   WorkspaceWithRoles,
 } from "@botifyr/shared";
 import { DEPARTMENTS } from "@botifyr/shared";
+import { findAiProviderPreset, resolveAiBaseUrl } from "@botifyr/shared";
 import type { LocalChannel } from "@botifyr/channels";
 import { emit, feedEventRecipient, subscribe } from "./events.js";
 import {
@@ -72,6 +73,7 @@ import {
   resolveCamxoraTracks,
   rewriteMediaStreams,
 } from "./camxora-tools.js";
+import { createNodeProvider } from "./node-provider.js";
 import { parseResendInbound, verifyResendSignature } from "./email-inbound.js";
 import {
   noteModelFailure,
@@ -8079,6 +8081,30 @@ export async function buildServer(options: ServerOptions) {
       // never selects — a placeholder is fine here.
       const demoUrl = "http://localhost:8787/demo";
       try {
+        // Device mode: the key lives on the user's machine, so the test runs
+        // through the node (which holds the key).
+        const saved = await loadAiConfig(store, vaultKey, userId).catch(() => null);
+        const mode = request.body?.mode ?? saved?.mode ?? "server";
+        if (mode === "device") {
+          if (!nodeInfo(userId).online) {
+            return { ok: false, message: "Your key lives on this device — start the desktop node, then test." };
+          }
+          const preset = findAiProviderPreset(request.body?.provider ?? saved?.provider ?? "");
+          const provider = request.body?.provider ?? saved?.provider ?? "";
+          const model = (request.body?.model ?? saved?.model ?? "").trim() || preset?.defaultModel || "";
+          const baseUrl = resolveAiBaseUrl({
+            provider,
+            baseUrl: (request.body?.baseUrl ?? saved?.baseUrl ?? "").trim() || undefined,
+          });
+          if (!baseUrl) return { ok: false, message: "Pick a provider (or a custom base URL) first." };
+          const nodeProvider = createNodeProvider(userId, { provider, model, baseUrl });
+          await nodeProvider.complete({
+            messages: [{ role: "user", content: "Reply with the single word: ok" }],
+            tools: [],
+            maxTokens: 8,
+          });
+          return { ok: true, message: "Connected through your device." };
+        }
         const provider = request.body?.provider
           ? await providerForInput(store, vaultKey, userId, request.body, demoUrl)
           : await userProvider(store, vaultKey, userId, demoUrl);
