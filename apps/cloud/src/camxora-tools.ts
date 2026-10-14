@@ -188,7 +188,8 @@ export function createCamxoraTools(store: Store, vaultKey: Buffer, userId: strin
     },
     {
       name: "music.wav",
-      description: "Convert a Camxora clip to WAV (or MP3).",
+      description:
+        "Convert a Camxora clip to WAV (or MP3). The result is a durable file served from Camxora's own storage — poll it with music.wav_status and relay the download URL, so the track can be kept after a streaming link expires.",
       parameters: {
         type: "object",
         properties: { clipId, format: { type: "string", enum: ["wav", "mp3"] } },
@@ -201,6 +202,21 @@ export function createCamxoraTools(store: Store, vaultKey: Buffer, userId: strin
           clip_id: String(args.clipId ?? ""),
           format: args.format,
         });
+      },
+    },
+    {
+      name: "music.wav_status",
+      description:
+        "Poll a WAV conversion (from music.wav) by id. On success the result carries a durable download URL served from Camxora's storage — share it so the track can be kept even after the streaming URL expires.",
+      parameters: {
+        type: "object",
+        properties: { taskId: { type: "string", description: "WAV conversion task id from music.wav." } },
+        required: ["taskId"],
+      },
+      run: async (args) => {
+        const key = await camxoraKey(store, vaultKey, userId);
+        if (!key) return notConnected();
+        return camxoraCall(key, "GET", `/v1/music/wav/${encodeURIComponent(String(args.taskId ?? ""))}`);
       },
     },
     {
@@ -229,7 +245,7 @@ export function createCamxoraTools(store: Store, vaultKey: Buffer, userId: strin
     {
       name: "music.task",
       description:
-        "Poll a Camxora task's status and result by id. On success, relay the track's audio URL to the user — it renders as an inline player.",
+        'Poll a Camxora task\'s status and result by id. On success, present the track to the user as a fenced `media` block: { "stream": <playback url>, "download": <durable url once music.wav finishes> }. It renders as an inline player that starts on the stream and falls back to the download when the stream expires.',
       parameters: {
         type: "object",
         properties: { taskId: { type: "string", description: "Task id from a generate/extend/etc call." } },
@@ -291,6 +307,7 @@ export const CAMXORA_TOOL_NAMES = [
   "music.lyrics",
   "music.stems",
   "music.wav",
+  "music.wav_status",
   "music.video",
   "music.task",
   "music.get",

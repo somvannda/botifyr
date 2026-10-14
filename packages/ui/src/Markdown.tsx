@@ -24,21 +24,31 @@ const VIDEO_URL_RE = /\.(?:mp4|webm|mov|m4v|ogv)(?:[?#].*)?$/i;
  * Inline player for a media URL, plus a direct download link.
  *
  * Nothing is proxied through our server: playback streams from the provider's
- * CDN and the download goes straight to the same URL. When playback fails (the
- * common cause is an expired signed URL), we surface the download link as the
- * fallback.
+ * CDN and the download goes straight to the same URL. When a streaming URL is
+ * signed/expiring, pass a durable `download` URL too — playback starts on the
+ * stream and, if it fails (expired), switches to the durable URL.
  */
-function MediaPlayer({ url, kind }: { url: string; kind: "audio" | "video" }) {
+function MediaPlayer({
+  stream,
+  download,
+  kind,
+  title,
+}: {
+  stream: string;
+  download?: string;
+  kind: "audio" | "video";
+  title?: string;
+}) {
   const [failed, setFailed] = useState(false);
+  const src = failed && download ? download : stream;
+  const href = download ?? stream;
+  const mediaProps = { src, controls: true, preload: "metadata" as const, onError: () => setFailed(true) };
   return (
     <span className="md-media">
-      {kind === "audio" ? (
-        <audio className="md-audio" src={url} controls preload="metadata" onError={() => setFailed(true)} />
-      ) : (
-        <video className="md-video" src={url} controls preload="metadata" onError={() => setFailed(true)} />
-      )}
-      <a className="md-download" href={url} download target="_blank" rel="noreferrer">
-        {failed ? "Couldn't play — download from Camxora" : "Download"}
+      {title && <span className="md-media-title">{title}</span>}
+      {kind === "audio" ? <audio className="md-audio" {...mediaProps} /> : <video className="md-video" {...mediaProps} />}
+      <a className="md-download" href={href} download target="_blank" rel="noreferrer">
+        {failed && !download ? "Couldn't play — download from Camxora" : "Download"}
       </a>
     </span>
   );
@@ -46,9 +56,40 @@ function MediaPlayer({ url, kind }: { url: string; kind: "audio" | "video" }) {
 
 /** Render a media URL as a playable element; null when it isn't audio/video. */
 function mediaPlayer(url: string, key: string): ReactNode | null {
-  if (AUDIO_URL_RE.test(url)) return <MediaPlayer key={key} url={url} kind="audio" />;
-  if (VIDEO_URL_RE.test(url)) return <MediaPlayer key={key} url={url} kind="video" />;
+  if (AUDIO_URL_RE.test(url)) return <MediaPlayer key={key} stream={url} kind="audio" />;
+  if (VIDEO_URL_RE.test(url)) return <MediaPlayer key={key} stream={url} kind="video" />;
   return null;
+}
+
+/**
+ * A fenced `media` block carries a stream URL and an optional durable download
+ * URL, e.g.:
+ *
+ * ```media
+ * { "stream": "https://cdn…/song.mp3?token=…", "download": "https://cdn…/song.mp3" }
+ * ```
+ *
+ * The player starts on `stream` and falls back to `download` when it expires.
+ */
+function parseMediaBlock(segment: string): { stream: string; download?: string; kind: "audio" | "video"; title?: string } | null {
+  const nl = segment.indexOf("\n");
+  if (nl === -1 || segment.slice(0, nl).trim() !== "media") return null;
+  try {
+    const raw = JSON.parse(segment.slice(nl + 1).trim()) as {
+      stream?: unknown;
+      download?: unknown;
+      title?: unknown;
+    };
+    if (typeof raw.stream !== "string" || !raw.stream) return null;
+    return {
+      stream: raw.stream,
+      download: typeof raw.download === "string" ? raw.download : undefined,
+      kind: VIDEO_URL_RE.test(raw.stream) ? "video" : "audio",
+      title: typeof raw.title === "string" ? raw.title : undefined,
+    };
+  } catch {
+    return null;
+  }
 }
 
 function fileRef(name: string, key: string, onFileRef: (name: string) => void): ReactNode {
@@ -145,6 +186,19 @@ export function Markdown({ text, onFileRef }: { text: string; onFileRef?: (name:
 
   segments.forEach((segment, segIndex) => {
     if (segIndex % 2 === 1) {
+      const media = parseMediaBlock(segment);
+      if (media) {
+        blocks.push(
+          <MediaPlayer
+            key={`media-${segIndex}`}
+            stream={media.stream}
+            download={media.download}
+            kind={media.kind}
+            title={media.title}
+          />,
+        );
+        return;
+      }
       blocks.push(
         <pre key={`code-${segIndex}`} className="md-code">
           <code>{segment.replace(/^\n/, "").replace(/\n$/, "")}</code>

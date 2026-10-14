@@ -50,4 +50,22 @@ describe("Markdown media URLs", () => {
     fireEvent.error(audio);
     expect(container.querySelector("a.md-download")?.textContent).toMatch(/download/i);
   });
+
+  it("streams the media block's stream URL and swaps to the durable download on expiry", () => {
+    const text = [
+      "```media",
+      JSON.stringify({ stream: "https://cdn.example/song.mp3?t=1", download: "https://cdn.example/song.mp3" }),
+      "```",
+    ].join("\n");
+    const { container } = render(<Markdown text={text} />);
+    const audio = container.querySelector("audio") as HTMLAudioElement;
+    expect(audio?.getAttribute("src")).toBe("https://cdn.example/song.mp3?t=1");
+    expect((container.querySelector("a.md-download") as HTMLAnchorElement)?.getAttribute("href")).toBe(
+      "https://cdn.example/song.mp3",
+    );
+    fireEvent.error(audio);
+    expect((container.querySelector("audio") as HTMLAudioElement)?.getAttribute("src")).toBe(
+      "https://cdn.example/song.mp3",
+    );
+  });
 });
