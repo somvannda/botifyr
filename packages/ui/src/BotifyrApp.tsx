@@ -692,6 +692,8 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
   const [findPos, setFindPos] = useState(0);
 
   const activeIdRef = useRef<string | null>(null);
+  /** Camxora tasks whose legacy (unplayable) media we've already tried to refresh. */
+  const refreshedMediaRef = useRef<Set<string>>(new Set());
   activeIdRef.current = activeSessionId;
   const activeBotIdRef = useRef<string | null>(null);
   activeBotIdRef.current = activeBotId;
@@ -1077,6 +1079,21 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, client]);
+
+  // Auto-heal old music messages: a message that still points at the encrypted
+  // legacy media URL is refreshed once to its playable MP3 (server rewrites the
+  // message and emits session.updated). The set stops repeated attempts.
+  useEffect(() => {
+    const session = sessions.find((entry) => entry.id === activeSessionId);
+    if (!session) return;
+    for (const message of session.messages) {
+      if (message.role !== "assistant" || !message.taskId) continue;
+      if (!/cloudfront\.net\/\d+\/clip\/|\/api\/forbidden/.test(message.content)) continue;
+      if (refreshedMediaRef.current.has(message.taskId)) continue;
+      refreshedMediaRef.current.add(message.taskId);
+      void client.refreshTaskMedia(message.taskId).catch(() => {});
+    }
+  }, [activeSessionId, sessions, client]);
 
   // Pin the transcript to the newest message — but only when the reader is
   // already at the bottom, so scrolling back through history isn't interrupted.
