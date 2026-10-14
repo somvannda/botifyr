@@ -6614,44 +6614,19 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                                     <CloseIcon size={12} />
                                   </button>
                                 </>
-                              ) : app.tokenApp ? (
-                                tokenInputFor === app.provider ? (
-                                  <div className="market-token">
-                                    <input
-                                      type="password"
-                                      placeholder={app.credentialLabel ?? "Token"}
-                                      value={tokenValue}
-                                      onChange={(event) => setTokenValue(event.target.value)}
-                                      onKeyDown={(event) => {
-                                        if (event.key === "Enter") void saveToken(app.provider!);
-                                      }}
-                                    />
-                                    <button
-                                      className="market-btn"
-                                      type="button"
-                                      onClick={() => void saveToken(app.provider!)}
-                                    >
-                                      Save
-                                    </button>
-                                  </div>
-                                ) : (
-                                  <button
-                                    className="market-btn"
-                                    type="button"
-                                    onClick={() => {
-                                      setTokenInputFor(app.provider);
-                                      setTokenValue("");
-                                    }}
-                                  >
-                                    Add
-                                  </button>
-                                )
                               ) : (
                                 <button
                                   className="market-btn"
                                   type="button"
                                   disabled={connectingApp === app.provider}
-                                  onClick={() => void connectApp(app.provider!)}
+                                  onClick={() => {
+                                    if (app.tokenApp) {
+                                      setTokenInputFor(app.provider);
+                                      setTokenValue("");
+                                    } else {
+                                      void connectApp(app.provider!);
+                                    }
+                                  }}
                                 >
                                   {connectingApp === app.provider ? "Adding…" : "Add"}
                                 </button>
@@ -6668,6 +6643,70 @@ export function BotifyrApp({ bridge = defaultBridge }: { bridge?: BotBridge }) {
                   </section>
                 );
               })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tokenInputFor && (
+        <div
+          className="apps-overlay"
+          onClick={() => {
+            setTokenInputFor(null);
+            setTokenValue("");
+          }}
+        >
+          <div className="apps-panel connect-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="apps-head">
+              <span className="apps-title">
+                Connect {MARKETPLACE.find((a) => a.provider === tokenInputFor)?.name ?? "app"}
+              </span>
+              <button
+                className="round small"
+                type="button"
+                onClick={() => {
+                  setTokenInputFor(null);
+                  setTokenValue("");
+                }}
+              >
+                <CloseIcon size={13} />
+              </button>
+            </div>
+            <p className="apps-sub">
+              Paste your {MARKETPLACE.find((a) => a.provider === tokenInputFor)?.credentialLabel ?? "token"} to
+              connect. It is stored encrypted and never shared with the model.
+            </p>
+            <div className="market-token">
+              <input
+                type="password"
+                autoFocus
+                placeholder={MARKETPLACE.find((a) => a.provider === tokenInputFor)?.credentialLabel ?? "Token"}
+                value={tokenValue}
+                onChange={(event) => setTokenValue(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && tokenValue.trim()) void saveToken(tokenInputFor);
+                }}
+              />
+            </div>
+            <div className="connect-actions">
+              <button
+                className="ghost small"
+                type="button"
+                onClick={() => {
+                  setTokenInputFor(null);
+                  setTokenValue("");
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                className="market-btn"
+                type="button"
+                disabled={!tokenValue.trim()}
+                onClick={() => void saveToken(tokenInputFor)}
+              >
+                Connect
+              </button>
             </div>
           </div>
         </div>
